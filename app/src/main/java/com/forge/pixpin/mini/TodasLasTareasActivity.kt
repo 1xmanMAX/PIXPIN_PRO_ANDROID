@@ -16,6 +16,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -89,18 +94,46 @@ import kotlin.math.roundToInt
  *
  * **O en tablero Kanban** (25-oct-2026, como el PC del 17-oct): una columna por lista, lo pendiente
  * arriba y lo hecho plegado al pie; mantener pulsada una tarjeta y soltarla en otra columna la pasa
- * a esa lista, igual que «Mover a…». El botón de arriba cambia de una vista a otra y la elegida se
- * recuerda al volver. Ver [Kanban].
+ * a esa lista, igual que «Mover a…». Ver [Kanban].
+ *
+ * **Tres vistas: Tarjetas, Kanban y Horario, sin la lista** (25-oct-2026, del PC `5139e5d2`; el
+ * usuario: «que la función de Horario aparezca en la ventana de Tareas; de allí quita la vista de
+ * Lista, deja Tarjetas y Kanban y añade Horario»). Las tarjetas son las de siempre en una rejilla
+ * (una columna en un teléfono, más en una tableta); el Horario es el calendario de la semana
+ * ([com.forge.pixpin.horario.PanelDelHorario]), que ya no tiene pantalla propia, con las tareas con
+ * hora como chapitas: tocar una vuelve a las tarjetas con ella a la vista. El conmutador de arriba
+ * cambia de una a otra y la elegida se recuerda ([VistaDeTareas.Vista]; quien tenía la lista abre
+ * en las tarjetas). El mosaico Horario de Funciones abre aquí, en el Horario.
  *
  * Toda la lógica está en [TodasLasTareas] y [Kanban], sin Android y probada. Leer el chat y agrupar va
  * fuera del hilo que pinta; aquí solo se enseña lo ya calculado.
  */
 class TodasLasTareasActivity : ComponentActivity() {
 
+    /** La nota de voz de una clase, de la vista Horario: pide el micrófono, así que va con la pantalla. */
+    private val notaDeVoz = com.forge.pixpin.horario.NotaDeVozDeClase(this)
+
+    /** La vista con la que se pidió abrir ([abrir]), hasta que la pantalla la pone. */
+    private var vistaPedida by mutableStateOf<VistaDeTareas.Vista?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) vistaPedida = vistaDe(intent)
         setContent { PixPinTheme { Pantalla() } }
     }
+
+    /** Ya abierta, el mosaico Horario la trae al frente en su vista. */
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        vistaDe(intent)?.let { vistaPedida = it }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        notaDeVoz.alParar()
+    }
+
+    private fun vistaDe(i: Intent?): VistaDeTareas.Vista? = i?.getStringExtra(EXTRA_VISTA)?.let { VistaDeTareas.Vista.deTexto(it) }
 
     /** Lo que se enseña, calculado fuera del hilo que pinta. */
     private data class Vista(
@@ -131,12 +164,22 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
 
         var consulta by remember { mutableStateOf("") }
-        // Lista o tablero: la última elegida (`tareas-vista.txt` del PC; aquí, las preferencias).
-        var modo by remember { mutableStateOf(Kanban.Vista.deTexto(runCatching { preferencias().getString(VISTA, null) }.getOrNull())) }
-        fun cambiarModo(m: Kanban.Vista) {
+        // Tarjetas, Kanban u Horario: la última elegida (`tareas-vista.txt` del PC, con sus mismas
+        // palabras; aquí, las preferencias). La «lista» que se guardaba antes abre en las tarjetas.
+        var modo by remember { mutableStateOf(VistaDeTareas.Vista.deTexto(runCatching { preferencias().getString(VISTA, null) }.getOrNull())) }
+        fun cambiarModo(m: VistaDeTareas.Vista) {
             modo = m
             runCatching { preferencias().edit().putString(VISTA, m.texto).apply() }
         }
+        LaunchedEffect(vistaPedida) {
+            val pedida = vistaPedida ?: return@LaunchedEffect
+            cambiarModo(pedida)
+            vistaPedida = null
+        }
+        // La tarea a enseñar en las tarjetas (tocada en el horario) y la que se resalta un momento.
+        var irA by remember { mutableStateOf<String?>(null) }
+        var resaltada by remember { mutableStateOf<String?>(null) }
+        val rejilla = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
         var apuntar by remember { mutableStateOf("") }
         // Las recién tachadas (clave de la lista + texto crudo) y cuándo.
         val recien = remember { mutableStateMapOf<String, Long>() }
@@ -271,6 +314,20 @@ class TodasLasTareasActivity : ComponentActivity() {
             }
         }
 
+        // Las tareas pendientes con hora, para el horario: su chapita y de qué lista y tarea es cada una.
+        val conHora = remember(listas) { tareasConHora(listas.orEmpty()) }
+        LaunchedEffect(irA, vista, modo) {
+            val k = irA ?: return@LaunchedEffect
+            val v = vista ?: return@LaunchedEffect
+            if (modo != VistaDeTareas.Vista.TARJETAS || palabras.isNotEmpty()) return@LaunchedEffect
+            irA = null
+            val i = indiceEnLaRejilla(v, palabras, abiertas, k) ?: return@LaunchedEffect
+            rejilla.animateScrollToItem(i)
+            resaltada = k
+            delay(1600)
+            resaltada = null
+        }
+
         fun apuntarAhora() {
             // Lo escrito se entiende antes de guardarlo (tareas inteligentes del PC): «urgente»,
             // «#casa» o «mañana a las 10» pasan a sus marcas `🔼 #casa ⏰ …`.
@@ -302,110 +359,124 @@ class TodasLasTareasActivity : ComponentActivity() {
                             style = MaterialTheme.typography.labelMedium, color = Cristal.tinta.copy(alpha = 0.7f)
                         )
                     }
-                    // Lista ⇄ tablero Kanban.
-                    val kanban = modo == Kanban.Vista.KANBAN
-                    BotonRedondo(
-                        if (kanban) Icons.Filled.ViewAgenda else Icons.Filled.ViewKanban,
-                        if (kanban) "Ver en lista" else "Ver en tablero Kanban",
-                        { cambiarModo(if (kanban) Kanban.Vista.LISTA else Kanban.Vista.KANBAN) },
-                        tamano = 44.dp
-                    )
-                    // **El horario de clases** (25-oct-2026): cada asignatura es una lista de tareas.
-                    // Ver [com.forge.pixpin.horario.HorarioActivity].
-                    BotonRedondo(Icons.Filled.CalendarMonth, "Horario", { com.forge.pixpin.horario.HorarioActivity.abrir(this@TodasLasTareasActivity) }, tamano = 44.dp)
+                    // Tarjetas · Kanban · Horario.
+                    Conmutador(modo) { cambiarModo(it) }
                 }
 
-                // Buscador.
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp).cristal().padding(horizontal = 14.dp, vertical = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Search, null, tint = Cristal.tinta.copy(alpha = 0.7f))
-                    Spacer(Modifier.width(8.dp))
-                    Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
-                        if (consulta.isEmpty()) Text(
-                            "Buscar… («hoy», «ayer»)", color = Cristal.tinta.copy(alpha = 0.5f),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
-                        BasicTextField(
-                            value = consulta, onValueChange = { consulta = it }, singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Cristal.tinta),
-                            cursorBrush = SolidColor(Cristal.tinta), modifier = Modifier.fillMaxWidth()
-                        )
-                    }
-                    if (consulta.isNotEmpty()) IconButton(onClick = { consulta = "" }) { Icon(Icons.Filled.Close, "Vaciar", tint = Cristal.tinta) }
-                }
-                Spacer(Modifier.height(8.dp))
-
-                // Apuntar: va al Inbox de «Mensajes guardados».
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp).cristal().padding(start = 14.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Add, null, tint = Cristal.tinta.copy(alpha = 0.7f))
-                    Spacer(Modifier.width(8.dp))
-                    Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
-                        if (apuntar.isEmpty()) Text(
-                            "Apunta una tarea en el Inbox", color = Cristal.tinta.copy(alpha = 0.5f),
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
-                        BasicTextField(
-                            value = apuntar, onValueChange = { apuntar = it }, singleLine = true,
-                            textStyle = MaterialTheme.typography.bodyLarge.copy(color = Cristal.tinta),
-                            cursorBrush = SolidColor(Cristal.tinta), modifier = Modifier.fillMaxWidth(),
-                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
-                            keyboardActions = KeyboardActions(onDone = { apuntarAhora() })
-                        )
-                    }
-                    TextButton(onClick = { apuntarAhora() }, enabled = apuntar.isNotBlank()) { Text("Apuntar") }
-                }
-
-                val v = vista
-                when {
-                    v == null -> Box(Modifier.weight(1f).fillMaxWidth())
-                    v.grupos.isEmpty() && palabras.isNotEmpty() -> SinResultados(consulta, Modifier.weight(1f)) { consulta = "" }
-                    v.grupos.isEmpty() && v.listas.isEmpty() -> Vacia(Modifier.weight(1f))
-                    modo == Kanban.Vista.KANBAN -> Tablero(
-                        v, palabras, abiertas, Modifier.weight(1f),
-                        tarjeta = { l, f, color, mod ->
-                            Tarjeta(l, f, color, palabras, v.hoy, false, ::marcar, { moviendo = l to f }, ::quitar, ::recordar, mod) { a, b -> ponerHora(a, b, null) }
-                        },
-                        soltar = { desde, f, hasta -> mover(desde, f, hasta) }
-                    )
-                    v.grupos.isEmpty() -> Vacia(Modifier.weight(1f))
-                    else -> LazyColumn(
-                        Modifier.weight(1f).fillMaxWidth(),
-                        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 32.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                // El horario enseña la semana: sin buscador ni caja de apuntar (`con_tareas` del PC).
+                if (modo == VistaDeTareas.Vista.HORARIO) com.forge.pixpin.horario.PanelDelHorario(
+                    notaDeVoz, conHora.first,
+                    onTarea = { k ->
+                        conHora.second.getOrNull(k)?.let { (l, f) ->
+                            consulta = ""
+                            cambiarModo(VistaDeTareas.Vista.TARJETAS)
+                            irA = clave(l, f)
+                        }
+                    },
+                    onAbrirEnTareas = { nombre -> consulta = nombre; cambiarModo(VistaDeTareas.Vista.TARJETAS) },
+                    modifier = Modifier.weight(1f)
+                ) else Column(Modifier.weight(1f)) {
+                    // Buscador.
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp).cristal().padding(horizontal = 14.dp, vertical = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        // El color de cada grupo, el mismo que en el PC.
-                        val colores = TodasLasTareas.coloresDeListas(v.listas.map { it.clave to it.filas.isNotEmpty() })
-                        v.grupos.forEach { g ->
-                            val l = v.listas[g.lista]
-                            val color = Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[g.lista]])
-                            item(key = "e:" + l.clave) { Encabezado(l, g.pendientes(l), color) }
-                            items(g.arriba, key = { "a:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
-                            }
-                            if (g.hechas.isNotEmpty()) {
-                                // Buscando, lo hecho que coincide se ve.
-                                val abierta = palabras.isNotEmpty() || abiertas[l.clave] == true
-                                item(key = "p:" + l.clave) {
-                                    Row(
-                                        Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
-                                            .clickable { abiertas[l.clave] = !abierta }.padding(horizontal = 8.dp, vertical = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = Cristal.tinta.copy(alpha = 0.7f))
-                                        Spacer(Modifier.width(6.dp))
-                                        Text("Hechas (${g.hechas.size})", color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+                        Icon(Icons.Filled.Search, null, tint = Cristal.tinta.copy(alpha = 0.7f))
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
+                            if (consulta.isEmpty()) Text(
+                                "Buscar… («hoy», «ayer»)", color = Cristal.tinta.copy(alpha = 0.5f),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                            BasicTextField(
+                                value = consulta, onValueChange = { consulta = it }, singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Cristal.tinta),
+                                cursorBrush = SolidColor(Cristal.tinta), modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (consulta.isNotEmpty()) IconButton(onClick = { consulta = "" }) { Icon(Icons.Filled.Close, "Vaciar", tint = Cristal.tinta) }
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    // Apuntar: va al Inbox de «Mensajes guardados».
+                    Row(
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp).cristal().padding(start = 14.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(Icons.Filled.Add, null, tint = Cristal.tinta.copy(alpha = 0.7f))
+                        Spacer(Modifier.width(8.dp))
+                        Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
+                            if (apuntar.isEmpty()) Text(
+                                "Apunta una tarea en el Inbox", color = Cristal.tinta.copy(alpha = 0.5f),
+                                maxLines = 1, overflow = TextOverflow.Ellipsis
+                            )
+                            BasicTextField(
+                                value = apuntar, onValueChange = { apuntar = it }, singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = Cristal.tinta),
+                                cursorBrush = SolidColor(Cristal.tinta), modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(onDone = { apuntarAhora() })
+                            )
+                        }
+                        TextButton(onClick = { apuntarAhora() }, enabled = apuntar.isNotBlank()) { Text("Apuntar") }
+                    }
+
+                    val v = vista
+                    when {
+                        v == null -> Box(Modifier.weight(1f).fillMaxWidth())
+                        v.grupos.isEmpty() && palabras.isNotEmpty() -> SinResultados(consulta, Modifier.weight(1f)) { consulta = "" }
+                        v.grupos.isEmpty() && v.listas.isEmpty() -> Vacia(Modifier.weight(1f))
+                        modo == VistaDeTareas.Vista.KANBAN -> Tablero(
+                            v, palabras, abiertas, Modifier.weight(1f),
+                            tarjeta = { l, f, color, mod ->
+                                Tarjeta(l, f, color, palabras, v.hoy, false, ::marcar, { moviendo = l to f }, ::quitar, ::recordar, mod) { a, b -> ponerHora(a, b, null) }
+                            },
+                            soltar = { desde, f, hasta -> mover(desde, f, hasta) }
+                        )
+                        v.grupos.isEmpty() -> Vacia(Modifier.weight(1f))
+                        // **Las tarjetas, en rejilla** (25-oct-2026): una columna en un teléfono, más en una
+                        // tableta. Los encabezados, «Hechas (N)» y el aire ocupan la fila entera.
+                        else -> LazyVerticalGrid(
+                            GridCells.Adaptive(minSize = 300.dp),
+                            Modifier.weight(1f).fillMaxWidth(),
+                            state = rejilla,
+                            contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 32.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // El color de cada grupo, el mismo que en el PC.
+                            val colores = TodasLasTareas.coloresDeListas(v.listas.map { it.clave to it.filas.isNotEmpty() })
+                            val ancha: (androidx.compose.foundation.lazy.grid.LazyGridItemSpanScope) -> GridItemSpan = { GridItemSpan(it.maxLineSpan) }
+                            // La tarea tocada en el horario, recién traída a la vista: con un filo de su color.
+                            fun resalte(l: Lista, f: Fila, color: Color) =
+                                if (resaltada == clave(l, f)) Modifier.border(2.dp, color, RoundedCornerShape(16.dp)) else Modifier
+                            v.grupos.forEach { g ->
+                                val l = v.listas[g.lista]
+                                val color = Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[g.lista]])
+                                item(key = "e:" + l.clave, span = ancha) { Encabezado(l, g.pendientes(l), color) }
+                                items(g.arriba, key = { "a:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
+                                    Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar, resalte(l, l.filas[i], color)) { a, b -> ponerHora(a, b, null) }
+                                }
+                                if (g.hechas.isNotEmpty()) {
+                                    // Buscando, lo hecho que coincide se ve.
+                                    val abierta = palabras.isNotEmpty() || abiertas[l.clave] == true
+                                    item(key = "p:" + l.clave, span = ancha) {
+                                        Row(
+                                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
+                                                .clickable { abiertas[l.clave] = !abierta }.padding(horizontal = 8.dp, vertical = 8.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = Cristal.tinta.copy(alpha = 0.7f))
+                                            Spacer(Modifier.width(6.dp))
+                                            Text("Hechas (${g.hechas.size})", color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+                                        }
+                                    }
+                                    if (abierta) items(g.hechas, key = { "h:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
+                                        Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
                                     }
                                 }
-                                if (abierta) items(g.hechas, key = { "h:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                    Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
-                                }
+                                item(key = "s:" + l.clave, span = ancha) { Spacer(Modifier.height(8.dp)) }
                             }
-                            item(key = "s:" + l.clave) { Spacer(Modifier.height(8.dp)) }
                         }
                     }
                 }
@@ -421,6 +492,73 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun clave(l: Lista, f: Fila) = l.clave + "\u0000" + f.crudo
 
     private fun preferencias() = getSharedPreferences(PREFERENCIAS, Context.MODE_PRIVATE)
+
+    /**
+     * **Las tareas pendientes con hora (`⏰`), para el horario** (`tareas_con_hora` del PC): lo que se
+     * lee en su chapita (sin las marcas), su hora local y el color de su lista; y de qué lista y qué
+     * tarea es cada una, para enseñarla al tocarla.
+     */
+    private fun tareasConHora(ls: List<Lista>): Pair<List<com.forge.pixpin.horario.TareaConHora>, List<Pair<Lista, Fila>>> {
+        val colores = TodasLasTareas.coloresDeListas(ls.map { it.clave to it.filas.isNotEmpty() })
+        val tareas = mutableListOf<com.forge.pixpin.horario.TareaConHora>()
+        val sitios = mutableListOf<Pair<Lista, Fila>>()
+        ls.forEachIndexed { li, l ->
+            for (f in l.filas) {
+                if (f.hecha) continue
+                val hora = Tareas.horaDe(f.crudo) ?: continue
+                val sin = Tareas.sinHora(f.texto)
+                val texto = TareaInteligente.marcas(sin).titulo.ifBlank { sin.trim() }
+                val cuando = hora.toEpochSecond(java.time.ZoneOffset.UTC) * 1000
+                tareas += com.forge.pixpin.horario.TareaConHora(texto, cuando, TodasLasTareas.COLORES_DE_GRUPO[colores[li]])
+                sitios += l to f
+            }
+        }
+        return tareas to sitios
+    }
+
+    /**
+     * **El sitio de una tarea en la rejilla de tarjetas** ([clave]), contando como se ponen: el
+     * encabezado de cada lista, lo de arriba, «Hechas (N)» y lo hecho si está abierto, y el aire.
+     */
+    private fun indiceEnLaRejilla(v: Vista, palabras: List<String>, abiertas: Map<String, Boolean>, buscada: String): Int? {
+        var i = 0
+        for (g in v.grupos) {
+            val l = v.listas[g.lista]
+            i++
+            for (fi in g.arriba) { if (clave(l, l.filas[fi]) == buscada) return i; i++ }
+            if (g.hechas.isNotEmpty()) {
+                i++
+                if (palabras.isNotEmpty() || abiertas[l.clave] == true) for (fi in g.hechas) { if (clave(l, l.filas[fi]) == buscada) return i; i++ }
+            }
+            i++
+        }
+        return null
+    }
+
+    /**
+     * **El conmutador de vistas**: una sola pastilla gris con las tres (Tarjetas · Kanban · Horario)
+     * y la elegida más clara, como el del PC. Dos o tres botones sueltos, con el elegido lleno,
+     * parecían acciones distintas.
+     */
+    @Composable
+    private fun Conmutador(modo: VistaDeTareas.Vista, elegir: (VistaDeTareas.Vista) -> Unit) {
+        val forma = RoundedCornerShape(22.dp)
+        Row(Modifier.clip(forma).background(Cristal.boton, forma).padding(3.dp)) {
+            VistaDeTareas.Vista.entries.forEach { v ->
+                val puesta = v == modo
+                val (icono, nombre) = when (v) {
+                    VistaDeTareas.Vista.TARJETAS -> Icons.Filled.ViewAgenda to "Tarjetas"
+                    VistaDeTareas.Vista.KANBAN -> Icons.Filled.ViewKanban to "Kanban"
+                    VistaDeTareas.Vista.HORARIO -> Icons.Filled.CalendarMonth to "Horario"
+                }
+                Box(
+                    Modifier.size(40.dp).clip(forma).background(if (puesta) Cristal.puesto else Color.Transparent, forma)
+                        .clickable { elegir(v) },
+                    contentAlignment = Alignment.Center
+                ) { Icon(icono, nombre, tint = if (puesta) Cristal.tintaPuesta else Cristal.tinta.copy(alpha = 0.75f), modifier = Modifier.size(22.dp)) }
+            }
+        }
+    }
 
     /** Una tarjeta agarrada en el tablero: cuál, de qué columna, dónde se cogió y cuánto mide. */
     private data class Agarre(val lista: Lista, val fila: Fila, val columna: Int, val agarre: Offset, val ancho: Int)
@@ -768,11 +906,21 @@ class TodasLasTareasActivity : ComponentActivity() {
 
     companion object {
         private const val PREFERENCIAS = "tareas"
-        /** Cómo se ven: [Kanban.Vista.texto]. */
+        /** Cómo se ven: [VistaDeTareas.Vista.texto] («tarjetas», «kanban» u «horario», las del PC). */
         private const val VISTA = "vista"
+        private const val EXTRA_VISTA = "vista"
 
-        fun abrir(context: Context) = context.startActivity(
-            Intent(context, TodasLasTareasActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        /**
+         * Abre Tareas; con [vista], en esa (el mosaico Horario la abre en el Horario). Si ya está
+         * abierta, la trae al frente y le pasa la vista ([onNewIntent]).
+         */
+        fun abrir(context: Context, vista: VistaDeTareas.Vista? = null) = context.startActivity(
+            Intent(context, TodasLasTareasActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply {
+                if (vista != null) {
+                    putExtra(EXTRA_VISTA, vista.texto)
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
+            }
         )
     }
 }

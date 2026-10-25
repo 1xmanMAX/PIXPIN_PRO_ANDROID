@@ -545,13 +545,8 @@
             La llamada secreta: un recordatorio que suena como una llamada y se oye por el
             auricular. Sale encima del bloqueo. Ver LlamadaSecretaActivity.
         -->
-        <!-- El horario de clases de la semana: sus llamadas suenan con la llamada secreta. Ver horario/. -->
-        <activity
-            android:name=".horario.HorarioActivity"
-            android:exported="false"
-            android:taskAffinity="${applicationId}.horario"
-            android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.PixPin" />
+        <!-- El horario de clases de la semana ya no tiene pantalla propia (25-oct-2026): es la vista
+             Horario de Tareas (mini/TodasLasTareasActivity). Sus llamadas suenan con la llamada secreta. -->
         <!-- «Enviar a Anki»: sin pantalla, para poder pedir el permiso de AnkiDroid. Ver anki/. -->
         <activity
             android:name=".anki.EnviarAAnkiActivity"

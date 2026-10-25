@@ -81,14 +81,21 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
         }
     }
     var eligiendoNuevo by remember { mutableStateOf(false) }
+    var enFunciones by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    // Atrás, con Funciones puesto, vuelve a Chat (el Escape del PC) antes de salir de la lista.
+    BackHandler(enabled = enFunciones) { enFunciones = false }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
-            Text(
-                "Chats", style = MaterialTheme.typography.titleLarge, color = Cristal.tinta,
-                modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 8.dp)
+            // **El interruptor Chat · Funciones** (25-oct-2026, del PC `768b73f8`): en el sitio del
+            // título. «Funciones» cambia la lista por la rejilla de funciones y se queda puesta
+            // como una pestaña; «Chat» devuelve la lista. Ver [PestanaDeFunciones].
+            InterruptorChatFunciones(
+                enFunciones, { enFunciones = it },
+                Modifier.padding(start = 16.dp, top = 10.dp, bottom = 8.dp)
             )
-            LazyColumn(contentPadding = PaddingValues(bottom = 110.dp)) {
+            if (enFunciones) PestanaDeFunciones(onChat = { enFunciones = false }, Modifier.weight(1f).padding(bottom = 80.dp))
+            else LazyColumn(contentPadding = PaddingValues(bottom = 110.dp)) {
                 items(charlas.orEmpty(), key = { it.proyecto ?: "general" }) { c ->
                     Fila(c, esDelAsistente = c.proyecto == delAsistente, compartido = c.proyecto?.let { compartidos[it] }) {
                         if (c.proyecto == com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR) alcance.launch {
@@ -115,6 +122,27 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
                     alcance.launch { chatNuevo(contexto, conPersonas) }
                 }
             }
+        }
+    }
+}
+
+/**
+ * **El interruptor Chat · Funciones**: una sola pastilla con las dos partes y la puesta más clara,
+ * como el conmutador de vistas de Tareas (dos botones sueltos parecían dos acciones distintas).
+ */
+@Composable
+private fun InterruptorChatFunciones(enFunciones: Boolean, cambiar: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    val forma = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    Row(modifier.clip(forma).background(Cristal.boton, forma).padding(3.dp)) {
+        listOf(false to R.string.proyectos_interruptor_chat, true to R.string.proyectos_interruptor_funciones).forEach { (esta, texto) ->
+            val puesta = enFunciones == esta
+            Text(
+                androidx.compose.ui.res.stringResource(texto),
+                color = if (puesta) Cristal.tintaPuesta else Cristal.tinta.copy(alpha = 0.75f),
+                fontSize = 15.sp, fontWeight = if (puesta) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier.clip(forma).background(if (puesta) Cristal.puesto else androidx.compose.ui.graphics.Color.Transparent, forma)
+                    .clickable { cambiar(esta) }.padding(horizontal = 16.dp, vertical = 7.dp)
+            )
         }
     }
 }

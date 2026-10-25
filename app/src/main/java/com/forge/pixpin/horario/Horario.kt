@@ -37,7 +37,7 @@ import java.io.File
  * igual; se guarda con el mismo nombre y formato para que pueda viajar el día que el PC lo haga.
  *
  * Puro: lo prueban `HorarioTest` y `SemanaTest`. Lo de Android (alarmas, llamada) está en
- * [AvisosDelHorario]; la rejilla de la semana en [HorarioActivity].
+ * [AvisosDelHorario]; la rejilla de la semana en [PanelDelHorario].
  */
 object Horario {
 

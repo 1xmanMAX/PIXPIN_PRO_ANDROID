@@ -49,9 +49,6 @@ import androidx.compose.material.icons.filled.FolderZip
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material.icons.automirrored.filled.Notes
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Checklist
-import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Archive
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Delete
@@ -525,27 +522,9 @@ fun PantallaDeProyectos(
                 // Y no se ofrece crear otro cuando se ha venido a uno concreto: la lista
                 // está filtrada a este, así que el botón de más solo puede acabar en un
                 // proyecto vacío que no se ve.
-                // **Lecciones y capturas, aquí y no en el chat** (4-oct-2026): ocupan el sitio
-                // del sistema solar, que se quitó por no servir, y así no se mezclan con
-                // Mensajes guardados.
-                // Y **las tareas de todos los chats** (6-oct-2026), como la ventana de Tareas del PC.
-                if (soloEste == null) {
-                    com.forge.pixpin.ui.theme.BotonRedondo(
-                        Icons.Filled.Checklist, "Tareas",
-                        { com.forge.pixpin.mini.TodasLasTareasActivity.abrir(contexto) }, tamano = 44.dp
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    com.forge.pixpin.ui.theme.BotonRedondo(
-                        Icons.Filled.Lightbulb, "Lecciones aprendidas",
-                        { com.forge.pixpin.lecciones.LeccionesActivity.abrir(contexto) }, tamano = 44.dp
-                    )
-                    Spacer(Modifier.width(6.dp))
-                    com.forge.pixpin.ui.theme.BotonRedondo(
-                        Icons.Filled.PhotoLibrary, "Galería de capturas",
-                        { GaleriaDeCapturasActivity.abrir(contexto) }, tamano = 44.dp
-                    )
-                    Spacer(Modifier.width(6.dp))
-                }
+                // **Tareas, Lecciones y la Galería ya no van aquí** (25-oct-2026, del PC `a274ac06`):
+                // viven en la pestaña Funciones de la lista de chats ([PestanaDeFunciones]), con las
+                // demás funciones fuertes. El usuario: «quitarlas de los chats».
                 if (soloEste == null) {
                     val plantilla = stringResourceSafe(R.string.proyecto_nuevo_nombre)
                     com.forge.pixpin.ui.theme.BotonRedondo(

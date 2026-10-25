@@ -2,7 +2,6 @@ package com.forge.pixpin.mini
 
 import java.time.LocalDate
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -127,12 +126,10 @@ class KanbanTest {
 
     @Test
     fun `la vista elegida se recuerda y una palabra parecida no es el tablero`() {
-        for (v in Kanban.Vista.entries) assertEquals(v, Kanban.Vista.deTexto(v.texto))
-        assertEquals("kanban", Kanban.Vista.KANBAN.texto)
-        assertEquals(Kanban.Vista.KANBAN, Kanban.Vista.deTexto(" kanban\n"))
-        assertEquals(Kanban.Vista.LISTA, Kanban.Vista.deTexto(null))
-        assertEquals(Kanban.Vista.LISTA, Kanban.Vista.deTexto(""))
-        assertEquals(Kanban.Vista.LISTA, Kanban.Vista.deTexto("kanbann"))
-        assertNotNull(Kanban.Vista.deTexto("tarjetas"))
+        // Desde el 25-oct-2026 la vista es [VistaDeTareas.Vista] (Tarjetas · Kanban · Horario).
+        assertEquals("kanban", VistaDeTareas.Vista.KANBAN.texto)
+        assertEquals(VistaDeTareas.Vista.KANBAN, VistaDeTareas.Vista.deTexto(" kanban\n"))
+        assertEquals(VistaDeTareas.Vista.TARJETAS, VistaDeTareas.Vista.deTexto(null))
+        assertEquals(VistaDeTareas.Vista.TARJETAS, VistaDeTareas.Vista.deTexto("kanbann"))
     }
 }

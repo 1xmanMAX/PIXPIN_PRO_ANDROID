@@ -20,19 +20,10 @@ import java.time.LocalDate
  * desplazan de lado**, y al arrastrar una tarjeta cerca del borde el tablero se desplaza solo
  * ([desplazamientoAlBorde]). Y sin buscar salen también **las listas vacías**: son donde se suelta
  * una tarjeta para empezar a llenarlas.
+ *
+ * Cuál de las vistas se ve (Tarjetas · Kanban · Horario, 25-oct-2026) está en [VistaDeTareas].
  */
 object Kanban {
-
-    /** **Cómo se ven las tareas**, y se recuerda al volver (`rejilla::Vista` del PC). */
-    enum class Vista(val texto: String) {
-        LISTA("lista"),
-        KANBAN("kanban");
-
-        companion object {
-            /** Lo guardado; lo que no se reconozca es la lista de siempre. */
-            fun deTexto(t: String?): Vista = entries.firstOrNull { it.texto == t?.trim() } ?: LISTA
-        }
-    }
 
     /**
      * **Las columnas del tablero**, en el orden de las listas ([TodasLasTareas.ORDEN_DE_LISTAS]),

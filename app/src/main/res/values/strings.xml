@@ -1077,4 +1077,23 @@
     <string name="clase_sin_video">No se pudo grabar la pantalla: se graba solo el audio</string>
     <string name="clase_sin_audio">El vídeo entró en el chat, pero sin audio no hay nota que pasar a texto</string>
     <string name="clase_ver_video">Vídeo</string>
+    <!-- El interruptor Chat · Funciones de arriba de la lista de chats y los mosaicos de Funciones,
+         en su orden (25-oct-2026, las claves y los textos del PC: docs/ui-funciones-y-chats.md). -->
+    <string name="proyectos_interruptor_chat">Chat</string>
+    <string name="proyectos_interruptor_funciones">Funciones</string>
+    <string name="funciones_titulo">Funciones</string>
+    <string name="funciones_grabar">Grabar reunión</string>
+    <string name="funciones_grabar_detalle">Clase o reunión, con capturas y transcripción</string>
+    <string name="funciones_lienzo">Nuevo lienzo</string>
+    <string name="funciones_lienzo_detalle">Un lienzo en blanco para dibujar o calcar</string>
+    <string name="funciones_tareas">Tareas</string>
+    <string name="funciones_tareas_detalle">Las listas de tareas de todos tus chats</string>
+    <string name="funciones_timeline">Timeline</string>
+    <string name="funciones_timeline_detalle">Tu día minuto a minuto, y las lecciones</string>
+    <string name="funciones_horario">Horario</string>
+    <string name="funciones_horario_detalle">Tus clases de la semana, con aviso antes</string>
+    <string name="funciones_galeria">Capturas</string>
+    <string name="funciones_galeria_detalle">Todas las capturas que has guardado</string>
+    <string name="funciones_figuras">Figuras</string>
+    <string name="funciones_figuras_detalle">Tu biblioteca de figuras para los lienzos</string>
 </resources>

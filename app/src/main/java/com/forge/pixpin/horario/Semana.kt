@@ -6,7 +6,7 @@ import com.forge.pixpin.ia.Momento
 import kotlin.math.floor
 
 /**
- * **La semana de la rejilla del horario**: lo puro de [HorarioActivity] (25-oct-2026,
+ * **La semana de la rejilla del horario**: lo puro de [PanelDelHorario] (25-oct-2026,
  * `horario/semana.rs` del PC, portado tal cual). Sin pintar nada, para poder probarlo.
  *
  * - [Semana]: las asignaturas de la lista y los **bloques** de la rejilla, uno por clase y día. En
