@@ -139,4 +139,67 @@ class NotaRicaTest {
         for (fila in filas.values) assertEquals(300f, fila.last().x + fila.last().ancho, 1e-3f)
         assertEquals(alto, cajas.last().y + cajas.last().alto, 1e-3f)
     }
+
+    // ---- La revisión del 25-oct-2026 (PC 6f2d95a): rutas, código, red, la foto pegada. ----
+
+    @Test
+    fun `una ruta de windows con espacios y parentesis es una sola foto`() {
+        val t = """![](C:\Users\Max Antony\Fotos (2)\obra 1.png) y sigue"""
+        assertEquals(
+            listOf(Trozo.Album(listOf(Imagen("", """C:\Users\Max Antony\Fotos (2)\obra 1.png"""))), Trozo.Texto("y sigue")),
+            NotaRica.trozos(t)
+        )
+        // Entre `<…>` vale un paréntesis suelto.
+        assertEquals(listOf(Trozo.Album(listOf(Imagen("", "C:/a (b.png")))), NotaRica.trozos("![](<C:/a (b.png>)"))
+        // Y un enlace de la Wikipedia no pierde su final.
+        val p = com.forge.pixpin.motormd.Markdown.parseInline("[casa](https://es.wikipedia.org/wiki/Casa_(edificio)) fin")
+        assertEquals("casa fin", p.text)
+        assertEquals("https://es.wikipedia.org/wiki/Casa_(edificio)", p.spans.single { it.url != null }.url)
+        // Caso de control: sin emparejar, el primero, como antes.
+        assertEquals(3, NotaRica.cierreDelParentesis("a.b) (c"))
+    }
+
+    @Test
+    fun `lo que va en codigo no es una foto`() {
+        // Quien explica la sintaxis la escribe entre comillas: es texto.
+        assertEquals(listOf(Trozo.Texto("se pone `![](foto.png)` asi")), NotaRica.trozos("se pone `![](foto.png)` asi"))
+        // Con dos comillas, igual.
+        assertTrue(NotaRica.trozos("``![](x.png)``").none { it is Trozo.Album })
+        // Caso de control: fuera de las comillas sí lo es.
+        assertTrue(NotaRica.trozos("`a` ![](foto.png)").any { it is Trozo.Album })
+    }
+
+    @Test
+    fun `los blancos del final y los saltos de windows no son formato pero un escape si`() {
+        assertFalse(NotaRica.tieneFormato("hola  \r\nque tal\t\r\nadios"))
+        // Caso negativo: un escape sí cambia lo que se ve.
+        assertTrue(NotaRica.tieneFormato("""5 \* 3"""))
+    }
+
+    @Test
+    fun `nunca una ruta de red ni una que se salga con puntos`() {
+        val files = Files.createTempDirectory("nota-rica-red").toFile()
+        try {
+            assertNull(NotaRica.archivo(files, """\\equipo\carpeta\x.png"""))
+            assertNull(NotaRica.archivo(files, "//equipo/carpeta/x.png"))
+            assertNull(NotaRica.archivo(files, "file://" + files.absolutePath + "/../fuera.png"))
+            assertNull(NotaRica.archivo(files, files.absolutePath + "/a/../../fuera.png"))
+            // Caso de control: la de aquí, sin `..`, sí.
+            assertEquals(File(files, "a.png"), NotaRica.archivo(files, File(files, "a.png").absolutePath))
+        } finally {
+            files.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun `en una linea las fotos se dicen y no se ven sus rutas`() {
+        assertEquals("hola\n🖼\n🖼 planta fin", NotaRica.sinRutasDeFotos("hola\n![]($foto1)\n![planta|300]($foto2) fin"))
+        // La foto pegada en el PC lleva su número.
+        assertEquals("hola\n🖼 foto 1\nver", NotaRica.sinRutasDeFotos("hola\n![foto 1](notas/1-pegado.png)\nver"))
+        // Una ruta de Windows con paréntesis no deja un trozo detrás.
+        assertEquals("ver 🖼 y 🖼 b.", NotaRica.sinRutasDeFotos("""ver ![](C:\Fotos (2)\a.png) y ![b](<x (1.png>)."""))
+        // Caso negativo: un `![` sin cerrar se queda como se escribió.
+        assertEquals("mira ![esto", NotaRica.sinRutasDeFotos("mira ![esto"))
+        assertEquals("sin fotos", NotaRica.sinRutasDeFotos("sin fotos"))
+    }
 }

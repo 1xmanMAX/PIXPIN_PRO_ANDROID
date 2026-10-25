@@ -51,6 +51,14 @@ class GrabarClaseActivity : ComponentActivity() {
     private var conVideo by androidx.compose.runtime.mutableStateOf(false)
 
     /**
+     * **La calidad del vídeo** (25-oct-2026, como la ficha de Preparar del PC): «Ligero», «Normal» o
+     * «Nítido», con lo que pesa una hora debajo. Se recuerda la última (por su clave, la del PC).
+     */
+    private var perfil by androidx.compose.runtime.mutableStateOf(PerfilDeVideo.NORMAL)
+
+    private fun prefs() = getSharedPreferences("grabar_clase", MODE_PRIVATE)
+
+    /**
      * El permiso de grabar la pantalla, **una vez para toda la clase** (Android 14: un permiso, un
      * `VirtualDisplay`). Sin él se graba solo el audio: no se pierde la clase por un «no».
      */
@@ -73,6 +81,7 @@ class GrabarClaseActivity : ComponentActivity() {
             return
         }
         aPantallaCompleta()
+        perfil = PerfilDeVideo.deClave(runCatching { prefs().getString(PERFIL, null) }.getOrNull())
         setContent { PixPinTheme { Pantalla() } }
     }
 
@@ -123,6 +132,33 @@ class GrabarClaseActivity : ComponentActivity() {
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 4.dp)
                     )
+                    Text(
+                        getString(R.string.clase_calidad),
+                        style = MaterialTheme.typography.labelLarge,
+                        modifier = Modifier.padding(top = 12.dp)
+                    )
+                    androidx.compose.foundation.layout.Row(
+                        Modifier.fillMaxWidth().padding(top = 4.dp),
+                        horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (p in PerfilDeVideo.entries) {
+                            androidx.compose.material3.FilterChip(
+                                selected = p == perfil,
+                                onClick = {
+                                    perfil = p
+                                    runCatching { prefs().edit().putString(PERFIL, p.clave).apply() }
+                                },
+                                label = { Text(getString(nombreDe(p))) }
+                            )
+                        }
+                    }
+                    // Lo que pesa, siempre a la vista: en el teléfono no hay ratón que pase por encima.
+                    Text(
+                        getString(pistaDe(perfil)),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
                 }
                 Button(onClick = { empezar() }, modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
                     Text(getString(R.string.clase_empezar))
@@ -164,14 +200,27 @@ class GrabarClaseActivity : ComponentActivity() {
             Toast.makeText(this, R.string.clase_ya, Toast.LENGTH_SHORT).show()
         } else {
             // Ahora, con esta pantalla delante: es lo que deja al servicio quedarse el micrófono.
-            runCatching { GrabarClaseService.empezar(this, proyecto, codigo, datos) }
+            runCatching { GrabarClaseService.empezar(this, proyecto, codigo, datos, perfil) }
                 .onFailure { Toast.makeText(this, R.string.clase_no_arranca, Toast.LENGTH_LONG).show() }
         }
         finish()
     }
 
+    private fun nombreDe(p: PerfilDeVideo) = when (p) {
+        PerfilDeVideo.LIGERO -> R.string.clase_calidad_ligero
+        PerfilDeVideo.NORMAL -> R.string.clase_calidad_normal
+        PerfilDeVideo.NITIDO -> R.string.clase_calidad_nitido
+    }
+
+    private fun pistaDe(p: PerfilDeVideo) = when (p) {
+        PerfilDeVideo.LIGERO -> R.string.clase_calidad_ligero_pista
+        PerfilDeVideo.NORMAL -> R.string.clase_calidad_normal_pista
+        PerfilDeVideo.NITIDO -> R.string.clase_calidad_nitido_pista
+    }
+
     companion object {
         private const val EL_PROYECTO = "clase_proyecto"
+        private const val PERFIL = "perfil_video"
 
         /** Abre la preparación para grabar en el chat [proyecto] (null, el general). */
         fun abrir(context: Context, proyecto: String?) {

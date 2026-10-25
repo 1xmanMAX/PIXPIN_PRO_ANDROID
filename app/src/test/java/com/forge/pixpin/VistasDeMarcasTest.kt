@@ -50,6 +50,37 @@ class VistasDeMarcasTest {
     }
 
     @Test
+    fun `con los topes del editor una vista enorme no baja de su minimo y sigue centrada`() {
+        // 25-oct-2026, como `camara_entre` del PC: el pellizco no baja de 0,1.
+        val enorme = VistaDeMarca(500.0, 200.0, 100_000.0, 40_000.0)
+        val c = enorme.aViewportEntre(800.0, 600.0, Viewport.MIN_ZOOM, VistaDeMarca.ZOOM_MAXIMO)
+        assertEquals(0.1, c.zoom, 0.0)
+        val centro = c.toScene(400.0, 300.0)
+        cerca(centro.x, 500.0, 1e-2); cerca(centro.y, 200.0, 1e-2)
+        // Caso de control: sin los topes del editor llega al de la cámara.
+        assertEquals(VistaDeMarca.ZOOM_MINIMO, enorme.aViewport(800.0, 600.0).zoom, 0.0)
+        // Unos topes del revés no dan un aumento del revés.
+        assertEquals(2.0, VistaDeMarca(0.0, 0.0, 1.0, 1.0).aViewportEntre(800.0, 600.0, 2.0, 1.0).zoom, 0.0)
+    }
+
+    @Test
+    fun `sin hueco no hay camara para ir a la marca`() {
+        val dir = Files.createTempDirectory("vistas").toFile()
+        try {
+            val marcas = listOf(Marca(id = 1L, x = 0.0, y = 0.0, emoji = "⭐"))
+            assertTrue(VistasDeMarcas.guardar(dir, "d", 1L, Viewport(zoom = 1.0), 800.0, 600.0, marcas))
+            // La ventana minimizada o a medio crear: no se va a ningún sitio.
+            assertNull(VistasDeMarcas.camaraPara(dir, "d", 1L, 0.0, 600.0))
+            assertNull(VistasDeMarcas.camaraPara(dir, "d", 1L, 800.0, 0.5))
+            // Con hueco, sí, y con el mínimo del editor.
+            val c = VistasDeMarcas.camaraPara(dir, "d", 1L, 8.0, 6.0)!!
+            assertEquals(Viewport.MIN_ZOOM, c.zoom, 0.0)
+        } finally {
+            dir.deleteRecursively()
+        }
+    }
+
+    @Test
     fun `el texto de la vista y lo que no es una`() {
         assertEquals("12 -3.5 640 360.1235", VistaDeMarca(12.0, -3.5, 640.0, 360.123456).aTexto())
         assertEquals("320.5 1040 800 450", VistaDeMarca(320.5, 1040.0, 800.0, 450.0).aTexto())

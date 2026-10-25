@@ -26,11 +26,21 @@ data class VistaDeMarca(val x: Double, val y: Double, val ancho: Double, val alt
      * min(w/ancho, h/alto)` acotado a [ZOOM_MINIMO]..[ZOOM_MAXIMO] y la esquina en
      * `(x − w/2z, y − h/2z)`; en Excalidraw, `scrollX = w/2z − x`.
      */
-    fun aViewport(w: Double, h: Double): Viewport {
+    fun aViewport(w: Double, h: Double): Viewport = aViewportEntre(w, h, ZOOM_MINIMO, ZOOM_MAXIMO)
+
+    /**
+     * **Como [aViewport], con el aumento entre [minimo] y [maximo]: los topes de quien la usa**
+     * (25-oct-2026, como `VistaDeMarca::camara_entre` del PC). El editor no deja el pellizco por
+     * debajo de su [Viewport.MIN_ZOOM] (0,1, el de Excalidraw); una cámara que llegara a 0,05
+     * haría que el primer gesto de alejar acercase de golpe hasta ese 0,1.
+     */
+    fun aViewportEntre(w: Double, h: Double, minimo: Double, maximo: Double): Viewport {
         val ww = w.coerceAtLeast(1.0)
         val hh = h.coerceAtLeast(1.0)
+        val bajo = minimo.coerceAtLeast(1e-6)
+        val alto_ = maximo.coerceAtLeast(bajo)
         val zoom = minOf(ww / ancho.coerceAtLeast(1e-9), hh / alto.coerceAtLeast(1e-9))
-            .coerceIn(ZOOM_MINIMO, ZOOM_MAXIMO)
+            .coerceIn(bajo, alto_)
         return Viewport(scrollX = ww / (2 * zoom) - x, scrollY = hh / (2 * zoom) - y, zoom = zoom)
     }
 
@@ -140,9 +150,14 @@ object VistasDeMarcas {
         escribir(filesDir, dibujo, leer(filesDir, dibujo), marcas)
     }
 
-    /** La cámara para ir a la marca [id] en un hueco de [w]×[h]; null si no tiene vista (va como antes). */
+    /**
+     * La cámara para ir a la marca [id] en un hueco de [w]×[h]; null si no tiene vista (va como
+     * antes). **Con los topes del editor** (25-oct-2026, como el PC): de [Viewport.MIN_ZOOM] a
+     * [VistaDeMarca.ZOOM_MAXIMO]; por debajo del mínimo del pellizco, el primer gesto de alejar
+     * acercaría. Ver [VistaDeMarca.aViewportEntre].
+     */
     fun camaraPara(filesDir: File, dibujo: String, id: Long, w: Double, h: Double): Viewport? {
-        if (!(w > 0 && h > 0)) return null
-        return leer(filesDir, dibujo)[id]?.aViewport(w, h)
+        if (!(w >= 1 && h >= 1)) return null
+        return leer(filesDir, dibujo)[id]?.aViewportEntre(w, h, Viewport.MIN_ZOOM, VistaDeMarca.ZOOM_MAXIMO)
     }
 }

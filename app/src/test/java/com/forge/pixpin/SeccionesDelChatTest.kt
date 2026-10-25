@@ -85,4 +85,132 @@ class SeccionesDelChatTest {
         assertFalse(SeccionesDelChat.tieneEnlace("escribe a ana@ejemplo.com"))
         assertFalse(SeccionesDelChat.tieneEnlace(""))
     }
+
+    // ---- La ficha del chat (25-oct-2026, PC `8c92ba4`, `99f918a`, `2439c5c`). ----
+
+    @Test
+    fun `la de proyectos no se queda ningun mensaje`() {
+        // Como `la_de_proyectos_no_se_queda_ningun_mensaje` del PC: ni una nota, ni un proyecto
+        // adjunto, ni lo del buzón se cuelan en ella.
+        val l = listOf(
+            msg("n", Clase.NOTA, texto = "hola", fijado = true),
+            msg("p", Clase.PROYECTO, "otro"),
+            msg("b", Clase.IMAGEN, "x.png", buzon = true)
+        )
+        assertTrue(deSeccion(l, Seccion.PROYECTOS).isEmpty())
+        assertTrue(SeccionesDelChat.cosasDe(l, Seccion.PROYECTOS).isEmpty())
+        assertFalse(SeccionesDelChat.esCuadricula(Seccion.PROYECTOS))
+        // Es la primera de la ficha, y «Todo» y el buzón no están en ella.
+        assertEquals(Seccion.PROYECTOS, SeccionesDelChat.DE_LA_FICHA.first())
+        assertFalse(Seccion.TODO in SeccionesDelChat.DE_LA_FICHA)
+        assertFalse(Seccion.BUZON in SeccionesDelChat.DE_LA_FICHA)
+        // Caso de control: los mismos mensajes sí salen en «Todo».
+        assertEquals(2, deSeccion(l, Seccion.TODO).size)
+    }
+
+    @Test
+    fun `las fotos de las notas ricas van en fotos en el sitio de su nota`() {
+        val foto = "pixpin:files/guardados/pc/c/notas/1-a.png"
+        val l = listOf(
+            msg("f1", Clase.IMAGEN, "a.jpg"),
+            msg("nota", Clase.NOTA, texto = "obra\n![]($foto)\n![planta]($foto)\n![acta](pixpin:files/x/acta.pdf)"),
+            msg("llana", Clase.NOTA, texto = "sin fotos"),
+            msg("v", Clase.IMAGEN, "clase.mp4"),
+            msg("f2", Clase.IMAGEN, "b.jpg")
+        )
+        // El PDF de la nota no es una foto; el vídeo tiene su pestaña.
+        assertEquals(2, SeccionesDelChat.fotosDeLaNota(l[1].texto).size)
+        assertEquals(
+            listOf(
+                SeccionesDelChat.Cosa("f1"), SeccionesDelChat.Cosa("nota", 0),
+                SeccionesDelChat.Cosa("nota", 1), SeccionesDelChat.Cosa("f2")
+            ),
+            SeccionesDelChat.cosasDe(l, Seccion.FOTOS)
+        )
+        // Caso negativo: lo escrito entre comillas no es una foto.
+        assertTrue(SeccionesDelChat.fotosDeLaNota("`![](x.png)`").isEmpty())
+        assertTrue(SeccionesDelChat.fotosDeLaNota("sin nada").isEmpty())
+    }
+
+    @Test
+    fun `con las fotos de las notas mezcla en el orden del chat`() {
+        // Como `con_las_fotos_de_las_notas` del PC: fotos en 0, 3 y 5; notas en 1 (dos fotos),
+        // 4 (ninguna) y 6 (una).
+        val cuantas = mapOf(1 to 2, 4 to 0, 6 to 1)
+        assertEquals(
+            listOf(0 to null, 1 to 0, 1 to 1, 3 to null, 5 to null, 6 to 0),
+            SeccionesDelChat.conLasFotosDeLasNotas(listOf(0, 3, 5), listOf(1, 4, 6)) { cuantas.getValue(it) }
+        )
+        assertEquals(emptyList<Pair<Int, Int?>>(), SeccionesDelChat.conLasFotosDeLasNotas(emptyList(), emptyList()) { 0 })
+    }
+
+    @Test
+    fun `la previa sigue a su cosa por id y si se va vuelve a la rejilla`() {
+        val a = SeccionesDelChat.Cosa("a")
+        val nota1 = SeccionesDelChat.Cosa("n", 1)
+        val antes = listOf(a, SeccionesDelChat.Cosa("n", 0), nota1)
+        assertEquals(2, SeccionesDelChat.reubicar(antes, nota1))
+        // La sincronización mete dos delante: sigue en la misma, no en la que cae en su sitio.
+        val despues = listOf(SeccionesDelChat.Cosa("x"), SeccionesDelChat.Cosa("y")) + antes
+        assertEquals(4, SeccionesDelChat.reubicar(despues, nota1))
+        // Borrada: a la rejilla.
+        assertEquals(null, SeccionesDelChat.reubicar(listOf(a), nota1))
+        assertEquals(null, SeccionesDelChat.reubicar(antes, null))
+    }
+
+    @Test
+    fun `por meses con lo nuevo arriba`() {
+        val zona = java.util.TimeZone.getTimeZone("UTC")
+        fun ms(a: Int, m: Int, d: Int) = java.util.Calendar.getInstance(zona).apply { clear(); set(a, m - 1, d, 12, 0) }.timeInMillis
+        val cosas = listOf("sep1" to ms(2026, 9, 1), "oct1" to ms(2026, 10, 1), "sep2" to ms(2026, 9, 20), "oct2" to ms(2026, 10, 25), "dic25" to ms(2025, 12, 31))
+        val meses = SeccionesDelChat.porMeses(cosas, zona) { it.second }
+        assertEquals(listOf(2026 to 10, 2026 to 9, 2025 to 12), meses.map { it.anio to it.mes })
+        assertEquals(listOf("oct2", "oct1"), meses[0].cosas.map { it.first })
+        assertEquals(listOf("sep2", "sep1"), meses[1].cosas.map { it.first })
+        assertTrue(SeccionesDelChat.porMeses(emptyList<Long>(), zona) { it }.isEmpty())
+    }
+
+    @Test
+    fun `los proyectos de la ficha se filtran por nombre con su negrita`() {
+        val charlas = listOf(
+            Conversacion(null, "Mensajes guardados", null, 3),
+            Conversacion("asis", "Asistente", null, 0),
+            Conversacion("r", "Reforma del Baño", null, 7),
+            Conversacion("SIN", "Asistente", null, 0)
+        )
+        assertEquals(listOf(null, "asis", "r"), SeccionesDelChat.proyectosDeLaFicha(charlas, null, "SIN").map { it.proyecto })
+        // Sin tildes ni mayúsculas, y la negrita en su sitio del nombre de verdad.
+        assertEquals(listOf("r"), SeccionesDelChat.proyectosDeLaFicha(charlas, "bano", "SIN").map { it.proyecto })
+        assertEquals(12..15, SeccionesDelChat.tramoBuscado("Reforma del Baño", "BAÑO"))
+        // Casos negativos: nada que buscar, o no está.
+        assertEquals(null, SeccionesDelChat.tramoBuscado("Reforma", " "))
+        assertEquals(null, SeccionesDelChat.tramoBuscado("Reforma", "cocina"))
+        assertTrue(SeccionesDelChat.proyectosDeLaFicha(charlas, "cocina", "SIN").isEmpty())
+    }
+
+    @Test
+    fun `las hojas de cada chat son sus lienzos y paginas fuera del buzon`() {
+        val l = listOf(
+            msg("d1", Clase.DIBUJO).copy(proyecto = "r"),
+            msg("p1", Clase.PAGINA, "plano.pdf").copy(proyecto = "r"),
+            msg("d2", Clase.DIBUJO, buzon = true).copy(proyecto = "r"),
+            msg("n", Clase.NOTA, texto = "x").copy(proyecto = "r"),
+            msg("g", Clase.DIBUJO)
+        )
+        assertEquals(mapOf("r" to 2, null to 1), SeccionesDelChat.hojasPorChat(l))
+    }
+
+    @Test
+    fun `las iniciales de un chat sin logo`() {
+        assertEquals("RD", iniciales("Reforma del baño"))
+        assertEquals("C", iniciales("Casa"))
+        assertEquals("·", iniciales("  "))
+    }
+
+    @Test
+    fun `cada extension tiene su color de familia`() {
+        assertEquals(colorDeExtension("PDF"), colorDeExtension("pdf"))
+        assertTrue(colorDeExtension("pdf") != colorDeExtension("docx"))
+        assertEquals(colorDeExtension("mp4"), colorDeExtension("mov"))
+    }
 }

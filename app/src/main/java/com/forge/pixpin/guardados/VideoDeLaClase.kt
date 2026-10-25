@@ -73,28 +73,49 @@ class VideoDeLaClase private constructor(
          * (Android 14). [alPerderse] se llama si el sistema corta la proyección (el chip de la barra,
          * bloquear la pantalla). Null si este teléfono no deja: entonces se graba solo el audio.
          */
-        fun empezar(context: Context, codigo: Int, datos: Intent, destino: File, alPerderse: () -> Unit): VideoDeLaClase? {
+        fun empezar(
+            context: Context, codigo: Int, datos: Intent, destino: File,
+            perfil: PerfilDeVideo = PerfilDeVideo.NORMAL, alPerderse: () -> Unit
+        ): VideoDeLaClase? {
             var grabadora: MediaRecorder? = null
             var proyeccion: MediaProjection? = null
             return runCatching {
                 val metricas = metricas(context) ?: error("sin pantalla")
-                val (ancho, alto) = GrabarClase.medidasDelVideo(metricas.widthPixels, metricas.heightPixels)
-                grabadora = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context)
-                else @Suppress("DEPRECATION") MediaRecorder()).apply {
-                    setAudioSource(MediaRecorder.AudioSource.MIC)
-                    setVideoSource(MediaRecorder.VideoSource.SURFACE)
-                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                    setOutputFile(destino.absolutePath)
-                    setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-                    setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                    setVideoSize(ancho, alto)
-                    setVideoFrameRate(30)
-                    // Diapositivas y una cara: con 2,5 Mb/s una hora son ~1,1 GB, como el PC a 1280.
-                    setVideoEncodingBitRate(2_500_000)
-                    setAudioSamplingRate(44_100)
-                    setAudioEncodingBitRate(96_000)
-                    prepare()
+                // **Con la calidad elegida** (25-oct-2026, como el PC: «Ligero», «Normal», «Nítido»).
+                // Si el codificador del teléfono no admite el tamaño de «Nítido» (muchos no pasan
+                // de 1080p), «Normal»: mejor un vídeo algo más blando que ninguno.
+                val probar = listOf(perfil, PerfilDeVideo.NORMAL, PerfilDeVideo.LIGERO).distinct()
+                var medidas: Pair<Int, Int>? = null
+                for (p in probar) {
+                    val (ancho, alto) = GrabarClase.medidasDelVideo(metricas.widthPixels, metricas.heightPixels, p)
+                    val (media, _) = PerfilDeVideo.bitsPorSegundo(p, ancho, alto)
+                    val g = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context)
+                    else @Suppress("DEPRECATION") MediaRecorder())
+                    val lista = runCatching {
+                        g.apply {
+                            setAudioSource(MediaRecorder.AudioSource.MIC)
+                            setVideoSource(MediaRecorder.VideoSource.SURFACE)
+                            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                            setOutputFile(destino.absolutePath)
+                            setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+                            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
+                            setVideoSize(ancho, alto)
+                            setVideoFrameRate(p.porSegundo)
+                            // La media del PC para este tamaño: una hora de «Normal» ≈ 300 MB.
+                            setVideoEncodingBitRate(media)
+                            setAudioSamplingRate(44_100)
+                            setAudioEncodingBitRate(96_000)
+                            prepare()
+                        }
+                    }.isSuccess
+                    if (lista) {
+                        grabadora = g
+                        medidas = ancho to alto
+                        break
+                    }
+                    runCatching { g.release() }
                 }
+                val (ancho, alto) = medidas ?: error("sin codificador")
                 proyeccion = context.getSystemService(MediaProjectionManager::class.java).getMediaProjection(codigo, datos)
                     ?: error("sin proyección")
                 // Android 14: el aviso de que se corta se pone **antes** de crear el display.

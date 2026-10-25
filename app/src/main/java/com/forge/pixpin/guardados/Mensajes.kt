@@ -357,6 +357,15 @@ data class Mensaje(
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val video: kotlinx.serialization.json.JsonObject? = null,
+    /**
+     * **Los marcadores con nota de una clase** (25-oct-2026, PC `3af2647`): en la nota de voz,
+     * `marcadores: [{ms, texto}]` en orden de `ms`, uno por milisegundo, `texto` de 200 caracteres
+     * como mucho y sin saltos (puede ir vacío). **Sin ninguno la clave se quita** (null, nunca `[]`),
+     * como [marcas], que siguen aparte. Se ponen y se quitan en «Estudiar la clase»; se conservan
+     * tal cual al reescribir el mensaje. Ver [EstudiarClase].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val marcadores: kotlinx.serialization.json.JsonArray? = null,
 
     /**
      * **Es un escaneo** (23-oct-2026, lo pidió el usuario): entró por «Escanear» del clip y se puede
@@ -398,8 +407,13 @@ data class TurnoDeVoz(val quien: String, val desdeMs: Int, val hastaMs: Int)
 /**
  * Las secciones de la cabecera, en su orden. **Vídeos** y **Enlaces** (25-oct-2026, como el
  * `Seccion` del PC): ver [SeccionesDelChat].
+ *
+ * **Proyectos** (25-oct-2026, como `Seccion::Proyectos` del PC, `2439c5c`) es la primera pestaña
+ * de la ficha del chat ([FichaDelChat]): lista los chats para pasar de uno a otro. No es de
+ * mensajes —ninguno es de ella, ver [deSeccion]— ni se guarda ni viaja, y no sale en las fichas
+ * de la cabecera, que filtran la conversación.
  */
-enum class Seccion { TODO, FOTOS, VIDEOS, ARCHIVOS, ENLACES, VOZ, DIBUJOS, FIJADOS, BUZON }
+enum class Seccion { TODO, FOTOS, VIDEOS, ARCHIVOS, ENLACES, VOZ, DIBUJOS, FIJADOS, BUZON, PROYECTOS }
 
 /**
  * Qué clases entran en cada sección.
@@ -420,6 +434,7 @@ fun clasesDe(seccion: Seccion): Set<Clase> = when (seccion) {
     Seccion.DIBUJOS -> setOf(Clase.DIBUJO)
     Seccion.FIJADOS -> Clase.entries.toSet()
     Seccion.BUZON -> Clase.entries.toSet()
+    Seccion.PROYECTOS -> emptySet()
 }
 
 /**

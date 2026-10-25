@@ -165,4 +165,58 @@ class GrabarClaseTest {
         assertEquals(800 to 480, GrabarClase.medidasDelVideo(800, 480))
         assertEquals(16 to 16, GrabarClase.medidasDelVideo(3, 3))
     }
+
+    // ---- La calidad del vídeo (25-oct-2026, `perfil.rs` del PC, `cdad692`). ----
+
+    @Test
+    fun `cada perfil tiene su tamano y su ritmo y se gira con la pantalla`() {
+        assertEquals(1280 to 720, GrabarClase.medidasDelVideo(1920, 1080, PerfilDeVideo.LIGERO))
+        assertEquals(1920 to 1072, GrabarClase.medidasDelVideo(2560, 1440, PerfilDeVideo.NORMAL))
+        // Nítido es la pantalla tal cual (a 16).
+        assertEquals(2560 to 1440, GrabarClase.medidasDelVideo(2560, 1440, PerfilDeVideo.NITIDO))
+        // Un teléfono de pie: la caja se gira, no se queda en 486 de ancho.
+        assertEquals(864 to 1920, GrabarClase.medidasDelVideo(1080, 2400, PerfilDeVideo.NORMAL))
+        // Caso negativo: ningún perfil agranda una pantalla pequeña.
+        assertEquals(1360 to 768, GrabarClase.medidasDelVideo(1366, 768, PerfilDeVideo.NORMAL))
+        assertEquals(10, PerfilDeVideo.LIGERO.porSegundo)
+        assertEquals(15, PerfilDeVideo.NORMAL.porSegundo)
+        assertEquals(30, PerfilDeVideo.NITIDO.porSegundo)
+    }
+
+    @Test
+    fun `una hora de normal cabe en el presupuesto`() {
+        val (media, _) = PerfilDeVideo.bitsPorSegundo(PerfilDeVideo.NORMAL, 1920, 1080)
+        val mb = PerfilDeVideo.megasPorHora(media, true)
+        assertTrue("$mb MB por hora", mb in 150..300)
+        val l = PerfilDeVideo.megasPorHora(PerfilDeVideo.LIGERO.media, true)
+        val n = PerfilDeVideo.megasPorHora(PerfilDeVideo.NITIDO.media, true)
+        assertTrue("$l $mb $n", l < mb && mb < n)
+    }
+
+    @Test
+    fun `los bits escalan con los pixeles con topes`() {
+        val a = PerfilDeVideo.NORMAL
+        assertEquals(a.media to a.pico, PerfilDeVideo.bitsPorSegundo(a, 1920, 1080))
+        // Una ventanita no se queda sin bits: como mucho la mitad.
+        assertEquals(a.media / 2 to a.pico / 2, PerfilDeVideo.bitsPorSegundo(a, 320, 240))
+        // Caso negativo: una pantalla enorme no se dispara.
+        assertEquals(PerfilDeVideo.NITIDO.media * 4, PerfilDeVideo.bitsPorSegundo(PerfilDeVideo.NITIDO, 7680, 4320).first)
+        for (p in PerfilDeVideo.entries) {
+            val (m, x) = PerfilDeVideo.bitsPorSegundo(p, 1280, 720)
+            assertTrue(x > m)
+        }
+    }
+
+    @Test
+    fun `las claves son las del pc y lo raro es normal y tocar recorre los tres`() {
+        assertEquals(listOf("ligero", "normal", "nitido"), PerfilDeVideo.entries.map { it.clave })
+        for (p in PerfilDeVideo.entries) assertEquals(p, PerfilDeVideo.deClave(p.clave))
+        assertEquals(PerfilDeVideo.NORMAL, PerfilDeVideo.deClave("ultra"))
+        assertEquals(PerfilDeVideo.NORMAL, PerfilDeVideo.deClave(null))
+        var p = PerfilDeVideo.LIGERO
+        val vistos = ArrayList<PerfilDeVideo>()
+        repeat(3) { vistos += p; p = p.siguiente() }
+        assertEquals(PerfilDeVideo.entries, vistos)
+        assertEquals(PerfilDeVideo.LIGERO, p)
+    }
 }

@@ -46,7 +46,7 @@ object NotaRica {
         val alt = s2.substring(0, cierre)
         if ('\n' in alt) return null
         val tras = s2.substring(cierre + 2)
-        val fin = tras.indexOf(')').takeIf { it >= 0 } ?: return null
+        val fin = cierreDelParentesis(tras) ?: return null
         var enlace = tras.substring(0, fin).trim()
         // Un título detrás de la ruta (`![a](ruta "titulo")`) no es la ruta.
         enlace = enlace.split(" \"").first().trim().trimStart('<').trimEnd('>')
@@ -54,29 +54,110 @@ object NotaRica {
         return Imagen(alt.split('|').first().trim(), enlace) to (2 + cierre + 2 + fin + 1)
     }
 
-    /** Las imágenes de un renglón y el texto entre ellas, en orden (`partir_imagenes`). */
-    internal fun partirImagenes(linea: String): List<Any> {
-        val salida = ArrayList<Any>()
-        var resto = linea
-        val texto = StringBuilder()
+    /**
+     * **El `)` que cierra el `(` de una ruta o un enlace** (25-oct-2026, `cierre_del_parentesis`
+     * del PC), en [tras] (lo de detrás del `(`): el que lo empareja, contando los que se abren
+     * dentro, porque una ruta de Windows (`C:\Fotos (2)\a.png`) o una dirección de la Wikipedia
+     * los llevan. Entre `<…>` (`![](<ruta con ( suelto>)`), el de después del `>`. Si no se
+     * emparejan, el primero, como antes. Cortar en el primero dejaba la foto sin salir y un trozo
+     * de ruta como texto.
+     */
+    fun cierreDelParentesis(tras: String): Int? {
+        if (tras.trimStart().startsWith('<')) {
+            val g = tras.indexOf('>')
+            if (g >= 0) {
+                val k = tras.indexOf(')', g)
+                if (k >= 0) return k
+            }
+        }
+        var nivel = 0
+        for ((k, c) in tras.withIndex()) {
+            when {
+                c == '(' -> nivel++
+                c == ')' && nivel == 0 -> return k
+                c == ')' -> nivel--
+                c == '\n' -> break
+            }
+        }
+        return tras.indexOf(')').takeIf { it >= 0 }
+    }
+
+    /**
+     * Dónde hay `` `código` `` en un renglón (con sus comillas, `tramos_de_codigo` del PC): de
+     * tantas comillas como abren hasta otras tantas.
+     */
+    internal fun tramosDeCodigo(linea: String): List<IntRange> {
+        val tramos = ArrayList<IntRange>()
+        var i = 0
         while (true) {
-            val i = resto.indexOf("![")
-            if (i < 0) break
-            val hallada = imagenEn(resto.substring(i))
+            val inicio = linea.indexOf('`', i).takeIf { it >= 0 } ?: break
+            var tiras = 0
+            while (inicio + tiras < linea.length && linea[inicio + tiras] == '`') tiras++
+            val valla = linea.substring(inicio, inicio + tiras)
+            val j = linea.indexOf(valla, inicio + tiras)
+            if (j >= 0) {
+                tramos += inicio until j + tiras
+                i = j + tiras
+            } else i = inicio + tiras
+        }
+        return tramos
+    }
+
+    /**
+     * Las imágenes de un renglón y el texto entre ellas, en orden (`partir_imagenes`). **Lo que va
+     * dentro de un `` `código` `` es texto aunque lo parezca** (25-oct-2026, como el PC): quien
+     * explica la sintaxis escribe `` `![](foto.png)` ``, y eso no es una foto.
+     */
+    internal fun partirImagenes(linea: String): List<Any> {
+        val codigo = tramosDeCodigo(linea)
+        val salida = ArrayList<Any>()
+        // Dónde empieza el texto aún sin soltar, y desde dónde se busca.
+        var desde = 0
+        var buscar = 0
+        while (true) {
+            val i = linea.indexOf("![", buscar).takeIf { it >= 0 } ?: break
+            val hallada = if (codigo.any { i in it }) null else imagenEn(linea.substring(i))
             if (hallada == null) {
-                // Un `![` que no cierra: texto, y se sigue buscando detrás.
-                texto.append(resto, 0, i + 2)
-                resto = resto.substring(i + 2)
+                // Un `![` que no cierra, o de un código: texto, y se sigue buscando detrás.
+                buscar = i + 2
                 continue
             }
-            texto.append(resto, 0, i)
-            if (texto.isNotEmpty()) { salida += texto.toString(); texto.clear() }
+            if (i > desde) salida += linea.substring(desde, i)
             salida += hallada.first
-            resto = resto.substring(i + hallada.second)
+            desde = i + hallada.second
+            buscar = desde
         }
-        texto.append(resto)
-        if (texto.isNotEmpty()) salida += texto.toString()
+        if (desde < linea.length) salida += linea.substring(desde)
         return salida
+    }
+
+    /**
+     * **El texto de una nota con sus fotos dichas como «🖼 alt»** (`sin_rutas_de_fotos` del PC):
+     * en una línea (la lista de chats, lo citado, lo fijado) la ruta no le dice nada a nadie y se
+     * comería todo el sitio. Lo demás, tal cual. La foto pegada en el PC lleva su número de alt
+     * (`![foto 2](notas/…)`) y aquí sale «🖼 foto 2».
+     */
+    fun sinRutasDeFotos(texto: String): String {
+        if ("![" !in texto) return texto
+        val salida = StringBuilder(texto.length)
+        var resto = texto
+        while (true) {
+            val i = resto.indexOf("![").takeIf { it >= 0 } ?: break
+            salida.append(resto, 0, i)
+            val tras = resto.substring(i + 2)
+            val c = tras.indexOf("](").takeIf { it >= 0 && '\n' !in tras.substring(0, it) }
+            val f = c?.let { cierreDelParentesis(tras.substring(it + 2)) }
+            if (c != null && f != null) {
+                val alt = tras.substring(0, c).split('|').first().trim()
+                salida.append(if (alt.isEmpty()) "🖼" else "🖼 ").append(alt)
+                resto = tras.substring(c + 2 + f + 1)
+            } else {
+                salida.append("![")
+                resto = tras
+            }
+        }
+        salida.append(resto)
+        return salida.toString()
     }
 
     /**
@@ -185,6 +266,14 @@ object NotaRica {
         val trozos = trozos(texto)
         if (trozos.any { it !is Trozo.Texto }) return true
         val bloques = trozos.flatMap { Markdown.parse((it as Trozo.Texto).markdown) }
+        // **Un escape cambia lo que se ve** (25-oct-2026, como el PC: `5 \* 3` es «5 * 3»): si
+        // los párrafos no dicen lo mismo que los renglones escritos, hay formato. Los blancos de
+        // final de renglón y los `\r\n` no cuentan: la nota llana tiene que seguir llana.
+        if (bloques.all { it is MarkdownBlock.Paragraph }) {
+            val leido = bloques.joinToString("\n") { (it as MarkdownBlock.Paragraph).content.text.trim() }
+            val escrito = texto.replace("\r\n", "\n").lines().map { it.trim() }.filter { it.isNotEmpty() }.joinToString("\n")
+            if (leido != escrito) return true
+        }
         return bloques.any { b ->
             when (b) {
                 is MarkdownBlock.Paragraph -> b.content.spans.any { s ->
@@ -204,10 +293,15 @@ object NotaRica {
      */
     fun archivo(filesDir: File, enlace: String): File? {
         val e = enlace.trim()
+        // **Nunca una ruta de red ni una que se salga con `..`** (25-oct-2026, como el PC: allí,
+        // solo con pintar una nota llegada de otro aparato, Windows llamaría a ese equipo con las
+        // credenciales del usuario). Aquí no hay red de Windows, pero la regla es la misma en los
+        // dos lados: la nota que se pinta no decide adónde se mira.
+        if (e.startsWith("\\\\") || e.startsWith("//") || e.split('/', '\\').any { it == ".." }) return null
         val f = when {
             e.startsWith(PORTATIL) -> {
                 val rel = e.removePrefix(PORTATIL)
-                if (rel.isEmpty() || rel.split('/').any { it == ".." }) return null
+                if (rel.isEmpty()) return null
                 File(filesDir, rel)
             }
             e.startsWith("file://") -> File(e.removePrefix("file://"))

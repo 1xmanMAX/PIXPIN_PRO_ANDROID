@@ -581,6 +581,9 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
     private fun irALaMarca(m: com.forge.pixpin.motor.Marca) {
         val v = controller.scene.viewport
         val ancho = medidaDelLienzo.width.takeIf { it > 0 }?.toDouble() ?: return
+        // **Sin hueco no se va a ningún sitio** (25-oct-2026, como el PC): un lienzo sin medir
+        // todavía (a medio crear) daría una cámara para una ventana de un píxel.
+        if (medidaDelLienzo.height < 1) return
         // **Con su vista guardada, a esa vista** (25-oct-2026, §3.8). Ver [VistasDeMarcas].
         VistasDeMarcas.camaraPara(filesDir, dibujoId, m.id, ancho, medidaDelLienzo.height.toDouble())?.let {
             controller.setViewport(it); cambiadoDesdeFuera(); return

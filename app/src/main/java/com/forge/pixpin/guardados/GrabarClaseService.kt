@@ -133,6 +133,7 @@ class GrabarClaseService : Service() {
     companion object {
         private const val EL_PROYECTO = "proyecto"
         private const val EL_CODIGO = "codigo"
+        private const val EL_PERFIL = "perfil_video"
         private const val LOS_DATOS = "datos"
         private const val ACCION_TERMINAR = "com.forge.pixpin.action.CLASE_TERMINAR"
         private const val CANAL = "pixpin_clase"
@@ -151,11 +152,16 @@ class GrabarClaseService : Service() {
          * [datos] (el permiso de grabar la pantalla recién concedido, [codigo] su resultado) graba
          * además el vídeo de la pantalla ([VideoDeLaClase]).
          */
-        fun empezar(context: Context, proyecto: String?, codigo: Int = 0, datos: Intent? = null) {
+        fun empezar(
+            context: Context, proyecto: String?, codigo: Int = 0, datos: Intent? = null,
+            /** La calidad del vídeo (25-oct-2026, como el PC). Ver [PerfilDeVideo]. */
+            perfil: PerfilDeVideo = PerfilDeVideo.NORMAL
+        ) {
             context.startForegroundService(
                 Intent(context, GrabarClaseService::class.java)
                     .putExtra(EL_PROYECTO, proyecto)
                     .putExtra(EL_CODIGO, codigo)
+                    .putExtra(EL_PERFIL, perfil.clave)
                     .apply { if (datos != null) putExtra(LOS_DATOS, datos) }
             )
         }
@@ -246,7 +252,10 @@ class GrabarClaseService : Service() {
             }.isSuccess
             val mp4 = File(carpeta, "clase_$ahora.mp4")
             g = if (enPrimerPlano) {
-                VideoDeLaClase.empezar(this, intent.getIntExtra(EL_CODIGO, 0), datos, mp4) {
+                VideoDeLaClase.empezar(
+                    this, intent.getIntExtra(EL_CODIGO, 0), datos, mp4,
+                    PerfilDeVideo.deClave(intent.getStringExtra(EL_PERFIL))
+                ) {
                     // El sistema cortó la pantalla (el chip, bloquear): se guarda lo que haya.
                     scope.launch { terminar() }
                 }

@@ -685,6 +685,29 @@
     <string name="guardados_archivos">Archivos</string>
     <string name="guardados_videos">Vídeos</string>
     <string name="guardados_enlaces">Enlaces</string>
+    <!-- La ficha del chat (25-oct-2026, como la isla del PC). Ver FichaDelChat. -->
+    <string name="guardados_proyectos">Proyectos</string>
+    <string name="ficha_titulo">Información</string>
+    <string name="ficha_este_chat">Este chat</string>
+    <string name="ficha_mes">%1$s de %2$d</string>
+    <string name="ficha_posicion">%1$d de %2$d</string>
+    <string name="ficha_ver_en_el_chat">Ver en el chat</string>
+    <string name="ficha_abrir">Abrir</string>
+    <string name="ficha_abrir_enlace">Abrir enlace</string>
+    <string name="ficha_reproducir">Reproducir</string>
+    <string name="ficha_buscar">Buscar</string>
+    <string name="ficha_vacia_fotos">Las fotos del chat saldrán aquí</string>
+    <string name="ficha_vacia_videos">Los vídeos del chat saldrán aquí</string>
+    <string name="ficha_vacia_archivos">Los archivos del chat saldrán aquí</string>
+    <string name="ficha_vacia_enlaces">Los enlaces del chat saldrán aquí</string>
+    <string name="ficha_vacia_voz">Las notas de voz saldrán aquí</string>
+    <string name="ficha_vacia_dibujos">Los dibujos del chat saldrán aquí</string>
+    <string name="ficha_vacia_fijados">Lo que fijes saldrá aquí</string>
+    <string name="ficha_vacia_proyectos">Aún no hay proyectos</string>
+    <plurals name="ficha_hojas">
+        <item quantity="one">1 hoja</item>
+        <item quantity="other">%d hojas</item>
+    </plurals>
     <string name="guardados_voz">Voz</string>
     <string name="guardados_dibujos">Dibujos</string>
     <string name="guardados_fijados">Fijados</string>
@@ -1014,7 +1037,14 @@
     <string name="clase_notif">Grabando la clase</string>
     <string name="clase_captura_de">Captura del %1$s</string>
     <string name="clase_con_video">Grabar también el vídeo de la pantalla</string>
-    <string name="clase_video_explicacion">Ocupa mucho más (≈1 GB por hora). Las capturas salen del propio vídeo, a pantalla entera, y Android enseña que se está grabando la pantalla.</string>
+    <string name="clase_video_explicacion">Ocupa más que la nota sola (mira la calidad). Las capturas salen del propio vídeo, a pantalla entera, y Android enseña que se está grabando la pantalla.</string>
+    <string name="clase_calidad">Calidad del vídeo</string>
+    <string name="clase_calidad_ligero">Ligero</string>
+    <string name="clase_calidad_normal">Normal</string>
+    <string name="clase_calidad_nitido">Nítido</string>
+    <string name="clase_calidad_ligero_pista">Vídeo a 720p y 10 fps: lo que menos pesa (unos 180 MB por hora)</string>
+    <string name="clase_calidad_normal_pista">Vídeo a 1080p y 15 fps: unos 300 MB por hora como mucho</string>
+    <string name="clase_calidad_nitido_pista">La pantalla tal cual a 30 fps: el texto pequeño se lee, pesa más</string>
     <string name="clase_sin_video">No se pudo grabar la pantalla: se graba solo el audio</string>
     <string name="clase_sin_audio">El vídeo entró en el chat, pero sin audio no hay nota que pasar a texto</string>
     <string name="clase_ver_video">Vídeo</string>

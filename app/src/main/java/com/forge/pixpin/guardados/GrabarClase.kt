@@ -209,6 +209,81 @@ object GrabarClase {
         return a16(ancho) to a16(alto)
     }
 
+    /**
+     * **El tamaño del vídeo con un perfil** (25-oct-2026, como `Perfil::medidas` del PC): la
+     * pantalla dentro de la caja de su perfil, **girada como la pantalla** (el PC graba apaisado; un
+     * teléfono de pie con «Normal» va a 1080×1920, no a 486×1080), nunca más grande que la pantalla
+     * y con los lados múltiplos de 16 como [medidasDelVideo].
+     */
+    fun medidasDelVideo(ancho: Int, alto: Int, perfil: PerfilDeVideo): Pair<Int, Int> {
+        val (largoTope, cortoTope) = perfil.tope ?: PerfilDeVideo.TOPE_NATIVO
+        val largo = maxOf(ancho, alto, 1)
+        val corto = maxOf(minOf(ancho, alto), 1)
+        val k = minOf(1.0, largoTope.toDouble() / largo, cortoTope.toDouble() / corto)
+        // Con una pizca: 1920 · (1280/1920) da 1279,99… y se iría a 1264.
+        fun a16(v: Int) = ((v * k + 1e-6).toInt() / 16 * 16).coerceAtLeast(16)
+        return a16(ancho) to a16(alto)
+    }
+
     /** Cuánto dura armado el ✕ de tirar: pasado esto, otro toque vuelve a avisar. */
     const val TIRAR_DURA_MS = 3_000L
+}
+
+/**
+ * **La calidad del vídeo de la clase** (25-oct-2026, como `pixpin_motor_video::Perfil` del PC,
+ * `cdad692`): «Ligero», «Normal» y «Nítido». Cada uno dice hasta qué tamaño se graba, cuántos
+ * fotogramas por segundo y cuántos bits se le dejan al codificador; los números son los del PC,
+ * para que una hora de clase pese lo mismo grabada en un sitio que en otro (en «Normal», unos
+ * 300 MB **en el peor caso**). [clave] es la del PC, y es lo que se guarda de la elección.
+ *
+ * En el teléfono el codificador es siempre el H.264 del aparato (`MediaRecorder`): del PC no se
+ * trae la cadena de caídas gráfica → procesador → modo sencillo ni el aviso de con cuál se graba.
+ */
+enum class PerfilDeVideo(
+    val clave: String,
+    /** La caja más grande, (lado largo, lado corto); null, la pantalla tal cual (hasta [TOPE_NATIVO]). */
+    val tope: Pair<Int, Int>?,
+    /** Fotogramas por segundo como mucho. */
+    val porSegundo: Int,
+    /** Bits por segundo de media y de pico para un vídeo de [referencia]. */
+    val media: Int,
+    val pico: Int,
+    val referencia: Pair<Int, Int>
+) {
+    LIGERO("ligero", 1280 to 720, 10, 300_000, 1_500_000, 1280 to 720),
+    NORMAL("normal", 1920 to 1080, 15, 550_000, 3_000_000, 1920 to 1080),
+    NITIDO("nitido", null, 30, 1_200_000, 6_000_000, 1920 to 1080);
+
+    /** El siguiente al tocar (vuelve al primero tras el último), como en el PC. */
+    fun siguiente(): PerfilDeVideo = entries[(ordinal + 1) % entries.size]
+
+    companion object {
+        /** El tope duro de «la pantalla tal cual»: 4K, como el PC. */
+        val TOPE_NATIVO = 3840 to 2160
+
+        /** Bytes por segundo del AAC de la nota (96 kb/s). */
+        const val BYTES_POR_SEGUNDO_AAC = 12_000
+
+        /** El de una [clave]; cualquier otra cosa, «Normal» (el de salida). */
+        fun deClave(clave: String?): PerfilDeVideo = entries.firstOrNull { it.clave == clave } ?: NORMAL
+
+        /**
+         * **Bits por segundo de media y de pico** para un vídeo de [ancho]×[alto] (`bits_por_segundo`
+         * del PC): proporcionales a los píxeles respecto a la referencia, pero nunca menos de la
+         * mitad (el texto pequeño necesita sus bits igual) ni más de cuatro veces.
+         */
+        fun bitsPorSegundo(p: PerfilDeVideo, ancho: Int, alto: Int): Pair<Int, Int> {
+            val px = maxOf(ancho, 2).toLong() * maxOf(alto, 2)
+            val ref = maxOf(p.referencia.first, 2).toLong() * maxOf(p.referencia.second, 2)
+            val factor = (px * 1000 / ref).coerceIn(500, 4000)
+            return (p.media * factor / 1000).toInt() to (p.pico * factor / 1000).toInt()
+        }
+
+        /** **Megas por hora en el peor caso**: el vídeo a su media todo el rato y el sonido AAC. */
+        fun megasPorHora(mediaVideo: Int, conSonido: Boolean): Long {
+            val video = mediaVideo.toLong() / 8 * 3600
+            val sonido = if (conSonido) BYTES_POR_SEGUNDO_AAC.toLong() * 3600 else 0
+            return (video + sonido) / 1_000_000
+        }
+    }
 }

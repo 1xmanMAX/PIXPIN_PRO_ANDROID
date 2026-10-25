@@ -576,6 +576,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         var fichasALaVista by androidx.compose.runtime.saveable.rememberSaveable {
             mutableStateOf(false)
         }
+        // **La ficha del chat** (25-oct-2026, como la isla del PC de `99f918a` y `2439c5c`): tocar
+        // el título ya no despliega las fichas, abre la ficha con sus pestañas —Proyectos, Fotos,
+        // Vídeos, Archivos, Enlaces, Voz, Dibujos y Fijados—, que es lo que hace Telegram al
+        // tocar el nombre de un chat. Las fichas que filtran la conversación siguen saliendo al
+        // buscar. Ver [FichaDelChat].
+        var fichaAbierta by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
         // Por cuál de los fijados va el paseo. Crece sin parar y se toma el resto: así
         // no hay que reajustarlo cuando se fija o se suelta algo mientras se mira.
         var porElFijado by remember { mutableIntStateOf(0) }
@@ -1792,7 +1798,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 // lupa de la esquina obliga a cruzarla entera.
                                 Column(
                                     Modifier.combinedClickable(
-                                        onClick = { fichasALaVista = !fichasALaVista },
+                                        onClick = { fichaAbierta = true },
                                         onLongClick = { consulta = "" }
                                     )
                                 ) {
@@ -1848,7 +1854,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                             modifier = Modifier
                                                 .padding(start = 2.dp)
                                                 .size(18.dp)
-                                                .rotate(if (fichasALaVista) 180f else 0f)
+                                                .rotate(if (fichaAbierta) 180f else 0f)
                                         )
                                     }
                                     // **Compartido**: con cuántas personas, delante de lo demás.
@@ -2459,6 +2465,57 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             }
         }
 
+        if (fichaAbierta) {
+            val charlasDeLaFicha = remember(mensajes, proyectos, chatDelAsistente) {
+                conversaciones(
+                    mensajes,
+                    proyectos.filter { !it.archivado }.associate { it.id to it.nombre },
+                    getString(com.forge.pixpin.R.string.guardados_titulo),
+                    chatDelAsistente ?: com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR
+                )
+            }
+            val hojas = remember(sinLecciones) { SeccionesDelChat.hojasPorChat(sinLecciones) }
+            val deLaFicha = remember(deEsteChat) { deEsteChat.filter { !it.enBuzon } }
+            FichaDelChat(
+                nombre = nombreDelChat.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) },
+                subtitulo = resources.getQuantityString(
+                    com.forge.pixpin.R.plurals.guardados_cuantos, deLaFicha.size, deLaFicha.size
+                ),
+                chatDe = chatDe,
+                mensajes = deLaFicha,
+                charlas = charlasDeLaFicha,
+                hojas = hojas,
+                sinCrear = com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR,
+                resumenDe = { resumen(it) },
+                fechaDe = { fechaDe(it) },
+                onCerrar = { fichaAbierta = false },
+                // Otro chat: se cambia aquí mismo, por el mismo camino que la lista de chats.
+                onIrAlChat = { charla ->
+                    fichaAbierta = false
+                    if (charla.proyecto != null) {
+                        chatDe = charla.proyecto
+                        nombreDelChat = charla.nombre
+                        vineDeLaGeneral = true
+                    } else {
+                        chatDe = null
+                        nombreDelChat = ""
+                        vineDeLaGeneral = false
+                    }
+                    seccion = Seccion.TODO
+                },
+                // «Ver en el chat»: salir a propósito, a ese mensaje.
+                onVerEnElChat = { id ->
+                    fichaAbierta = false
+                    seccion = Seccion.TODO
+                    consulta = null
+                    irA = id
+                },
+                onAbrir = { abrir(it) },
+                onAbrirFichero = { abrirFuera(it.path) },
+                onAbrirEnlace = { abrirEnlace(it) }
+            )
+        }
+
         if (eligiendoChat) {
             // **La lista de conversaciones, como la de Telegram**: cada una con su último
             // mensaje y su hora, ordenadas por lo más reciente, y la general arriba por
@@ -2864,7 +2921,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // **El buzón solo sale si hay algo dentro.** Una bandeja vacía siempre a la
         // vista enseña a no mirarla, y cuando por fin tenga algo ya nadie la mira.
         val secciones = remember(hayBuzon) {
-            if (hayBuzon) Seccion.entries else Seccion.entries.filter { it != Seccion.BUZON }
+            // «Proyectos» es de la ficha del chat, no filtra la conversación. Ver [FichaDelChat].
+            Seccion.entries.filter { it != Seccion.PROYECTOS && (hayBuzon || it != Seccion.BUZON) }
         }
         androidx.compose.foundation.lazy.LazyRow(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -7513,6 +7571,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             Seccion.DIBUJOS -> com.forge.pixpin.R.string.guardados_dibujos
             Seccion.FIJADOS -> com.forge.pixpin.R.string.guardados_fijados
             Seccion.BUZON -> com.forge.pixpin.R.string.guardados_buzon
+            Seccion.PROYECTOS -> com.forge.pixpin.R.string.guardados_proyectos
         }
     )
 
@@ -7564,7 +7623,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     }
 
     private fun resumen(m: Mensaje): String = when {
-        m.texto.isNotBlank() -> m.texto.take(60)
+        // Una nota rica dice sus fotos como «🖼 foto 2», no con su ruta (25-oct-2026). Ver [NotaRica.sinRutasDeFotos].
+        m.texto.isNotBlank() -> NotaRica.sinRutasDeFotos(m.texto).take(60)
         m.nombre.isNotBlank() -> m.nombre
         m.clase == Clase.VOZ -> getString(com.forge.pixpin.R.string.guardados_voz)
         else -> getString(com.forge.pixpin.R.string.guardados_titulo)

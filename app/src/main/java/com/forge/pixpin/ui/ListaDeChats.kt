@@ -145,7 +145,8 @@ internal fun vistazo(m: Mensaje): String = when (m.clase) {
     Clase.MINIAPP -> if (com.forge.pixpin.guardados.CarpetaDePaginas.esCarpeta(m)) "📒 " + m.nombre.ifBlank { "Carpeta de páginas" }
     else "☑️ " + m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().trim('#', ' ')
     Clase.ARCHIVO -> "📄 " + m.nombre.ifBlank { "Archivo" }
-    Clase.NOTA -> m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
+    // Las fotos de una nota rica, como «🖼 alt» y no su ruta (25-oct-2026). Ver [com.forge.pixpin.guardados.NotaRica.sinRutasDeFotos].
+    Clase.NOTA -> com.forge.pixpin.guardados.NotaRica.sinRutasDeFotos(m.texto).lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
 }
 
 /** La hora si es de hoy, «ayer», o el día. */

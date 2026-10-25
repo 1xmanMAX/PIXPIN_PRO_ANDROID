@@ -570,7 +570,10 @@ object Markdown {
             if (line[i] == '[') {
                 val closeText = line.indexOf(']', i + 1)
                 if (closeText > i && closeText + 1 < line.length && line[closeText + 1] == '(') {
-                    val closeUrl = line.indexOf(')', closeText + 2)
+                    // El `)` que empareja, no el primero (25-oct-2026, como el PC): un enlace
+                    // de la Wikipedia (`…/Casa_(edificio)`) no pierde su final.
+                    val closeUrl = com.forge.pixpin.guardados.NotaRica.cierreDelParentesis(line.substring(closeText + 2))
+                        ?.let { it + closeText + 2 } ?: -1
                     if (closeUrl > closeText) {
                         appendStyled(
                             line, i + 1, closeText, SpanKind.LINK, out, spans, profundidad,
