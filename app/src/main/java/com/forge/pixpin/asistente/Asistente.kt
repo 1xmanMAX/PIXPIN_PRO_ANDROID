@@ -1,6 +1,5 @@
 package com.forge.pixpin.asistente
 
-import android.app.ActivityManager
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.getValue
@@ -11,13 +10,10 @@ import com.forge.pixpin.guardados.Clase
 import com.forge.pixpin.guardados.Mensaje
 import com.forge.pixpin.guardados.MensajesStore
 import com.forge.pixpin.ia.Agente
-import com.forge.pixpin.ia.Descarga
 import com.forge.pixpin.ia.ErrorIa
 import com.forge.pixpin.ia.Herramientas
-import com.forge.pixpin.ia.Modelo
-import com.forge.pixpin.ia.Modelos
+import com.forge.pixpin.ia.Nube
 import com.forge.pixpin.ia.Seguir
-import com.forge.pixpin.ia.ServidorLlama
 import com.forge.pixpin.motor.Proyecto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -29,14 +25,17 @@ import java.util.UUID
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * **El asistente del chat, en el teléfono** (`apps/pixpin/src/asistente/` del PC): un motor por
- * proceso, cargado al primer uso y soltado a los 5 min sin usar; la descarga de la primera vez; y
- * cada pregunta, contestada en vivo en una nota normal con aparato «IA».
+ * **El asistente del chat, en el teléfono** (`apps/pixpin/src/asistente/` del PC): cada pregunta,
+ * contestada en vivo en una nota normal con aparato «IA», por la nube (Claude o DeepSeek con la
+ * clave del usuario).
  *
- * **Nada de esto bloquea la pantalla**: la descarga, el arranque del modelo y cada turno van en
- * `Dispatchers.IO` sobre el `scope` de la aplicación (sobreviven a girar el teléfono o a cerrar el
- * chat). La pantalla solo lee el estado de aquí ([enVivo], [progreso]), que es estado de Compose y
- * se escribe siempre en el hilo principal.
+ * **Sin modelo en el teléfono** (25-oct-2026, lo pidió el usuario): el llama.cpp que iba en el APK
+ * y los GGUF que se bajaban se quitaron; la nube es el único motor. [limpiarModelosLocales] borra
+ * al arrancar lo que quedara bajado de antes.
+ *
+ * **Nada de esto bloquea la pantalla**: cada turno va en `Dispatchers.IO` sobre el `scope` de la
+ * aplicación (sobrevive a girar el teléfono o a cerrar el chat). La pantalla solo lee el estado de
+ * aquí ([enVivo]), que es estado de Compose y se escribe siempre en el hilo principal.
  */
 object Asistente {
     private const val TAG = "PixPinAsistente"
@@ -61,18 +60,6 @@ object Asistente {
     )
 
     var enVivo by mutableStateOf<EnVivo?>(null)
-        private set
-
-    /** La descarga en curso, para la barra de la tarjeta; null si no se baja nada. */
-    var progreso by mutableStateOf<Descarga.Progreso?>(null)
-        private set
-
-    /** Lo que salió mal en la última descarga, dicho para el usuario; null si nada. */
-    var avisoDeDescarga by mutableStateOf<String?>(null)
-        private set
-
-    /** Sube cuando cambia lo bajado (para que la tarjeta y los ajustes se repinten). */
-    var bajados by mutableStateOf(0)
         private set
 
     /** La pregunta Sí/No que espera en la burbuja de una respuesta (§4.3 del manual del PC). */
@@ -113,111 +100,25 @@ object Asistente {
         return r
     }
 
-    private val cancelarDescarga = AtomicBoolean(false)
     private val parar = AtomicBoolean(false)
     private val ocupado = AtomicBoolean(false)
 
-    private var motor: ServidorLlama? = null
-    private var motorDe: String? = null
-
-    fun raiz(c: Context): File = File(c.noBackupFilesDir, "modelos")
-
-    /** El ejecutable: solo existe en los teléfonos arm64 (es lo único que se compila). */
-    fun ejecutable(c: Context): File = File(c.applicationInfo.nativeLibraryDir, "libllamaserver.so")
-
-    fun hayMotor(c: Context): Boolean = ejecutable(c).isFile
-
-    fun ramTotal(c: Context): Long = runCatching {
-        ActivityManager.MemoryInfo().also { (c.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(it) }.totalMem
-    }.getOrDefault(0L)
-
-    /** El modelo que toca: el del ajuste, o el que va con la RAM del teléfono. */
-    fun modelo(c: Context, ajuste: String?): Modelo = Modelos.elegido(ajuste, ramTotal(c))
-
-    fun listo(c: Context, m: Modelo): Boolean = Descarga.modeloListo(raiz(c), m)
-
     private fun enPantalla(bloque: () -> Unit) = android.os.Handler(android.os.Looper.getMainLooper()).post(bloque)
 
-    // ------------------------------------------------------------------------------- descarga
-
-    /** **Baja [m]** (con progreso y cancelar); reanuda lo que hubiera a medias. */
-    fun bajar(c: Context, m: Modelo) {
-        val app = c.applicationContext as PixPinApp
-        if (progreso != null) return
-        cancelarDescarga.set(false)
-        avisoDeDescarga = null
-        progreso = Descarga.Progreso(0, m.bytes, m.pesos.nombre, false)
-        app.scope.launch(Dispatchers.IO) {
-            var ultimo = 0L
-            val r = runCatching {
-                Descarga.asegurar(raiz(app), m, { p ->
-                    val ahora = System.currentTimeMillis()
-                    if (ahora - ultimo > 250 || p.verificando) { ultimo = ahora; enPantalla { progreso = p } }
-                }, cancelarDescarga)
-            }
-            val error = r.exceptionOrNull()
-            if (error != null && error !== ErrorIa.Cancelado) Log.w(TAG, "descarga", error)
-            enPantalla {
-                progreso = null
-                bajados++
-                avisoDeDescarga = when {
-                    error == null || error === ErrorIa.Cancelado -> null
-                    error is ErrorIa -> error.paraElUsuario()
-                    else -> "No se pudo bajar: ${error.message ?: "sin red"}. Lo bajado se guarda y sigue al reintentar."
-                }
-            }
-        }
-    }
-
-    fun cancelarDescarga() = cancelarDescarga.set(true)
-
-    /** Borra un modelo bajado (Ajustes). Si es el cargado, lo suelta antes. */
-    fun borrar(c: Context, m: Modelo) {
-        val app = c.applicationContext as PixPinApp
-        app.scope.launch(Dispatchers.IO) {
-            synchronized(this@Asistente) { if (motorDe == m.id) { motor?.soltar(); motor = null; motorDe = null } }
-            Descarga.borrar(raiz(app), m)
-            enPantalla { bajados++ }
-        }
-    }
-
-    // --------------------------------------------------------------------------------- motor
-
-    /** **Un motor por proceso**: el del modelo elegido; si se cambió de modelo, se suelta el otro. */
-    @Synchronized
-    private fun motorPara(c: Context, m: Modelo): ServidorLlama {
-        motor?.let { if (motorDe == m.id) return it; it.soltar() }
-        val carpeta = Descarga.carpetaModelo(raiz(c), m)
-        val nuevo = ServidorLlama(
-            ServidorLlama.Config(
-                servidor = ejecutable(c),
-                modelo = File(carpeta, m.pesos.nombre),
-                vision = m.vision?.let { File(carpeta, it.nombre) },
-                trabajo = File(c.noBackupFilesDir, "asistente"),
-                hilos = ServidorLlama.hilosParaEsteAparato()
-            )
-        )
-        motor = nuevo
-        motorDe = m.id
-        return nuevo
-    }
+    // ------------------------------------------------------------------- lo que quedó de antes
 
     /**
-     * **Soltar la memoria** si no está contestando (la app se va al fondo, o el sistema pide
-     * memoria). El modelo vuelve a cargarse solo en la siguiente pregunta. Fuera del hilo de la
-     * pantalla: matar el proceso espera a que muera.
+     * **Lo que dejó el modelo del teléfono, fuera** (25-oct-2026): los GGUF bajados
+     * (`noBackupFilesDir/modelos`, hasta ~6 GB con la «mejor vista») y la carpeta de trabajo del
+     * servidor (`noBackupFilesDir/asistente`). Ya nada los usa; sin esto se quedarían ocupando el
+     * teléfono para siempre. Barato cuando no hay nada: se llama al arrancar, fuera del hilo de
+     * la pantalla.
      */
-    fun soltarSiNoContesta(c: Context) {
-        if (ocupado.get()) return
-        val app = c.applicationContext as? PixPinApp ?: return
-        app.scope.launch(Dispatchers.IO) { synchronized(this@Asistente) { if (!ocupado.get()) motor?.soltar() } }
-    }
-
-    /** Que la primera respuesta no espere a cargar el modelo (al abrir el chat «Asistente»). */
-    fun precalentar(c: Context, m: Modelo) {
-        if (!hayMotor(c) || !listo(c, m)) return
-        val app = c.applicationContext as PixPinApp
-        app.scope.launch(Dispatchers.IO) { runCatching { motorPara(app, m).precalentar() } }
+    fun limpiarModelosLocales(c: Context) {
+        for (nombre in listOf("modelos", "asistente")) {
+            val carpeta = File(c.noBackupFilesDir, nombre)
+            if (carpeta.exists() && !carpeta.deleteRecursively()) Log.w(TAG, "no se pudo borrar ${carpeta.name}")
+        }
     }
 
     // ------------------------------------------------------------------------- chat «Asistente»
@@ -285,30 +186,16 @@ object Asistente {
     /** El texto que se le enseña al usuario la primera vez que la nube buscaría en sus documentos (§4.8). */
     const val PREGUNTA_DOCUMENTOS = "El asistente está usando un modelo de la nube. Para contestar sobre tus documentos le mandaría " +
         "trozos de ellos (lo que encuentre en tus PDF, notas y chats) por internet.\n\n¿Lo permites? Lo que elijas se recuerda y se cambia en Ajustes › Asistente."
-    /** Lo que se mide de la ventana con la nube (`pensado::VENTANA_NUBE` del PC). */
-    const val VENTANA_NUBE = 64_000
-
-    const val SIN_PERMISO_DOCUMENTOS = "el usuario no permite mandar sus documentos a la nube; dile que puede permitirlo en Ajustes › Asistente o usar el modelo local, que busca sin salir del telefono"
+    const val SIN_PERMISO_DOCUMENTOS = "el usuario no permite mandar sus documentos a la nube; dile que puede permitirlo en Ajustes › Asistente"
 
     /**
-     * **El motor de este turno** (§1.4): el local, o Claude o DeepSeek con su clave (y el local de
-     * respaldo si se puede). null y el motivo si no hay con qué contestar.
+     * **El motor de este turno** (§1.4): Claude o DeepSeek con su clave. null y el motivo si falta
+     * la clave.
      */
-    private fun motorDelTurno(app: PixPinApp, ajustes: com.forge.pixpin.data.Settings, mirarFoto: Boolean = false): Pair<com.forge.pixpin.ia.Motor?, String?> {
-        // **Mejor vista** (§1.3): con una foto y un pedido de MIRARLA, Gemma si está bajado; el de
-        // siempre se suelta antes (nunca dos cargados a la vez: `motorPara` cambia uno por otro).
-        val gemma = com.forge.pixpin.ia.Modelos.GEMMA4_E2B
-        val m = if (mirarFoto && ajustes.asistenteMejorVista && hayMotor(app) && listo(app, gemma)) gemma else modelo(app, ajustes.asistenteModelo)
-        val local = if (hayMotor(app) && listo(app, m)) motorPara(app, m) else null
-        val proveedor = com.forge.pixpin.ia.Nube.Proveedor.porId(ajustes.asistenteMotor)
-        if (proveedor != null) {
-            val clave = ClavesDeLaNube.leer(app, proveedor) ?: return null to "Falta la clave de ${proveedor.nombre}: pégala en Ajustes → Asistente."
-            val nube = com.forge.pixpin.ia.Nube.Motor(proveedor, clave, ligero = ajustes.asistentePensar == "no")
-            return (if (ajustes.asistenteRespaldoLocal && local != null) com.forge.pixpin.ia.Nube.ConRespaldo(nube, local, proveedor.nombre, Herramientas.DISPONIBLES) else nube) to null
-        }
-        if (!hayMotor(app)) return null to "El asistente local solo va en teléfonos de 64 bits (arm64)."
-        if (local == null) return null to ErrorIa.Falta(m.nombre).paraElUsuario()
-        return local to null
+    private fun motorDelTurno(app: PixPinApp, ajustes: com.forge.pixpin.data.Settings): Pair<com.forge.pixpin.ia.Motor?, String?> {
+        val proveedor = Nube.Proveedor.elegido(ajustes.asistenteMotor)
+        val clave = ClavesDeLaNube.leer(app, proveedor) ?: return null to "Falta la clave de ${proveedor.nombre}: pégala en Ajustes → Asistente."
+        return Nube.Motor(proveedor, clave, ligero = ajustes.asistentePensar == "no") to null
     }
 
     private fun contestar(app: PixPinApp, almacen: MensajesStore, pregunta: Mensaje, respuesta: Mensaje, enSuChat: Boolean) {
@@ -316,9 +203,7 @@ object Asistente {
         fun escribir(texto: String, lienzo: String? = null, fuentes: kotlinx.serialization.json.JsonArray? = null) =
             almacen.actualizar(respuesta.id) { it.copy(texto = texto, lienzoIa = lienzo ?: it.lienzoIa, fuentesIa = fuentes ?: it.fuentesIa) }
         val conFoto = ChatDelAsistente.fotoDe(almacen.leer(), pregunta) != null
-        val mirar = com.forge.pixpin.ia.Nube.Proveedor.porId(ajustes.asistenteMotor) == null &&
-            com.forge.pixpin.ia.Seleccion.pideMejorVista(ChatDelAsistente.sinMencion(pregunta.texto), conFoto)
-        val (motor0, motivo) = motorDelTurno(app, ajustes, mirar)
+        val (motor0, motivo) = motorDelTurno(app, ajustes)
         // Una orden simple sale sin modelo (camino rápido); sin motor, el resto avisa.
         val esOrden = !conFoto && com.forge.pixpin.ia.Rapido.interpretar(ChatDelAsistente.sinMencion(pregunta.texto), com.forge.pixpin.ia.Momento.ahora()) != null
         val motor = motor0 ?: if (esOrden) Agente.SinMotor(motivo.orEmpty()) else null
@@ -326,32 +211,29 @@ object Asistente {
             escribir("⚠️ " + motivo.orEmpty())
             return
         }
-        val conNube = motor.catalogoCompleto
         val mensajes = almacen.leer()
         val fotoArchivo = ChatDelAsistente.fotoDe(mensajes, pregunta)?.ruta?.let { File(it) }
         val foto = fotoArchivo?.let { FotoParaElModelo.deArchivo(it) }?.let { it to "image/jpeg" }
         // `@lienzo:Nombre` fija dónde se dibuja y se le dice al modelo como «el lienzo «Nombre»».
         val (pedido0, destino) = ChatDelAsistente.resolverLienzo(ChatDelAsistente.sinMencion(pregunta.texto), mensajes.filter { it.proyecto == pregunta.proyecto })
         // La memoria del turno (§2.5): la hoja de trabajo del chat, el contexto medido y, si ya se
-        // reinició alguna vez, buscar en lo guardado. El 0.8B no planea: tarda y no le sirve.
+        // reinició alguna vez, buscar en lo guardado. A la nube va el catálogo entero.
         val delChat = mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon }
         val anteriores = delChat.filter { it.cuando <= pregunta.cuando && it.id != pregunta.id && it.id != respuesta.id }
         val hoja = PensadoDelChat.hojaDelChat(app, anteriores)
-        val ventana = if (conNube) VENTANA_NUBE else com.forge.pixpin.ia.ServidorLlama.CONTEXTO
-        val herramientas = if (conNube) Herramientas.catalogo() else Herramientas.paraElPedido(pedido0, foto != null)
+        val ventana = Nube.VENTANA
+        val herramientas = Herramientas.catalogo()
         val (historial, reiniciado) = if (enSuChat) {
             val nuevo = if (foto != null) com.forge.pixpin.ia.MensajeIa.usuarioConImagen(pedido0, foto.first, foto.second) else com.forge.pixpin.ia.MensajeIa.usuario(pedido0)
             PensadoDelChat.historial(Agente.instrucciones(), hoja, anteriores, nuevo, ventana, herramientas)
         } else ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta.copy(texto = pedido0), enSuChat, foto) to false
         val fuentesDelChat = PensadoDelChat.fuentes(anteriores, hoja)
-        val ligero = !conNube && modelo(app, ajustes.asistenteModelo).id == com.forge.pixpin.ia.Modelos.QWEN35_08B.id
         val opciones = Agente.Opciones(
-            planificar = !ligero,
+            planificar = true,
             pensar = when (ajustes.asistentePensar) { "si" -> true; "no" -> false; else -> false },
             hoja = hoja,
             ventana = ventana,
             buscar = if (enSuChat && (reiniciado || hoja.reinicios > 0)) { c -> com.forge.pixpin.ia.Contexto.buscar(fuentesDelChat, c, 3) } else null,
-            ampliar = Herramientas.catalogo(),
             rapido = com.forge.pixpin.ia.Momento.ahora()
         )
         val recogido = PensadoDelChat.Recogido()
@@ -368,8 +250,7 @@ object Asistente {
             },
             pedido = pedido, foto = fotoArchivo, destino = destino,
             permisoDocumentos = {
-                if (!conNube) null
-                else when (runBlocking { app.settings.settings.first().asistenteDocumentosNube }) {
+                when (runBlocking { app.settings.settings.first().asistenteDocumentosNube }) {
                     "si" -> null
                     "no" -> SIN_PERMISO_DOCUMENTOS
                     else -> {

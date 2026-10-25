@@ -110,6 +110,8 @@ class PixPinApp : Application() {
         // Y lo que el capturador no ve —crashes nativos, ANR—, que Android sí
         // apunta: se recoge al arrancar y acaba en el mismo informe.
         scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }
+        // Los modelos del asistente que se bajaban al teléfono ya no se usan: fuera, que ocupan gigas.
+        scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.asistente.Asistente.limpiarModelosLocales(this@PixPinApp) } }
         // La biblioteca de figuras viaja por el chat «Asistente» (mensaje `auto-figuras`).
         com.forge.pixpin.motor.BibliotecaStore.alCambiar = { c ->
             scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.asistente.FigurasQueViajan.asegurarMensaje(c) } }
@@ -174,18 +176,6 @@ class PixPinApp : Application() {
                     com.forge.pixpin.atajos.Atajos.ponerAlDia(this@PixPinApp, lista, mensajes)
                     com.forge.pixpin.atajos.IndiceDelBuscador.ponerAlDia(this@PixPinApp, lista, mensajes)
                 }
-        }
-    }
-
-    /**
-     * **El asistente suelta su memoria** (1-3 GB en su proceso aparte) cuando la app deja de verse
-     * o el sistema la pide, si no está contestando: un teléfono no es un PC, y quien se va a otra
-     * app no quiere que esa memoria siga ocupada cinco minutos. Vuelve a cargarse sola al preguntar.
-     */
-    override fun onTrimMemory(level: Int) {
-        super.onTrimMemory(level)
-        if (level >= android.content.ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN) {
-            com.forge.pixpin.asistente.Asistente.soltarSiNoContesta(this)
         }
     }
 }

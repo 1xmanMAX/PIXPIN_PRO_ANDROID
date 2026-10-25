@@ -10,8 +10,9 @@ import java.util.Base64
 
 /**
  * **El contrato con el motor** (`motor.rs` del PC): lo único que el resto de PixPin ve del
- * modelo. La conversación sigue la forma de la API de chat de OpenAI —la que habla
- * `llama-server`—, así que cambiar de motor no toca ni el bucle del agente ni el chat.
+ * modelo. La conversación sigue la forma de la API de chat de OpenAI —la que habla DeepSeek y
+ * la que [Nube] traduce para Claude—, así que cambiar de proveedor no toca ni el bucle del
+ * agente ni el chat.
  */
 enum class Rol(val nombre: String) { SISTEMA("system"), USUARIO("user"), ASISTENTE("assistant"), HERRAMIENTA("tool") }
 
@@ -71,7 +72,7 @@ data class MensajeIa(
         fun sistema(t: String) = texto(Rol.SISTEMA, t)
         fun usuario(t: String) = texto(Rol.USUARIO, t)
 
-        /** La imagen va **antes** del texto (lo recomienda Qwen). */
+        /** La imagen va **antes** del texto. */
         fun usuarioConImagen(t: String, bytes: ByteArray, mime: String) =
             MensajeIa(Rol.USUARIO, listOf(Parte.Imagen(bytes, mime), Parte.Texto(t)))
 
@@ -85,25 +86,9 @@ data class Peticion(
     val herramientas: List<Herramienta> = emptyList(),
     val maxTokens: Int = 1024,
     val temperatura: Double = 0.7,
-    /** Qwen3.5 piensa en voz alta si se le deja; el 0.8B entra en bucles. Siempre apagado. */
+    /** Pensar antes de contestar en esta vuelta (la vuelta de planear lo pide). */
     val pensar: Boolean = false
-) {
-    /** El cuerpo de `/v1/chat/completions`, con lo que recomienda Qwen3.5 sin pensar. */
-    fun aJson(enVivo: Boolean): JsonObject = buildJsonObject {
-        put("messages", JsonArray(mensajes.map { it.aJson() }))
-        put("max_tokens", maxTokens)
-        put("temperature", temperatura)
-        put("top_p", 0.8)
-        put("top_k", 20)
-        put("presence_penalty", 1.5)
-        put("stream", enVivo)
-        // Que la ranura guarde lo leído: la vuelta siguiente solo lee lo nuevo.
-        put("cache_prompt", true)
-        put("chat_template_kwargs", buildJsonObject { put("enable_thinking", pensar) })
-        if (enVivo) put("stream_options", buildJsonObject { put("include_usage", true) })
-        if (herramientas.isNotEmpty()) put("tools", JsonArray(herramientas.map { it.aJson() }))
-    }
-}
+)
 
 /** Un trozo de la respuesta mientras llega. */
 sealed class Trozo {
@@ -148,17 +133,8 @@ data class Respuesta(
 interface Motor {
     fun completar(peticion: Peticion, alTrozo: (Trozo) -> Seguir): Respuesta
 
-    /** Soltar la memoria ya (cerrar el modelo). Se vuelve a cargar en la siguiente petición. */
+    /** Soltar lo que tenga abierto. */
     fun soltar() {}
-
-    /** Dejarlo listo sin esperar a la primera pregunta. Bloquea. */
-    fun precalentar() {}
-
-    /**
-     * Si se le manda el catálogo entero en cada turno (la nube: un prefijo estable que se cachea)
-     * en vez de las pocas que elige [Seleccion] (el modelo local).
-     */
-    val catalogoCompleto: Boolean get() = false
 }
 
 /**

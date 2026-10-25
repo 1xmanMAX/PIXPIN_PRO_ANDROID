@@ -58,12 +58,11 @@ android {
     // Antes de subirlo hay que pasarlo por `herramientas/apk-para-repartir.sh`, que lo vuelve
     // a firmar con apksigner y `--min-sdk-version 21`, que es lo único que la incluye.
 
-    // **Las bibliotecas nativas, extraídas al instalar** (14-oct-2026). El asistente lanza
-    // `libllamaserver.so` —llama.cpp, un ejecutable con nombre de biblioteca— con ProcessBuilder, y
-    // desde Android 10 solo se puede ejecutar lo que está en `nativeLibraryDir` (W^X): sin extraer,
-    // las .so se quedan dentro del APK y ese fichero no existe. Las demás (.so de JNI) se cargan
-    // igual extraídas; el APK sale además más pequeño (van comprimidas), a cambio de ocupar algo
-    // más una vez instalado. Ver ia/ServidorLlama.kt y herramientas/llama-android/compilar.sh.
+    // **Las bibliotecas nativas, comprimidas en el APK y extraídas al instalar** (14-oct-2026).
+    // Nació para el llama.cpp del asistente local, que había que ejecutar desde `nativeLibraryDir`;
+    // ese motor se quitó el 25-oct-2026, pero se queda así porque las .so de JNI que quedan (voz,
+    // planos, Office, PDF: ~43 MB sin comprimir) van comprimidas y el APK que se reparte por un
+    // enlace pesa bastante menos, a cambio de ocupar algo más una vez instalado.
     packaging {
         jniLibs { useLegacyPackaging = true }
     }

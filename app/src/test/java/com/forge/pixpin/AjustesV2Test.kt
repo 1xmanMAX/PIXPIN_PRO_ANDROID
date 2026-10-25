@@ -64,8 +64,8 @@ class AjustesV2Test {
             "formato_web_tools", "formato_web_groups", "formato_nota_tools", "formato_nota_groups", "formato_modelo_tools", "formato_modelo_groups",
             "plano_avanzado", "palabras_magicas",
             "motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas",
-            "asistente_modelo", "asistente_motor", "asistente_respaldo_local", "asistente_pensar", "asistente_documentos_nube",
-            "asistente_revisar_dicho", "asistente_leer_respuestas", "asistente_mejor_vista",
+            "asistente_motor", "asistente_pensar", "asistente_documentos_nube",
+            "asistente_revisar_dicho", "asistente_leer_respuestas",
             "maxima_fluidez", "modo_noche", "oled_negro", "pin_font"
         )
         assertEquals(conocidas, CatalogoDeAjustes.CLAVES)

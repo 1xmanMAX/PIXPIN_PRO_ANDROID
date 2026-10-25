@@ -293,11 +293,4 @@ class HerramientasIaTest {
         val v = validar(Herramientas.DIBUJAR, """{"elementos":[{"tipo":"lapiz","puntos":[0,0,9,9],"material":"oro","dureza":"ZZ"}]}""")
         assertEquals(2, v.avisos.size)
     }
-
-    @Test fun `una charla corta no lleva herramientas y un pedido si`() {
-        assertTrue(Herramientas.paraElPedido("Hola").isEmpty())
-        assertTrue(Herramientas.paraElPedido("¿Qué tal estás hoy, amigo mío?").isEmpty())
-        assertEquals(Herramientas.DIBUJAR, Herramientas.paraElPedido("dibuja un círculo rojo")[0].nombre)
-        assertFalse(Herramientas.paraElPedido("gracias, ahora dibuja un cuadrado azul grande").isEmpty())
-    }
 }

@@ -49,6 +49,13 @@ object Nube {
 
         companion object {
             fun porId(id: String?) = entries.firstOrNull { it.id == id?.trim() }
+
+            /**
+             * **El que contesta**: el del ajuste, o Claude si está vacío o no se conoce. Desde que
+             * se quitó el modelo del teléfono (25-oct-2026) la nube es el único motor, y el vacío
+             * que antes quería decir «el local» pasa a ser el de siempre.
+             */
+            fun elegido(id: String?): Proveedor = porId(id) ?: CLAUDE
         }
     }
 
@@ -58,7 +65,9 @@ object Nube {
     const val RESERVA_PENSAR = 8_192
     val ESPERAS_MS = listOf(1_000L, 4_000L)
     const val ESPERA_MAXIMA_MS = 20_000L
-    const val PAUSA_TRAS_FALLO_MS = 3 * 60_000L
+
+    /** Los tokens de la ventana que se mide con la nube (`pensado::VENTANA_NUBE` del PC). */
+    const val VENTANA = 64_000
 
     // ---------------------------------------------------------------------------- las claves
 
@@ -89,14 +98,14 @@ object Nube {
         val n = p.nombre
         val sinSaldo = codigo == 402 || "credit balance" in bajo || "insufficient balance" in bajo
         return when {
-            sinSaldo -> "Tu cuenta de $n no tiene saldo. Recargala en su web o vuelve al asistente local en Ajustes → Asistente." to false
+            sinSaldo -> "Tu cuenta de $n no tiene saldo. Recargala en su web o cambia a la otra nube en Ajustes → Asistente." to false
             codigo == 401 -> "$n no acepta la clave: esta mal copiada o se revoco. Pega otra en Ajustes → Asistente." to false
             codigo == 403 -> "La clave de $n no tiene permiso para usar este modelo. Revisa tu cuenta o usa otra clave." to false
             codigo == 404 -> "$n ya no ofrece el modelo que usa PixPin. Actualiza PixPin." to false
             codigo == 413 -> "La peticion es demasiado grande para $n; prueba con una foto mas pequena." to false
             codigo == 429 -> "Demasiadas peticiones seguidas a $n; espera un momento y vuelve a pedirlo." to true
             codigo in setOf(500, 502, 503, 504, 529) -> "$n esta saturado o fallo; vuelve a intentarlo en un rato." to true
-            else -> "$n no acepto la peticion. Prueba a pedirlo de otra forma o vuelve al asistente local en Ajustes → Asistente." to false
+            else -> "$n no acepto la peticion. Prueba a pedirlo de otra forma." to false
         }
     }
 
@@ -498,8 +507,6 @@ object Nube {
         private val memoria = LinkedHashMap<String, JsonElement>()
         private val pensar = AtomicBoolean(!ligero)
 
-        override val catalogoCompleto: Boolean get() = true
-
         override fun toString() = "Nube.Motor(${proveedor.id}, ${enmascarar(clave)})"
 
         internal fun cuerpo(p: Peticion): JsonObject {
@@ -577,7 +584,7 @@ object Nube {
         private inline fun resultadoHttp(enviar: () -> Boolean): Boolean = try {
             enviar()
         } catch (f: Fallo.Red) {
-            throw Intento.Reintentar(nube("No hay conexion con ${proveedor.nombre}. Mira la red o vuelve al asistente local en Ajustes → Asistente."), null)
+            throw Intento.Reintentar(nube("No hay conexion con ${proveedor.nombre}. Mira la red y vuelve a pedirlo."), null)
         } catch (f: Fallo.Http) {
             if (f.codigo == 400 && proveedor == Proveedor.DEEPSEEK && "reasoning" in f.cuerpo.lowercase() && pensar.getAndSet(false))
                 throw Intento.Cambiar(nube(clasificar(proveedor, f.codigo, f.cuerpo).first))
@@ -623,46 +630,5 @@ object Nube {
             val modelo = (v["model"] as? JsonPrimitive)?.content ?: proveedor.modelo
             "la clave funciona: ${proveedor.nombre} ($modelo) contesto."
         }
-    }
-
-    /** Lo que pide la nube, recortado a las pocas herramientas del modelo local (`para_el_local`). */
-    fun paraElLocal(p: Peticion, disponibles: Set<String>? = null): Peticion {
-        if (p.herramientas.size <= Seleccion.MAXIMO) return p
-        val pedido = p.mensajes.lastOrNull { it.rol == Rol.USUARIO }?.textoEntero.orEmpty()
-        val conImagen = p.mensajes.any { it.tieneImagen }
-        val elegidas = Seleccion.paraElPedido(pedido, conImagen, disponibles).map { it.nombre }.toSet()
-        return p.copy(herramientas = p.herramientas.filter { it.nombre in elegidas })
-    }
-
-    /**
-     * **La nube con el local de respaldo**: si la nube falla antes de enseñar nada y hay modelo
-     * local, la burbuja lo dice y contesta el local; durante [PAUSA_TRAS_FALLO_MS] se va directo
-     * al local.
-     */
-    class ConRespaldo(
-        val nube: com.forge.pixpin.ia.Motor,
-        val local: com.forge.pixpin.ia.Motor?,
-        val nombre: String,
-        private val disponibles: Set<String>? = null,
-        private val reloj: () -> Long = System::currentTimeMillis
-    ) : com.forge.pixpin.ia.Motor {
-        @Volatile private var caidoHasta = 0L
-
-        override val catalogoCompleto: Boolean get() = nube.catalogoCompleto
-
-        override fun completar(peticion: Peticion, alTrozo: (Trozo) -> Seguir): Respuesta {
-            if (local != null && reloj() < caidoHasta) return local.completar(paraElLocal(peticion, disponibles), alTrozo)
-            var emitido = false
-            return try {
-                nube.completar(peticion) { t -> emitido = true; alTrozo(t) }
-            } catch (e: ErrorIa.Nube) {
-                if (local == null || emitido) throw e
-                caidoHasta = reloj() + PAUSA_TRAS_FALLO_MS
-                if (alTrozo(Trozo.Texto("⚠️ $nombre: ${e.aviso}\nSigo con el asistente local.\n\n")) == Seguir.PARAR) return Respuesta("", fin = Fin.CORTADO)
-                local.completar(paraElLocal(peticion, disponibles), alTrozo)
-            }
-        }
-
-        override fun soltar() { nube.soltar(); local?.soltar() }
     }
 }

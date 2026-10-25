@@ -137,16 +137,16 @@ class AgenteIaTest {
         assertEquals(1, c.motor.recibido.size)
     }
 
-    @Test fun `sin modelo es un error para el usuario`() {
+    @Test fun `un fallo de la nube llega tal cual para el usuario`() {
         val motor = object : Motor {
-            override fun completar(peticion: Peticion, alTrozo: (Trozo) -> Seguir): Respuesta = throw ErrorIa.Falta("el modelo (x.gguf)")
+            override fun completar(peticion: Peticion, alTrozo: (Trozo) -> Seguir): Respuesta = throw ErrorIa.Nube("Falta la clave de Claude Haiku 5.5: pégala en Ajustes → Asistente.")
         }
         val e = try {
             Agente.turno(motor, historial(), Herramientas.catalogo(), Apunta()) { Seguir.SI }
             null
         } catch (e: ErrorIa) { e }
-        assertTrue(e is ErrorIa.Falta)
-        assertEquals("Falta bajar el asistente: abre el chat «Asistente» para bajarlo.", e!!.paraElUsuario())
+        assertTrue(e is ErrorIa.Nube)
+        assertEquals("Falta la clave de Claude Haiku 5.5: pégala en Ajustes → Asistente.", e!!.paraElUsuario())
     }
 
     @Test fun `una llamada cortada por tokens se repite mas corta`() {
