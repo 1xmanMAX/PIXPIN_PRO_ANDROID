@@ -54,30 +54,154 @@ object Transcriptor {
     /** Si Whisper tiene que ponerlo todo en el primer idioma. Ver [com.forge.pixpin.data.Settings.modoDeIdiomas]. */
     fun todoEnUno(context: Context): Boolean = ajustes(context)?.modoDeIdiomas == com.forge.pixpin.data.MODO_TODO_EN_UNO
 
-    /** Un trozo de texto y en qué milisegundo del audio empieza. */
-    class Segmento(val desdeMs: Int, val texto: String)
+    /**
+     * Un trozo de texto, en qué milisegundo del audio empieza y en cuál acaba.
+     *
+     * El trozo puede ser una palabra (Vosk), una tanda (Whisper, Qwen3-ASR), una frase (Google)
+     * o una línea ya juntada por [agrupar]. [hastaMs] igual a [desdeMs] quiere decir que no se
+     * sabe cuándo acaba: se le trata como un instante. Un fin antes del principio (un tiempo
+     * tocado a mano) se queda en el principio.
+     *
+     * **Con su fin desde el 25-oct-2026** (puerto de `Segmento::entre`, `tiempos.rs` del PC):
+     * para partir en líneas de 15 s hace falta saber dónde acaba cada trozo, no solo dónde empieza.
+     */
+    class Segmento(val desdeMs: Int, val texto: String, hastaMs: Int = desdeMs) {
+        val hastaMs: Int = maxOf(hastaMs, desdeMs)
+
+        /** El mismo trozo corrido [ms] (un turno que empieza a mitad del audio). */
+        fun corrido(ms: Int) = Segmento(desdeMs + ms, texto, hastaMs + ms)
+
+        override fun equals(other: Any?) = other is Segmento && other.desdeMs == desdeMs && other.hastaMs == hastaMs && other.texto == texto
+        override fun hashCode() = (desdeMs * 31 + hastaMs) * 31 + texto.hashCode()
+        override fun toString() = "Segmento($desdeMs..$hastaMs, \"$texto\")"
+
+        companion object {
+            /** Un trozo con principio y fin (`Segmento::entre` del PC). */
+            fun entre(desdeMs: Int, hastaMs: Int, texto: String) = Segmento(desdeMs, texto, hastaMs)
+        }
+    }
+
+    /**
+     * **Cuánto abarca una línea del texto con tiempos, como mucho.**
+     *
+     * **Actualizado el 25-oct-2026, por petición del usuario** (puerto de 7df5532 del PC): antes
+     * eran 20 s y una clase de 27 s salió en un solo bloque `[0:00]`. Ahora hay una marca cada
+     * 15 s como mucho: ni frase a frase —una lista de renglones sueltos no se lee— ni de corrido.
+     * El formato `[m:ss]` es el mismo, así que el PC lo lee igual.
+     */
+    const val PARRAFO_MS = 15_000
+
+    /** Lo que dura como poco una línea antes de partirla por un punto: por debajo de 5 s, una frase corta se queda con la siguiente. */
+    const val PARRAFO_MINIMO_MS = 5_000
+
+    /** Un silencio entre dos trozos de más de esto es buen sitio para partir. */
+    private const val PAUSA_MS = 700
+
+    /**
+     * **Junta los trozos en líneas de hasta [maxMs]**, partiendo donde mejor se lea (puerto de
+     * `tiempos::agrupar` del PC, con los mismos números: el texto sale igual en los dos).
+     *
+     * Se van sumando trozos a la línea; cuando el siguiente la haría pasar de [maxMs] (de donde
+     * empieza la línea a donde acaba el trozo), se parte. No se parte a ciegas delante de ese
+     * trozo: se busca, entre los sitios de la línea que dejan al menos [minMs] detrás, **el
+     * mejor**: tras un punto (`.`, `?`, `!`, `…`), si no tras un silencio largo, si no tras una
+     * coma; a igualdad, el más tardío. Solo si no hay ninguno se parte delante del trozo nuevo.
+     * Un trozo que solo ya pasa de [maxMs] va en su línea. Los trozos en blanco no cuentan y
+     * ninguna línea sale vacía. Pura: es lo que comparten todos los motores.
+     */
+    fun agrupar(trozos: List<Segmento>, maxMs: Int, minMs: Int): List<Segmento> {
+        val lineas = ArrayList<Segmento>()
+        var linea = ArrayList<Segmento>()
+        for (s in trozos) {
+            val texto = s.texto.trim()
+            if (texto.isEmpty()) continue
+            val t = Segmento.entre(s.desdeMs, s.hastaMs, texto)
+            while (linea.isNotEmpty() && t.hastaMs - linea.first().desdeMs > maxMs) {
+                val corte = mejorCorte(linea, minMs) ?: linea.size
+                lineas += juntar(linea.subList(0, corte))
+                linea = ArrayList(linea.subList(corte, linea.size))
+            }
+            linea += t
+        }
+        if (linea.isNotEmpty()) lineas += juntar(linea)
+        return lineas
+    }
+
+    /** Dónde partir [linea] (el índice del primer trozo de la siguiente), o null si no hay ningún sitio bueno que deje [minMs] detrás. */
+    private fun mejorCorte(linea: List<Segmento>, minMs: Int): Int? {
+        val desde = linea.firstOrNull()?.desdeMs ?: return null
+        var mejor: Pair<Int, Int>? = null
+        for (k in 1 until linea.size) {
+            if (linea[k].desdeMs - desde < minMs) continue
+            val antes = linea[k - 1]
+            val nota = when {
+                acabaFrase(antes.texto) -> 3
+                linea[k].desdeMs - antes.hastaMs >= PAUSA_MS -> 2
+                antes.texto.endsWith(',') || antes.texto.endsWith(';') || antes.texto.endsWith(':') -> 1
+                else -> 0
+            }
+            if (nota > 0 && (mejor == null || nota >= mejor.first)) mejor = nota to k
+        }
+        return mejor?.second
+    }
+
+    /** Si un texto acaba una frase: punto, interrogación, exclamación o puntos suspensivos, aunque detrás vaya una comilla o un paréntesis. */
+    private fun acabaFrase(texto: String): Boolean {
+        val t = texto.trimEnd('"', '\'', ')', '»', '”', '’')
+        return t.isNotEmpty() && t.last() in ".?!…。？！"
+    }
+
+    /** Una línea de varios trozos: empieza con el primero, acaba con el que más tarde acabe, y el texto va separado por un blanco. */
+    private fun juntar(linea: List<Segmento>): Segmento {
+        val desde = linea.firstOrNull()?.desdeMs ?: 0
+        val hasta = linea.maxOfOrNull { it.hastaMs } ?: desde
+        return Segmento.entre(desde, hasta, linea.joinToString(" ") { it.texto })
+    }
+
+    /**
+     * **Las palabras de una frase de la que solo se sabe principio y fin**, con su tiempo
+     * repartido según lo largas que son (`tiempos::repartir` del PC). El reparto por letras es una
+     * estimación (se habla más o menos a ritmo constante); el `[m:ss]` de cada línea cae a uno o
+     * dos segundos de lo dicho, que para saltar al minuto basta.
+     */
+    fun repartir(desdeMs: Int, hastaMs: Int, texto: String): List<Segmento> {
+        val palabras = texto.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }
+        val letras = palabras.sumOf { it.codePointCount(0, it.length) }.toLong()
+        if (letras == 0L) return emptyList()
+        // En Long: una frase de una hora por miles de letras no cabe en un Int.
+        val dura = (hastaMs - desdeMs).coerceAtLeast(0).toLong()
+        var hechas = 0L
+        return palabras.map { p ->
+            val a = desdeMs + (dura * hechas / letras).toInt()
+            hechas += p.codePointCount(0, p.length)
+            val b = desdeMs + (dura * hechas / letras).toInt()
+            Segmento.entre(a, b, p)
+        }
+    }
+
+    /**
+     * **Lo que aporta una frase** de la que se sabe principio y fin: ella entera si cabe en una
+     * línea ([PARRAFO_MS]), con su minuto exacto; si no, sus palabras con el tiempo repartido
+     * ([repartir]), para que [agrupar] la parta en líneas de 15 s.
+     */
+    fun trozosDeFrase(desdeMs: Int, hastaMs: Int, texto: String): List<Segmento> {
+        if (hastaMs - desdeMs <= PARRAFO_MS) {
+            val t = texto.trim()
+            return if (t.isEmpty()) emptyList() else listOf(Segmento.entre(desdeMs, hastaMs, t))
+        }
+        return repartir(desdeMs, hastaMs, texto)
+    }
+
+    /** Los trozos juntados en líneas de hasta [PARRAFO_MS] (ver [agrupar]): lo que se guarda en [Resultado.Texto.segmentos], uno por línea del texto. */
+    fun lineas(trozos: List<Segmento>): List<Segmento> = agrupar(trozos, PARRAFO_MS, PARRAFO_MINIMO_MS)
 
     /**
      * **El texto con sus tiempos**, una línea por párrafo: `[1:23] lo que se dijo`. Los
-     * segmentos se juntan en párrafos de unos [PARRAFO_MS]: así cada línea es un sitio al
-     * que saltar en el audio sin que el texto sea una lista de frases sueltas. Ver
-     * [tiempoDe] para leerlo de vuelta.
+     * segmentos se juntan en líneas de hasta [PARRAFO_MS] con [agrupar] (25-oct-2026: antes se
+     * juntaban a ciegas en párrafos de 20 s). Ver [tiempoDe] para leerlo de vuelta.
      */
-    fun conTiempos(segmentos: List<Segmento>, prefijo: String = ""): String {
-        val lineas = ArrayList<String>()
-        var desde = -1
-        val trozo = StringBuilder()
-        for (sg in segmentos) {
-            if (desde >= 0 && sg.desdeMs - desde >= PARRAFO_MS) {
-                lineas += "[${marcaDeTiempo(desde)}] $prefijo${trozo.toString().trim()}"
-                trozo.clear(); desde = -1
-            }
-            if (desde < 0) desde = sg.desdeMs
-            trozo.append(sg.texto).append(' ')
-        }
-        if (trozo.isNotBlank()) lineas += "[${marcaDeTiempo(desde.coerceAtLeast(0))}] $prefijo${trozo.toString().trim()}"
-        return lineas.joinToString("\n\n")
-    }
+    fun conTiempos(segmentos: List<Segmento>, prefijo: String = ""): String =
+        lineas(segmentos).joinToString("\n\n") { "[${marcaDeTiempo(it.desdeMs)}] $prefijo${it.texto}" }
 
     /** `1:23`, `12:05`, `1:02:09`. */
     fun marcaDeTiempo(ms: Int): String {
@@ -96,14 +220,11 @@ object Transcriptor {
         return ((h * 3600 + min * 60 + seg) * 1000) to linea.substring(m.range.last + 1)
     }
 
-    /** Cuánto abarca un párrafo del texto con tiempos, como mucho. */
-    private const val PARRAFO_MS = 20_000
-
     /** En qué acabó: el texto, o por qué no. */
     sealed class Resultado {
         /**
          * [avisos]: cuántos trozos no se entendieron; con alguno, el texto tiene huecos.
-         * [segmentos]: el texto por trozos, cada uno con en qué milisegundo del audio empieza.
+         * [segmentos]: el texto por líneas de hasta [PARRAFO_MS], cada una con en qué milisegundo del audio empieza y acaba.
          */
         class Texto(
             val texto: String, val avisos: Int = 0, val segmentos: List<Segmento> = emptyList(),
@@ -190,7 +311,7 @@ object Transcriptor {
                         val parte = (k.toFloat() / tramos.size) to ((k + 1).toFloat() / tramos.size)
                         val r = reconocerPcm(context, trozo, idioma) { avance(0.1f + 0.9f * (parte.first + (parte.second - parte.first) * it)) }
                         if (r !is Resultado.Texto) { if (r is Resultado.Fallo && r.codigo == NADA) { vacios++; continue } else return r }
-                        val corridos = r.segmentos.map { Segmento(t.desdeMs + it.desdeMs, it.texto) }
+                        val corridos = r.segmentos.map { it.corrido(t.desdeMs) }
                         todos += corridos
                         lineas += conTiempos(corridos, prefijo = t.prefijo)
                     } finally {
@@ -259,7 +380,11 @@ object Transcriptor {
                 MotorVosk.reconocer(context, pcm, idioma) { avance(0.35f + 0.65f * it) }
             } ?: return Resultado.DescargandoIdioma
             if (segmentos.isEmpty()) return Resultado.Fallo(NADA)
-            return Resultado.Texto(segmentos.joinToString(" ") { it.texto }, 0, segmentos)
+            // **Los segmentos que se guardan son ya las líneas del texto** (25-oct-2026, como
+            // `Transcripcion.segmentos` del PC): palabras de Vosk o tandas de Whisper juntadas en
+            // líneas de hasta 15 s. Juntar lo ya juntado no cambia nada, así que [conTiempos] y los
+            // turnos dan lo mismo.
+            return Resultado.Texto(segmentos.joinToString(" ") { it.texto }, 0, lineas(segmentos))
         }
     }
 
@@ -285,6 +410,67 @@ object Transcriptor {
         if (tanda.isNotEmpty()) salida += tanda
         return salida
     }
+
+    /**
+     * Lo que dura como mucho una tanda de Whisper o de Qwen3-ASR: **cada tanda es una línea
+     * `[m:ss]`** del texto, y el usuario pidió una marca cada 15 s como mucho (25-oct-2026,
+     * `cortes::TANDA_SEGUNDOS` del PC). Antes eran 20.
+     */
+    const val TANDA_SEGUNDOS = 15
+
+    /**
+     * Desde cuántos segundos una tanda se cierra en la primera pausa larga ([PAUSA_DE_TANDA_MS])
+     * en vez de esperar al tope: entre 8 y 15 s se prefiere partir donde se calló, que es donde
+     * suele acabar una frase.
+     */
+    const val TANDA_MINIMA_SEGUNDOS = 8
+
+    /** Lo que cuenta como pausa para cerrar una tanda de más de [TANDA_MINIMA_SEGUNDOS]: más que un respiro. */
+    const val PAUSA_DE_TANDA_MS = 500
+
+    /**
+     * Como [agrupar], pero una tanda que ya dura [minimo] segundos o más **se cierra en la
+     * primera pausa** de [pausas] (bytes, de [pausasLargas]) que cruce (`cortes::agrupar_en_pausas`
+     * del PC). La pausa tiene que caer entre la tanda y la frase nueva: una de dentro de la tanda
+     * (de antes de llegar al mínimo) no cuenta. Con [minimo] cero, ninguna tanda cruza una pausa.
+     */
+    internal fun agruparEnPausas(trozos: List<LongRange>, segundos: Int, minimo: Int, pausas: List<Long>): List<List<LongRange>> {
+        val tope = segundos.toLong() * BYTES_POR_SEGUNDO
+        val minimoBytes = minimo.toLong() * BYTES_POR_SEGUNDO
+        val salida = ArrayList<List<LongRange>>()
+        var tanda = ArrayList<LongRange>()
+        for (t in trozos) {
+            if (tanda.isNotEmpty()) {
+                val desde = tanda.first().first
+                val hasta = tanda.last().last + 1
+                val cruza = hasta - desde >= minimoBytes && pausas.any { it >= hasta && it <= t.first }
+                if (t.last + 1 - desde > tope || cruza) { salida += tanda; tanda = ArrayList() }
+            }
+            tanda += t
+        }
+        if (tanda.isNotEmpty()) salida += tanda
+        return salida
+    }
+
+    /**
+     * **Las tandas de una nota para escribir una línea cada 15 s** (`cortes::tandas_de_lineas`
+     * del PC): frases ([cortes]) juntas hasta [TANDA_SEGUNDOS], cerrando en una pausa de
+     * [PAUSA_DE_TANDA_MS] en cuanto pasan de [TANDA_MINIMA_SEGUNDOS]. Lo usan Whisper y Qwen3-ASR;
+     * cada tanda, con su principio y su fin, es una línea.
+     */
+    internal fun tandasDeLineas(pcm: File): List<List<LongRange>> {
+        val s = silencios(pcm)
+        return agruparEnPausas(cortes(pcm, s), TANDA_SEGUNDOS, TANDA_MINIMA_SEGUNDOS, pausasLargas(s, PAUSA_DE_TANDA_MS))
+    }
+
+    /**
+     * **Dónde hay una pausa de [ms] o más** (bytes): la mitad de cada silencio largo, que es justo
+     * donde [cortes] parte (`cortes::pausas_largas` del PC).
+     */
+    internal fun pausasLargas(pcm: File, ms: Int): List<Long> = pausasLargas(silencios(pcm), ms)
+
+    private fun pausasLargas(s: Silencios?, ms: Int): List<Long> =
+        if (s == null) emptyList() else s.tramos.filter { (it.last + 1 - it.first) * VENTANA_MS >= ms }.map { s.mitad(it) }
 
     /** El milisegundo en que empieza un tramo (bytes de PCM de 16 bits a [HERCIOS]). */
     internal fun msDe(byte: Long): Int = (byte * 1000 / BYTES_POR_SEGUNDO).toInt()
@@ -348,38 +534,13 @@ object Transcriptor {
      * de más de un cuarto de segundo. Nunca se pegan dos frases; los trozos largos se parten
      * en su punto más callado; lo que no llega a un tercio de segundo es ruido.
      */
-    internal fun cortes(pcm: File): List<LongRange> {
+    internal fun cortes(pcm: File): List<LongRange> = cortes(pcm, silencios(pcm))
+
+    private fun cortes(pcm: File, s: Silencios?): List<LongRange> {
         val total = pcm.length() and 1L.inv()
         if (total <= 0) return emptyList()
-        val ventana = (VENTANA_MS * BYTES_POR_SEGUNDO / 1000) and 1.inv()
-        val energias = ArrayList<Double>((total / ventana).toInt() + 1)
-        RandomAccessFile(pcm, "r").use { raf ->
-            val buf = ByteArray(ventana)
-            var pos = 0L
-            while (pos + ventana <= total) {
-                raf.seek(pos); raf.readFully(buf)
-                val cortos = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
-                var suma = 0.0
-                for (k in 0 until cortos.remaining()) { val v = cortos.get(k).toDouble(); suma += v * v }
-                energias += Math.sqrt(suma / cortos.remaining().coerceAtLeast(1))
-                pos += ventana
-            }
-        }
-        if (energias.isEmpty()) return listOf(0 until total)
-        val ordenadas = energias.sorted()
-        val tipica = ordenadas[(ordenadas.size * 0.6).toInt().coerceIn(0, ordenadas.size - 1)]
-        val umbral = maxOf(UMBRAL_MINIMO, tipica * PARTE_DE_SILENCIO)
-        val minimoDeSilencio = SILENCIO_MS / VENTANA_MS
-        val puntos = ArrayList<Long>()
-        var calladasDesde = -1
-        for ((k, e) in energias.withIndex()) {
-            val callada = e < umbral
-            if (callada && calladasDesde < 0) calladasDesde = k
-            if (!callada && calladasDesde >= 0) {
-                if (k - calladasDesde >= minimoDeSilencio) puntos += ((calladasDesde + k) / 2).toLong() * ventana
-                calladasDesde = -1
-            }
-        }
+        if (s == null) return listOf(0 until total)
+        val puntos = s.tramos.map { s.mitad(it) }
         val trozo = TROZO_SEGUNDOS.toLong() * BYTES_POR_SEGUNDO
         val minimo = MINIMO_MS.toLong() * BYTES_POR_SEGUNDO / 1000
         val salida = ArrayList<LongRange>()
@@ -399,6 +560,55 @@ object Transcriptor {
             }
         }
         return salida.filter { !it.isEmpty() }
+    }
+
+    /**
+     * Los silencios de más de un cuarto de segundo de un PCM, en ventanas de [VENTANA_MS] (de la
+     * primera callada a la última, incluidas). Null si el archivo no llega a una ventana.
+     */
+    private class Silencios(val ventana: Int, val tramos: List<IntRange>) {
+        /** Dónde se corta un silencio: en su mitad, redondeada a la ventana (bytes). */
+        fun mitad(t: IntRange): Long = ((t.first + t.last + 1) / 2).toLong() * ventana
+    }
+
+    /**
+     * **Los silencios de una nota**: se mide la energía cada 20 ms y se llama silencio a lo que
+     * queda por debajo de una fracción de la energía típica (el percentil 60). Separado de
+     * [cortes] el 25-oct-2026 para que [pausasLargas] los reuse sin leer el archivo dos veces.
+     */
+    private fun silencios(pcm: File): Silencios? {
+        val total = pcm.length() and 1L.inv()
+        if (total <= 0) return null
+        val ventana = (VENTANA_MS * BYTES_POR_SEGUNDO / 1000) and 1.inv()
+        val energias = ArrayList<Double>((total / ventana).toInt() + 1)
+        RandomAccessFile(pcm, "r").use { raf ->
+            val buf = ByteArray(ventana)
+            var pos = 0L
+            while (pos + ventana <= total) {
+                raf.seek(pos); raf.readFully(buf)
+                val cortos = ByteBuffer.wrap(buf).order(ByteOrder.LITTLE_ENDIAN).asShortBuffer()
+                var suma = 0.0
+                for (k in 0 until cortos.remaining()) { val v = cortos.get(k).toDouble(); suma += v * v }
+                energias += Math.sqrt(suma / cortos.remaining().coerceAtLeast(1))
+                pos += ventana
+            }
+        }
+        if (energias.isEmpty()) return null
+        val ordenadas = energias.sorted()
+        val tipica = ordenadas[(ordenadas.size * 0.6).toInt().coerceIn(0, ordenadas.size - 1)]
+        val umbral = maxOf(UMBRAL_MINIMO, tipica * PARTE_DE_SILENCIO)
+        val minimoDeSilencio = SILENCIO_MS / VENTANA_MS
+        val tramos = ArrayList<IntRange>()
+        var calladasDesde = -1
+        for ((k, e) in energias.withIndex()) {
+            val callada = e < umbral
+            if (callada && calladasDesde < 0) calladasDesde = k
+            if (!callada && calladasDesde >= 0) {
+                if (k - calladasDesde >= minimoDeSilencio) tramos += calladasDesde until k
+                calladasDesde = -1
+            }
+        }
+        return Silencios(ventana, tramos)
     }
 
     /** El principio de la ventana de [VENTANA_MS] con menos energía entre [a] y [b] (bytes, pares). */

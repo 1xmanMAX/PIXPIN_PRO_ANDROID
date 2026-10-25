@@ -295,7 +295,7 @@ class ConversacionActivity : ComponentActivity() {
             val segmentos = transcribirUno(t.archivo)
             val nombre = nombres[t.quien]
             if (segmentos != null) {
-                val corridos = segmentos.map { Transcriptor.Segmento(desdeMs + it.desdeMs, it.texto) }
+                val corridos = segmentos.map { it.corrido(desdeMs) }
                 lineas += Transcriptor.conTiempos(corridos, prefijo = "**$nombre:** ")
             }
             quienCuando += TurnoDeVoz(nombre, desdeMs, desdeMs + t.ms)

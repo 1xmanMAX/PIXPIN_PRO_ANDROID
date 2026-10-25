@@ -138,7 +138,7 @@ class GuionQwen3Test {
         // Un minuto de habla continua (sin pausas): se parte por los puntos más callados y
         // ninguna tanda pasa del tope.
         val muestras = tono(65f)
-        val t = GuionQwen3.tandas(Transcriptor.cortes(pcm(muestras)))
+        val t = GuionQwen3.tandas(pcm(muestras))
         assertTrue("$t", t.size >= 3)
         assertTrue(t.all { it.hasta - it.desde <= GuionQwen3.TOPE_SEGUNDOS * MelQwen3.HERCIOS * 2L })
         assertEquals(0L, t[0].desde)
@@ -149,7 +149,7 @@ class GuionQwen3Test {
     @Test
     fun `dos frases con una pausa van juntas si caben`() {
         val muestras = tono(5f) + ShortArray(MelQwen3.HERCIOS) + tono(5f)
-        assertEquals(1, GuionQwen3.tandas(Transcriptor.cortes(pcm(muestras))).size)
+        assertEquals(1, GuionQwen3.tandas(pcm(muestras)).size)
     }
 
     @Test

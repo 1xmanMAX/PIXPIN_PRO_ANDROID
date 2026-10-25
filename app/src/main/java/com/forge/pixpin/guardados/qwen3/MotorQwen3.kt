@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  * - **La caché de claves y valores mide lo justo** para la tanda (guion + tope de tokens) en vez
  *   de un máximo fijo.
  *
- * Y la tercera, de los cortes: **tandas de hasta 20 s por los silencios** ([GuionQwen3.tandas]).
+ * Y la tercera, de los cortes: **tandas de hasta 15 s por los silencios, una línea `[m:ss]` cada una** ([GuionQwen3.tandas]).
  *
  * **Memoria**: ~1,5 GB de pico (medido en el PC con la misma exportación). Por eso solo se ofrece
  * en teléfonos con 6 GB o más ([seOfrece]), corre en un servicio en primer plano
@@ -163,14 +163,14 @@ object MotorQwen3 {
          * Con un idioma (o «todo en el primero») se le dice el primero. Con dos y «cada trozo como
          * se dijo», el modelo adivina el de cada tanda; si dice uno que no es de los dos, o el
          * texto no se sostiene en él, la tanda se rehace con el primero (la misma red que Whisper).
-         * Un segmento por tanda con su milisegundo; lista vacía si no se entendió nada.
+         * Un segmento por tanda con su principio y su fin; lista vacía si no se entendió nada.
          */
         fun transcribir(pcm: File, idioma: String, segundo: String = "", todoEnUno: Boolean = false, avance: (Float) -> Unit = {}): List<Transcriptor.Segmento> {
             val principal = lengua(idioma)
             val nombre = GuionQwen3.nombreDelIdioma(principal) ?: throw IllegalArgumentException("Qwen3-ASR no sabe $idioma")
             val otro = segundo.takeIf { it.isNotBlank() }?.let { lengua(it) }?.takeIf { it != principal && GuionQwen3.sabe(it) }
             val adivinar = otro != null && !todoEnUno
-            val tandas = GuionQwen3.tandas(Transcriptor.cortes(pcm))
+            val tandas = GuionQwen3.tandas(pcm)
             val total = tandas.size.coerceAtLeast(1).toFloat()
             val salida = ArrayList<Transcriptor.Segmento>()
             RandomAccessFile(pcm, "r").use { raf ->
@@ -187,7 +187,7 @@ object MotorQwen3 {
                         else unaTanda(audio, nombre, parte)
                     } else unaTanda(audio, nombre, parte)
                     val texto = oido.texto.trim()
-                    if (texto.isNotEmpty() && Transcriptor.creible(texto, lenguaDicha)) salida += Transcriptor.Segmento(Transcriptor.msDe(tanda.desde), texto)
+                    if (texto.isNotEmpty() && Transcriptor.creible(texto, lenguaDicha)) salida += Transcriptor.Segmento.entre(Transcriptor.msDe(tanda.desde), Transcriptor.msDe(tanda.hasta), texto)
                     avance((n + 1) / total)
                 }
             }

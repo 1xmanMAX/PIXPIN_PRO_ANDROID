@@ -36,11 +36,13 @@ import java.net.URL
  * modos, cada trozo en su idioma o todo en el primero. Para «todo en inglés» está la
  * tarea `translate` de verdad, que es la única que Whisper trae de fábrica.
  *
- * **Tandas de hasta [TANDA_SEGUNDOS]**: Whisper oye como mucho 30 segundos de una vez y
- * rellena con silencio hasta diez segundos más de lo que se le da, así que cuesta casi lo
- * mismo un trozo de dos segundos que uno de veinte. Las frases ([Transcriptor.cortes]) se
- * juntan en tandas ([Transcriptor.agrupar]) y cada tanda se reconoce por su cuenta, con
- * su minuto.
+ * **Tandas de hasta [Transcriptor.TANDA_SEGUNDOS]**: Whisper oye como mucho 30 segundos de
+ * una vez y rellena con silencio hasta diez segundos más de lo que se le da, así que cuesta casi
+ * lo mismo un trozo de dos segundos que uno de quince. Las frases ([Transcriptor.cortes]) se
+ * juntan en tandas ([Transcriptor.tandasDeLineas]) y cada tanda se reconoce por su cuenta, con
+ * su principio y su fin: **cada tanda es una línea `[m:ss]`** del texto (25-oct-2026, puerto de
+ * 7df5532 del PC: con tandas de 20 s una clase de 27 s salía en un solo bloque; ahora son de
+ * 15 s como mucho, cerrando en una pausa a partir de los 8).
  */
 object MotorWhisper {
 
@@ -48,7 +50,6 @@ object MotorWhisper {
     val MODELOS = linkedMapOf("tiny" to 104, "base" to 161, "small" to 375)
     const val MODELO_POR_DEFECTO = "tiny"
     const val PAGINA_DE_MODELOS = "https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models"
-    private const val TANDA_SEGUNDOS = 20
     private const val MINIMO_PARA_ADIVINAR_SEGUNDOS = 3
 
     private fun repositorio(modelo: String) = "https://huggingface.co/csukuangfj/sherpa-onnx-whisper-$modelo/resolve/main/"
@@ -155,7 +156,7 @@ object MotorWhisper {
 
     /**
      * Reconoce un PCM (16 bits, mono, 16 kHz) entero, por tandas de frases. Devuelve un
-     * segmento por tanda con su milisegundo, o null si no hay modelo. Hilo de fondo.
+     * segmento por tanda con su principio y su fin, o null si no hay modelo. Hilo de fondo.
      *
      * [idioma] es el primero. Con [segundo] no vacío y distinto:
      * - **cada uno en el suyo** ([todoEnUno] falso): cada tanda se reconoce sin idioma
@@ -172,7 +173,7 @@ object MotorWhisper {
         val modelo = modelo(context)
         asegurarModelo(context, modelo) ?: return null
         val rec = reconocedorPara(context, modelo)
-        val tandas = Transcriptor.agrupar(Transcriptor.cortes(pcm), TANDA_SEGUNDOS)
+        val tandas = Transcriptor.tandasDeLineas(pcm)
         if (tandas.isEmpty()) return emptyList()
         val principal = idiomaDe(idioma)
         val otro = segundo.takeIf { it.isNotBlank() }?.let { idiomaDe(it) }?.takeIf { it != principal }
@@ -232,7 +233,7 @@ object MotorWhisper {
                         lengua = principal
                         rec.setConfig(if (adivinar) sinIdioma else conElPrincipal)
                     }
-                    if (Transcriptor.creible(texto, lengua)) salida += Transcriptor.Segmento(Transcriptor.msDe(desde), texto)
+                    if (Transcriptor.creible(texto, lengua)) salida += Transcriptor.Segmento.entre(Transcriptor.msDe(desde), Transcriptor.msDe(hasta + 1), texto)
                     avance((i + 1).toFloat() / tandas.size)
                 }
             }

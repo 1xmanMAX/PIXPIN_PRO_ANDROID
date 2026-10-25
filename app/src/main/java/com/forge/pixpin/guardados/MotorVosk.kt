@@ -133,14 +133,35 @@ object MotorVosk {
     }.getOrNull()
 
     @Serializable
-    private class PalabraVosk(val word: String = "", val start: Double = 0.0, val end: Double = 0.0, val conf: Double = 1.0)
+    private class PalabraVosk(val word: String? = null, val start: Double? = null, val end: Double? = null, val conf: Double = 1.0)
     @Serializable
     private class ResultadoVosk(val text: String = "", val result: List<PalabraVosk> = emptyList())
     private val json = Json { ignoreUnknownKeys = true }
 
     /**
-     * Reconoce un archivo PCM (16 bits, mono, 16 kHz) entero. Devuelve una frase por
-     * segmento con el milisegundo en que empieza. [avance] de 0 a 1. Hilo de fondo.
+     * **Mete en la lista lo que diga un resultado de Vosk**:
+     * `{"text":"…","result":[{"word":"…","start":0.9,"end":1.2}]}`.
+     *
+     * **Palabra a palabra, con su tiempo** (25-oct-2026, `motor::apuntar` del PC): Vosk cierra un
+     * resultado en cada silencio, y quien habla de corrido deja resultados de un minuto. Con cada
+     * palabra suelta, [Transcriptor.agrupar] los parte en líneas de 15 s. Si a alguna palabra le
+     * falta el tiempo, la frase entera desde su primera palabra, como antes.
+     */
+    internal fun apuntar(texto: String, segmentos: MutableList<Transcriptor.Segmento>) {
+        val r = runCatching { json.decodeFromString<ResultadoVosk>(texto) }.getOrNull() ?: return
+        if (r.text.isBlank()) return
+        fun ms(s: Double?) = s?.let { (it * 1000).toInt() }
+        val sueltas = r.result.map { p ->
+            val w = p.word?.trim(); val a = ms(p.start); val b = ms(p.end)
+            if (w == null || a == null || b == null) null else Transcriptor.Segmento.entre(a, b, w)
+        }
+        if (sueltas.isNotEmpty() && sueltas.all { it != null }) segmentos += sueltas.filterNotNull().filter { it.texto.isNotEmpty() }
+        else segmentos += Transcriptor.Segmento(ms(r.result.firstOrNull()?.start) ?: 0, r.text.trim())
+    }
+
+    /**
+     * Reconoce un archivo PCM (16 bits, mono, 16 kHz) entero. Devuelve una palabra por
+     * segmento con su principio y su fin (ver [apuntar]); [Transcriptor] las junta en líneas. [avance] de 0 a 1. Hilo de fondo.
      */
     fun reconocer(context: Context, pcm: File, idioma: String, avance: (Float) -> Unit = {}): List<Transcriptor.Segmento>? {
         val carpeta = asegurarModelo(context, idioma) ?: return null
@@ -152,12 +173,7 @@ object MotorVosk {
         }
         val segmentos = ArrayList<Transcriptor.Segmento>()
         val total = pcm.length().coerceAtLeast(1)
-        fun apuntar(texto: String) {
-            val r = runCatching { json.decodeFromString<ResultadoVosk>(texto) }.getOrNull() ?: return
-            if (r.text.isBlank()) return
-            val desde = ((r.result.firstOrNull()?.start ?: 0.0) * 1000).toInt()
-            segmentos += Transcriptor.Segmento(desde, r.text.trim())
-        }
+        fun apuntar(texto: String) = apuntar(texto, segmentos)
         Recognizer(modelo, HERCIOS).use { rec ->
             rec.setWords(true)
             pcm.inputStream().buffered().use { entrada ->

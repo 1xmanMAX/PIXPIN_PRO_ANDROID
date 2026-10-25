@@ -186,8 +186,13 @@ object GuionQwen3 {
         return 0
     }
 
-    /** Lo que se junta en una tanda: frases seguidas hasta 20 s (cada segundo son 13 tokens de audio en la caché). */
-    const val TANDA_SEGUNDOS = 20
+    /**
+     * Lo que se junta en una tanda: frases seguidas hasta 15 s, las mismas que con Whisper
+     * ([Transcriptor.TANDA_SEGUNDOS]). Cada tanda es una línea `[m:ss]` del texto, y el usuario
+     * pidió una marca cada 15 s como mucho (25-oct-2026, 7df5532 del PC; antes eran 20). El
+     * frente aguanta más, pero cada segundo son 13 tokens de audio en la caché.
+     */
+    const val TANDA_SEGUNDOS = Transcriptor.TANDA_SEGUNDOS
 
     /** Ninguna tanda pasa de 30 s (lo que el modelo vio entrenando). */
     const val TOPE_SEGUNDOS = 30
@@ -197,13 +202,21 @@ object GuionQwen3 {
 
     /**
      * **Por dónde se parte una nota**: en las frases de [Transcriptor.cortes] (las mismas que con
-     * Whisper, y las que portó el PC a `cortes.rs`) juntadas hasta 20 s por [Transcriptor.agrupar],
-     * sin solapar y cortando siempre en un silencio o en el punto más callado; lo que aún pase de
-     * 30 s se parte en trozos de 30. Cada tanda sabe en qué byte empieza: de ahí sale su `[m:ss]`.
+     * Whisper) juntadas hasta 15 s, cerrando en una pausa a partir de los 8
+     * ([Transcriptor.tandasDeLineas], `cortes::tandas_de_lineas` del PC), sin solapar y cortando
+     * siempre en un silencio o en el punto más callado; lo que aún pase de 30 s se parte en trozos
+     * de 30. Cada tanda sabe en qué byte empieza y acaba: de ahí sale su línea `[m:ss]`.
      */
-    fun tandas(frases: List<LongRange>): List<Tanda> {
+    fun tandas(pcm: java.io.File): List<Tanda> = trocear(Transcriptor.tandasDeLineas(pcm))
+
+    /** Lo mismo con las frases ya cortadas y sin saber dónde están las pausas: solo el tope de [TANDA_SEGUNDOS]. */
+    fun tandas(frases: List<LongRange>): List<Tanda> =
+        trocear(Transcriptor.agruparEnPausas(frases, TANDA_SEGUNDOS, 0, emptyList()))
+
+    /** Cada grupo de frases, como tramo contiguo, en trozos de [TOPE_SEGUNDOS] como mucho. */
+    private fun trocear(grupos: List<List<LongRange>>): List<Tanda> {
         val tope = TOPE_SEGUNDOS.toLong() * MelQwen3.HERCIOS * 2
-        return Transcriptor.agrupar(frases, TANDA_SEGUNDOS).flatMap { g ->
+        return grupos.flatMap { g ->
             val desde = g.first().first
             val hasta = g.last().last + 1
             (desde until hasta step tope).map { a -> Tanda(a, minOf(a + tope, hasta)) }

@@ -140,13 +140,19 @@ object MotorGoogle {
      * texto por pausa y la tanda son frases cortadas por pausa, así que casi siempre son
      * tantos textos como frases y van uno a uno. Si vienen menos (juntó dos frases), se
      * reparten a lo largo de la tanda; si vienen más, los sobrantes van con la última.
+     *
+     * **Con su fin** (25-oct-2026): cada texto acaba donde acaba la última frase que le toca
+     * (la de antes de la del texto siguiente), para que [Transcriptor.agrupar] lo parta en líneas
+     * de 15 s como a los demás motores.
      */
     internal fun casar(tanda: List<LongRange>, textos: List<String>): List<Transcriptor.Segmento> {
         val limpios = textos.map { it.trim() }.filter { it.isNotEmpty() }
         if (limpios.isEmpty()) return emptyList()
+        fun fraseDe(k: Int) = if (limpios.size <= tanda.size) k * tanda.size / limpios.size else minOf(k, tanda.size - 1)
         return limpios.mapIndexed { k, texto ->
-            val frase = if (limpios.size <= tanda.size) k * tanda.size / limpios.size else minOf(k, tanda.size - 1)
-            Transcriptor.Segmento(Transcriptor.msDe(tanda[frase].first), texto)
+            val frase = fraseDe(k)
+            val ultima = if (k + 1 < limpios.size) maxOf(frase, fraseDe(k + 1) - 1) else tanda.size - 1
+            Transcriptor.Segmento.entre(Transcriptor.msDe(tanda[frase].first), Transcriptor.msDe(tanda[ultima].last + 1), texto)
         }
     }
 

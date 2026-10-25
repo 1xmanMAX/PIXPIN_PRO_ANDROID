@@ -54,5 +54,48 @@ class TranscriptorTandasTest {
         val mas = MotorGoogle.casar(tanda, listOf("a", "", "b", "c", "d"))
         assertEquals(listOf(0, 6000, 12000, 12000), mas.map { it.desdeMs })
         assertTrue(MotorGoogle.casar(tanda, listOf("", " ")).isEmpty())
+        // Cada texto acaba donde acaba la última frase que le toca.
+        assertEquals(listOf(5000, 11000, 18000), uno.map { it.hastaMs })
+        assertEquals(listOf(5000, 18000), menos.map { it.hastaMs })
+    }
+
+    /** Los grupos de frases como tramos contiguos, para comparar con los `Range` del PC. */
+    private fun tramos(g: List<List<LongRange>>) = g.map { it.first().first until it.last().last + 1 }
+
+    @Test
+    fun `pasados ocho segundos la tanda se cierra en la primera pausa`() {
+        // `cortes.rs` del PC (7df5532), con los mismos números.
+        val trozos = listOf(frase(0, 5), frase(5, 9), frase(9, 13))
+        val pausas = listOf(5 * seg, 9 * seg)
+        // La pausa de los 5 s llega antes de los 8: no cierra.
+        assertEquals(listOf(frase(0, 9), frase(9, 13)), tramos(Transcriptor.agruparEnPausas(trozos, 15, 8, pausas)))
+        // Sin pausas, todo cabe en 15 s; y una pausa de antes de los 8 s no cierra luego donde
+        // no se calló.
+        assertEquals(listOf(frase(0, 13)), tramos(Transcriptor.agruparEnPausas(trozos, 15, 8, emptyList())))
+        assertEquals(listOf(frase(0, 13)), tramos(Transcriptor.agruparEnPausas(trozos, 15, 8, pausas.take(1))))
+    }
+
+    /** `tono` y `silencio` de las pruebas de `cortes.rs` del PC, en un PCM de 16 bits. */
+    private fun tono(segundos: Float) = ShortArray((segundos * Transcriptor.HERCIOS).toInt()) { (kotlin.math.sin(it * 0.2f) * 8_000f).toInt().toShort() }
+    private fun silencio(segundos: Float) = ShortArray((segundos * Transcriptor.HERCIOS).toInt())
+    private fun pcm(muestras: ShortArray): java.io.File = java.io.File.createTempFile("tandas", ".raw").apply {
+        deleteOnExit()
+        val b = ByteArray(muestras.size * 2)
+        for (i in muestras.indices) { b[2 * i] = (muestras[i].toInt() and 0xFF).toByte(); b[2 * i + 1] = (muestras[i].toInt() shr 8).toByte() }
+        writeBytes(b)
+    }
+
+    @Test
+    fun `una clase seguida sale en tandas de quince segundos como mucho`() {
+        // 4 s, pausa, 5 s, pausa, 4 s: cabría en una tanda de 15 s, pero pasados los 8 se
+        // cierra en la pausa.
+        val t = Transcriptor.tandasDeLineas(pcm(tono(4f) + silencio(0.6f) + tono(5f) + silencio(0.6f) + tono(4f)))
+        assertEquals("$t", 2, t.size)
+        // Un minuto sin respirar: ninguna tanda pasa de 15 s.
+        val largo = pcm(tono(60f))
+        val l = tramos(Transcriptor.tandasDeLineas(largo))
+        assertTrue("$l", l.size >= 4)
+        assertTrue("$l", l.all { it.last + 1 - it.first <= Transcriptor.TANDA_SEGUNDOS * seg })
+        assertEquals(largo.length(), l.last().last + 1)
     }
 }
