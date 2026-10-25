@@ -359,9 +359,18 @@ class AccionesDelTelefono(
         when (pedido) {
             PedidoFiguras.Lista -> Figuras.lista(lista.map { it.nombre })
             is PedidoFiguras.Poner -> {
-                val i = Figuras.buscar(lista.map { it.nombre }, pedido.nombre)
-                    ?: error("no hay ninguna figura «${pedido.nombre}». ${Figuras.lista(lista.map { it.nombre })}")
-                alPoner(lista[i].elementos).getOrThrow().let { "puesta «${lista[i].nombre}»: $it" }
+                // Las del usuario primero; si no, **las plantillas de serie** (las 627 del PC, 25-oct:
+                // «la biblioteca de figuras del lienzo: las del usuario y las plantillas de serie»).
+                val propias = com.forge.pixpin.motor.FigurasDeSerie.sinLasDeSerie(lista)
+                val i = Figuras.buscar(propias.map { it.nombre }, pedido.nombre)
+                val figura = if (i != null) propias[i] else {
+                    val serie = com.forge.pixpin.motor.FigurasDeSerie.todas(contexto)
+                    // Por su nombre corto («Cronograma») o entero («Planificación · Cronograma»).
+                    val j = Figuras.buscar(serie.map { com.forge.pixpin.motor.FigurasDeSerie.nombreCorto(it.nombre) }, pedido.nombre)
+                        ?: Figuras.buscar(serie.map { it.nombre }, pedido.nombre)
+                    j?.let { serie[it] } ?: error("no hay ninguna figura «${pedido.nombre}». ${Figuras.lista(propias.map { it.nombre })}")
+                }
+                alPoner(figura.elementos).getOrThrow().let { "puesta «${figura.nombre}»: $it" }
             }
             is PedidoFiguras.Guardar -> {
                 val ultimo = ChatDelAsistente.lienzoPropio(almacen.leer(), chat)?.referencia

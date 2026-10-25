@@ -66,6 +66,8 @@ object Conocimiento {
             "El asistente contesta con la nube: en Ajustes → Asistente se elige Claude o DeepSeek y se pega tu clave, que se guarda cifrada y no viaja."),
         e("El asistente: que hace", listOf("que haces", "que sabes", "puedes", "asistente", "@asistente"),
             "Con internet y tu clave: contesta, dibuja en el lienzo, hace graficas, lee PDFs, busca en tus cosas y usa la app (notas, tareas, lienzos, lecciones, capturas). En otro chat se le llama con @asistente."),
+        e("El asistente: conversacion nueva y memoria", listOf("conversacion nueva", "nueva conversacion", "olvida", "contexto", "memoria", "recuerda", "empezar de cero"),
+            "En el chat «Asistente», «🧹 Conversación nueva» corta: lo de arriba sigue a la vista pero ya no se le manda. Lo duradero (tus preferencias) lo guarda en su memoria, que va a tus aparatos en guardados/asistente/memoria. Mientras trabaja puedes escribirle para corregirle o decirle «para»."),
         e("Reproductor de audio", listOf("audio", "musica", "reproduc", "escuchar", "cancion"),
             "Las notas de voz suenan en su burbuja. La Biblioteca de audio (menu de Mensajes guardados) las junta todas.")
     )

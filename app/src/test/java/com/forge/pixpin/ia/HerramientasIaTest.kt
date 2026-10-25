@@ -37,7 +37,8 @@ class HerramientasIaTest {
         // `con_topes(catalogo(), 16)` del PC (main 882d465), volcado con `herramientas/oraculo-del-pc`.
         val delPc = Json.parseToJsonElement(javaClass.getResource("/ia/herramientas-del-pc.json")!!.readText()) as JsonArray
         val porNombre = delPc.associateBy { it.jsonObject["function"]!!.jsonObject["name"]!!.jsonPrimitive.content }
-        val nuestro = Agente.conTopes(Herramientas.catalogo(), Agente.TOPE_LISTAS)
+        // Las que llegaron después del volcado (`editar_texto`) se comprueban en su prueba.
+        val nuestro = Agente.conTopes(Herramientas.catalogo().filter { h -> Herramientas.POSTERIORES.none { it.nombre == h.nombre } }, Agente.TOPE_LISTAS)
         assertEquals(Herramientas.DISPONIBLES.size, nuestro.size)
         for (h in nuestro) {
             // Igual también SIN ordenar: el PC escribe las claves en orden alfabético y la

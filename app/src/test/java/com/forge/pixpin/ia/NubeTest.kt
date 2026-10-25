@@ -332,7 +332,7 @@ class NubeTest {
         }
         assertTrue(c.startsWith("<rol>") && c.contains("</reglas>"))
         assertTrue(d.contains("# Reglas\n1. ") && d.contains("Recuerda:"))
-        assertEquals(1, Nube.reglas(emptyList()).size)
+        assertEquals(2, Nube.reglas(emptyList()).size)
         assertEquals(c, Nube.para(Nube.Proveedor.CLAUDE, base, Herramientas.catalogo()))
         // Lo que cambia cada turno va detrás: lo fijo no cambia y se cachea.
         val (f1, v1) = Nube.enDos(Nube.Proveedor.CLAUDE, "$base\n\n# Hoja de trabajo\nobjetivo: casa", Herramientas.catalogo())

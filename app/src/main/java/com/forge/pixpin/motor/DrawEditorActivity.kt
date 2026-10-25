@@ -5365,6 +5365,17 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         dibujoId
     }.getOrNull()
 
+    /** **Lo que hay aquí**, para que el asistente lo lea (25-oct-2026, `editar_texto` y la revisión). */
+    override fun elementosDelLienzo(): List<Element>? = runCatching { controller.scene.elements }.getOrNull()
+
+    /** **Lo que cambia el asistente** (sus textos traducidos o corregidos), en un solo paso de deshacer. */
+    override fun cambiarElementos(cambiados: List<Element>): String? = runCatching {
+        if (controller.soloMirar || cambiados.isEmpty()) return null
+        controller.reemplazar(cambiados)
+        llegoDeFuera.intValue++
+        dibujoId
+    }.getOrNull()
+
     override fun recibirImagen(archivo: File, mime: String): Boolean = runCatching {
         val file = ExcalidrawStore.guardarImagen(this, archivo, mime) ?: return false
         val bmp = ImageStore.load(file.path) ?: return false

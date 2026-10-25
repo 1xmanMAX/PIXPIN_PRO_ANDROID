@@ -18,6 +18,18 @@ interface RecibeImagenes {
  */
 interface RecibeElementos {
     fun recibirElementos(elementos: List<Element>): String?
+
+    /**
+     * **Lo que hay en el lienzo abierto** (25-oct-2026): para que el asistente lo lea antes de
+     * editarlo (`editar_texto`) y revise lo que dibujó. null si no se puede leer.
+     */
+    fun elementosDelLienzo(): List<Element>? = null
+
+    /**
+     * **Sustituye esos elementos por id**, en un solo paso de deshacer (`editar_texto` del
+     * asistente). Devuelve el id del dibujo; null si no se pudo (un lienzo que solo se mira).
+     */
+    fun cambiarElementos(cambiados: List<Element>): String? = null
 }
 
 /**

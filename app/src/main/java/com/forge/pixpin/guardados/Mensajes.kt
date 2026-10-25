@@ -327,6 +327,16 @@ data class Mensaje(
     val fuentesIa: kotlinx.serialization.json.JsonArray? = null,
 
     /**
+     * **La marca de «Conversación nueva»** del chat del asistente (17-oct-2026 en el PC,
+     * `asistente/chat.rs::NUEVA_CONVERSACION`; aquí desde el 25-oct-2026): una nota del asistente
+     * (`aparato = "IA"`) con `"nuevaConversacionIa": true`. Lo de arriba sigue a la vista y viaja
+     * como siempre, pero ya no se le manda al modelo. Mismo nombre y forma que el PC, que la guarda
+     * en su `resto`; **hay que conservarla** por lo mismo que [lienzoIa]. No se escribe si no hay.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val nuevaConversacionIa: Boolean? = null,
+
+    /**
      * **Una clase o una reunión grabada en el PC** (24-oct-2026, `ventana_chat/grabar_clase.rs`): la
      * nota de voz lleva sus capturas por minuto (`capturas: [{ms, id}]`) y `grabacion: "clase"`, y
      * cada captura dice de qué grabación es y en qué minuto (`enGrabacion: {de, ms}`). **Se conservan
