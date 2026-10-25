@@ -64,6 +64,13 @@ object AnotacionesDelAdjunto {
         if (rel.startsWith("$CARPETA/") && rel.endsWith(".excalidraw.gz") && rel.indexOf('/', CARPETA.length + 1) < 0)
             rel.removeSuffix(".excalidraw.gz") + ".marcas" else null
 
+    /**
+     * **La vista de cada marcador del lienzo** (25-oct-2026, PC `vistas_junto_a`):
+     * `pins/draw/X.excalidraw.gz` → `pins/draw/X.vistas.json`, al lado de sus marcas. No lleva
+     * `anot-`, así que no pasa por [porUid]: viaja con el dibujo. Ver [com.forge.pixpin.motor.VistasDeMarcas].
+     */
+    fun vistasJuntoA(rel: String): String? = marcasJuntoA(rel)?.removeSuffix(".marcas")?.plus(".vistas.json")
+
     /** Todo lo de [uid] que hay en disco. Para borrarlo con su mensaje. */
     fun todoDe(filesDir: File, uid: String): List<File> =
         porUid(filesDir)[uid].orEmpty().map { File(filesDir, it) }

@@ -71,8 +71,16 @@ fun PanelDeFiguras(
     /** Pegar el texto del portapapeles como un texto del dibujo. Ver [DrawController.pegarTexto]. */
     onPegarTexto: () -> Unit = {},
     /** Las de serie del PC, ver [FigurasDeSerie]: van por categorías. */
-    deSerie: List<FiguraGuardada> = emptyList()
+    deSerie: List<FiguraGuardada> = emptyList(),
+    /**
+     * **Para adjuntar al chat** (25-oct-2026, como el PC: «adjuntar figura abre la ventana de
+     * figuras, selecciono, aparece el botón de adjuntar»). Con él, tocar una casilla la marca y
+     * abajo sale «Adjuntar»; guardar, pegar y la gráfica, que son del lienzo, no salen.
+     */
+    onAdjuntar: ((FiguraGuardada) -> Unit)? = null
 ) {
+    var marcada by remember { mutableStateOf<FiguraGuardada?>(null) }
+    val alTocar: (FiguraGuardada) -> Unit = if (onAdjuntar != null) { f -> marcada = f } else onInsertar
     /**
      * El nombre a medio escribir, o null si no se está guardando nada.
      *
@@ -153,8 +161,18 @@ fun PanelDeFiguras(
                 }
                 items(visibles.size, key = { visibles[it].id }) { i ->
                     val f = visibles[i]
-                    Casilla(f, onInsertar, if (f.propia) onQuitar else null)
+                    Casilla(f, alTocar, if (f.propia) onQuitar else null, marcada = marcada?.id == f.id)
                 }
+            }
+            if (onAdjuntar != null) {
+                val m = marcada
+                androidx.compose.material3.Button(
+                    onClick = { m?.let(onAdjuntar) }, enabled = m != null,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                ) {
+                    Text(if (m == null) "Elige una figura" else "Adjuntar «${FigurasDeSerie.nombreCorto(m.nombre)}»", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                return@Column
             }
 
             if (nombre != null) {
@@ -515,7 +533,8 @@ private fun Casilla(
     figura: FiguraGuardada,
     onInsertar: (FiguraGuardada) -> Unit,
     onQuitar: ((FiguraGuardada) -> Unit)?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    marcada: Boolean = false
 ) {
     Column(
         modifier.padding(vertical = 4.dp),
@@ -526,7 +545,11 @@ private fun Casilla(
                 Modifier
                     .size(LADO_DE_LA_CASILLA)
                     .background(Color.White, RoundedCornerShape(10.dp))
-                    .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(10.dp))
+                    .border(
+                        if (marcada) 3.dp else 1.dp,
+                        if (marcada) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
+                        RoundedCornerShape(10.dp)
+                    )
                     .clickable { onInsertar(figura) }
                     .padding(6.dp)
             ) {

@@ -379,6 +379,7 @@
     <string name="guardados_adj_miniapp">Una mini-app</string>
     <string name="guardados_adj_carpeta">Carpeta de páginas</string>
     <string name="guardados_anadir_a_carpeta">Añadir a carpeta…</string>
+    <string name="guardados_adj_figura">Figura</string>
     <string name="guardados_adj_conversacion">Una conversación</string>
     <string name="guardados_fondo">Fondo del chat</string>
     <string name="guardados_a_texto">Pasar a texto</string>
@@ -678,6 +679,8 @@
     </plurals>
     <string name="guardados_fotos">Fotos</string>
     <string name="guardados_archivos">Archivos</string>
+    <string name="guardados_videos">Vídeos</string>
+    <string name="guardados_enlaces">Enlaces</string>
     <string name="guardados_voz">Voz</string>
     <string name="guardados_dibujos">Dibujos</string>
     <string name="guardados_fijados">Fijados</string>
