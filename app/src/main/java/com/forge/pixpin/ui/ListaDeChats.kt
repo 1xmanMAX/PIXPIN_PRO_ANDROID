@@ -11,6 +11,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -69,6 +71,16 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
         mensajes?.let { conversaciones(it, proyectos.filter { p -> !p.archivado }.associate { p -> p.id to p.nombre }, general, delAsistente) }
     }
     val alcance = rememberCoroutineScope()
+    // **Los chats compartidos en los que estoy**, para su chapa (25-oct-2026, del PC `e3f1d60`). Se
+    // releen cada vez que cambia la lista de compartidos; sin ninguno, ni se mira la identidad.
+    val versionDeCompartidos by com.forge.pixpin.sincro.CompartidosEnDisco.version.collectAsState()
+    var compartidos by remember { mutableStateOf<Map<String, com.forge.pixpin.sincro.EnElChat>>(emptyMap()) }
+    LaunchedEffect(versionDeCompartidos) {
+        compartidos = withContext(Dispatchers.IO) {
+            runCatching { com.forge.pixpin.guardados.chatsCompartidosDentro(contexto) }.getOrDefault(emptyMap())
+        }
+    }
+    var eligiendoNuevo by remember { mutableStateOf(false) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -78,7 +90,7 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
             )
             LazyColumn(contentPadding = PaddingValues(bottom = 110.dp)) {
                 items(charlas.orEmpty(), key = { it.proyecto ?: "general" }) { c ->
-                    Fila(c, esDelAsistente = c.proyecto == delAsistente) {
+                    Fila(c, esDelAsistente = c.proyecto == delAsistente, compartido = c.proyecto?.let { compartidos[it] }) {
                         if (c.proyecto == com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR) alcance.launch {
                             val p = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.Asistente.asegurarChat(contexto) }
                             MensajesActivity.abrirChatDe(contexto, p.id, p.nombre)
@@ -93,8 +105,34 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             BotonRedondo(Icons.Filled.Folder, "Proyectos", onProyectos, tamano = 56.dp, puesto = true)
+            // **El «+» de los chats** (25-oct-2026, del PC `e3f1d60`): primero, normal o compartido.
+            // El compartido nace ya en `compartidos.json` conmigo dentro y se abren sus personas para
+            // invitar (Añadir, el código y el QR), como «Compartir» de siempre.
+            Spacer(Modifier.width(12.dp))
+            Box {
+                BotonRedondo(Icons.Filled.Add, "Chat nuevo", { eligiendoNuevo = true }, tamano = 48.dp)
+                com.forge.pixpin.guardados.MenuDeChatNuevo(eligiendoNuevo, { eligiendoNuevo = false }) { conPersonas ->
+                    alcance.launch { chatNuevo(contexto, conPersonas) }
+                }
+            }
         }
     }
+}
+
+/**
+ * **Un chat nuevo desde la lista** (25-oct-2026): el proyecto nuevo, como el «+» de Proyectos, y su
+ * chat abierto. [conPersonas]: además compartido, y encima sus personas para invitar. Si compartir
+ * falla, queda como chat normal y se avisa (`cc-nuevo-error` del PC).
+ */
+private suspend fun chatNuevo(contexto: android.content.Context, conPersonas: Boolean) {
+    val app = contexto.applicationContext as com.forge.pixpin.PixPinApp
+    val p = app.proyectos.nuevo(contexto.getString(R.string.proyecto_nuevo_nombre), System.currentTimeMillis())
+    val compartido = conPersonas && withContext(Dispatchers.IO) {
+        runCatching { com.forge.pixpin.guardados.compartirChatNuevo(contexto, p.id, p.nombre) }.isSuccess
+    }
+    MensajesActivity.abrirChatDe(contexto, p.id, p.nombre)
+    if (compartido) com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(contexto, p.id, p.nombre)
+    else if (conPersonas) android.widget.Toast.makeText(contexto, "No se pudo compartir el chat nuevo: queda como chat normal", android.widget.Toast.LENGTH_LONG).show()
 }
 
 private fun abrir(contexto: android.content.Context, c: Conversacion) {
@@ -103,24 +141,39 @@ private fun abrir(contexto: android.content.Context, c: Conversacion) {
 }
 
 @Composable
-private fun Fila(c: Conversacion, esDelAsistente: Boolean = false, alTocar: () -> Unit) {
+private fun Fila(c: Conversacion, esDelAsistente: Boolean = false, compartido: com.forge.pixpin.sincro.EnElChat? = null, alTocar: () -> Unit) {
     Row(
         Modifier.fillMaxWidth().clickable(onClick = alTocar).padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         // El logo del proyecto si se le puso uno; si no, su inicial. Ver [com.forge.pixpin.guardados.LogoDelProyecto].
         val logo = com.forge.pixpin.guardados.logoDe(c.proyecto)
-        Box(Modifier.size(50.dp).clip(CircleShape).background(Cristal.boton, CircleShape), contentAlignment = Alignment.Center) {
-            if (c.proyecto == null) Icon(Icons.Filled.BookmarkBorder, null, tint = Cristal.tinta)
-            else if (esDelAsistente) Text("🤖", fontSize = 22.sp)
-            else if (logo != null) androidx.compose.foundation.Image(
-                logo, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
+        Box(Modifier.size(50.dp)) {
+            Box(Modifier.size(50.dp).clip(CircleShape).background(Cristal.boton, CircleShape), contentAlignment = Alignment.Center) {
+                if (c.proyecto == null) Icon(Icons.Filled.BookmarkBorder, null, tint = Cristal.tinta)
+                else if (esDelAsistente) Text("🤖", fontSize = 22.sp)
+                else if (logo != null) androidx.compose.foundation.Image(
+                    logo, contentDescription = null, contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                else Text(c.nombre.trim().take(1).uppercase().ifBlank { "·" }, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta)
+            }
+            // **La chapa de compartido** (25-oct-2026): abajo a la derecha del avatar, con un aro del
+            // color del fondo. Un chat normal no la lleva, ni uno del que salí.
+            if (compartido != null) com.forge.pixpin.guardados.ChapaDeCompartido(
+                MaterialTheme.colorScheme.background, Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 3.dp)
             )
-            else Text(c.nombre.trim().take(1).uppercase().ifBlank { "·" }, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta)
         }
         Column(Modifier.weight(1f).padding(start = 14.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
+                // Delante del nombre, las dos personas y cuántas son si son más de una, como el
+                // icono de grupo de Telegram delante del nombre del grupo.
+                if (compartido != null) {
+                    val verde = androidx.compose.ui.graphics.Color(com.forge.pixpin.sincro.EntrePersonas.VERDE_COMPARTIDO)
+                    Icon(Icons.Filled.Groups, contentDescription = null, tint = verde, modifier = Modifier.size(16.dp))
+                    if (compartido.personas > 1) Text("${compartido.personas}", fontSize = 12.sp, color = verde, modifier = Modifier.padding(start = 2.dp))
+                    Spacer(Modifier.width(5.dp))
+                }
                 Text(c.nombre, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta,
                     maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                 c.ultimo?.let { Text(hora(it.cuando), fontSize = 12.sp, color = Cristal.tinta.copy(alpha = 0.6f)) }

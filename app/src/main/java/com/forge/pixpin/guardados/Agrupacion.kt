@@ -16,7 +16,7 @@ package com.forge.pixpin.guardados
  * Cinco minutos ([VENTANA_DE_GRUPO_MS]), tal cual sale en `ChatActivity.java` al calcular
  * `pinnedTop` y `pinnedBottom`: `Math.abs(prev.date - message.date) <= 5 * 60` sobre fechas
  * en segundos. Allí se exige además **mismo autor**; aquí sobra, porque en un chat con uno
- * mismo todos los mensajes son propios. Queda solo el tiempo.
+ * mismo todos los mensajes son propios. Queda solo el tiempo (salvo en un chat compartido: ver [sitios]).
  *
  * ## Por qué se calcula por tramo de día y no sobre la lista entera
  *
@@ -78,10 +78,15 @@ data class Sitio(val pegadoArriba: Boolean, val pegadoAbajo: Boolean) {
  * El primero nunca está pegado arriba y el último nunca pegado abajo — no por un caso
  * especial, sino porque no tienen con quién.
  */
-fun sitios(mensajes: List<Mensaje>): List<Sitio> {
+fun sitios(mensajes: List<Mensaje>, autor: (Mensaje) -> Int = { 0 }): List<Sitio> {
     if (mensajes.isEmpty()) return emptyList()
+    // **En un chat compartido, además, de la misma persona** (25-oct-2026, del PC `b89c058`): es el
+    // «mismo autor» de Telegram que aquí sobraba mientras todo era de uno. Dos seguidos de personas
+    // distintas no se pegan aunque vayan al mismo lado, y la nueva estrena tanda con su nombre
+    // encima. En un chat normal [autor] es siempre 0 y queda solo el tiempo, como antes.
+    val autores = IntArray(mensajes.size) { autor(mensajes[it]) }
     val juntos = BooleanArray(mensajes.size - 1) { i ->
-        cabenJuntos(mensajes[i].cuando, mensajes[i + 1].cuando)
+        autores[i] == autores[i + 1] && cabenJuntos(mensajes[i].cuando, mensajes[i + 1].cuando)
     }
     return List(mensajes.size) { i ->
         Sitio(
@@ -99,10 +104,10 @@ fun sitios(mensajes: List<Mensaje>): List<Sitio> {
  * burbuja mira el suyo. Si algún identificador se repitiera, gana el último — que es también
  * el que se pintaría.
  */
-fun sitiosPorId(tramos: List<Tramo>): Map<String, Sitio> {
+fun sitiosPorId(tramos: List<Tramo>, autor: (Mensaje) -> Int = { 0 }): Map<String, Sitio> {
     val salida = HashMap<String, Sitio>()
     for (tramo in tramos) {
-        val suyos = sitios(tramo.mensajes)
+        val suyos = sitios(tramo.mensajes, autor)
         for (i in tramo.mensajes.indices) salida[tramo.mensajes[i].id] = suyos[i]
     }
     return salida
@@ -140,12 +145,14 @@ data class Radios(
  * `ChatMessageCell.java:11016-11029`: con `pinnedTop` va `tr = nearRad` si es propio, y con
  * `pinnedBottom`, `br = nearRad` (para lo ajeno son las esquinas izquierdas).
  */
-fun radios(sitio: Sitio): Radios = Radios(
-    arribaIzq = RADIO_BURBUJA,
-    arribaDer = if (sitio.pegadoArriba) RADIO_VECINO else RADIO_BURBUJA,
-    abajoDer = if (sitio.pegadoAbajo) RADIO_VECINO else RADIO_BURBUJA,
-    abajoIzq = RADIO_BURBUJA
-)
+fun radios(sitio: Sitio, propio: Boolean = true): Radios {
+    val arriba = if (sitio.pegadoArriba) RADIO_VECINO else RADIO_BURBUJA
+    val abajo = if (sitio.pegadoAbajo) RADIO_VECINO else RADIO_BURBUJA
+    // **Lo de otra persona, del lado izquierdo** (25-oct-2026, chats compartidos): Telegram recorta
+    // las esquinas izquierdas en lo ajeno; el lado que se toca es el suyo.
+    return if (propio) Radios(RADIO_BURBUJA, arriba, abajo, RADIO_BURBUJA)
+    else Radios(arriba, RADIO_BURBUJA, RADIO_BURBUJA, abajo)
+}
 
 /** El relleno de dentro de la burbuja, en dp. [fin] es el lado de la cola. */
 data class Relleno(val inicio: Int, val arriba: Int, val fin: Int, val abajo: Int)
@@ -158,9 +165,9 @@ data class Relleno(val inicio: Int, val arriba: Int, val fin: Int, val abajo: In
  * ese lado. Sin ellos el texto se le mete dentro y la burbuja parece mal dibujada; con ellos
  * en todas, las burbujas agrupadas se ven torcidas respecto a la de la cola.
  */
-fun relleno(sitio: Sitio): Relleno = Relleno(
-    inicio = 12,
-    arriba = 7,
-    fin = if (sitio.ultimoDelGrupo) 18 else 12,
-    abajo = 7
-)
+fun relleno(sitio: Sitio, propio: Boolean = true): Relleno {
+    val cola = if (sitio.ultimoDelGrupo) 18 else 12
+    // Lo ajeno (chats compartidos, 25-oct-2026) lleva la cola por la izquierda: el aire, también.
+    return if (propio) Relleno(inicio = 12, arriba = 7, fin = cola, abajo = 7)
+    else Relleno(inicio = cola, arriba = 7, fin = 12, abajo = 7)
+}

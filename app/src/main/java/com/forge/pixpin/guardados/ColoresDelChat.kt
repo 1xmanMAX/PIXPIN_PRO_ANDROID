@@ -50,6 +50,15 @@ object ColoresDelChat {
     @ReadOnlyComposable
     fun burbuja(): Color = if (esDeNoche()) Color(0xFF3E618A) else Color(0xFFEFFFDE)
 
+    /**
+     * **La burbuja de otra persona** en un chat compartido (25-oct-2026, del PC `e3f1d60`): la
+     * blanca de Telegram en claro y la entrante de «Dark Blue» en oscuro. Con cada uno a su lado,
+     * el color dice también quién habla; la [tinta] y la [hora] de siempre se leen sobre las dos.
+     */
+    @Composable
+    @ReadOnlyComposable
+    fun burbujaAjena(): Color = if (esDeNoche()) Color(0xFF182533) else Color(0xFFFFFFFF)
+
     /** Lo escrito dentro de ella. */
     @Composable
     @ReadOnlyComposable

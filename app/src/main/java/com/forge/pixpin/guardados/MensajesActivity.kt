@@ -244,16 +244,25 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * de aparato, el nombre de quien escribe desde él. Ver [com.forge.pixpin.sincro.Compartidos].
      */
     private var compartido by mutableStateOf<com.forge.pixpin.sincro.ChatCompartido?>(null)
-    private var autoresDelChat by mutableStateOf<Map<String, String>>(emptyMap())
-    /** El código de este aparato: lo mío no lleva nombre encima. */
-    private var miCodigoDeAparato by mutableStateOf<String?>(null)
 
-    /** Quién escribió [m], si el chat es compartido y no lo escribí yo desde aquí. */
-    private fun autorDe(m: Mensaje): String? {
-        if (autoresDelChat.isEmpty()) return null
-        val codigo = m.aparato ?: return null
-        if (codigo == miCodigoDeAparato) return null
-        return autoresDelChat[codigo]
+    /**
+     * **El chat compartido en el que estoy dentro**, visto desde aquí (25-oct-2026, del PC
+     * `e3f1d60`): cuántas personas y quién es quién. Nulo en un chat normal —o uno del que salí—,
+     * que se ve como siempre: todo a un lado. Ver [com.forge.pixpin.sincro.EntrePersonas].
+     */
+    private var enElChat by mutableStateOf<com.forge.pixpin.sincro.EnElChat?>(null)
+
+    /**
+     * **De quién es [m]** en un chat compartido; nulo en uno normal. Las respuestas del asistente no
+     * son de ninguna persona de la lista: nulo también, y van a la izquierda sin nombre.
+     *
+     * **Antes** (13-oct-2026) solo se dejaba fuera el código de este aparato, y lo que escribía desde
+     * mi PC o mi tableta salía con mi propio nombre: ahora es mío todo lo de mis aparatos.
+     */
+    private fun quienDe(m: Mensaje): com.forge.pixpin.sincro.Quien? {
+        val lados = enElChat?.lados ?: return null
+        if (com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m)) return null
+        return lados.quien(com.forge.pixpin.sincro.EntrePersonas.aparatoCorto(m.aparato))
     }
 
     /**
@@ -472,15 +481,21 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val versionDeCompartidos by com.forge.pixpin.sincro.CompartidosEnDisco.version.collectAsState()
         LaunchedEffect(chatDe, versionDeCompartidos) {
             val este = chatDe
-            val (c, codigo) = withContext(Dispatchers.IO) {
+            // La identidad solo se lee si este chat es compartido (del PC `cad5e20`): leerla la
+            // crea, y un chat normal no tiene por qué.
+            val (c, en) = withContext(Dispatchers.IO) {
                 runCatching {
                     val c = este?.let { com.forge.pixpin.sincro.CompartidosEnDisco(filesDir).de(it) }
-                    c to com.forge.pixpin.sincro.Codigos.deEsteAparato(filesDir)
+                    val en = c?.let { cc ->
+                        com.forge.pixpin.sincro.EntrePersonas.porChat(listOf(cc)) {
+                            com.forge.pixpin.sincro.IdentidadEnDisco(filesDir).leer(android.os.Build.MODEL.orEmpty().ifBlank { "Este aparato" })
+                        }[cc.chat]
+                    }
+                    c to en
                 }.getOrDefault(null to null)
             }
             compartido = c
-            autoresDelChat = c?.let { com.forge.pixpin.sincro.Compartidos.autores(it) }.orEmpty()
-            miCodigoDeAparato = codigo
+            enElChat = en
         }
         var mensajes by remember { mutableStateOf(emptyList<Mensaje>()) }
         var cargando by remember { mutableStateOf(true) }
@@ -897,7 +912,24 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // lista, no burbuja por burbuja. Mirar al vecino desde dentro de la burbuja
         // obligaría a pasarle la lista entera a cada una y a recorrerla en cada
         // recomposición, que es justo lo que hace que una lista larga se arrastre.
-        val sitios = remember(tramos) { sitiosPorId(tramos) }
+        // **En un chat compartido, cada persona su tanda** (25-oct-2026, del PC `b89c058`): de
+        // quién es cada mensaje y su número de autor, que es lo que corta las tandas aunque dos
+        // personas seguidas vayan las dos a la izquierda. En uno normal, todo nulo y todo 0.
+        val lados = enElChat?.lados
+        val quienes = remember(visibles, lados) {
+            if (lados == null) emptyMap() else visibles.associate { it.id to quienDe(it) }
+        }
+        val autores = remember(visibles, quienes) {
+            if (quienes.isEmpty()) emptyMap<String, Int>()
+            else {
+                val personas = visibles.filter { quienes[it.id] != null }
+                val numeros = com.forge.pixpin.sincro.EntrePersonas.numerar(personas.map { quienes[it.id]!! })
+                val porId = HashMap<String, Int>()
+                personas.forEachIndexed { i, m -> porId[m.id] = numeros[i] }
+                visibles.associate { it.id to (porId[it.id] ?: com.forge.pixpin.sincro.EntrePersonas.AUTOR_ASISTENTE) }
+            }
+        }
+        val sitios = remember(tramos, autores) { sitiosPorId(tramos) { autores[it.id] ?: 0 } }
         // Las citas, por identificador. Buscar el original recorriendo la lista **por
         // cada burbuja** son varios miles de comparaciones en cada pasada; el mapa se
         // hace una vez, igual que [sitiosPorId] y por el mismo motivo.
@@ -1290,6 +1322,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             numeroDelCitado = m.respondeA?.let { numeroPorMensaje[it] } ?: 0,
                             respondido = m.respondeA?.let { porId[it] },
                             sitio = sitios[m.id] ?: Sitio(false, false),
+                            enCompartido = lados != null,
+                            quien = quienes[m.id],
                             consulta = consulta,
                             recarga = recargar,
                             ampliada = ampliada,
@@ -1859,29 +1893,48 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         )
                                     }
                                     // **Compartido**: con cuántas personas, delante de lo demás.
-                                    val conQuien = compartido?.let { c ->
-                                        com.forge.pixpin.sincro.Compartidos.nombresDentro(c).size.takeIf { it > 1 }?.let { "compartido · $it personas" }
-                                    }
+                                    // **Compartido**: con cuántas personas, delante de lo demás y
+                                    // siempre que esté dentro, aunque sea solo (25-oct-2026, del PC
+                                    // `e3f1d60`: «Compartido · 3 personas»). Tocarlo abre sus personas:
+                                    // invitar, quitar, salir.
+                                    val conQuien = enElChat?.let { com.forge.pixpin.sincro.EntrePersonas.chapa(it.personas) }
+                                    val resto = listOfNotNull(
+                                        // El tamaño solo si se sabe: casi nada
+                                        // guarda su peso, y `tamanoLegible(0)`
+                                        // devuelve vacío, así que el subtítulo
+                                        // decía «12 cosas · » con el separador
+                                        // colgando de la nada.
+                                        resources.getQuantityString(
+                                            com.forge.pixpin.R.plurals.guardados_cuantos,
+                                            deEsteChat.size, deEsteChat.size
+                                        ),
+                                        tamanoLegible(
+                                            deEsteChat.sumOf { it.bytes }
+                                        ).ifBlank { null }
+                                    ).joinToString(" · ")
                                     if (mensajes.isNotEmpty() || conQuien != null) {
-                                        Text(
-                                            // El tamaño solo si se sabe: casi nada
-                                            // guarda su peso, y `tamanoLegible(0)`
-                                            // devuelve vacío, así que el subtítulo
-                                            // decía «12 cosas · » con el separador
-                                            // colgando de la nada.
-                                            listOfNotNull(
-                                                conQuien,
-                                                resources.getQuantityString(
-                                                    com.forge.pixpin.R.plurals.guardados_cuantos,
-                                                    deEsteChat.size, deEsteChat.size
-                                                ),
-                                                tamanoLegible(
-                                                    deEsteChat.sumOf { it.bytes }
-                                                ).ifBlank { null }
-                                            ).joinToString(" · "),
-                                            fontSize = 12.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (conQuien != null) {
+                                                val verde = androidx.compose.ui.graphics.Color(com.forge.pixpin.sincro.EntrePersonas.VERDE_COMPARTIDO)
+                                                Row(
+                                                    Modifier.clickable {
+                                                        chatDe?.let { com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(this@MensajesActivity, it, nombreDelChat) }
+                                                    },
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Icon(Icons.Filled.Groups, contentDescription = null, tint = verde, modifier = Modifier.size(14.dp))
+                                                    Text(" $conQuien", fontSize = 12.sp, color = verde, maxLines = 1)
+                                                }
+                                                Text(" · ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            }
+                                            Text(
+                                                resto,
+                                                fontSize = 12.sp,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                                            )
+                                        }
                                     }
                                 }
                             } else {
@@ -3017,6 +3070,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * Todas van al mismo lado. En una mensajería hay dos lados porque hay dos personas;
      * aquí solo hay uno, y partir la pantalla en dos columnas para nada dejaría la mitad
      * del ancho sin usar justo donde se leen documentos.
+     *
+     * **Salvo en un chat compartido** (25-oct-2026, del PC `e3f1d60`): ahí sí hay varias personas,
+     * y lo mío va a la derecha y lo de cada otra a la izquierda, con su nombre encima de su tanda.
      */
     @OptIn(
         androidx.compose.foundation.ExperimentalFoundationApi::class,
@@ -3031,6 +3087,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         numeroDelCitado: Int,
         respondido: Mensaje?,
         sitio: Sitio,
+        /** Si es un chat compartido en el que estoy: entonces cada uno va a su lado. */
+        enCompartido: Boolean = false,
+        /** De quién es, en un chat compartido ([quienDe]); nulo en uno normal o si es del asistente. */
+        quien: com.forge.pixpin.sincro.Quien? = null,
         consulta: String?,
         recarga: Int,
         ampliada: com.forge.pixpin.ui.ZoomDeHoja,
@@ -3103,6 +3163,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // Lo marcado se tiñe **de lado a lado**, no solo la burbuja: así se ve de un
         // vistazo cuántas van sin tener que mirar burbuja por burbuja.
         Spacer(Modifier.height(espacioAntes(sitio).dp))
+        // **Lo mío a la derecha y lo de los demás a la izquierda**, solo en un chat compartido
+        // (25-oct-2026, del PC `e3f1d60`). Las respuestas del asistente, a la izquierda sin nombre.
+        val propio = !enCompartido || quien?.esMio == true
+        // **El nombre de quien escribe, encima de la primera de su tanda** —su círculo con la
+        // inicial y el nombre, los dos de su color— como un grupo de Telegram. Antes iba dentro de
+        // cada burbuja, repetido en todas.
+        if (com.forge.pixpin.sincro.EntrePersonas.conNombre(quien, !sitio.pegadoArriba)) {
+            NombreDePersona(quien!!.nombre!!)
+        }
         Box(
             Modifier
                 .fillMaxWidth()
@@ -3452,8 +3521,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         }
                     },
                 // En el chat «Asistente», lo del usuario a la derecha y lo del asistente a la izquierda.
-                horizontalArrangement = if (chatDe != null && chatDe == chatDelAsistente &&
-                    !com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m)) Arrangement.End else Arrangement.Start,
+                horizontalArrangement = when {
+                    enCompartido -> if (propio) Arrangement.End else Arrangement.Start
+                    chatDe != null && chatDe == chatDelAsistente &&
+                        !com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m) -> Arrangement.End
+                    else -> Arrangement.Start
+                },
                 verticalAlignment = Alignment.Bottom
             ) {
             // **El marcador para guardarlo, al lado y fuera de la burbuja.**
@@ -3523,14 +3596,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             // La esquina que toca al vecino se achata a 3: es lo que hace que cuatro
             // notas seguidas se lean como un bloque y no como cuatro cajas sueltas
             // (`ChatMessageCell.java:10978`). Las demás van a 17, el radio de Telegram.
-            val r = radios(sitio)
+            val r = radios(sitio, propio)
             val colorDelLienzo = remember(m.referencia) { colorDelDibujo(m.referencia) }
             Surface(
                 shape = RoundedCornerShape(
                     topStart = r.arribaIzq.dp, topEnd = r.arribaDer.dp,
                     bottomEnd = r.abajoDer.dp, bottomStart = r.abajoIzq.dp
                 ),
-                color = ColoresDelChat.burbuja(),
+                color = if (propio) ColoresDelChat.burbuja() else ColoresDelChat.burbujaAjena(),
                 contentColor = ColoresDelChat.tinta(),
                 // El color del lienzo del que viene, si viene de uno: es lo que en
                 // proyectos separa las hojas de un lienzo de las de otro.
@@ -3610,7 +3683,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // El relleno no es simétrico: al lado de la cola sobran 6 puntos
                 // (`ChatMessageCell.java:3364`), y sin ellos la hora se pega al borde
                 // redondeado justo donde la burbuja se estrecha.
-                val pad = relleno(sitio)
+                val pad = relleno(sitio, propio)
                 Column(
                     if (soloFoto) Modifier
                     else Modifier.padding(
@@ -3698,18 +3771,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             }
                         }
                     }
-                    // **Quién lo escribió**, en un chat compartido (13-oct-2026): como el autor en un
-                    // grupo de Telegram, arriba y en color. Lo mío no lo lleva.
-                    autorDe(m)?.let { quien ->
-                        Text(
-                            quien,
-                            fontSize = 13.sp,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary,
-                            maxLines = 1,
-                            modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 2.dp)
-                        )
-                    }
+                    // Quién lo escribió ya no va aquí dentro (25-oct-2026): va encima de la primera
+                    // burbuja de su tanda, fuera ([NombreDePersona]).
                     // **De quién llegó**, si vino por Wi-Fi: su nombre y el código fijo de su aparato.
                     m.recibidoDe?.let { de ->
                         Text(
