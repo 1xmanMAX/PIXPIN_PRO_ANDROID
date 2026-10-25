@@ -74,6 +74,8 @@ sealed class Llamada {
     data class Calcar(val parametros: com.forge.pixpin.ia.Calcar.Parametros) : Llamada() { override val nombre get() = Herramientas.CALCAR }
     /** Guardar, poner o listar figuras de la biblioteca ([Figuras]). */
     data class Figuras(val pedido: PedidoFiguras) : Llamada() { override val nombre get() = Herramientas.FIGURAS }
+    /** Cambiar lo que dicen los textos que ya hay en el lienzo ([EditarTexto]). */
+    data class EditarTextos(val edicion: EditarTexto.Edicion) : Llamada() { override val nombre get() = EditarTexto.NOMBRE }
 
     /** Si lo que pide se dibuja tal cual en el lienzo. */
     val dibuja: Boolean get() = this is Dibujar || this is Grafica || this is DibujoSvg
@@ -225,7 +227,20 @@ object Herramientas {
      * **El catálogo del teléfono**: las del PC que se saben hacer aquí, en el orden del PC y con
      * su esquema exacto. A la nube se le manda entero en cada turno.
      */
-    fun catalogo(): List<Herramienta> = DEL_PC.filter { it.nombre in DISPONIBLES }
+    fun catalogo(): List<Herramienta> {
+        val delPc = DEL_PC.filter { it.nombre in DISPONIBLES }
+        // Las que llegaron después, donde las pone el PC: tras las de dibujar y editar el lienzo,
+        // antes de las acciones de la app.
+        val i = delPc.indexOfFirst { Acciones.porNombre(it.nombre) != null }.let { if (it < 0) delPc.size else it }
+        return delPc.subList(0, i) + POSTERIORES + delPc.subList(i, delPc.size)
+    }
+
+    /**
+     * **Las del PC que llegaron después del volcado** de `catalogo-del-pc.json` (25-oct-2026),
+     * hechas aquí con su mismo esquema y texto (`edicion.rs`, fila `EDITAR_TEXTO`). `preguntar_usuario`
+     * y `memoria` no van aquí: las añade el turno cuando hay a quién preguntar o memoria, como el PC.
+     */
+    val POSTERIORES: List<Herramienta> by lazy { listOf(EditarTexto.herramienta()) }
 
     /** El catálogo como texto JSON (la lista `tools`). */
     fun catalogoJson(): String = JsonArray(catalogo().map { it.aJson() }).toString()
@@ -286,6 +301,7 @@ object Herramientas {
                     ?: throw mal("falta «pregunta»")
             )
             FIGURAS -> Llamada.Figuras(Figuras.validar(args))
+            EditarTexto.NOMBRE -> Llamada.EditarTextos(EditarTexto.validar(args))
             BUSCAR -> Llamada.Buscar(Documentos.validar(args))
             SVG -> Llamada.DibujoSvg(Svg.validar(args, avisos))
             CALCAR -> Llamada.Calcar(validarCalcar(args))

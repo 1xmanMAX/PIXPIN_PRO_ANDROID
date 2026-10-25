@@ -3071,6 +3071,16 @@ class DrawController(initial: Scene = Scene()) {
     }
 
     /**
+     * **Sustituye esos elementos por id**, en un solo paso de deshacer (25-oct-2026): lo que cambia
+     * el asistente con `editar_texto` (los textos traducidos o corregidos). Lo que no esté, no entra.
+     */
+    fun reemplazar(cambiados: List<Element>) {
+        if (cambiados.isEmpty()) return
+        val porId = cambiados.associateBy { it.id }
+        mutate { elementos -> elementos.map { porId[it.id] ?: it } }
+    }
+
+    /**
      * Manda al fondo y **bloquea** los elementos indicados.
      *
      * Es lo que convierte una imagen en el soporte sobre el que se dibuja en vez

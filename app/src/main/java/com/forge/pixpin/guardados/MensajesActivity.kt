@@ -1019,6 +1019,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             loMandado = nota.id
                             refrescar()
                         }
+                        // «Conversación nueva»: lo de arriba ya no se le manda (asistente/Asistente.kt).
+                        com.forge.pixpin.asistente.ConversacionNueva(chatDe, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA)) { loMandado = System.currentTimeMillis().toString(); refrescar() }
                     }
                     // **`@` para elegir lienzo** (§4.4): al escribir `@` al principio de una palabra,
                     // el asistente (fuera de su chat) y los lienzos y hojas del chat.

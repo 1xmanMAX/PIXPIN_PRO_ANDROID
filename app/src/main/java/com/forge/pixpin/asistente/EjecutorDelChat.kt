@@ -6,8 +6,12 @@ import com.forge.pixpin.guardados.Mensaje
 import com.forge.pixpin.guardados.MensajesStore
 import com.forge.pixpin.guardados.sinAcentos
 import com.forge.pixpin.ia.Agente
+import com.forge.pixpin.ia.EditarTexto
 import com.forge.pixpin.ia.Lienzo
+import com.forge.pixpin.ia.LienzoDestino
+import com.forge.pixpin.ia.Lint
 import com.forge.pixpin.ia.Llamada
+import com.forge.pixpin.ia.Preguntar
 import com.forge.pixpin.ia.MensajeIa
 import com.forge.pixpin.ia.Motor
 import com.forge.pixpin.ia.Peticion
@@ -59,7 +63,12 @@ class EjecutorDelChat(
     /** null si se pueden mandar trozos de documentos al modelo; si no, lo que se le contesta. */
     permisoDocumentos: () -> String? = { null },
     /** El lienzo nombrado con `@lienzo:` (su referencia): ahí se dibuja, sin abrirlo. */
-    private val destino: String? = null
+    private val destino: String? = null,
+    /**
+     * **La tarjeta de `preguntar_usuario`** en la burbuja (§ del PC, 22-oct): enseña la pregunta y
+     * espera la respuesta. null: aquí no hay a quién preguntar (y el turno no ofrece la herramienta).
+     */
+    private val dudar: ((Preguntar.Pregunta) -> Preguntar.Contestada)? = null
 ) : Agente.Ejecutor {
 
     private val acciones = AccionesDelTelefono(contexto, almacen, chat, confirmar)
@@ -69,6 +78,13 @@ class EjecutorDelChat(
     @Volatile var lienzo: String? = null
         private set
 
+    /** Los ids de lo último que creó o tocó (para «lo último» de `editar_texto`). */
+    @Volatile private var ultimos: List<String> = emptyList()
+
+    override fun puedePreguntar(): Boolean = dudar != null
+
+    override fun preguntar(p: Preguntar.Pregunta): Preguntar.Contestada = dudar?.invoke(p) ?: Preguntar.Contestada.SinRespuesta
+
     override fun ejecutar(llamada: Llamada): Result<String> = when (llamada) {
         is Llamada.Dibujar, is Llamada.Grafica, is Llamada.DibujoSvg -> dibujar(llamada)
         is Llamada.Ocr -> leer(llamada.peticion)
@@ -77,6 +93,76 @@ class EjecutorDelChat(
         is Llamada.Calcar -> calcar(llamada.parametros)
         is Llamada.Ayuda -> acciones.ayuda(llamada.pregunta)
         is Llamada.Figuras -> acciones.figuras(llamada.pedido) { elementos -> ponerFigura(elementos) }
+        is Llamada.EditarTextos -> editarTexto(llamada.edicion)
+    }
+
+    // ----------------------------------------------------------------------- el lienzo destino
+
+    /**
+     * **Dónde trabaja el asistente ahora**: el lienzo abierto delante, el nombrado con `@lienzo:`
+     * o el propio del asistente en este chat (el mismo orden que [alLienzo]). null si no hay.
+     */
+    private sealed class Destino {
+        abstract val elementos: List<Element>
+        class Abierto(val lienzo: RecibeElementos, override val elementos: List<Element>) : Destino()
+        class EnDisco(val referencia: String, val escena: Scene) : Destino() { override val elementos get() = escena.elements }
+    }
+
+    private fun destinoActual(): Destino? {
+        (LienzoAlFrente.actual() as? RecibeElementos)?.let { abierto ->
+            val e = runCatching { runBlocking { withContext(Dispatchers.Main) { abierto.elementosDelLienzo() } } }.getOrNull()
+            if (e != null) return Destino.Abierto(abierto, e)
+        }
+        val ref = destino?.takeIf { File(ExcalidrawStore.rutaDe(contexto, it)).isFile }
+            ?: ChatDelAsistente.lienzoPropio(almacen.leer(), chat)?.referencia ?: return null
+        val escena = ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, ref)) ?: return null
+        return Destino.EnDisco(ref, escena)
+    }
+
+    /**
+     * **El resumen del lienzo destino** para pegarlo al pedido («[Lienzo destino: …]», el
+     * `edicion::resumen` del PC): lo que ya hay, con sus `#id`, para editarlo en vez de rehacerlo.
+     * null si no hay lienzo destino.
+     */
+    fun resumenDelLienzo(): String? = runCatching {
+        val d = destinoActual() ?: return null
+        // Sin las plantillas de serie puestas: el PC las reconoce por su forma
+        // (`figuras_de_serie::cual_es`, del motor 2D), que aquí aún no está.
+        LienzoDestino.resumen(d.elementos)
+    }.getOrNull()
+
+    /** **Revisión automática** ([Lint]) de lo que tocó una llamada, para pegarla a su resultado. */
+    private fun revision(elementos: List<Element>, tocados: Collection<String>): String =
+        runCatching { Lint.paraElModelo(Lint.revisar(elementos, tocados.toSet())) }.getOrDefault("")
+
+    private fun conRevision(hecho: String, elementos: List<Element>, tocados: Collection<String>): String {
+        val r = revision(elementos, tocados)
+        return if (r.isEmpty()) hecho else "$hecho\n$r"
+    }
+
+    /**
+     * **`editar_texto`** en el lienzo destino, en un solo paso de deshacer: en el abierto, por su
+     * historial; en el del disco, guardado de una vez por el camino de siempre.
+     */
+    private fun editarTexto(e: EditarTexto.Edicion): Result<String> = runCatching {
+        val d = destinoActual() ?: error("no hay ningun lienzo donde cambiar textos: abre uno o nombralo con @lienzo:")
+        val hecho = EditarTexto.hacer(d.elementos, e, ultimos).getOrThrow()
+        if (hecho.cambiados.isNotEmpty()) {
+            val cambiados = hecho.elementos.filter { it.id in hecho.cambiados }
+            when (d) {
+                is Destino.Abierto -> {
+                    val id = runBlocking { withContext(Dispatchers.Main) { d.lienzo.cambiarElementos(cambiados) } }
+                        ?: error("el lienzo abierto no dejo cambiar los textos (esta en solo mirar)")
+                    lienzo = id
+                }
+                is Destino.EnDisco -> {
+                    ExcalidrawStore.guardar(contexto, d.referencia, d.escena.copy(elements = hecho.elementos)) ?: error("no se pudo guardar el lienzo")
+                    lienzo = d.referencia
+                }
+            }
+            ultimos = hecho.cambiados
+        }
+        if (hecho.cambiados.isEmpty()) hecho.texto else conRevision(hecho.texto, hecho.elementos, hecho.cambiados)
     }
 
     // ------------------------------------------------------------------------------------- lienzo
@@ -137,7 +223,8 @@ class EjecutorDelChat(
             val id = runBlocking { withContext(Dispatchers.Main) { abierto.recibirElementos(nuevos) } }
             if (id != null) {
                 lienzo = id
-                return "dibujada $que en el lienzo abierto"
+                val escena = runCatching { runBlocking { withContext(Dispatchers.Main) { abierto.elementosDelLienzo() } } }.getOrNull()
+                return conLoAnadido("dibujada $que en el lienzo abierto", escena, nuevos)
             }
         }
         // 2. El lienzo nombrado con `@lienzo:`, o el propio del asistente en este chat; a la
@@ -149,11 +236,12 @@ class EjecutorDelChat(
             val escena = ExcalidrawStore.cargar(ruta) ?: Scene()
             val origen = Lienzo.alLado(escena.elements)
             val corridos = hacer(origen)
-            ExcalidrawStore.guardar(contexto, propio, escena.copy(elements = escena.elements + corridos))
+            val todos = escena.elements + corridos
+            ExcalidrawStore.guardar(contexto, propio, escena.copy(elements = todos))
                 ?: error("no se pudo guardar el lienzo")
             lienzo = propio
             val nombre = almacen.leer().lastOrNull { it.referencia == propio }?.let(ChatDelAsistente::nombreDeLienzo) ?: ChatDelAsistente.NOMBRE_DEL_LIENZO
-            return "dibujada $que en el lienzo «$nombre»"
+            return conLoAnadido("dibujada $que en el lienzo «$nombre»", todos, corridos)
         }
         // 3. Uno nuevo, que entra al chat como dibujo del asistente.
         val id = "ia-$semilla"
@@ -171,7 +259,27 @@ class EjecutorDelChat(
             )
         )
         lienzo = id
-        return "dibujada $que en un lienzo nuevo, «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»"
+        return conLoAnadido("dibujada $que en un lienzo nuevo, «${ChatDelAsistente.NOMBRE_DEL_LIENZO}»", nuevos, nuevos)
+    }
+
+    /** Cuántos de lo recién dibujado se listan en el «hecho» (`MAX_ANADIDOS` del PC). */
+    private val MAX_ANADIDOS = 12
+
+    /**
+     * **El «hecho» de lo dibujado** con lo que entró y sus `#id` (para que la llamada siguiente lo
+     * pueda editar) y la **revisión automática** de lo nuevo ([Lint], `lint.rs` del PC): textos
+     * encimados, rótulos que se salen, flechas que no llegan, tildes que faltan.
+     */
+    private fun conLoAnadido(hecho: String, escena: List<Element>?, nuevos: List<Element>): String {
+        if (escena == null) return hecho
+        val ids = nuevos.map { it.id }.toSet()
+        ultimos = ids.toList()
+        val enEscena = escena.filter { it.id in ids }
+        val s = StringBuilder(hecho)
+        val lista = LienzoDestino.listar(escena, enEscena.take(MAX_ANADIDOS))
+        if (lista.isNotEmpty()) s.append(":\n").append(lista)
+        if (enEscena.size > MAX_ANADIDOS) s.append("\n(+${enEscena.size - MAX_ANADIDOS} mas)")
+        return conRevision(s.toString(), escena, ids)
     }
 
     /** Que al abrir el lienzo nuevo se vea lo dibujado (está en el 800×600 del modelo). */

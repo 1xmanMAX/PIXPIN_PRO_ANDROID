@@ -36,6 +36,39 @@ object ChatDelAsistente {
 
     fun esRespuesta(m: Mensaje): Boolean = m.aparato == APARATO
 
+    // ------------------------------------------------------------- «Conversación nueva» (§ del PC, 17-oct)
+
+    /**
+     * Lo que dice la nota que marca una **conversación nueva** (`TEXTO_NUEVA_CONVERSACION` del PC,
+     * letra a letra): lo de arriba sigue a la vista, pero ya no se le manda al asistente.
+     */
+    const val TEXTO_NUEVA_CONVERSACION = "🧹 Conversación nueva: lo de arriba ya no se le manda al asistente."
+
+    /** Si es la marca de una conversación nueva (`es_corte` del PC): del asistente y con la marca. */
+    fun esCorte(m: Mensaje): Boolean = esRespuesta(m) && m.nuevaConversacionIa == true
+
+    /**
+     * **Lo que el asistente ve de la conversación** (`desde_el_corte` del PC): lo de después de la
+     * última «Conversación nueva» (todo, si no hay ninguna). Así pedir algo nuevo no arrastra el
+     * contexto del chat entero: ni su historial, ni su hoja de trabajo, ni sus fotos.
+     */
+    fun desdeElCorte(mensajes: List<Mensaje>): List<Mensaje> {
+        val i = mensajes.indexOfLast(::esCorte)
+        return if (i < 0) mensajes else mensajes.subList(i + 1, mensajes.size)
+    }
+
+    /**
+     * **Si ya está cortado** (`nueva_conversacion` del PC): el último mensaje que no es de sistema
+     * ya es una marca. Dos cortes seguidos no dicen nada nuevo.
+     */
+    fun yaCortado(delChat: List<Mensaje>): Boolean = delChat.lastOrNull { !esDeSistema(it) }?.let(::esCorte) == true
+
+    /** La conversación que se cierra, `(es del usuario, texto)`, para la memoria de largo plazo. */
+    fun laQueSeCierra(delChat: List<Mensaje>): List<Pair<Boolean, String>> = desdeElCorte(delChat)
+        .filter { !esDeSistema(it) && it.clase == Clase.NOTA && it.texto.isNotBlank() && it.texto != PENSANDO }
+        .map { !esRespuesta(it) to (if (esRespuesta(it)) limpiarRespuesta(it.texto) else sinMencion(it.texto)) }
+        .filter { it.second.isNotBlank() }
+
     // ----------------------------------------------------------------------- `@` para elegir lienzo (§4.4)
 
     const val MENCION_LIENZO = "@lienzo:"
@@ -154,7 +187,8 @@ object ChatDelAsistente {
      * mensajes del chat antes de [pregunta] (aunque haya una respuesta en medio).
      */
     fun fotoDe(mensajes: List<Mensaje>, pregunta: Mensaje): Mensaje? {
-        val delChat = mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon }
+        // Tras «Conversación nueva», las fotos de antes tampoco se le enseñan.
+        val delChat = desdeElCorte(mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon })
         val hasta = delChat.indexOfFirst { it.id == pregunta.id }.let { if (it < 0) delChat.size else it }
         return delChat.subList(maxOf(0, hasta - FOTO_ATRAS), hasta)
             .lastOrNull { it.clase == Clase.IMAGEN && !esRespuesta(it) && it.ruta != null }
@@ -179,7 +213,7 @@ object ChatDelAsistente {
         foto: Pair<ByteArray, String>?
     ): MutableList<MensajeIa> {
         val pedido = sinMencion(pregunta.texto).ifBlank { pregunta.texto }
-        val antes = mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon && it.cuando <= pregunta.cuando && it.id != pregunta.id }
+        val antes = desdeElCorte(mensajes.filter { it.proyecto == pregunta.proyecto && !it.enBuzon && it.cuando <= pregunta.cuando && it.id != pregunta.id })
         val salida = mutableListOf(MensajeIa.sistema(sistema))
         if (enSuChat) {
             val turnos = ArrayList<MensajeIa>()
@@ -235,6 +269,10 @@ object ChatDelAsistente {
         "buscar_historial" -> "🗂️ buscando en la conversación…"
         "calcar_imagen" -> "🖼️ calcando la imagen…"
         "ayuda_app" -> "📖 mirando la ayuda…"
+        com.forge.pixpin.ia.Preguntar.NOMBRE -> "❓ esperando tu respuesta…"
+        com.forge.pixpin.ia.EditarTexto.NOMBRE -> "✏️ cambiando los textos…"
+        com.forge.pixpin.ia.MemoriaLarga.NOMBRE -> "🧠 mirando la memoria…"
+        com.forge.pixpin.ia.Pasos.NOMBRE -> "📝 apuntando los pasos…"
         else -> "⚙️ trabajando…"
     }
 

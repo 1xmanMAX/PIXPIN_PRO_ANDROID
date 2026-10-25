@@ -183,6 +183,8 @@ private fun QuienContesta(ajustes: com.forge.pixpin.data.Settings) {
  */
 @Composable
 fun PreguntaDelAsistente(respuesta: String, modifier: Modifier = Modifier) {
+    // La duda con opciones (`preguntar_usuario`) sale en el mismo sitio que la de Sí/No.
+    DudaDelAsistente(respuesta, modifier)
     val p = Asistente.pregunta?.takeIf { it.respuesta == respuesta } ?: return
     Column(modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Text("❓ ${p.texto}", fontSize = 14.sp)
@@ -193,6 +195,67 @@ fun PreguntaDelAsistente(respuesta: String, modifier: Modifier = Modifier) {
                 border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.error)
             ) { Text("Sí", color = MaterialTheme.colorScheme.error) }
         }
+    }
+}
+
+/**
+ * **La duda con opciones dentro de la burbuja** (`preguntar_usuario`, la tarjeta del PC del
+ * 23-oct): la pregunta, un botón por opción (la recomendada primero, rellena) con lo que pasa si se
+ * elige, y «Otro…» para escribir lo suyo. Lo que se escribe en el chat mientras espera también es
+ * la respuesta. A los 5 minutos, o al parar, el asistente sigue con la recomendada.
+ */
+@Composable
+fun DudaDelAsistente(respuesta: String, modifier: Modifier = Modifier) {
+    val d = Asistente.duda?.takeIf { it.respuesta == respuesta } ?: return
+    var otro by remember(d) { mutableStateOf<String?>(null) }
+    Column(modifier.padding(top = 6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Text("❓ ${d.pregunta.texto}", fontSize = 14.sp)
+        d.pregunta.opciones.forEachIndexed { i, o ->
+            val alElegir = { Asistente.contestarDuda(com.forge.pixpin.ia.Preguntar.Contestada.Opcion(i)) }
+            val rotulo: @Composable () -> Unit = {
+                Column {
+                    Text(o.etiqueta, fontSize = 14.sp)
+                    if (o.descripcion.isNotEmpty()) Text(o.descripcion, fontSize = 12.sp)
+                }
+            }
+            if (i == 0) Button(onClick = alElegir, modifier = Modifier.fillMaxWidth()) { rotulo() }
+            else OutlinedButton(onClick = alElegir, modifier = Modifier.fillMaxWidth()) { rotulo() }
+        }
+        val escrito = otro
+        if (escrito == null) TextButton(onClick = { otro = "" }) { Text("Otro…") }
+        else Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            androidx.compose.material3.OutlinedTextField(
+                value = escrito, onValueChange = { otro = it }, singleLine = false,
+                placeholder = { Text("Escribe lo tuyo") }, modifier = Modifier.weight(1f)
+            )
+            TextButton(
+                onClick = { if (escrito.isNotBlank()) Asistente.contestarDuda(com.forge.pixpin.ia.Preguntar.Contestada.Texto(escrito)) },
+                enabled = escrito.isNotBlank()
+            ) { Text("Enviar") }
+        }
+    }
+}
+
+/**
+ * **«🧹 Conversación nueva»** encima de la caja del chat «Asistente» (`nueva_conversacion` del PC):
+ * lo de arriba sigue a la vista, pero ya no se le manda al asistente, y lo duradero de lo que se
+ * cierra queda en su memoria. Con un turno en marcha avisa en vez de cortar.
+ */
+@Composable
+fun ConversacionNueva(chat: String?, modifier: Modifier = Modifier, alHacerse: () -> Unit) {
+    val contexto = LocalContext.current
+    val alcance = rememberCoroutineScope()
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+        androidx.compose.material3.AssistChip(
+            onClick = {
+                alcance.launch {
+                    val aviso = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { Asistente.nuevaConversacion(contexto, chat) }
+                    if (aviso != null) android.widget.Toast.makeText(contexto, aviso, android.widget.Toast.LENGTH_SHORT).show()
+                    alHacerse()
+                }
+            },
+            label = { Text("🧹 Conversación nueva", fontSize = 13.sp) }
+        )
     }
 }
 
