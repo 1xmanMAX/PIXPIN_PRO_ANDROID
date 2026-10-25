@@ -1,5 +1,6 @@
 package com.forge.pixpin.sincro
 
+import com.forge.pixpin.guardados.CarpetaDePaginas
 import com.forge.pixpin.guardados.Clase
 import com.forge.pixpin.guardados.Mensaje
 import com.forge.pixpin.motor.Hoja
@@ -1082,5 +1083,170 @@ class SincronizarDeVerdadTest {
         val m = telefono.leerMensajes().single { it.id == "suelto" }
         assertTrue("sellado: ${m.numero}", m.numero > 0)
         assertNotNull(m.uid)
+    }
+
+    // ------------------------------------------- lo nuevo se junta sin perder nada (PC f3a1f37)
+
+    /** Sincroniza dirigiendo [desde] (el que junta y escribe en los dos). */
+    private fun sincronizarDesde(desde: Disco, hacia: Disco, chat: String = Disco.GENERAL): Sesion.Hecho {
+        val hecho = Sesion.Hecho()
+        conectado(desde, hacia) { s ->
+            val prep = s.preparar(chat)
+            s.aplicar(prep, hecho)
+            s.aplicarArchivos(s.prepararArchivos(prep), hecho)
+            s.cerrar(prep)
+        }
+        return hecho
+    }
+
+    /** Que la vuelta siguiente ya no tiene nada que hacer, ni con los mensajes ni con los archivos. */
+    private fun quieto(chat: String = Disco.GENERAL) = conectado(telefono, tableta) { s ->
+        val prep = s.preparar(chat)
+        assertTrue("sin pasos: ${prep.pasos}", prep.pasos.isEmpty())
+        s.aplicar(prep, Sesion.Hecho())
+        assertTrue(s.prepararArchivos(prep).pasos.toString(), s.prepararArchivos(prep).pasos.isEmpty())
+    }
+
+    private fun marcadores(vararg m: Pair<Int, String>) = kotlinx.serialization.json.JsonArray(m.map { (ms, t) ->
+        kotlinx.serialization.json.JsonObject(mapOf("ms" to kotlinx.serialization.json.JsonPrimitive(ms), "texto" to kotlinx.serialization.json.JsonPrimitive(t)))
+    })
+
+    private fun msDe(d: Disco, id: String): List<Int> =
+        d.leerMensajes().single { it.id == id }.marcadores.orEmpty().map { (it as kotlinx.serialization.json.JsonObject)["ms"].toString().toInt() }
+
+    /**
+     * **Un marcador en cada aparato antes de sincronizar deja los dos** (25-oct-2026, §7.1 del manual
+     * del PC): las `marcas` y los `marcadores` de una nota de voz se juntan por su milisegundo, a tres
+     * bandas, dirija quien dirija. Quitar uno en un solo aparato lo quita en los dos, y quitarlos
+     * todos quita la clave `marcadores` (nunca `[]`).
+     */
+    @Test
+    fun `los marcadores y las marcas de una clase puestos en los dos aparatos se quedan todos`() {
+        emparejar()
+        mensaje(telefono, "voz", clase = Clase.VOZ)
+        editar(telefono, "voz") { it.copy(grabacion = "clase", marcadores = marcadores(30_000 to "ojo: examen"), marcas = listOf(12_000)) }
+        sincronizar()
+        assertEquals(listOf(30_000), msDe(tableta, "voz"))
+
+        // El teléfono pone uno al minuto 1 y una banderita; la tableta, otro al 2 y otra banderita.
+        editar(telefono, "voz") { it.copy(marcadores = marcadores(30_000 to "ojo: examen", 60_000 to "desde el teléfono"), marcas = listOf(12_000, 15_000)) }
+        editar(tableta, "voz") { it.copy(marcadores = marcadores(30_000 to "ojo: examen", 120_000 to "desde la tableta"), marcas = listOf(9_000, 12_000)) }
+        assertEquals(1, sincronizar().fusionados)
+        for (d in listOf(telefono, tableta)) {
+            val v = d.leerMensajes().single { it.id == "voz" }
+            assertEquals(listOf(30_000, 60_000, 120_000), msDe(d, "voz"))
+            assertEquals(listOf(9_000, 12_000, 15_000), v.marcas)
+            assertEquals("clase", v.grabacion)
+        }
+        assertEquals(telefono.resumenDe(telefono.leerMensajes().single { it.id == "voz" }),
+            tableta.resumenDe(tableta.leerMensajes().single { it.id == "voz" }))
+        quieto()
+
+        // Dirigiendo la tableta: el teléfono quita el del segundo 30 y la tableta añade uno al minuto 3.
+        editar(telefono, "voz") { it.copy(marcadores = marcadores(60_000 to "desde el teléfono", 120_000 to "desde la tableta")) }
+        editar(tableta, "voz") { m -> m.copy(marcadores = kotlinx.serialization.json.JsonArray(m.marcadores!! + marcadores(180_000 to "otro")[0])) }
+        sincronizarDesde(tableta, telefono)
+        for (d in listOf(telefono, tableta)) assertEquals(listOf(60_000, 120_000, 180_000), msDe(d, "voz"))
+
+        // Caso negativo: quitarlos todos en un lado (sin tocar en el otro) los quita en los dos y la
+        // clave se va; las banderitas se quedan como estaban.
+        editar(tableta, "voz") { it.copy(marcadores = null) }
+        editar(telefono, "voz") { it.copy(texto = "retocada en el teléfono") }
+        sincronizar()
+        for (d in listOf(telefono, tableta)) {
+            val v = d.leerMensajes().single { it.id == "voz" }
+            assertNull(v.marcadores)
+            assertEquals("retocada en el teléfono", v.texto)
+            assertEquals(listOf(9_000, 12_000, 15_000), v.marcas)
+        }
+        quieto()
+    }
+
+    /**
+     * **Una carpeta de páginas con una página nueva en cada aparato deja las dos** (§7.2 del manual
+     * del PC): el `texto` del `MINIAPP` «carpeta» se junta página a página por su `id`, no por
+     * párrafos. Quitar una página en un aparato la quita en los dos.
+     */
+    @Test
+    fun `una carpeta de paginas con una pagina en cada aparato deja las dos`() {
+        emparejar()
+        for (id in listOf("d1", "d2", "d3", "d4")) mensaje(telefono, id, "día $id")
+        mensaje(telefono, "c", clase = Clase.MINIAPP)
+        editar(telefono, "c") { it.copy(miniapp = CarpetaDePaginas.MINIAPP, nombre = "Diario de obra", texto = CarpetaDePaginas().anadir("d1", "Día 1")!!.escribir()) }
+        sincronizar()
+        assertEquals(listOf("d1"), CarpetaDePaginas.leer(tableta.leerMensajes().single { it.id == "c" }.texto).paginas.map { it.id })
+
+        editar(telefono, "c") { it.copy(texto = CarpetaDePaginas.leer(it.texto).anadir("d2", "Día 2")!!.escribir()) }
+        editar(tableta, "c") { it.copy(texto = CarpetaDePaginas.leer(it.texto).anadir("d3", "Foto de la tableta")!!.escribir()) }
+        assertEquals(1, sincronizar().fusionados)
+        val texto = telefono.leerMensajes().single { it.id == "c" }.texto
+        assertEquals(listOf("d1", "d2", "d3"), CarpetaDePaginas.leer(texto).paginas.map { it.id })
+        assertEquals(texto, tableta.leerMensajes().single { it.id == "c" }.texto)
+        // Es lo que escribe la carpeta: abrirla y guardarla sin tocar no es un cambio.
+        assertEquals(texto, CarpetaDePaginas.leer(texto).escribir())
+        quieto()
+
+        // Dirigiendo la tableta: el teléfono quita «Día 1» y la tableta renombra la 2 y añade la 4.
+        editar(telefono, "c") { it.copy(texto = CarpetaDePaginas.leer(it.texto).quitar("d1")!!.escribir()) }
+        editar(tableta, "c") { it.copy(texto = CarpetaDePaginas.leer(it.texto).renombrar(1, "Día dos")!!.anadir("d4", "Día 4")!!.escribir()) }
+        sincronizarDesde(tableta, telefono)
+        for (d in listOf(telefono, tableta)) {
+            val c = CarpetaDePaginas.leer(d.leerMensajes().single { it.id == "c" }.texto)
+            assertEquals(listOf("d2", "d3", "d4"), c.paginas.map { it.id })
+            assertEquals("Día dos", c.paginas[0].titulo)
+        }
+        quieto()
+    }
+
+    /**
+     * **La biblioteca de figuras guardada en los dos aparatos no pierde ninguna** (§7.3 del manual del
+     * PC): `pins/draw/figuras.json`, señalado por el mensaje `auto-figuras`, cambiado en los dos se
+     * junta figura a figura, dirija quien dirija; antes ganaba el tocado más tarde. Borrar una figura
+     * en un solo aparato sí viaja (no hay choque). Al llegar, la biblioteca se vuelve a leer.
+     */
+    @Test
+    fun `la biblioteca de figuras con una figura nueva en cada aparato las tiene todas`() {
+        emparejar()
+        val rel = Disco.BIBLIOTECA_DE_FIGURAS
+        fun figura(id: String, nombre: String) =
+            """{"id":"$id","nombre":"$nombre","elementos":[{"id":"$id-p","type":"rectangle","x":0,"y":0,"width":10,"height":10,"version":1,"versionNonce":3,"updated":1}],"propia":true}"""
+        fun escribir(d: Disco, vararg figuras: String) = File(d.filesDir, rel).apply { parentFile!!.mkdirs() }.writeText(figuras.joinToString(",", "[", "]"))
+        fun ids(d: Disco): List<String> = Regex("\\{\"id\":\"([^\"]+)\",\"nombre\"").findAll(File(d.filesDir, rel).readText()).map { it.groupValues[1] }.toList()
+        val norte = figura("serie-norte", "Norte")
+        escribir(telefono, norte)
+        mensaje(telefono, com.forge.pixpin.asistente.FigurasQueViajan.ID, clase = Clase.ARCHIVO, ruta = File(telefono.filesDir, rel).absolutePath)
+        sincronizar()
+        assertEquals(listOf("serie-norte"), ids(tableta))
+
+        // Una en cada aparato.
+        escribir(telefono, norte, figura("f-tel", "Sello del teléfono"))
+        escribir(tableta, norte, figura("f-tab", "Sello de la tableta"))
+        val antes = com.forge.pixpin.motor.BibliotecaStore.revision.intValue
+        sincronizar()
+        assertEquals(listOf("serie-norte", "f-tel", "f-tab"), ids(telefono))
+        assertEquals("los dos quedan iguales, byte a byte", File(telefono.filesDir, rel).readText(), File(tableta.filesDir, rel).readText())
+        assertTrue("la biblioteca se vuelve a leer al llegar", com.forge.pixpin.motor.BibliotecaStore.revision.intValue > antes)
+        // Sigue siendo una lista de figuras, en JSON compacto como el del PC.
+        assertEquals(3, kotlinx.serialization.json.Json.parseToJsonElement(File(tableta.filesDir, rel).readText()).let { it as kotlinx.serialization.json.JsonArray }.size)
+        quieto()
+
+        // Dirigiendo la tableta: otra en cada uno.
+        escribir(telefono, norte, figura("f-tel", "Sello del teléfono"), figura("f-tab", "Sello de la tableta"), figura("g-tel", "Otra"))
+        escribir(tableta, figura("g-tab", "La de la tableta"), norte, figura("f-tel", "Sello del teléfono"), figura("f-tab", "Sello de la tableta"))
+        sincronizarDesde(tableta, telefono)
+        assertEquals(listOf("g-tab", "serie-norte", "f-tel", "f-tab", "g-tel"), ids(tableta))
+        assertEquals(File(tableta.filesDir, rel).readText(), File(telefono.filesDir, rel).readText())
+        quieto()
+
+        // Caso negativo: borrar una figura en un solo aparato la borra en los dos (no hay choque).
+        escribir(telefono, figura("g-tab", "La de la tableta"), norte, figura("f-tab", "Sello de la tableta"), figura("g-tel", "Otra"))
+        sincronizar()
+        assertEquals(listOf("g-tab", "serie-norte", "f-tab", "g-tel"), ids(tableta))
+        // Y una que no es una lista de figuras no se junta: gana la tocada más tarde, como antes.
+        escribir(telefono, norte)
+        File(tableta.filesDir, rel).writeText("no es json")
+        File(tableta.filesDir, rel).setLastModified(System.currentTimeMillis() + 60_000)
+        sincronizar()
+        assertEquals("no es json", File(telefono.filesDir, rel).readText())
     }
 }

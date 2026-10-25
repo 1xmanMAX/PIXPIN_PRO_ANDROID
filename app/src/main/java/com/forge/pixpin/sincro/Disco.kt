@@ -812,6 +812,9 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             throw e
         }
         alCambiar(Cambio.ARCHIVOS)
+        // **La biblioteca de figuras que llega se vuelve a leer** (25-oct-2026, §8 del manual del PC
+        // «sincronizar lo nuevo»): el lienzo abierto enseña al momento la figura guardada en el otro.
+        if (esBibliotecaDeFiguras(rel)) com.forge.pixpin.motor.BibliotecaStore.alLlegar()
         return true
     }
 
@@ -990,6 +993,17 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
          */
         const val CARPETA_DE_LETRAS = "guardados/fuentes-shx/"
         private val CARPETAS = listOf("guardados/", "pins/", "proyectos/", "tablas/", "croquis3d/", "notas/", "voz/")
+
+        /**
+         * **La biblioteca de figuras** ([com.forge.pixpin.motor.BibliotecaStore]; en el PC,
+         * `disco::BIBLIOTECA_DE_FIGURAS`), señalada por el mensaje `auto-figuras` del chat «Asistente».
+         * Para el cable sigue siendo un archivo binario (no es [esTexto]); solo cambia que, si cambió en
+         * los dos aparatos, se junta figura a figura ([Fusion.biblioteca], 25-oct-2026) en vez de
+         * quedarse la tocada más tarde.
+         */
+        const val BIBLIOTECA_DE_FIGURAS = "pins/draw/figuras.json"
+
+        fun esBibliotecaDeFiguras(rel: String) = rel == BIBLIOTECA_DE_FIGURAS
 
         fun chatDe(m: Mensaje): String = m.proyecto ?: GENERAL
 

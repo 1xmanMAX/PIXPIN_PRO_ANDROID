@@ -58,6 +58,18 @@ object BibliotecaStore {
 
     @Volatile private var leida: Pair<Pair<Long, Long>, List<FiguraGuardada>>? = null
 
+    /**
+     * **Llegó otra biblioteca por la sincronización** (25-oct-2026, §8 del manual del PC «sincronizar
+     * lo nuevo»: «recargar `BibliotecaStore` cuando llega `figuras.json`»). Se olvida la leída —por
+     * si el fichero nuevo tuviera la misma fecha y el mismo tamaño que el de antes— y sube
+     * [revision], para que el panel de figuras de un lienzo abierto la vuelva a leer. No la escribe:
+     * no se avisa a [alCambiar], o volvería a viajar lo que acaba de llegar.
+     */
+    fun alLlegar() {
+        leida = null
+        revision.intValue++
+    }
+
     /** Escribe la lista entera. Devuelve si se pudo. */
     fun guardar(context: Context, figuras: List<FiguraGuardada>): Boolean = runCatching {
         val destino = archivo(context)

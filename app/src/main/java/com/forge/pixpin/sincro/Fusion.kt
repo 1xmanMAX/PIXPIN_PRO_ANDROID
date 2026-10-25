@@ -83,6 +83,16 @@ object Fusion {
         if (m == s) return m
         if (m == b) return s
         if (s == b) return m
+        // **Las marcas y los marcadores de una nota de voz, uno por milisegundo** (25-oct-2026, PC
+        // `f3a1f37`): se juntan por su minuto, a tres bandas. Sin esto, un marcador puesto en el
+        // teléfono y otro en el PC antes de sincronizar eran un choque de la lista entera y uno se
+        // perdía. `marcadores` sin ninguno no se escribe (como `Mensaje.marcadores`); `marcas` va
+        // siempre, aunque sea `[]`.
+        if (clave != null && clave in POR_MILISEGUNDO) {
+            porMilisegundo(b, m, s, ganaMio, c, cuenta)?.let { l ->
+                return if (l.isNotEmpty() || clave == "marcas") JsonArray(l) else null
+            }
+        }
         // Cambiado en los dos, y distinto.
         if (m == null || s == null) {
             // Borrado en uno y cambiado en el otro: **se queda lo cambiado**.
@@ -108,6 +118,11 @@ object Fusion {
         // en una sola línea, y por párrafos un cambio en cada aparato era un choque entero.
         if (clave == "texto" && m is JsonPrimitive && s is JsonPrimitive && m.isString && s.isString) {
             tablaJunta(b, m.content, s.content, ganaMio, c, cuenta)?.let { return JsonPrimitive(it) }
+            // **Una carpeta de páginas se junta página a página** (25-oct-2026, PC `f3a1f37`): su
+            // documento va en el `texto` de un mensaje `MINIAPP` «carpeta» en una sola línea
+            // ([com.forge.pixpin.guardados.CarpetaDePaginas]); por párrafos, añadir una página en
+            // cada aparato era un choque y una de las dos se perdía. Después de la tabla, como allí.
+            carpetaJunta(b, m.content, s.content, ganaMio, c, cuenta)?.let { return JsonPrimitive(it) }
         }
         if (clave in PARRAFOS && m is JsonPrimitive && s is JsonPrimitive && m.isString && s.isString) {
             val bt = (b as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
@@ -129,6 +144,99 @@ object Fusion {
         val s = comoTabla(suyo) ?: return null
         val base = (b as? JsonPrimitive)?.takeIf { it.isString }?.content?.let(::comoTabla)
         return objeto(base, m, s, ganaMio, c, cuenta).toString()
+    }
+
+    /**
+     * El documento de una carpeta de páginas en un texto, o null si no lo es: un objeto con
+     * `formato` (un número) y la lista `paginas`, cada una con su `id` distinto (`como_carpeta` del PC).
+     */
+    private fun comoCarpeta(texto: String): JsonObject? {
+        val t = texto.trimStart()
+        if (!t.startsWith("{") || !t.contains("\"paginas\"") || !t.contains("\"formato\"")) return null
+        val o = runCatching { Json.parseToJsonElement(texto) as? JsonObject }.getOrNull() ?: return null
+        val formato = o["formato"]
+        if (formato !is JsonPrimitive || formato is JsonNull || formato.isString) return null
+        val paginas = o["paginas"] as? JsonArray ?: return null
+        return o.takeIf { conIds(paginas) }
+    }
+
+    /**
+     * Dos carpetas juntas página a página (por su `id`, como las figuras de un lienzo), en JSON
+     * compacto. Null si alguna no es una carpeta: entonces va por párrafos. **Una carpeta recién
+     * creada** nace con el texto vacío o `{}`: es una base sin páginas (`{"paginas":[]}`), no «nunca
+     * se acordó nada», o una página quitada en un lado volvería con el otro.
+     */
+    private fun carpetaJunta(b: JsonElement?, mio: String, suyo: String, ganaMio: Boolean, c: Criterio, cuenta: Cuenta): String? {
+        val m = comoCarpeta(mio) ?: return null
+        val s = comoCarpeta(suyo) ?: return null
+        val base = (b as? JsonPrimitive)?.takeIf { it.isString }?.content?.let {
+            comoCarpeta(it) ?: JsonObject(mapOf("paginas" to JsonArray(emptyList())))
+        }
+        return objeto(base, m, s, ganaMio, c, cuenta).toString()
+    }
+
+    /**
+     * Las claves de un mensaje que son listas de cosas puestas en un milisegundo del audio: `marcas`
+     * (`[ms]`, `Mensaje.marcas`) y `marcadores` (`[{ms, texto}]`, los de «Estudiar la clase»). Las
+     * mismas que `POR_MILISEGUNDO` del PC.
+     */
+    val POR_MILISEGUNDO = setOf("marcas", "marcadores")
+
+    /** El milisegundo de una marca (`1500`) o de un marcador (`{"ms":1500,…}`). */
+    private fun msDe(e: JsonElement): Long? = when (e) {
+        is JsonObject -> numero(e["ms"])
+        is JsonPrimitive -> numero(e)
+        else -> null
+    }
+
+    /**
+     * **Una lista de marcas o marcadores por milisegundo, a tres bandas** (`por_milisegundo` del PC):
+     * cada `ms` se junta con la base —añadido en uno, entra; quitado en uno sin tocar en el otro,
+     * sale; cambiado en los dos, gana [gana]—. Lo que falta cuenta como una lista vacía (así se
+     * quitan todos los marcadores). Sin base no se sabe qué se quitó: se queda todo lo de los dos.
+     * Salida en orden de `ms`. Null si algo no tiene la forma (entonces decide la regla general).
+     */
+    private fun porMilisegundo(
+        b: JsonElement?, m: JsonElement?, s: JsonElement?,
+        gana: Boolean, c: Criterio, cuenta: Cuenta
+    ): List<JsonElement>? {
+        fun mapa(l: JsonElement?): Map<Long, JsonElement>? {
+            if (l == null) return emptyMap()
+            val lista = l as? JsonArray ?: return null
+            val salida = HashMap<Long, JsonElement>()
+            // Dos con el mismo `ms`: se queda el último, como el `BTreeMap::insert` del PC.
+            for (e in lista) salida[msDe(e) ?: return null] = e
+            return salida
+        }
+        val enB = mapa(b) ?: return null
+        val enM = mapa(m) ?: return null
+        val enS = mapa(s) ?: return null
+        val sinBase = b == null
+        val salida = ArrayList<JsonElement>()
+        for (k in java.util.TreeSet(enM.keys + enS.keys)) {
+            val em = enM[k]
+            val es = enS[k]
+            val junto = if (sinBase && (em == null || es == null)) em ?: es
+            else juntar(enB[k], em, es, gana, null, c, cuenta)
+            if (junto != null) salida += junto
+        }
+        return salida
+    }
+
+    /**
+     * **La biblioteca de figuras** (`pins/draw/figuras.json`, una lista de `{id, nombre, elementos,
+     * propia}`, la de [com.forge.pixpin.motor.BibliotecaStore]) cambiada en los dos aparatos
+     * (25-oct-2026, PC `f3a1f37`, `fusion::biblioteca`): se juntan figura a figura por su `id` y,
+     * dentro de una figura cambiada en los dos, pieza a pieza. No hay base (es un archivo, no un
+     * texto de la sincronización), así que lo que solo está en un lado se queda: una figura guardada
+     * en el teléfono y otra en el PC antes de sincronizar ya no se pierden. Null si alguna no es una
+     * lista de figuras con `id`: entonces gana la tocada más tarde, como cualquier archivo.
+     */
+    fun biblioteca(mio: String, suyo: String, c: Criterio): String? {
+        fun lista(t: String) = (runCatching { Json.parseToJsonElement(t) }.getOrNull() as? JsonArray)?.takeIf(::conIds)
+        val m = lista(mio) ?: return null
+        val s = lista(suyo) ?: return null
+        return listaConIds(null, m, s, c.mioMasNuevo, c, Cuenta()).toString()
     }
 
     /**

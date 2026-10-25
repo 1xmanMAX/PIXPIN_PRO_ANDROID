@@ -1020,6 +1020,11 @@ class Sesion private constructor(
                 // Lo mío manda: lo que tengo yo, va; solo se trae lo que aquí no existe.
                 loMioManda && mio != null -> mandarArchivo(rel, suyo, acordado, avance, hecho)
                 p is Diferencia.Paso.Fusionar && texto && mio != null && suyo != null -> fusionarArchivo(prep, rel, mio, suyo, acordado, cuenta, hecho)
+                // **La biblioteca de figuras cambiada en los dos se junta figura a figura**
+                // (25-oct-2026, PC `f3a1f37`): guardar una en el teléfono y otra en el PC antes de
+                // sincronizar ya no pierde ninguna.
+                p is Diferencia.Paso.Fusionar && Disco.esBibliotecaDeFiguras(rel) && mio != null && suyo != null ->
+                    fusionarBiblioteca(rel, suyo, acordado, mio.tocado >= suyo.tocado - desfase, avance, hecho)
                 // Un PDF o una foto no se juntan: se queda la versión tocada más tarde (la otra sigue en la copia).
                 p is Diferencia.Paso.Fusionar -> if ((mio?.tocado ?: 0L) >= (suyo?.tocado ?: 0L) - desfase) mandarArchivo(rel, suyo, acordado, avance, hecho) else traerArchivo(rel, mio, acordado, avance, hecho)
                 p is Diferencia.Paso.Mandar -> mandarArchivo(rel, suyo, acordado, avance, hecho)
@@ -1088,6 +1093,21 @@ class Sesion private constructor(
         if (r.faltaBase || r.resumen == null) return null
         val suyo = Fusion.aplicar(json(base), r.parche?.let(::json)) ?: return null
         return suyo.toString() to r.resumen
+    }
+
+    /**
+     * **La biblioteca de figuras cambiada en los dos** (`fusionar_biblioteca` del PC): se trae la
+     * suya entera, se junta con la de aquí ([Fusion.biblioteca]) y la unión va de vuelta, para que
+     * los dos queden iguales. Si alguna no se entiende, gana la tocada más tarde, como cualquier
+     * archivo (la otra sigue en la copia).
+     */
+    private fun fusionarBiblioteca(rel: String, suyo: ArchivoInfo?, acordado: String?, mioMasNuevo: Boolean, avance: (Long) -> Unit, hecho: Hecho): String? {
+        val deAlli = traerEntero(rel) ?: return null
+        val aqui = runCatching { disco.archivo(rel).readText() }.getOrDefault("")
+        val junta = Fusion.biblioteca(aqui, deAlli, Fusion.Criterio(mioMasNuevo, desfase))
+            ?: if (mioMasNuevo) aqui else deAlli
+        disco.escribirTexto(rel, junta)
+        return mandarArchivo(rel, suyo, acordado, avance, hecho)
     }
 
     /** Su versión entera, a memoria. */

@@ -10,8 +10,10 @@ import java.io.File
  * **La biblioteca de figuras viaja por el chat «Asistente»** (§3.7 del manual del PC): el fichero
  * `pins/draw/figuras.json` (el de [com.forge.pixpin.motor.BibliotecaStore]) lo señala UN mensaje
  * `ARCHIVO` de id fijo `auto-figuras`; la sincronización de siempre se lleva el fichero con él
- * (su ruta sale como `pixpin:files/pins/draw/figuras.json`). Gana el tocado más tarde, como un
- * fichero suelto.
+ * (su ruta sale como `pixpin:files/pins/draw/figuras.json`).
+ *
+ * **Cambiado en los dos aparatos, se junta figura a figura** (25-oct-2026, PC `f3a1f37`): antes ganaba
+ * el tocado más tarde y una figura guardada en el otro se perdía. Ver [com.forge.pixpin.sincro.Fusion.biblioteca].
  */
 object FigurasQueViajan {
     const val ID = "auto-figuras"

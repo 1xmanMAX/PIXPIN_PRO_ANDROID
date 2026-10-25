@@ -1440,6 +1440,12 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         // las de fábrica se arman con el estilo puesto, para que salgan del
         // color y del grosor que se está usando. Ver [figurasDeFabrica].
         var misFiguras by remember { mutableStateOf(BibliotecaStore.cargar(this)) }
+        // **Y al llegar otra por la sincronización** (25-oct-2026): la figura que se guardó en el PC
+        // sale en el panel sin cerrar el lienzo. Ver [BibliotecaStore.alLlegar].
+        val revisionDeFiguras = BibliotecaStore.revision.intValue
+        LaunchedEffect(revisionDeFiguras) {
+            if (revisionDeFiguras > 0) misFiguras = withContext(Dispatchers.IO) { BibliotecaStore.cargar(this@DrawEditorActivity) }
+        }
         // Qué grupo de la barra está desplegado. Vive aquí y no dentro de la
         // barra porque las hermanas salen **fuera** de ella, pegadas al lateral
         // de la pantalla, y una barra no puede pintar fuera de sí misma.

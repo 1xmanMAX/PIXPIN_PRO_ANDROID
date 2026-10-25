@@ -85,3 +85,20 @@ sincronizable». **Nada de esto se ha probado en un teléfono**: compila y pasan
 - Chapa de compartido en la lista de chats y «Compartido · N personas» en la cabecera.
 - «+» en la lista de chats: chat normal o compartido.
 - No cambia nada de lo que se guarda ni de lo que viaja.
+
+## Sincronizar lo nuevo sin perder nada (PC cad5e20..d56a74a)
+
+Del `docs/manual-sincronizar-lo-nuevo.md` del PC (§7 y §8). Las tres reglas de fusión nuevas, en
+`sincro/Fusion.kt` y `sincro/Protocolo.kt`, iguales byte a byte que `crates/pixpin-sincro/src/fusion.rs`
+(`FusionDeLoNuevoTest`: casos con la salida que dio el PC en `d56a74a`):
+
+| Qué | Regla | Borrar |
+|---|---|---|
+| `marcas` (`[ms]`) y `marcadores` (`[{ms,texto}]`) de un mensaje | por milisegundo, a tres bandas; el mismo `ms` cambiado en los dos lo gana quien gana el mensaje; sin base, todo lo de los dos; en orden de `ms`. Algo sin `ms`: la lista entera, como antes | quitado en uno sin tocar en el otro, sale; `marcadores` vacío quita la clave, `marcas` queda `[]` |
+| `texto` de un `MINIAPP` «carpeta» (`{"formato":1,"paginas":[…]}`) | página a página por `id` (como las figuras de un lienzo), título a título; JSON compacto; texto vacío de base = sin páginas. Va después de la tabla; si no es una carpeta, por párrafos | quitada en uno, sale; quitada en uno y renombrada en el otro, se queda |
+| `pins/draw/figuras.json` cambiado en los dos | se trae el suyo, figura a figura por `id` sin base, pieza a pieza dentro; se escribe aquí y se manda. Si alguno no es una lista de figuras con `id`, gana el tocado más tarde | sin choque (cambió un solo lado) viaja tal cual |
+
+- `<d>.marcas`, `<d>.vistas.json` y lo anotado (`anot-<uid>.*`) siguen como en el PC: el fichero
+  entero, gana el tocado más tarde (§3 del manual).
+- Al llegar `figuras.json` se olvida la biblioteca leída y el panel del lienzo abierto se recarga
+  (`BibliotecaStore.alLlegar`).
