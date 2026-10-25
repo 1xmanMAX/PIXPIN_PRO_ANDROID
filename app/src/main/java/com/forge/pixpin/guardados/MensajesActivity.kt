@@ -95,6 +95,7 @@ import androidx.compose.material.icons.filled.Functions
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
@@ -2013,19 +2014,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         masOpciones = false
                                         SoltarActivity.abrir(this@MensajesActivity, chatDe)
                                     }
-                                    DelMenu(com.forge.pixpin.R.string.proyectos_titulo) {
-                                        masOpciones = false
-                                        abrirLaPortada(enProyectos = true)
-                                    }
-                                    DelMenu(com.forge.pixpin.R.string.start_app) {
-                                        masOpciones = false
-                                        com.forge.pixpin.floating.PinHostService.start(this@MensajesActivity)
-                                        Toast.makeText(
-                                            this@MensajesActivity,
-                                            com.forge.pixpin.R.string.app_started,
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    }
+                                    // **Solo lo del chat** (25-oct-2026, como el PC): fuera «Proyectos» y
+                                    // «Iniciar», que están en la portada. Se queda «Ajustes» porque en el
+                                    // teléfono es la única puerta a la portada (y desde ella a los proyectos).
                                     DelMenu(com.forge.pixpin.R.string.guardados_fondo, Icons.Filled.Palette) {
                                         masOpciones = false
                                         eligiendoFondo = true
@@ -2270,6 +2261,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         eligiendoQue = false
                         eligiendoMini = true
                     }
+                    // **Una figura, eligiéndola viéndola** (25-oct-2026, como el PC). Ver [AdjuntarFigura].
+                    BotonDeAdjuntar(
+                        androidx.compose.material.icons.Icons.Filled.Category,
+                        com.forge.pixpin.R.string.guardados_adj_figura,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        adjuntandoFigura = true
+                    }
                         }
                     }
                 }
@@ -2277,6 +2277,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             }
         }
 
+        if (adjuntandoFigura) HojaDeAdjuntarFigura(onCerrar = { adjuntandoFigura = false }) { f ->
+            adjuntandoFigura = false
+            val chat = chatDe
+            lifecycleScope.launch {
+                val m = withContext(Dispatchers.IO) { runCatching { AdjuntarFigura.adjuntar(this@MensajesActivity, almacen, chat, f) }.getOrNull() }
+                Toast.makeText(this@MensajesActivity, if (m != null) "Adjuntada «${m.nombre}»" else "No se pudo adjuntar", Toast.LENGTH_SHORT).show()
+            }
+        }
         compartiendo?.let { cual ->
             // **La hoja de compartir de toda la aplicación** (13-sep-2026). Se arma leyendo del
             // disco, así que primero se prepara y luego sube. Ver [compartibleDe].
@@ -3707,8 +3715,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // como pie salía el Markdown en crudo debajo de la propia mini-app
                     // —la tabla de los gastos con sus barras y sus guiones—, que es
                     // exactamente lo que la mini-app existe para no tener que leer.
+                    // **La nota rica** (25-oct-2026): con Markdown o fotos se pinta aparte, con
+                    // formato y sus fotos en álbum, y no como pie. Ver [NotaRica].
+                    val rica = remember(m.texto, m.clase) { m.clase == Clase.NOTA && NotaRica.tieneFormato(m.texto) } && enVivo == null
                     val alPie = when (m.clase) {
-                        Clase.NOTA -> enVivo ?: m.texto
+                        Clase.NOTA -> if (rica) null else enVivo ?: m.texto
                         Clase.MINIAPP -> null
                         else -> m.texto.takeIf { it.isNotBlank() }
                     }
@@ -3735,6 +3746,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
                         ) { Text("🔊 Escuchar", fontSize = 12.sp) }
                     if (enVivo != null) com.forge.pixpin.asistente.PreguntaDelAsistente(m.id)
+                    if (rica) NotaRicaEnBurbuja(m.texto)
                     val medidor = androidx.compose.ui.text.rememberTextMeasurer()
                     val estiloDeLaHora = androidx.compose.ui.text.TextStyle(fontSize = TAMANO_DE_LA_HORA)
                     val hora = horaDe(m.cuando)
@@ -3818,7 +3830,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         }
                         return@Column
                     }
-                    Box {
+                    Box(if (rica) Modifier.fillMaxWidth() else Modifier) {
                         alPie?.let { texto ->
                             val conHueco = androidx.compose.ui.text.buildAnnotatedString {
                                 append(conLoQueCasa(texto, consulta))
@@ -5904,6 +5916,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
     }
 
+    /** El panel de figuras abierto para adjuntar una. Ver [HojaDeAdjuntarFigura]. */
+    private var adjuntandoFigura by mutableStateOf(false)
+
     @Composable
     private fun BotonDeAdjuntar(
         icono: androidx.compose.ui.graphics.vector.ImageVector,
@@ -7454,7 +7469,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         when (seccion) {
             Seccion.TODO -> com.forge.pixpin.R.string.guardados_todo
             Seccion.FOTOS -> com.forge.pixpin.R.string.guardados_fotos
+            Seccion.VIDEOS -> com.forge.pixpin.R.string.guardados_videos
             Seccion.ARCHIVOS -> com.forge.pixpin.R.string.guardados_archivos
+            Seccion.ENLACES -> com.forge.pixpin.R.string.guardados_enlaces
             Seccion.VOZ -> com.forge.pixpin.R.string.guardados_voz
             Seccion.DIBUJOS -> com.forge.pixpin.R.string.guardados_dibujos
             Seccion.FIJADOS -> com.forge.pixpin.R.string.guardados_fijados

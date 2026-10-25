@@ -414,6 +414,8 @@ class SincronizarDeVerdadTest {
         dibujo(telefono, "d1", "planta")
         mensaje(telefono, "l", clase = Clase.DIBUJO, referencia = "d1")
         a.escribir(a.delLienzo(telefono.filesDir, "d1"), "k:10.0:20.0:🏠")
+        // Y la vista de cada marcador, al lado (25-oct-2026, §3.8): `<d>.vistas.json`.
+        a.escribir(com.forge.pixpin.motor.VistasDeMarcas.archivo(telefono.filesDir, "d1"), """{"1":"320.5 1040 800 450"}""")
         // Un Word con el verde de la voz y el punto de lectura.
         val docx = File(telefono.filesDir, "guardados/4_acta.docx").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(9)) }
         mensaje(telefono, "w", clase = Clase.ARCHIVO, ruta = docx.absolutePath)
@@ -422,6 +424,7 @@ class SincronizarDeVerdadTest {
         a.escribir(a.sitio(telefono.filesDir, a.delDocumento(uW, docx)), "0.37")
         sincronizar()
         assertEquals("k:10.0:20.0:🏠", a.leer(a.delLienzo(tableta.filesDir, "d1")))
+        assertEquals("""{"1":"320.5 1040 800 450"}""", a.leer(com.forge.pixpin.motor.VistasDeMarcas.archivo(tableta.filesDir, "d1")))
         assertEquals("12:0.4", a.leer(a.voz(tableta.filesDir, a.delDocumento(uW, docx))))
         assertEquals("0.37", a.leer(a.sitio(tableta.filesDir, a.delDocumento(uW, docx))))
 

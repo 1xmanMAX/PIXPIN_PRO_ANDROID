@@ -377,8 +377,11 @@ data class VieneDe(
 @Serializable
 data class TurnoDeVoz(val quien: String, val desdeMs: Int, val hastaMs: Int)
 
-/** Las secciones de la cabecera, en su orden. */
-enum class Seccion { TODO, FOTOS, ARCHIVOS, VOZ, DIBUJOS, FIJADOS, BUZON }
+/**
+ * Las secciones de la cabecera, en su orden. **Vídeos** y **Enlaces** (25-oct-2026, como el
+ * `Seccion` del PC): ver [SeccionesDelChat].
+ */
+enum class Seccion { TODO, FOTOS, VIDEOS, ARCHIVOS, ENLACES, VOZ, DIBUJOS, FIJADOS, BUZON }
 
 /**
  * Qué clases entran en cada sección.
@@ -392,6 +395,9 @@ fun clasesDe(seccion: Seccion): Set<Clase> = when (seccion) {
     // Las mini-apps van con los archivos: son documentos, no conversación, y es donde
     // uno las busca cuando quiere «esa lista de la compra» y no recuerda cuándo la hizo.
     Seccion.ARCHIVOS -> setOf(Clase.ARCHIVO, Clase.PAGINA, Clase.PROYECTO, Clase.MINIAPP, Clase.TABLA, Clase.CROQUIS)
+    Seccion.VIDEOS -> setOf(Clase.IMAGEN, Clase.ARCHIVO)
+    // Lo que lleve una dirección web en su texto, sea de la clase que sea.
+    Seccion.ENLACES -> Clase.entries.toSet()
     Seccion.VOZ -> setOf(Clase.VOZ)
     Seccion.DIBUJOS -> setOf(Clase.DIBUJO)
     Seccion.FIJADOS -> Clase.entries.toSet()
@@ -436,7 +442,13 @@ fun deSeccion(mensajes: List<Mensaje>, seccion: Seccion): List<Mensaje> {
     // de una lista donde uno creía haberla puesto a salvo. Un cajón que borra lo que
     // guardas es peor que no tener cajón.
     val filtrados = mensajes.filter {
-        !it.enBuzon && it.clase in clases && (seccion != Seccion.FIJADOS || it.fijado)
+        !it.enBuzon && it.clase in clases && (seccion != Seccion.FIJADOS || it.fijado) && when (seccion) {
+            // Un vídeo tiene su sección: ya no cuenta como foto ni como archivo.
+            Seccion.FOTOS, Seccion.ARCHIVOS -> !SeccionesDelChat.esVideo(it)
+            Seccion.VIDEOS -> SeccionesDelChat.esVideo(it)
+            Seccion.ENLACES -> SeccionesDelChat.tieneEnlace(it.texto)
+            else -> true
+        }
     }
     return if (seccion == Seccion.FIJADOS) filtrados.sortedByDescending { it.cuando }
     else filtrados.sortedBy { it.cuando }

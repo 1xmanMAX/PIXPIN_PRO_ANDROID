@@ -581,6 +581,10 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
     private fun irALaMarca(m: com.forge.pixpin.motor.Marca) {
         val v = controller.scene.viewport
         val ancho = medidaDelLienzo.width.takeIf { it > 0 }?.toDouble() ?: return
+        // **Con su vista guardada, a esa vista** (25-oct-2026, §3.8). Ver [VistasDeMarcas].
+        VistasDeMarcas.camaraPara(filesDir, dibujoId, m.id, ancho, medidaDelLienzo.height.toDouble())?.let {
+            controller.setViewport(it); cambiadoDesdeFuera(); return
+        }
         controller.setViewport(
             com.forge.pixpin.motor.Marcas.vistaConLaMarcaArriba(
                 m, v.zoom, ancho,
@@ -2958,15 +2962,25 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         quitandoMarca?.let { q ->
             androidx.compose.material3.AlertDialog(
                 onDismissRequest = { quitandoMarca = null },
-                title = { Text("¿Quitar el marcador ${q.emoji}?") },
+                title = { Text("Marcador ${q.emoji}") },
                 confirmButton = {
                     TextButton(onClick = {
                         marcas = com.forge.pixpin.motor.Marcas.sin(marcas, q.id)
                         guardarLasMarcas()
+                        VistasDeMarcas.podar(filesDir, dibujoId, marcas)
                         quitandoMarca = null
                     }) { Text("Quitar") }
                 },
-                dismissButton = { TextButton(onClick = { quitandoMarca = null }) { Text("Cancelar") } }
+                dismissButton = {
+                    Row {
+                        // La de ahora pasa a ser su vista (el Mayús+clic del PC).
+                        TextButton(onClick = {
+                            VistasDeMarcas.guardar(filesDir, dibujoId, q.id, controller.scene.viewport, ancho.toDouble(), alto.toDouble(), marcas)
+                            quitandoMarca = null
+                        }) { Text("Actualizar vista") }
+                        TextButton(onClick = { quitandoMarca = null }) { Text("Cancelar") }
+                    }
+                }
             )
         }
         // Dónde cae ahora mismo, en el lienzo: se pregunta **al colocar**, leyendo el encuadre de
@@ -2990,8 +3004,13 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                         val lienzo = medidaDelLienzo
                         if (lienzo.width <= 0 || enElLienzo.x !in 0f..lienzo.width.toFloat() || enElLienzo.y !in 0f..lienzo.height.toFloat()) return@detectTapGestures
                         val p = controller.scene.viewport.toScene(enElLienzo.x.toDouble(), enElLienzo.y.toDouble())
+                        val antes = marcas.mapTo(HashSet()) { it.id }
                         marcas = com.forge.pixpin.motor.Marcas.con(marcas, p.x, p.y, porPoner, System.currentTimeMillis())
                         guardarLasMarcas()
+                        // Y lo que se ve ahora, para volver a verlo. Ver [VistasDeMarcas].
+                        marcas.firstOrNull { it.id !in antes }?.let {
+                            VistasDeMarcas.guardar(filesDir, dibujoId, it.id, controller.scene.viewport, lienzo.width.toDouble(), lienzo.height.toDouble(), marcas)
+                        }
                         emojiPorPoner = null
                     }
                 })

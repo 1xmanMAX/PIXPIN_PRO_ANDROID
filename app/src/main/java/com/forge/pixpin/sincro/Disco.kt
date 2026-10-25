@@ -646,6 +646,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             if (esTexto(rel)) pendientes += rel to etiqueta
             // Los marcadores de un lienzo, con él. Ver [AnotacionesDelAdjunto.delLienzo].
             AnotacionesDelAdjunto.marcasJuntoA(rel)?.let { poner(it, etiqueta) }
+            AnotacionesDelAdjunto.vistasJuntoA(rel)?.let { poner(it, etiqueta) }
         }
         fun dibujo(id: String?) = id?.let { "pins/draw/$it.excalidraw.gz" }
         fun croquis(id: String?) = id?.let { "croquis3d/$it.croquis.gz" }

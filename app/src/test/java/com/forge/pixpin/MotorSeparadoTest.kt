@@ -77,6 +77,9 @@ class MotorSeparadoTest {
         // dibuja una tabla pegada sí son núcleo —`Biblioteca.kt` y
         // `TablaDibujada.kt`— y por eso eso se comprueba sin dispositivo.
         "BibliotecaStore.kt", "DrawFiguras.kt", "DrawTablaPegada.kt",
+        // Las de serie del PC se leen del APK con su `Context` (`assets`); leer el JSON sí es
+        // núcleo (`FigurasDeSerie.leerTexto`) y se comprueba sin dispositivo.
+        "FigurasDeSerie.kt",
         // La caché de miniaturas: un `Bitmap`, un `LruCache` y la carpeta de
         // caché de la aplicación son las tres de Android. Cuánto se abre el
         // documento y en qué orden sí es del núcleo, pero eso vive en
