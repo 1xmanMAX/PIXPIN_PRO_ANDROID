@@ -447,8 +447,8 @@ class HorarioActivity : ComponentActivity() {
                         Box(Modifier.offset(y = y).fillMaxWidth().height(1.dp).background(tinta.copy(alpha = 0.08f)))
                         Text("$h:00", Modifier.offset(y = y).width(horas), fontSize = 10.sp, color = tinta.copy(alpha = 0.55f))
                     }
-                    for ((i, b) in semana.bloques.withIndex()) androidx.compose.runtime.key(i, b) {
-                        if (b.dia >= dias) return@key
+                    // Sin `return@key`: salir antes de un `key {}` deja un método que R8 no sabe pasar a dex.
+                    for ((i, b) in semana.bloques.withIndex()) if (b.dia < dias) androidx.compose.runtime.key(i, b) {
                         val caja = r.caja(b.dia, b.inicio, b.fin)
                         var arrastre by remember(b) { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
                         val color = Color(0xFF000000.toInt() or semana.colorDe(b.nombre))
