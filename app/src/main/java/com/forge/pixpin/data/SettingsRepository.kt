@@ -331,7 +331,15 @@ data class Settings(
      * Se guarda la lista de las apagadas y no la de las encendidas para que una herramienta nueva
      * nazca encendida. Ver [com.forge.pixpin.motor.HerramientasPorSitio].
      */
-    val herramientasApagadas: Set<String> = emptySet()
+    val herramientasApagadas: Set<String> = emptySet(),
+    /**
+     * **«Mi vocabulario»** del OCR (25-oct-2026, `[ocr] vocabulario` del PC): nombres, siglas y
+     * términos que la lectura debe preferir, uno por línea o separados por comas. Mismo texto y
+     * mismo formato que en el PC; **no viaja** (los ajustes no se sincronizan, ni allí ni aquí).
+     * En el teléfono corrige lo que lee de una foto la visión del asistente (ver
+     * [com.forge.pixpin.ocr.CorrectorOcr.conVocabulario]).
+     */
+    val ocrVocabulario: String = ""
 ) {
 
     private val apagadasTools: Set<com.forge.pixpin.motor.Tool>
@@ -486,6 +494,7 @@ class SettingsRepository(private val context: Context) {
         val PALABRAS = stringPreferencesKey("palabras_magicas")
         val DIAS_CADUCIDAD = intPreferencesKey("dias_caducidad")
         val HERRAMIENTAS_APAGADAS = stringSetPreferencesKey("herramientas_apagadas")
+        val OCR_VOCABULARIO = stringPreferencesKey("ocr_vocabulario")
         /** Las barras de cada formato: `formato_pdf_tools`, `formato_pdf_groups`… */
         fun herramientasDe(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio) = stringSetPreferencesKey("formato_${s.nombre}_tools")
         fun gruposDe(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio) = stringPreferencesKey("formato_${s.nombre}_groups")
@@ -556,7 +565,8 @@ class SettingsRepository(private val context: Context) {
                 ?: com.forge.pixpin.pdf.ComprimirPdf.NIVEL_POR_DEFECTO,
             palabrasMagicas = prefs[Keys.PALABRAS],
             diasCaducidad = (prefs[Keys.DIAS_CADUCIDAD] ?: com.forge.pixpin.capture.CaducidadDeCapturas.DIAS).coerceAtLeast(0),
-            herramientasApagadas = prefs[Keys.HERRAMIENTAS_APAGADAS] ?: emptySet()
+            herramientasApagadas = prefs[Keys.HERRAMIENTAS_APAGADAS] ?: emptySet(),
+            ocrVocabulario = prefs[Keys.OCR_VOCABULARIO] ?: ""
         )
     }
 
@@ -888,6 +898,11 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setCompresionPdf(nivel: String) {
         context.dataStore.edit { it[Keys.COMPRESION_PDF] = nivel }
+    }
+
+    /** «Mi vocabulario» del OCR; en blanco es quitar la clave (de fábrica). Ver [Settings.ocrVocabulario]. */
+    suspend fun setOcrVocabulario(texto: String) {
+        context.dataStore.edit { if (texto.isBlank()) it.remove(Keys.OCR_VOCABULARIO) else it[Keys.OCR_VOCABULARIO] = texto.trim() }
     }
 
     suspend fun setDiasCaducidad(dias: Int) {

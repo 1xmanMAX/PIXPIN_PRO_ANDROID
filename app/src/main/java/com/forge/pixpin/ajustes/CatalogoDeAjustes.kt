@@ -66,6 +66,14 @@ object CatalogoDeAjustes {
             "Las capturas se van solas a la papelera del teléfono pasados estos días, salvo las conservadas.",
             listOf("dias_caducidad"), "caducidad caducar borrar papelera dias capturas galeria conservar"
         ) { it.diasCaducidad },
+        // **Reconocer texto (OCR)** (25-oct-2026, `[ocr]` del PC, en su Captura): el teléfono no
+        // tiene motor que elegir ni diccionario que bajar (`docs/ocr.md`, § Android), así que de
+        // esa sección solo llega «Mi vocabulario».
+        Opcion(
+            "ocr-vocabulario", Seccion.CAPTURAR, "Mi vocabulario",
+            "Nombres, siglas o términos que el texto leído de una foto debe preferir (E030, Arequipa…).",
+            listOf("ocr_vocabulario"), "ocr reconocer texto leer foto palabras terminos nombres siglas corregir"
+        ) { it.ocrVocabulario },
         Opcion(
             "pdf", Seccion.PDF, "Compresión de los PDF",
             "Al guardar un PDF en PixPin se aligera solo, en segundo plano, con pdfsqueeze.",

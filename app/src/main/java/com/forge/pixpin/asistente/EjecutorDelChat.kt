@@ -44,7 +44,8 @@ import java.util.concurrent.atomic.AtomicBoolean
  * **Leer (OCR)**: el teléfono no tiene el OCR de Windows ni ML Kit. Las hojas de un PDF que ya
  * traen texto se leen de él, sin adivinar nada; las escaneadas y las fotos las lee **la visión del
  * propio modelo** (`mmproj`), hoja a hoja. Con el 0.8B eso inventa a menudo (medido en el PC): el
- * resultado lo dice. El texto entero va al chat como nota y como `.txt`, con aparato «IA».
+ * resultado lo dice. El texto entero va al chat como nota y como `.txt`, con aparato «IA». Lo
+ * leído con la visión pasa por «Mi vocabulario» de los ajustes (25-oct-2026, `docs/ocr.md` del PC).
  */
 class EjecutorDelChat(
     private val contexto: Context,
@@ -68,8 +69,12 @@ class EjecutorDelChat(
      * **La tarjeta de `preguntar_usuario`** en la burbuja (§ del PC, 22-oct): enseña la pregunta y
      * espera la respuesta. null: aquí no hay a quién preguntar (y el turno no ofrece la herramienta).
      */
-    private val dudar: ((Preguntar.Pregunta) -> Preguntar.Contestada)? = null
+    private val dudar: ((Preguntar.Pregunta) -> Preguntar.Contestada)? = null,
+    /** «Mi vocabulario» de los ajustes (`[ocr] vocabulario` del PC), para lo que lee la visión. */
+    vocabularioOcr: String = ""
 ) : Agente.Ejecutor {
+
+    private val vocabulario = com.forge.pixpin.ocr.Vocabulario.deTexto(vocabularioOcr)
 
     private val acciones = AccionesDelTelefono(contexto, almacen, chat, confirmar)
     val documentos = DocumentosAcciones(contexto, almacen, chat, motor, parar, permisoDocumentos)
@@ -347,7 +352,10 @@ class EjecutorDelChat(
                 maxTokens = 1500, temperatura = 0.2
             )
         ) { if (parar.get()) Seguir.PARAR else Seguir.SI }
-        return ChatDelAsistente.sinPensado(r.texto).trim()
+        // **«Mi vocabulario»** (25-oct-2026): lo que se parece claramente a un término del usuario se
+        // escribe como él lo pone, como hace Indra en el PC. Sin diccionario: la visión no da
+        // confianza por letra (ver [com.forge.pixpin.ocr.CorrectorOcr.conVocabulario]).
+        return com.forge.pixpin.ocr.CorrectorOcr.conVocabulario(ChatDelAsistente.sinPensado(r.texto).trim(), vocabulario)
     }
 
     /** El texto leído, al chat: una nota y un `«<nombre> (texto).txt»`, del aparato «IA». */

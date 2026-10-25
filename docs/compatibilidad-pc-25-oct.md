@@ -102,3 +102,22 @@ Del `docs/manual-sincronizar-lo-nuevo.md` del PC (§7 y §8). Las tres reglas de
   entero, gana el tocado más tarde (§3 del manual).
 - Al llegar `figuras.json` se olvida la biblioteca leída y el panel del lienzo abierto se recarga
   (`BibliotecaStore.alLlegar`).
+
+## OCR: Indra en el PC, «Mi vocabulario» aquí (PC d56a74a..e78c1a3)
+
+El PC lee el texto con un motor a elegir (`[ocr] motor = "windows" | "indra"`), corrige con el
+diccionario español y «Mi vocabulario», lee en otro hilo («Leyendo…» en la barra del pin, lo viejo
+se tira) y precarga Indra al abrir una captura. Su `docs/ocr.md` (§ Android) da tres caminos para
+el teléfono: pedírselo al escáner (una acción `OCR` que el escáner aún no tiene), copiar el
+`ocr/indra/` del escáner con ONNX Runtime bajado aparte (12,9 MB de `.so` + 26 MB de pesos con
+licencia OpenRAIL-M de Datalab, que **no pueden ir en el APK**) o JNI al crate de Rust (no:
+Android no compila Rust). Ninguno está pedido como hecho; aquí va lo puro y lo que ya sirve:
+
+| Del PC | En Android | Viaja |
+|---|---|---|
+| `pixpin-indra`: `lexico.rs`, `corrector.rs`, `dudas.rs`, `catalogo.rs` | `ocr/LexicoOcr.kt`, `CorrectorOcr.kt`, `DudasOcr.kt`, `CatalogoIndra.kt`, con las pruebas del PC (`CorrectorOcrTest`) | — |
+| `[ocr] vocabulario` («Mi vocabulario») | Ajustes › Capturar › «Mi vocabulario» (`ocr_vocabulario`); corrige lo que transcribe de una foto la visión del asistente (`EjecutorDelChat.leerConVision`) | **no**: los ajustes no viajan ni en el PC ni aquí |
+| `[ocr] motor`, `[ocr] corregir` | no: no hay motor que elegir ni diccionario bajado; sin confianza por letra el diccionario adivinaría | — |
+| Leer en otro hilo, «Leyendo…», precargar | no hace falta: los pines y la captura de Android no leen texto (no hay OCR); el asistente ya lee fuera del hilo de la interfaz | — |
+
+El canal de Indra (imagen, detección, LM, orden) no se porta sin el runtime que lo corra.

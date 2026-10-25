@@ -511,6 +511,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit) {
             "captura" -> CaptureModeCard()
             "formato" -> FormatoDeCopiaCard()
             "caducidad" -> CaducidadDeCapturasCard()
+            "ocr-vocabulario" -> com.forge.pixpin.ocr.MiVocabularioCard()
             "pdf" -> CompresionDePdfCard()
             "guia" -> ModoGuiaCard()
             "iman" -> ImanCard()

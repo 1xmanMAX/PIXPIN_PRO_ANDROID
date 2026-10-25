@@ -321,7 +321,7 @@ object Asistente {
                 preguntas += ChatDelAsistente.lineaDePregunta(q, r)
                 r == true
             },
-            pedido = pedido, foto = fotoArchivo, destino = destino,
+            pedido = pedido, foto = fotoArchivo, destino = destino, vocabularioOcr = ajustes.ocrVocabulario,
             permisoDocumentos = {
                 when (runBlocking { app.settings.settings.first().asistenteDocumentosNube }) {
                     "si" -> null
