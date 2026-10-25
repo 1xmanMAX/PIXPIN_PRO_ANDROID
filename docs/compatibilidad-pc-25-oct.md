@@ -74,3 +74,14 @@ sincronizable». **Nada de esto se ha probado en un teléfono**: compila y pasan
 - Del documento del PC «el motor en Android»: hilo de audio con prioridad, `VOICE_RECOGNITION` /
   `CAMCORDER`, micrófono perdido que se reabre rellenando con silencio. Los motores de escritorio
   (WASAPI, D3D11, Media Foundation) no se portan.
+
+## v0.134.0: chats compartidos como conversación (PC 078c8ba..cad5e20)
+
+- Quién escribió cada mensaje sale de `Mensaje.aparato` (código de 4 del aparato, como el PC) y de
+  `compartidos.json` (`id`, `codigo`, `nombre`, `desde`). Míos: este aparato, los de mi grupo y los
+  de la lista que son míos. Los míos a la derecha; cada persona a la izquierda con su inicial, su
+  color (FNV-1a del nombre módulo 7, el mismo que el PC) y su nombre encima del primer globo de cada
+  tanda. Lógica en `sincro/EntrePersonas.kt`.
+- Chapa de compartido en la lista de chats y «Compartido · N personas» en la cabecera.
+- «+» en la lista de chats: chat normal o compartido.
+- No cambia nada de lo que se guarda ni de lo que viaja.
