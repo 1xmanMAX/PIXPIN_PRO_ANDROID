@@ -35,6 +35,10 @@ import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -87,15 +91,29 @@ import kotlinx.coroutines.withContext
  * Lo que se cambia aquí es el mensaje de la carpeta ([CarpetasDelChat.cambiar]), que es lo que viaja.
  * En el PC las páginas se arrastran para reordenarlas; aquí, con las flechas de «Antes» y
  * «Después», que con el dedo no se confunden con desplazar la lista.
+ *
+ * **La carpeta de una grabación** (25-oct-2026, PC e1150e8) se ve igual, adaptada: la nota y el vídeo
+ * con su icono y lo que duran, las capturas con su foto y su minuto, en el orden de la grabación (no
+ * se mueven: el orden es el del tiempo). Detrás, **lo adjuntado a la clase**, en ámbar y con la chapa
+ * «Adjunto · no es de la grabación». Arriba, «Estudiar», «Adjuntar a la clase» y compartir la
+ * grabación ([ExportarGrabacion]). Tocar una pieza de lo grabado abre la clase en su minuto. Y como
+ * en el PC, **tocar la tarjeta del chat estudia la clase**: sin [EXTRA_ENTERA] (el «Abrir la carpeta»
+ * del menú), esta pantalla abre «Estudiar la clase» y se va.
  */
 class CarpetaActivity : ComponentActivity() {
 
     companion object {
         private const val EXTRA_CARPETA = "carpeta"
+        private const val EXTRA_ENTERA = "carpeta_entera"
 
-        fun abrir(context: Context, carpeta: String) {
+        /**
+         * Abre la carpeta [carpeta]. La de una grabación, sin [entera], estudia su clase (lo que hace
+         * tocar su tarjeta en el chat); con [entera], enseña lo grabado y lo adjuntado.
+         */
+        fun abrir(context: Context, carpeta: String, entera: Boolean = false) {
             context.startActivity(
                 Intent(context, CarpetaActivity::class.java).putExtra(EXTRA_CARPETA, carpeta)
+                    .putExtra(EXTRA_ENTERA, entera)
                     .apply { if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             )
         }
@@ -123,7 +141,32 @@ class CarpetaActivity : ComponentActivity() {
             finish()
             return
         }
+        val entera = intent.getBooleanExtra(EXTRA_ENTERA, false)
+        if (!entera) {
+            // La de una grabación con su nota: su vista natural es «Estudiar la clase».
+            val voz = runCatching {
+                MensajesStore(this).leer().firstOrNull { it.id == id }?.let(CarpetaDePaginas::deMensaje)
+                    ?.takeIf { it.esGrabacion }?.voz?.takeIf { it.isNotEmpty() }
+            }.getOrNull()
+            if (voz != null) {
+                EstudiarClaseActivity.abrir(this, voz)
+                finish()
+                return
+            }
+        }
         setContent { PixPinTheme { Pantalla(id) } }
+    }
+
+    /** La carpeta a la que va el fichero elegido para «Adjuntar a la clase». */
+    private var adjuntandoA: String? = null
+    private val elegirAdjunto = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val carpeta = adjuntandoA
+        if (uri != null && carpeta != null) Thread {
+            val puesto = runCatching { CarpetasDelChat.adjuntarALaClase(this, carpeta, uri) }.getOrNull()
+            runOnUiThread {
+                Toast.makeText(this, if (puesto != null) "Adjuntado a la clase: $puesto" else "No se pudo adjuntar", Toast.LENGTH_SHORT).show()
+            }
+        }.start()
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -145,8 +188,12 @@ class CarpetaActivity : ComponentActivity() {
             }
         }
         if (carpeta == null || documento == null) return
+        // En una grabación, lo grabado delante y lo adjuntado detrás (`sort_by_key(adjunto)` del PC).
+        val grabacion = documento.esGrabacion
         val paginas = documento.vivas(lista).map { (i, p) -> lista[i] to p }
+            .let { l -> if (grabacion) l.sortedBy { it.second.adjunto } else l }
         val nombre = carpeta.nombre.ifBlank { CarpetasDelChat.NOMBRE_DE_SERIE }
+        var compartiendo by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
 
         var renombrandoCarpeta by remember { mutableStateOf(false) }
         var renombrandoPagina by remember { mutableStateOf<CarpetaDePaginas.Pagina?>(null) }
@@ -165,11 +212,31 @@ class CarpetaActivity : ComponentActivity() {
                     title = {
                         Column(Modifier.clickable { renombrandoCarpeta = true }) {
                             Text(nombre, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(cuantas(paginas.size), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(
+                                if (grabacion) CarpetasDelChat.detalleDeGrabacion(documento) else cuantas(paginas.size),
+                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
                     },
                     actions = {
-                        IconButton(enabled = !trabajando && paginas.isNotEmpty(), onClick = {
+                        if (grabacion) {
+                            // Estudiar (si hay nota), adjuntar y compartir la grabación entera.
+                            if (documento.voz.isNotEmpty()) IconButton(onClick = { EstudiarClaseActivity.abrir(this@CarpetaActivity, documento.voz) }) {
+                                Icon(Icons.Filled.School, "Estudiar")
+                            }
+                            IconButton(onClick = { adjuntandoA = id; elegirAdjunto.launch(arrayOf("*/*")) }) {
+                                Icon(Icons.Filled.AttachFile, "Adjuntar a la clase")
+                            }
+                            IconButton(onClick = {
+                                alcance.launch {
+                                    compartiendo = withContext(Dispatchers.IO) {
+                                        runCatching {
+                                            ExportarGrabacion.notaDe(carpeta, lista)?.let { ExportarGrabacion.compartible(this@CarpetaActivity, it, lista) }
+                                        }.getOrNull()
+                                    }
+                                }
+                            }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, "Compartir la grabación") }
+                        } else IconButton(enabled = !trabajando && paginas.isNotEmpty(), onClick = {
                             trabajando = true
                             Toast.makeText(this@CarpetaActivity, "Exportando el PDF…", Toast.LENGTH_SHORT).show()
                             alcance.launch {
@@ -186,7 +253,7 @@ class CarpetaActivity : ComponentActivity() {
                 )
             },
             floatingActionButton = {
-                ExtendedFloatingActionButton(
+                if (!grabacion) ExtendedFloatingActionButton(
                     text = { Text("Página nueva") },
                     icon = { Icon(Icons.Filled.Add, null) },
                     onClick = {
@@ -220,7 +287,8 @@ class CarpetaActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 itemsIndexed(paginas, key = { _, (m, _) -> m.id }) { i, (m, p) ->
-                    FilaDePagina(
+                    if (grabacion) FilaDeGrabacion(m, p, documento, onQuitar = { cambiar { c -> c.quitar(m.id) } })
+                    else FilaDePagina(
                         numero = i + 1,
                         m = m,
                         titulo = p.titulo.ifBlank { m.nombre.ifBlank { CarpetasDelChat.PAGINA } },
@@ -244,6 +312,7 @@ class CarpetaActivity : ComponentActivity() {
                 }
             }
         }
+        compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
         renombrandoPagina?.let { p ->
             Renombrar(p.titulo, "Título de la página", onCerrar = { renombrandoPagina = null }) { nuevo ->
                 cambiar { c -> c.renombrar(c.posicion(p.id), nuevo) }
@@ -305,6 +374,65 @@ class CarpetaActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * **Una pieza de una grabación**: la nota y el vídeo con su icono y lo que duran, una captura con
+     * su foto y su minuto; lo adjuntado, en ámbar y con su chapa. Lo grabado se toca para estudiarlo
+     * en su minuto; lo adjuntado se abre como en el chat.
+     */
+    @Composable
+    private fun FilaDeGrabacion(m: Mensaje, p: CarpetaDePaginas.Pagina, c: CarpetaDePaginas, onQuitar: () -> Unit) {
+        var menu by remember { mutableStateOf(false) }
+        val adjunto = p.adjunto
+        val esquina = when {
+            adjunto -> ""
+            m.clase == Clase.VOZ || m.id == c.video -> GrabarClase.minuto(m.duracionMs.toLong())
+            else -> "⏱ " + GrabarClase.minuto(p.ms ?: 0)
+        }
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(10.dp))
+                .background(if (adjunto) COLOR_ADJUNTO.copy(alpha = 0.18f) else MaterialTheme.colorScheme.surfaceVariant)
+                .clickable {
+                    // Lo grabado se estudia en su minuto, con el texto al lado.
+                    if (!adjunto && c.voz.isNotEmpty()) EstudiarClaseActivity.abrir(this@CarpetaActivity, c.voz, p.ms ?: 0)
+                    else abrirPagina(this@CarpetaActivity, m)
+                }
+                .padding(8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier.size(96.dp, 72.dp).clip(RoundedCornerShape(4.dp)).background(Color.White),
+                contentAlignment = Alignment.Center
+            ) {
+                when {
+                    m.clase == Clase.VOZ -> Icon(Icons.Filled.Mic, null, tint = Color.Gray)
+                    m.id == c.video -> Icon(Icons.Filled.Videocam, null, tint = Color.Gray)
+                    else -> MiniaturaDePaginaDeCarpeta(m, Modifier.fillMaxSize())
+                }
+                if (esquina.isNotEmpty()) Text(
+                    esquina, color = Color.White, fontSize = 11.sp,
+                    modifier = Modifier.align(Alignment.TopStart).padding(4.dp)
+                        .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(50)).padding(horizontal = 6.dp)
+                )
+            }
+            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Text(p.titulo.ifBlank { m.nombre.ifBlank { CarpetasDelChat.PAGINA } }, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                if (adjunto) Text(
+                    "Adjunto · no es de la grabación", color = Color.White, fontSize = 11.sp,
+                    modifier = Modifier.padding(top = 4.dp).background(COLOR_ADJUNTO, RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 2.dp)
+                )
+            }
+            Box {
+                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Más") }
+                DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    DropdownMenuItem(text = { Text("Abrir") }, onClick = { menu = false; abrirPagina(this@CarpetaActivity, m) })
+                    DropdownMenuItem(text = { Text("Quitar de la carpeta") }, onClick = { menu = false; onQuitar() })
+                }
+            }
+        }
+    }
+
     @Composable
     private fun Renombrar(actual: String, rotulo: String, onCerrar: () -> Unit, onGuardar: (String) -> Unit) {
         var texto by remember { mutableStateOf(actual) }
@@ -317,6 +445,12 @@ class CarpetaActivity : ComponentActivity() {
         )
     }
 }
+
+/**
+ * El color de lo adjuntado a una clase (no es de lo grabado): el ámbar del PC (`COLOR_ADJUNTO`,
+ * 0.80/0.45/0.05), que se lee igual en claro y en oscuro.
+ */
+val COLOR_ADJUNTO = Color(0xFFCC730D)
 
 /**
  * **La miniatura de una página de la carpeta**: de un lienzo, su primera hoja (la de la plantilla,
@@ -368,9 +502,15 @@ private suspend fun miniatura(contexto: Context, m: Mensaje, lado: Int): Bitmap?
  */
 @Composable
 fun TarjetaDeCarpeta(m: Mensaje) {
+    val documento = remember(m.texto) { CarpetaDePaginas.deMensaje(m) }
+    // La de una grabación es una sola tarjeta con su foto (PC e1150e8).
+    if (documento?.esGrabacion == true) TarjetaDeGrabacion(m, documento) else TarjetaDeCuaderno(m, documento)
+}
+
+@Composable
+private fun TarjetaDeCuaderno(m: Mensaje, documento: CarpetaDePaginas?) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
     val cambios by MensajesStore.cambios.collectAsState()
-    val documento = remember(m.texto) { CarpetaDePaginas.deMensaje(m) }
     val paginas by produceState<List<Mensaje>>(emptyList(), m.texto, cambios) {
         val c = documento ?: return@produceState
         value = withContext(Dispatchers.IO) {
@@ -408,6 +548,62 @@ fun TarjetaDeCarpeta(m: Mensaje) {
                         contentAlignment = Alignment.Center
                     ) { MiniaturaDePaginaDeCarpeta(p, Modifier.fillMaxSize(), lado = 160) }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * **La tarjeta de una clase grabada** (25-oct-2026, `pintar_ojeada_grabacion` del PC, e1150e8): una sola
+ * en el chat por toda la grabación. La primera captura de fondo (sin capturas, el icono del vídeo o
+ * del micrófono), arriba la chapa «● Grabación», abajo lo que duró y cuántas capturas lleva y, si hay
+ * nota, la pastilla «Estudiar» (la tarjeta entera abre la clase: ver [CarpetaActivity]).
+ */
+@Composable
+private fun TarjetaDeGrabacion(m: Mensaje, c: CarpetaDePaginas) {
+    val contexto = androidx.compose.ui.platform.LocalContext.current
+    val cambios by MensajesStore.cambios.collectAsState()
+    val primera by produceState<Mensaje?>(null, m.texto, cambios) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val todos = MensajesStore(contexto).leer()
+                c.capturas().firstNotNullOfOrNull { p -> todos.firstOrNull { it.id == p.id && it.clase == Clase.IMAGEN } }
+            }.getOrNull()
+        }
+    }
+    Column(Modifier.widthIn(min = 220.dp, max = 280.dp).padding(2.dp)) {
+        Text(m.nombre.ifBlank { "Grabación" }, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Spacer(Modifier.height(6.dp))
+        Box(
+            Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) {
+            val foto = primera
+            if (foto != null) MiniaturaDePaginaDeCarpeta(foto, Modifier.fillMaxSize(), lado = 480)
+            else Icon(
+                if (c.video.isEmpty()) Icons.Filled.Mic else Icons.Filled.Videocam, null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp)
+            )
+            Row(
+                Modifier.align(Alignment.TopStart).padding(6.dp).background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(50))
+                    .padding(horizontal = 8.dp, vertical = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(Color(0xFFE53935)))
+                Text("Grabación", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(start = 5.dp))
+            }
+            Text(
+                CarpetasDelChat.detalleDeGrabacion(c), color = Color.White, fontSize = 11.sp,
+                modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
+                    .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp)
+            )
+            if (c.voz.isNotEmpty()) Row(
+                Modifier.align(Alignment.BottomEnd).padding(6.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50))
+                    .padding(horizontal = 10.dp, vertical = 4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.School, null, tint = Color.White, modifier = Modifier.size(14.dp))
+                Text("Estudiar", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
             }
         }
     }

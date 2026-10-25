@@ -40,6 +40,9 @@ import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.FitScreen
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
@@ -71,11 +74,16 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import com.forge.pixpin.R
+import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -101,14 +109,34 @@ import java.io.File
  * **Los marcadores** ([Mensaje.marcadores]) llevan su nota y se guardan en la nota de voz, donde los
  * pone también el PC; las banderitas de la letra ([Mensaje.marcas]) se enseñan con ellos y cada una
  * se quita de su campo (mantener pulsado). Del PC no se trae el teclado (espacio, J/L, M…).
+ *
+ * **Como los visores** (25-oct-2026, PC fe0c9c4 y 19c060f): claro u oscuro con la luna/el sol de
+ * arriba; lo que se ve (el vídeo o la captura) **se acerca como un lienzo** —pellizcar hacia los dedos,
+ * arrastrar, la pastilla de − % +— con [com.forge.pixpin.ui.Encuadre]; un toque reproduce o para y
+ * **el doble toque solo encaja** (no reproduce: el toque suelto espera a ver si viene otro). Al lado,
+ * el riel de todos los visores ([com.forge.pixpin.ui.RielDelVisor]): el marcador y **el lápiz, que
+ * anota la captura que se ve** en su lienzo `foto-<id>` (el mismo que al tocarla en el chat, el que
+ * viaja con ella), con el editor avanzado de los visores ([com.forge.pixpin.ui.EditorAvanzadoDeVisor]);
+ * lo anotado se ve aquí encima de la captura. Con el vídeo, el lápiz lo para y guarda antes el
+ * fotograma como **una captura más de la clase, en su minuto** (`guardar_fotograma` del PC: una
+ * imagen con `enGrabacion` y su sitio en `capturas` de la nota; aquí además entra en la carpeta de la
+ * grabación, para que no salga suelta en el chat). Al arrastrar la barra, el tirador va con el dedo
+ * ([EstudiarClase.posicionALaVista]). Del PC no se traen Escape, las teclas de acercar ni el clic
+ * contado desde la esquina de la ventana (`ms_del_raton`, a75847c): son cosas de una ventana de
+ * escritorio.
  */
 class EstudiarClaseActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val id = intent.getStringExtra(LA_NOTA).orEmpty()
+        val inicio = intent.getLongExtra(EL_MINUTO, 0L)
         aPantallaCompleta()
-        setContent { PixPinTheme { Pantalla(id) } }
+        setContent {
+            // Claro u oscuro como los visores: null es lo de los Ajustes.
+            var oscuro by remember { mutableStateOf<Boolean?>(null) }
+            PixPinTheme(darkTheme = oscuro) { Pantalla(id, inicio) { oscuro = it } }
+        }
     }
 
     /** Una señal de la columna del texto: un marcador con nota o una banderita de la letra. */
@@ -116,13 +144,18 @@ class EstudiarClaseActivity : ComponentActivity() {
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
-    private fun Pantalla(id: String) {
+    private fun Pantalla(id: String, inicio: Long, alCambiarTema: (Boolean) -> Unit) {
         val almacen = remember { MensajesStore(this) }
         var version by remember { mutableIntStateOf(0) }
         LaunchedEffect(Unit) { MensajesStore.cambios.collect { version++ } }
         val todos = remember(version) { almacen.leer() }
         val m = remember(todos) { todos.firstOrNull { it.id == id } }
         val capturas = remember(todos, m) { m?.let { capturasDeLaLetra(it, todos) }.orEmpty() }
+        // El mensaje de cada captura (el mismo orden): para su lienzo anotado.
+        val fotos = remember(todos, m) {
+            val porId = todos.associateBy { it.id }
+            m?.let { n -> GrabarClase.capturasDe(n).mapNotNull { e -> porId[e.id]?.takeIf { it.ruta?.let { r -> File(r).exists() } == true } } }.orEmpty()
+        }
         val video = remember(todos, m) { m?.let { videoDeLaLetra(it, todos) } }
         val lineas = remember(m?.transcripcion) { EstudiarClase.lineasDe(m?.transcripcion) }
         // Los marcadores y las banderitas, juntos y en orden: la ventana del PC enseña los dos.
@@ -143,7 +176,19 @@ class EstudiarClaseActivity : ComponentActivity() {
         LaunchedEffect(m?.ruta) {
             val r = m?.ruta
             if (r != null && File(r).exists() && Reproductor.estado.value.ruta != r) Reproductor.cargar(r, titulo, arrancar = false)
+            // Abierta desde una pieza de su carpeta: en su minuto (cuando ya se sabe lo que dura).
+            if (r != null && inicio > 0) {
+                repeat(20) {
+                    if (Reproductor.estado.value.duracionMs > 0) { m?.let { irA(it, inicio) }; return@LaunchedEffect }
+                    kotlinx.coroutines.delay(100)
+                }
+            }
         }
+        var arrastrando by remember { mutableStateOf<Long?>(null) }
+        var encuadre by remember { mutableStateOf(com.forge.pixpin.ui.Encuadre()) }
+        var verVideo by remember { mutableStateOf(true) }
+        var anotando by remember { mutableStateOf<Mensaje?>(null) }
+        val oscuroAhora = MaterialTheme.colorScheme.background.luminance() < 0.5f
         var seguir by remember { mutableStateOf(true) }
         var poniendo by remember { mutableStateOf<Long?>(null) }
         val irA: (Long) -> Unit = { ms -> m?.let { irA(it, ms) } }
@@ -156,6 +201,9 @@ class EstudiarClaseActivity : ComponentActivity() {
                         Text(getString(R.string.estudiar_titulo), fontWeight = FontWeight.Bold, maxLines = 1)
                         if (titulo.isNotBlank()) Text(titulo, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
+                    IconButton(onClick = { alCambiarTema(!oscuroAhora) }) {
+                        Icon(if (oscuroAhora) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuroAhora) "Claro" else "Oscuro")
+                    }
                     FilterChip(selected = seguir, onClick = { seguir = !seguir }, label = { Text(getString(R.string.estudiar_seguir)) })
                 }
                 if (m == null || m.ruta == null || !File(m.ruta).exists()) {
@@ -164,23 +212,112 @@ class EstudiarClaseActivity : ComponentActivity() {
                         modifier = Modifier.padding(16.dp)
                     )
                 }
-                // Lo que se ve: el vídeo callado siguiendo a la nota, o la captura del minuto.
+                // Lo que se ve: el vídeo callado siguiendo a la nota, o la captura del minuto (con lo
+                // anotado encima). Se acerca como un lienzo; ver [com.forge.pixpin.ui.Encuadre].
+                val conVideo = video != null && (verVideo || capturas.isEmpty())
+                val iVista = EstudiarClase.ultimoAntes(tiemposDeCapturas, posMs)
+                val fotoVista = if (conVideo) null else iVista?.let { fotos.getOrNull(it) }
+                var imagen by remember { mutableStateOf<ImageBitmap?>(null) }
+                LaunchedEffect(fotoVista?.id, fotoVista?.referencia, anotando, version) {
+                    val f = fotoVista
+                    imagen = if (f == null) null else withContext(Dispatchers.IO) { capturaAnotada(f, 2048) }
+                }
+                // Al cambiar de captura o del vídeo a una captura, vuelve a encajada.
+                LaunchedEffect(fotoVista?.id, conVideo) { encuadre = com.forge.pixpin.ui.Encuadre() }
+                val actual = imagen
+                val (anchoImg, altoImg) = when {
+                    conVideo -> 0f to 0f
+                    actual != null -> actual.width.toFloat() to actual.height.toFloat()
+                    else -> 0f to 0f
+                }
                 Box(
-                    Modifier.fillMaxWidth().height(230.dp).background(Color.Black),
+                    Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(0.dp)).background(Color.Black),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (video != null) VideoQueSigue(video, posMs, esta && estado.sonando)
-                    else {
-                        val i = EstudiarClase.ultimoAntes(tiemposDeCapturas, posMs)
-                        val ruta = i?.let { capturas[it].second }
-                        var imagen by remember { mutableStateOf<ImageBitmap?>(null) }
-                        LaunchedEffect(ruta) { if (ruta != null) leer(ruta, 2048)?.let { imagen = it } }
-                        val actual = imagen
-                        if (actual != null) Image(actual, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                    var caja by remember { mutableStateOf(com.forge.pixpin.ui.Encuadre.Caja(0f, 0f, 1f, 1f)) }
+                    // Sin medidas de la imagen (el vídeo se encaja solo), la caja entera hace de imagen.
+                    val w = if (anchoImg > 0f) anchoImg else caja.ancho
+                    val h = if (altoImg > 0f) altoImg else caja.alto
+                    Box(
+                        Modifier.fillMaxSize()
+                            .onSizeChanged { caja = com.forge.pixpin.ui.Encuadre.Caja(0f, 0f, it.width.toFloat(), it.height.toFloat()) }
+                            .graphicsLayer {
+                                scaleX = encuadre.aumento; scaleY = encuadre.aumento
+                                translationX = encuadre.dx; translationY = encuadre.dy
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        if (conVideo) VideoQueSigue(video!!, posMs, esta && estado.sonando)
+                        else if (actual != null) Image(actual, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
                         else Icon(Icons.Filled.Image, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(48.dp))
                     }
+                    // Los gestos, encima (el vídeo es una vista de Android y se quedaría los toques).
+                    Box(
+                        Modifier.fillMaxSize()
+                            .pointerInput(m?.ruta) {
+                                // Un toque reproduce o para; el doble toque **solo** encaja (19c060f).
+                                detectTapGestures(
+                                    onTap = { m?.ruta?.let { Reproductor.alternar(it, titulo) } },
+                                    onDoubleTap = { encuadre = com.forge.pixpin.ui.Encuadre() }
+                                )
+                            }
+                            .pointerInput(w, h, caja) {
+                                detectTransformGestures { centro, mover, zoom, _ ->
+                                    var e = encuadre
+                                    if (zoom != 1f) e = e.acercar(caja, w, h, zoom, centro.x, centro.y)
+                                    encuadre = e.mover(caja, w, h, mover.x, mover.y)
+                                }
+                            }
+                    )
+                    // Abajo a la izquierda: − % + y encajar, como la pastilla del PC.
+                    if (!conVideo || !encuadre.encajado) Row(
+                        Modifier.align(Alignment.BottomStart).padding(6.dp).clip(RoundedCornerShape(50))
+                            .background(com.forge.pixpin.ui.CRISTAL_DE_VISOR),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { encuadre = encuadre.paso(caja, w, h, -1) }) { Text("−", color = Color.White) }
+                        Text("${encuadre.porCiento(caja, w, h)} %", color = Color.White, fontSize = 12.sp)
+                        TextButton(onClick = { encuadre = encuadre.paso(caja, w, h, 1) }) { Text("+", color = Color.White) }
+                        if (!encuadre.encajado) IconButton(onClick = { encuadre = com.forge.pixpin.ui.Encuadre() }) {
+                            Icon(Icons.Filled.FitScreen, "Encajar", tint = Color.White)
+                        }
+                    }
+                    // Arriba a la izquierda, el vídeo o las capturas, si hay las dos cosas.
+                    if (video != null && capturas.isNotEmpty()) TextButton(
+                        onClick = { verVideo = !conVideo },
+                        modifier = Modifier.align(Alignment.TopStart).padding(4.dp).clip(RoundedCornerShape(50)).background(com.forge.pixpin.ui.CRISTAL_DE_VISOR)
+                    ) { Text(if (conVideo) "Capturas" else "Vídeo", color = Color.White, fontSize = 12.sp) }
+                    // El riel de todos los visores: el marcador y el lápiz (anotar lo que se ve).
+                    com.forge.pixpin.ui.RielDelVisor(
+                        poniendoMarca = poniendo != null, anotando = anotando != null, marcando = false,
+                        onMarcador = { if (m != null) poniendo = posMs },
+                        onLapiz = {
+                            val f = fotoVista
+                            when {
+                                f != null -> anotando = f
+                                conVideo && m != null -> {
+                                    // Se para: se anota lo que se está viendo, no lo que viene.
+                                    if (estado.sonando && esta) Reproductor.alternar(m.ruta!!, titulo)
+                                    val ms = posMs
+                                    Toast.makeText(this@EstudiarClaseActivity, "Guardando el fotograma…", Toast.LENGTH_SHORT).show()
+                                    Thread {
+                                        val nueva = runCatching { guardarFotograma(m, video!!, ms) }
+                                            .onFailure { android.util.Log.w("PixPinEstudiar", "fotograma", it) }.getOrNull()
+                                        runOnUiThread {
+                                            if (nueva == null) Toast.makeText(this@EstudiarClaseActivity, R.string.estudiar_no_se_guardo, Toast.LENGTH_SHORT).show()
+                                            else { verVideo = false; anotando = nueva }
+                                        }
+                                    }.start()
+                                }
+                                else -> Toast.makeText(this@EstudiarClaseActivity, "Aquí no hay nada que anotar", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onMarco = null,
+                        modifier = Modifier.align(Alignment.CenterEnd),
+                        rotuloDelLapiz = "Anotar"
+                    )
                 }
-                BarraDelTiempo(posMs, durMs, tiemposDeCapturas, senales, irA)
+                BarraDelTiempo(EstudiarClase.posicionALaVista(posMs, arrastrando), durMs, tiemposDeCapturas, senales, irA) { arrastrando = it }
                 Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         Transcriptor.marcaDeTiempo(posMs.toInt()) + " / " + Transcriptor.marcaDeTiempo(durMs.toInt()),
@@ -301,11 +438,133 @@ class EstudiarClaseActivity : ComponentActivity() {
             }
         }
         poniendo?.let { ms -> DialogoDelMarcador(ms, onCancelar = { poniendo = null }) { nota -> poniendo = null; poner(id, ms, nota) } }
+        anotando?.let { f -> AnotarCaptura(f, oscuroAhora) { anotando = null } }
+    }
+
+    /**
+     * **Anotar una captura en su lienzo** `foto-<id>` ([dibujoDeLaFoto]), el mismo que al tocarla en el
+     * chat: si aún no lo tiene, nace con la foto al fondo y clavada, como en [com.forge.pixpin.motor.DrawEditorActivity].
+     * A pantalla entera, con el editor avanzado de los visores; «Listo» lo guarda y apunta el lienzo
+     * en el mensaje (su `referencia`), que es lo que viaja.
+     */
+    @Composable
+    private fun AnotarCaptura(f: Mensaje, noche: Boolean, alAcabar: () -> Unit) {
+        val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
+        val dibujo = f.dibujoDeLaFoto
+        var capa by remember(f.id) { mutableStateOf<com.forge.pixpin.motor.DrawController?>(null) }
+        val fotos = remember(f.id) { HashMap<String, android.graphics.Bitmap?>() }
+        var tick by remember { mutableIntStateOf(0) }
+        LaunchedEffect(f.id) {
+            capa = withContext(Dispatchers.IO) { lienzoDeLaCaptura(f, dibujo) }
+        }
+        val c = capa
+        Box(Modifier.fillMaxSize().background(if (noche) Color(0xFF121212) else Color.White)) {
+            if (c != null) {
+            @Suppress("UNUSED_EXPRESSION") tick
+            com.forge.pixpin.motor.DrawCanvas(
+                controller = c,
+                modifier = Modifier.fillMaxSize(),
+                imageProvider = { idf -> fotos.getOrPut(idf) { c.scene.files[idf]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } } },
+                dark = noche,
+                onChange = { trazando -> if (!trazando) tick++ }
+            )
+            val sitio = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PIN
+            EditorAvanzadoDeVisor(
+                capa = c, ajustes = ajustes,
+                permitidas = ajustes.formatoToolSet(sitio) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
+                grupos = ajustes.formatoGroupList(sitio).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
+                noche = noche, tick = tick,
+                alListo = {
+                    val escena = c.scene
+                    Thread {
+                        runCatching {
+                            com.forge.pixpin.motor.ExcalidrawStore.guardar(this@EstudiarClaseActivity, dibujo, escena)
+                            if (f.referencia == null) MensajesStore(this@EstudiarClaseActivity).actualizar(f.id) { it.copy(referencia = dibujo) }
+                        }
+                    }.start()
+                    alAcabar()
+                },
+                cambiado = { tick++ }
+            )
+            }
+        }
+    }
+
+    /** El lienzo de la captura: el suyo si ya lo tiene; si no, uno con la foto al fondo, clavada. */
+    private fun lienzoDeLaCaptura(f: Mensaje, dibujo: String): com.forge.pixpin.motor.DrawController? {
+        val ruta = com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, dibujo)
+        com.forge.pixpin.motor.ExcalidrawStore.cargar(ruta)?.let { escena ->
+            return com.forge.pixpin.motor.DrawController(escena).also { it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
+        }
+        val foto = f.ruta ?: return null
+        val mapa = com.forge.pixpin.pin.ImageStore.load(foto) ?: return null
+        val fichero = com.forge.pixpin.motor.ExcalidrawStore.guardarImagen(this, File(foto), "image/png") ?: return null
+        val c = com.forge.pixpin.motor.DrawController(com.forge.pixpin.motor.Scene())
+        c.placeImage(fichero, at = com.forge.pixpin.motor.Pt(mapa.width / 2.0, mapa.height / 2.0), width = mapa.width.toDouble(), height = mapa.height.toDouble(), alFondo = true)
+        c.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW)
+        return c
+    }
+
+    /** **La captura con lo anotado encima**, si tiene lienzo; si no, la foto tal cual. */
+    private fun capturaAnotada(f: Mensaje, lado: Int): ImageBitmap? = runCatching {
+        val dibujo = f.referencia
+        val escena = dibujo?.let { com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, it)) }
+        if (escena != null && escena.elements.any { !it.isDeleted }) {
+            val ancho = escena.elements.filter { !it.isDeleted }.maxOf { it.x + it.width } - escena.elements.filter { !it.isDeleted }.minOf { it.x }
+            val escala = (lado / ancho.coerceAtLeast(1.0)).coerceIn(0.05, 2.0)
+            com.forge.pixpin.motor.DrawExport.aBitmap(escena, escala) { idf ->
+                escena.files[idf]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it, lado) }
+            }?.asImageBitmap()
+        } else null
+    }.getOrNull() ?: f.ruta?.let { leerYa(it, lado) }
+
+    /**
+     * **Guarda el fotograma que se ve** como una captura más de la clase (`guardar_fotograma` del PC):
+     * una imagen en el chat con su pie y `enGrabacion`, su sitio en las `capturas` de la nota
+     * ([GrabarClase.ponerCaptura]) y, como pieza de lo grabado, en la carpeta de la grabación (así no
+     * sale suelta en el chat). Devuelve el mensaje de la imagen.
+     */
+    private fun guardarFotograma(voz: Mensaje, video: String, ms: Long): Mensaje? {
+        val r = android.media.MediaMetadataRetriever()
+        val mapa = try {
+            r.setDataSource(video)
+            r.getFrameAtTime(ms * 1000, android.media.MediaMetadataRetriever.OPTION_CLOSEST)
+        } finally { runCatching { r.release() } } ?: return null
+        val ahora = System.currentTimeMillis()
+        val temporal = File(cacheDir, "clase-$ahora-$ms.png")
+        temporal.outputStream().use { mapa.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+        val almacen = MensajesStore(this)
+        val fichero = temporal.name
+        val ruta = almacen.copiarAdjunto(temporal, fichero, "png", aligerar = false, enderezar = false)
+        temporal.delete()
+        ruta ?: return null
+        val nombre = voz.nombre.removeSuffix(".m4a")
+        val m = Mensaje(
+            id = java.util.UUID.randomUUID().toString(),
+            cuando = ahora,
+            clase = Clase.IMAGEN,
+            texto = GrabarClase.pie(ms, nombre),
+            ruta = ruta,
+            nombre = fichero,
+            bytes = File(ruta).length(),
+            proyecto = voz.proyecto,
+            enGrabacion = GrabarClase.enGrabacion(voz.id, ms)
+        )
+        almacen.anadir(m)
+        almacen.actualizar(voz.id) { n -> GrabarClase.ponerCaptura(n.capturas, ms, m.id)?.let { n.copy(capturas = it) } ?: n }
+        almacen.leer().firstOrNull { CarpetaDePaginas.deMensaje(it)?.let { c -> c.esGrabacion && c.voz == voz.id } == true }?.let { carpeta ->
+            CarpetasDelChat.cambiar(this, carpeta.id) { c -> c.anadirAlMinuto(m.id, "⏱ ${GrabarClase.minuto(ms)}", ms) }
+        }
+        return m
     }
 
     /** **La barra del tiempo**: lo sonado, una raya por captura y una banderita por marcador. */
     @Composable
-    private fun BarraDelTiempo(posMs: Long, durMs: Long, capturas: List<Long>, senales: List<Senal>, irA: (Long) -> Unit) {
+    private fun BarraDelTiempo(
+        posMs: Long, durMs: Long, capturas: List<Long>, senales: List<Senal>, irA: (Long) -> Unit,
+        /** Dónde va el dedo arrastrando (null al soltar): el tirador va con él. */
+        alArrastrar: (Long?) -> Unit = {}
+    ) {
         val color = MaterialTheme.colorScheme.primary
         val fondo = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
         val raya = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
@@ -317,8 +576,13 @@ class EstudiarClaseActivity : ComponentActivity() {
             Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 16.dp)
                 .pointerInput(durMs, todas) { detectTapGestures { pegar(it.x, size.width.toFloat()) } }
                 .pointerInput(durMs) {
-                    detectHorizontalDragGestures { cambio, _ ->
-                        irA(EstudiarClase.msDeLaBarra(cambio.position.x, size.width.toFloat(), durMs))
+                    detectHorizontalDragGestures(
+                        onDragEnd = { alArrastrar(null) },
+                        onDragCancel = { alArrastrar(null) }
+                    ) { cambio, _ ->
+                        val ms = EstudiarClase.msDeLaBarra(cambio.position.x, size.width.toFloat(), durMs)
+                        alArrastrar(ms)
+                        irA(ms)
                     }
                 }
         ) {
@@ -448,13 +712,15 @@ class EstudiarClaseActivity : ComponentActivity() {
 
     companion object {
         private const val LA_NOTA = "estudiar_nota"
+        private const val EL_MINUTO = "estudiar_minuto"
 
-        fun intento(context: Context, nota: String): Intent =
-            Intent(context, EstudiarClaseActivity::class.java).putExtra(LA_NOTA, nota).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        fun intento(context: Context, nota: String, ms: Long = 0): Intent =
+            Intent(context, EstudiarClaseActivity::class.java).putExtra(LA_NOTA, nota).putExtra(EL_MINUTO, ms)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
-        /** Abre la clase de la nota de voz [nota]. */
-        fun abrir(context: Context, nota: String) {
-            context.startActivity(intento(context, nota))
+        /** Abre la clase de la nota de voz [nota], en [ms] si se da (una pieza de su carpeta). */
+        fun abrir(context: Context, nota: String, ms: Long = 0) {
+            context.startActivity(intento(context, nota, ms))
         }
     }
 }
@@ -469,3 +735,12 @@ private suspend fun leer(ruta: String, lado: Int): ImageBitmap? = withContext(Di
         BitmapFactory.decodeFile(ruta, BitmapFactory.Options().apply { inSampleSize = paso })?.asImageBitmap()
     }.getOrNull()
 }
+
+/** Como [leer], ya en el hilo en que se esté (para quien ya va fuera del de la pantalla). */
+private fun leerYa(ruta: String, lado: Int): ImageBitmap? = runCatching {
+    val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(ruta, medidas)
+    var paso = 1
+    while (maxOf(medidas.outWidth, medidas.outHeight) / paso > lado) paso *= 2
+    BitmapFactory.decodeFile(ruta, BitmapFactory.Options().apply { inSampleSize = paso })?.asImageBitmap()
+}.getOrNull()

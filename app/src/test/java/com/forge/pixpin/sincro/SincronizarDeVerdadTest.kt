@@ -2,6 +2,7 @@ package com.forge.pixpin.sincro
 
 import com.forge.pixpin.guardados.CarpetaDePaginas
 import com.forge.pixpin.guardados.Clase
+import com.forge.pixpin.guardados.GrabarClase
 import com.forge.pixpin.guardados.Mensaje
 import com.forge.pixpin.motor.Hoja
 import com.forge.pixpin.motor.Proyecto
@@ -1194,6 +1195,65 @@ class SincronizarDeVerdadTest {
             val c = CarpetaDePaginas.leer(d.leerMensajes().single { it.id == "c" }.texto)
             assertEquals(listOf("d2", "d3", "d4"), c.paginas.map { it.id })
             assertEquals("Día dos", c.paginas[0].titulo)
+        }
+        quieto()
+    }
+
+    /**
+     * **La carpeta de una clase grabada viaja y un adjunto en cada aparato deja los dos** (25-oct-2026,
+     * `una_carpeta_de_grabacion_viaja_y_un_adjunto_en_cada_aparato_deja_los_dos` del PC, bcebba6): llega
+     * con su tipo, su nota, su vídeo, lo que duró y el minuto de cada pieza; un adjunto a la clase en
+     * cada aparato deja los dos, marcados como adjuntos y aparte de lo grabado, que no cambia. La regla
+     * es la de §7.2 (la carpeta se junta página a página y, dentro de cada una, clave a clave): las
+     * claves nuevas (`tipo`, `voz`, `video`, `duracionMs`, `ms`, `adjunto`) se juntan como cualquier otra.
+     */
+    @Test
+    fun `una carpeta de grabacion viaja y un adjunto en cada aparato deja los dos`() {
+        emparejar()
+        // La nota, el vídeo y una captura (aquí notas: lo que importa es la carpeta).
+        mensaje(telefono, "voz", "la nota de la clase")
+        mensaje(telefono, "video", "el vídeo")
+        mensaje(telefono, "foto", "la captura")
+        val doc = GrabarClase.carpetaDeLaGrabacion("voz", 5_400_000, "video", listOf(GrabarClase.Enlace(65_000, "foto")))
+        mensaje(telefono, "c", clase = Clase.MINIAPP)
+        editar(telefono, "c") { it.copy(miniapp = CarpetaDePaginas.MINIAPP, nombre = "Clase 25-10 10h58", texto = doc.escribir()) }
+        sincronizar()
+        val alli = tableta.leerMensajes().single { it.id == "c" }
+        assertEquals(Clase.MINIAPP, alli.clase)
+        assertEquals("carpeta", alli.miniapp)
+        assertEquals("Clase 25-10 10h58", alli.nombre)
+        assertEquals("igual en la tableta, byte a byte", doc.escribir(), alli.texto)
+        val leida = CarpetaDePaginas.leer(alli.texto)
+        assertEquals(doc, leida)
+        assertTrue(leida.esGrabacion)
+        assertEquals(65_000L, leida.paginas[2].ms)
+        quieto()
+
+        // El teléfono le adjunta unos apuntes; la tableta, a la vez, una foto suya.
+        mensaje(telefono, "apuntes", "apuntes del profesor")
+        editar(telefono, "c") { it.copy(texto = CarpetaDePaginas.leer(it.texto).adjuntar("apuntes", "Apuntes")!!.escribir()) }
+        editar(tableta, "c") { it.copy(texto = CarpetaDePaginas.leer(it.texto).adjuntar("foto-de-la-tableta", "Pizarra")!!.escribir()) }
+        assertEquals(1, sincronizar().fusionados)
+        val enTelefono = CarpetaDePaginas.leer(telefono.leerMensajes().single { it.id == "c" }.texto)
+        assertTrue(enTelefono.esGrabacion)
+        assertEquals("voz" to 5_400_000L, enTelefono.voz to enTelefono.duracionMs)
+        assertEquals("video", enTelefono.video)
+        assertEquals("lo grabado no cambia", listOf("voz", "video", "foto"), enTelefono.deLaGrabacion().map { it.id })
+        assertEquals("los dos adjuntos, marcados", listOf("apuntes", "foto-de-la-tableta"), enTelefono.adjuntos().map { it.id }.sorted())
+        assertEquals("un adjunto no es una captura", 1, enTelefono.capturas().size)
+        val texto = telefono.leerMensajes().single { it.id == "c" }.texto
+        assertEquals(texto, tableta.leerMensajes().single { it.id == "c" }.texto)
+        // Es lo que escribe la carpeta: abrirla y guardarla sin tocar no es un cambio.
+        assertEquals(texto, CarpetaDePaginas.leer(texto).escribir())
+        quieto()
+
+        // Caso negativo: quitar un adjunto en un aparato lo quita en los dos, y lo grabado sigue.
+        editar(tableta, "c") { it.copy(texto = CarpetaDePaginas.leer(it.texto).quitar("apuntes")!!.escribir()) }
+        sincronizarDesde(tableta, telefono)
+        for (d in listOf(telefono, tableta)) {
+            val c = CarpetaDePaginas.leer(d.leerMensajes().single { it.id == "c" }.texto)
+            assertEquals(listOf("foto-de-la-tableta"), c.adjuntos().map { it.id })
+            assertEquals(listOf("voz", "video", "foto"), c.deLaGrabacion().map { it.id })
         }
         quieto()
     }

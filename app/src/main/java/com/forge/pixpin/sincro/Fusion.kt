@@ -122,6 +122,10 @@ object Fusion {
             // documento va en el `texto` de un mensaje `MINIAPP` «carpeta» en una sola línea
             // ([com.forge.pixpin.guardados.CarpetaDePaginas]); por párrafos, añadir una página en
             // cada aparato era un choque y una de las dos se perdía. Después de la tabla, como allí.
+            // **La carpeta de una grabación** (25-oct-2026, PC bcebba6) va por aquí igual: sus claves
+            // de más (`tipo`, `voz`, `video`, `duracionMs` y, en cada página, `ms` y `adjunto`) se juntan
+            // como cualquier clave del objeto, así que un adjunto a la clase en cada aparato deja los
+            // dos, marcados, y lo grabado no cambia (`SincronizarDeVerdadTest`).
             carpetaJunta(b, m.content, s.content, ganaMio, c, cuenta)?.let { return JsonPrimitive(it) }
         }
         if (clave in PARRAFOS && m is JsonPrimitive && s is JsonPrimitive && m.isString && s.isString) {

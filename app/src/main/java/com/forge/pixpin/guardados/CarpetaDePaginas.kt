@@ -36,13 +36,51 @@ import kotlinx.serialization.json.intOrNull
  * del documento —un campo de una versión más nueva— se conserva al reescribirlo** ([resto]), como
  * hace el `#[serde(flatten)]` del PC.
  *
+ * ## La carpeta de una grabación (25-oct-2026, PC `2061e6b` y `40daac7`)
+ *
+ * **Una clase o reunión grabada entra en el chat dentro de su carpeta** (el usuario del PC: «una
+ * grabación completa siempre debería ir dentro de una carpeta, para que en el chat no salgan varias
+ * imágenes y un audio, que ocupa mucho espacio»). Es una carpeta como las otras con campos de más,
+ * todos opcionales, que solo se escriben en ella (un aparato que no los sepa los guarda en [resto] y
+ * la sigue leyendo como una carpeta normal; §5.1 de `manual-sincronizar-lo-nuevo.md` del PC):
+ *
+ * - `tipo: "grabacion"` ([TIPO_GRABACION]). Sin él (o vacío), una carpeta de páginas de siempre.
+ * - `voz`: el `id` de su nota de voz (no va si la nota no se pudo cerrar).
+ * - `video`: el `id` de su vídeo (no va si no se grabó la pantalla).
+ * - `duracionMs`: lo que duró, para la tarjeta sin leer la nota.
+ * - En cada página, `ms` (el minuto en que se hizo; la voz y el vídeo, `0`) y `adjunto: true` si se
+ *   adjuntó a la clase después y **no es de lo grabado** (un PDF del profesor, una foto de la
+ *   pizarra). `adjunto` no va si es `false`.
+ *
+ * ```json
+ * {"formato":1,"tipo":"grabacion","voz":"1761400000001","video":"1761400000002","duracionMs":5400000,
+ *  "paginas":[{"id":"1761400000001","titulo":"","ms":0},{"id":"1761400000002","titulo":"","ms":0},
+ *             {"id":"1761400000003","titulo":"⏱ 1:05","ms":65000},{"id":"9","titulo":"Apuntes","adjunto":true}]}
+ * ```
+ *
+ * Las claves van **en el orden del PC** (el de los campos de su `struct`): `formato`, `tipo`, `voz`,
+ * `video`, `duracionMs`, `paginas`; y en cada página `id`, `titulo`, `ms`, `adjunto`. Así lo que se
+ * escribe aquí es byte a byte lo del PC y la fusión no ve cambios donde no los hay.
+ *
+ * **Lo de dentro no sale suelto en el chat** ([dentroDeCarpetas], PC `40daac7`): lo que está en una
+ * carpeta, de cualquier tipo, lo representa la tarjeta de su carpeta. Sigue siendo un mensaje normal
+ * (viaja, se busca, sale en la galería) y al quitarlo de la carpeta vuelve a verse.
+ *
  * Todo esto es puro (sin Android): se prueba en la JVM con las pruebas del PC portadas.
  */
 data class CarpetaDePaginas(
     val formato: Int = FORMATO,
     val paginas: List<Pagina> = emptyList(),
     /** Lo que no se entiende, tal cual. */
-    val resto: Map<String, JsonElement> = emptyMap()
+    val resto: Map<String, JsonElement> = emptyMap(),
+    /** Vacío: una carpeta de páginas. [TIPO_GRABACION]: una grabación. */
+    val tipo: String = "",
+    /** En una grabación, el `id` de su nota de voz (vacío si no entró). */
+    val voz: String = "",
+    /** En una grabación, el `id` de su vídeo (vacío si no lo hay). */
+    val video: String = "",
+    /** En una grabación, lo que duró. */
+    val duracionMs: Long = 0
 ) {
     /** Una página: qué mensaje es y cómo se llama dentro de la carpeta. */
     data class Pagina(
@@ -50,8 +88,32 @@ data class CarpetaDePaginas(
         val id: String,
         /** «Día 2». Vacío: se enseña el nombre del mensaje. */
         val titulo: String = "",
-        val resto: Map<String, JsonElement> = emptyMap()
+        val resto: Map<String, JsonElement> = emptyMap(),
+        /** En una grabación, el minuto (ms desde que empezó) en que se hizo. */
+        val ms: Long? = null,
+        /** En una grabación, que se adjuntó a la clase y no es de lo grabado. */
+        val adjunto: Boolean = false
     )
+
+    /** Si es la carpeta de una grabación. */
+    val esGrabacion: Boolean get() = tipo == TIPO_GRABACION
+
+    /** **Lo que es de la grabación**: la nota, el vídeo y las capturas, en su orden. En una carpeta de páginas, todas. */
+    fun deLaGrabacion(): List<Pagina> = paginas.filter { !it.adjunto }
+
+    /** **Las capturas de una grabación**: lo grabado que no es ni su nota ni su vídeo, en su orden. */
+    fun capturas(): List<Pagina> = deLaGrabacion().filter { it.id != voz && it.id != video }
+
+    /** **Lo adjuntado a la clase** (que no es de lo grabado), en su orden. */
+    fun adjuntos(): List<Pagina> = paginas.filter { it.adjunto }
+
+    /** **Adjunta a la clase** el mensaje [id], al final y marcado como adjunto. Null si ya estaba. */
+    fun adjuntar(id: String, titulo: String): CarpetaDePaginas? =
+        anadir(id, titulo)?.let { c -> c.copy(paginas = c.paginas.dropLast(1) + c.paginas.last().copy(adjunto = true)) }
+
+    /** Añade al final una pieza de la grabación, con su minuto. Como [anadir]: null si ya estaba. */
+    fun anadirAlMinuto(id: String, titulo: String, ms: Long): CarpetaDePaginas? =
+        anadir(id, titulo)?.let { c -> c.copy(paginas = c.paginas.dropLast(1) + c.paginas.last().copy(ms = ms.coerceAtLeast(0))) }
 
     val size: Int get() = paginas.size
     fun isEmpty() = paginas.isEmpty()
@@ -69,14 +131,20 @@ data class CarpetaDePaginas(
     fun escribir(): String {
         val raiz = LinkedHashMap<String, JsonElement>()
         raiz["formato"] = JsonPrimitive(maxOf(formato, FORMATO))
+        if (tipo.isNotEmpty()) raiz["tipo"] = JsonPrimitive(tipo)
+        if (voz.isNotEmpty()) raiz["voz"] = JsonPrimitive(voz)
+        if (video.isNotEmpty()) raiz["video"] = JsonPrimitive(video)
+        if (duracionMs != 0L) raiz["duracionMs"] = JsonPrimitive(duracionMs)
         raiz["paginas"] = JsonArray(paginas.map { p ->
             val o = LinkedHashMap<String, JsonElement>()
             o["id"] = JsonPrimitive(p.id)
             o["titulo"] = JsonPrimitive(p.titulo)
-            p.resto.forEach { (k, v) -> if (k != "id" && k != "titulo") o[k] = v }
+            p.ms?.let { o["ms"] = JsonPrimitive(it) }
+            if (p.adjunto) o["adjunto"] = JsonPrimitive(true)
+            p.resto.forEach { (k, v) -> if (k !in CLAVES_DE_PAGINA) o[k] = v }
             JsonObject(o)
         })
-        resto.forEach { (k, v) -> if (k != "formato" && k != "paginas") raiz[k] = v }
+        resto.forEach { (k, v) -> if (k !in CLAVES_DEL_DOCUMENTO) raiz[k] = v }
         return JsonObject(raiz).toString()
     }
 
@@ -170,7 +238,29 @@ data class CarpetaDePaginas(
         /** El prefijo de los mensajes de sistema del PC (`cuaderno::PREFIJO_DE_SISTEMA`). */
         const val PREFIJO_DE_SISTEMA = "auto-"
 
+        /** El `tipo` de la carpeta de una clase o reunión grabada (`TIPO_GRABACION` del PC). Es un dato guardado. */
+        const val TIPO_GRABACION = "grabacion"
+
+        /** Las claves que se leen a campos: lo demás va a `resto` tal cual. */
+        private val CLAVES_DEL_DOCUMENTO = setOf("formato", "tipo", "voz", "video", "duracionMs", "paginas")
+        private val CLAVES_DE_PAGINA = setOf("id", "titulo", "ms", "adjunto")
+
         private val json = Json { ignoreUnknownKeys = true }
+
+        /** **Una carpeta de grabación vacía**: de la nota [voz] (vacía si no entró) y que duró [duracionMs]. */
+        fun grabacion(voz: String, duracionMs: Long): CarpetaDePaginas =
+            CarpetaDePaginas(tipo = TIPO_GRABACION, voz = voz, duracionMs = duracionMs.coerceAtLeast(0))
+
+        /** Si el mensaje es la carpeta de una grabación. */
+        fun esGrabacion(m: Mensaje): Boolean = deMensaje(m)?.esGrabacion == true
+
+        /**
+         * **Los `id` de lo que está dentro de alguna carpeta** de la conversación (de páginas o de una
+         * grabación): lo que el chat no enseña suelto, porque lo representa la tarjeta de su carpeta
+         * (`dentro_de_carpetas` del PC, 40daac7).
+         */
+        fun dentroDeCarpetas(mensajes: List<Mensaje>): Set<String> =
+            mensajes.mapNotNull(::deMensaje).flatMapTo(HashSet()) { c -> c.paginas.map { it.id } }
 
         /** Si el mensaje es una carpeta. */
         fun esCarpeta(m: Mensaje): Boolean = m.clase == Clase.MINIAPP && m.miniapp == MINIAPP
@@ -208,12 +298,37 @@ data class CarpetaDePaginas(
                     Pagina(
                         id = cadena(o["id"]),
                         titulo = cadena(o["titulo"]),
-                        resto = o.filterKeys { it != "id" && it != "titulo" }
+                        resto = o.filterKeys { it !in CLAVES_DE_PAGINA },
+                        ms = numero(o["ms"]),
+                        adjunto = logico(o["adjunto"])
                     )
                 }
                 else -> throw IllegalArgumentException("paginas")
             }
-            return CarpetaDePaginas(formato, paginas, raiz.filterKeys { it != "formato" && it != "paginas" })
+            return CarpetaDePaginas(
+                formato, paginas, raiz.filterKeys { it !in CLAVES_DEL_DOCUMENTO },
+                tipo = cadena(raiz["tipo"]),
+                voz = cadena(raiz["voz"]),
+                video = cadena(raiz["video"]),
+                duracionMs = numero(raiz["duracionMs"]) ?: 0
+            )
+        }
+
+        /** Un número entero, o null si no va; otra cosa no se entiende (como el `Option<i64>` del PC). */
+        private fun numero(e: JsonElement?): Long? = when (e) {
+            null, JsonNull -> null
+            is JsonPrimitive ->
+                if (e.isString) throw IllegalArgumentException("se esperaba un número")
+                else e.content.toLongOrNull() ?: throw IllegalArgumentException("se esperaba un número entero")
+            else -> throw IllegalArgumentException("se esperaba un número")
+        }
+
+        private fun logico(e: JsonElement?): Boolean = when (e) {
+            null, JsonNull -> false
+            is JsonPrimitive ->
+                if (e.isString) throw IllegalArgumentException("se esperaba sí o no")
+                else e.content.toBooleanStrictOrNull() ?: throw IllegalArgumentException("se esperaba sí o no")
+            else -> throw IllegalArgumentException("se esperaba sí o no")
         }
 
         private fun cadena(e: JsonElement?): String = when (e) {

@@ -90,6 +90,35 @@ object GrabarClase {
     }
 
     /**
+     * **Añade una captura a la clase** (25-oct-2026, `clase::poner_captura` del PC, 8d7fe93): la de un
+     * fotograma del vídeo anotado al estudiar, el mensaje [id] en [ms]. Un id que ya estaba no se
+     * repite (null: no cambió); lo demás que lleve cada captura se respeta. Las claves, `{id, ms}`, en
+     * el orden alfabético en que las escribe el PC, y la lista por su minuto.
+     */
+    fun ponerCaptura(lista: JsonArray?, ms: Long, id: String): JsonArray? {
+        val antes = lista.orEmpty()
+        if (antes.any { ((it as? JsonObject)?.get("id") as? JsonPrimitive)?.takeIf { p -> p.isString }?.content == id }) return null
+        val nueva = buildJsonObject {
+            put("id", JsonPrimitive(id))
+            put("ms", JsonPrimitive(ms.coerceAtLeast(0)))
+        }
+        fun msDe(e: kotlinx.serialization.json.JsonElement) = ((e as? JsonObject)?.get("ms") as? JsonPrimitive)?.longOrNull ?: 0L
+        return JsonArray((antes + nueva).sortedBy(::msDe))
+    }
+
+    /**
+     * **La carpeta de una clase** (25-oct-2026, `carpeta_de_la_grabacion` del PC, e015e2b y 40daac7): la
+     * nota, el vídeo y las capturas en el orden de la grabación, cada una con su minuto (las capturas
+     * con el suyo de título, «⏱ 1:05»; la nota y el vídeo, sin título: se ve su nombre).
+     */
+    fun carpetaDeLaGrabacion(voz: String?, duracionMs: Long, video: String?, capturas: List<Enlace>): CarpetaDePaginas {
+        var c = CarpetaDePaginas.grabacion(voz.orEmpty(), duracionMs).copy(video = video.orEmpty())
+        for (id in listOfNotNull(voz, video)) c = c.anadirAlMinuto(id, "", 0) ?: c
+        for (k in capturas.sortedBy { it.ms }) c = c.anadirAlMinuto(k.id, "⏱ ${minuto(k.ms)}", k.ms) ?: c
+        return c
+    }
+
+    /**
      * **La captura que toca en [posicionMs]**: la última hecha antes (o en ese mismo momento).
      * Antes de la primera, la primera: algo hay que enseñar. Null sin capturas. [tiempos] en
      * orden, como los da [capturasDe].

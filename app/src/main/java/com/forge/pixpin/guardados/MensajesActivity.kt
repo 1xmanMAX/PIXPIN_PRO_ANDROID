@@ -45,6 +45,7 @@ import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.ViewInAr
+import androidx.compose.material.icons.filled.FolderCopy
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.LibraryAdd
@@ -894,13 +895,18 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // **Los mensajes de sistema** (`auto-*`: letras, figuras, automatizaciones) siguen en el
         // chat y viajan, pero no son burbujas: van plegados en una franja (lo del PC del 14-oct).
         val sinLecciones = remember(mensajes) { com.forge.pixpin.lecciones.LeccionesStore.sinLecciones(mensajes).filterNot { com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema(it) } }
+        // **Lo de dentro de una carpeta no sale suelto** (25-oct-2026, PC 40daac7): una página de un
+        // cuaderno o lo de una clase grabada lo representa la tarjeta de su carpeta. Solo en el chat
+        // (TODO) y sin buscar: en la galería y con la lupa se sigue viendo.
+        val dentro = remember(mensajes) { CarpetaDePaginas.dentroDeCarpetas(mensajes) }
         val deEsteChat = remember(sinLecciones, chatDe) { delChat(sinLecciones, chatDe) }
         val deLaSeccion = remember(deEsteChat, seccion) { deSeccion(deEsteChat, seccion) }
-        val visibles = remember(deLaSeccion, consulta, porEtiqueta, sinLecciones) {
+        val visibles = remember(deLaSeccion, consulta, porEtiqueta, sinLecciones, dentro) {
             // **Desde el chat general se busca en todos** (14-sep-2026): los lienzos, fotos y
             // notas de todos los proyectos, por su nombre y su texto. Dentro del chat de un
             // proyecto, solo en ese.
             val buscados = when {
+                consulta.isNullOrBlank() && seccion == Seccion.TODO && dentro.isNotEmpty() -> deLaSeccion.filter { it.id !in dentro }
                 consulta.isNullOrBlank() -> deLaSeccion
                 chatDe == null -> buscar(deSeccion(sinLecciones, seccion), consulta!!)
                 else -> buscar(deLaSeccion, consulta!!)
@@ -3262,6 +3268,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     DelMenu(com.forge.pixpin.R.string.guardados_anadir_a_carpeta, Icons.AutoMirrored.Filled.MenuBook) {
                         menuAbierto = false
                         CarpetasDelChat.preguntarDonde(this@MensajesActivity, m)
+                    }
+                }
+                // **La carpeta de una grabación** (25-oct-2026, PC e1150e8): tocarla estudia la clase;
+                // lo grabado y lo adjuntado, aquí. Ver [CarpetaActivity].
+                if (CarpetaDePaginas.esGrabacion(m)) {
+                    DelMenu(com.forge.pixpin.R.string.guardados_abrir_la_carpeta, Icons.Filled.FolderCopy) {
+                        menuAbierto = false
+                        CarpetaActivity.abrir(this@MensajesActivity, m.id, entera = true)
                     }
                 }
                 // **Guardar como receta** (§4.7): la pregunta que contestó, como botón del chat «Asistente».
@@ -7202,6 +7216,17 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     com.forge.pixpin.ui.Compartible.Salida(destino, mime, "Tal cual, sin cambiar nada")
                 }
             )
+        }
+        // **Una grabación** (una nota de voz, o la carpeta de su clase) sale con lo suyo: página web,
+        // PDF, Word, Markdown, texto y Anki (25-oct-2026, PC 2921a1d). Ver [ExportarGrabacion].
+        if (m.clase == Clase.VOZ || CarpetaDePaginas.esGrabacion(m)) {
+            val todos = almacen.leer()
+            ExportarGrabacion.notaDe(m, todos)?.let { voz ->
+                val suyo = if (voz.id == m.id) talCual else null
+                return ExportarGrabacion.compartible(this, voz, todos, listOfNotNull(suyo, wifi?.let {
+                    com.forge.pixpin.ui.Compartible.Formato("wifi", Icons.Filled.Wifi, "Enviar por Wi-Fi", com.forge.pixpin.ui.Compartible.NINGUNA, accion = { it() })
+                }))
+            }
         }
         if (sePuedeComponer(m) || m.clase == Clase.PROYECTO) {
             val (p, _) = proyectoDe(m) ?: return null
