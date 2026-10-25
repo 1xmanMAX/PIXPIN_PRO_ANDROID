@@ -313,8 +313,11 @@ object SincronizacionAutomatica {
         Red.conectar(InetAddress.getByName(host), puerto).use { s ->
             VueltaCallada(disco, Presencia.red.puerto).con(s.getInputStream(), s.getOutputStream(), soloEstos = chats)
         }
+        VueltasEnMarcha.apuntar(true)
         true
     } catch (e: Throwable) {
+        // Callada, pero el botón de sincronizar sí lo dice ([VueltasEnMarcha]).
+        VueltasEnMarcha.apuntarSiFallo(e)
         e.message != Protocolo.OCUPADO
     }
 
@@ -355,10 +358,12 @@ object SincronizacionAutomatica {
                 VueltaCallada(disco, Presencia.red.puerto).con(s.getInputStream(), s.getOutputStream())
             }
             fallos.remove(otroId)
+            VueltasEnMarcha.apuntar(true)
             if (r.trajoAlgo) decir("Sincronizado con ${r.nombre}: " + resumen(r.hecho))
         } catch (e: Throwable) {
             // Ocupado (otra vuelta en marcha) no es un fallo: se intenta en la próxima.
             if (e.message == Protocolo.OCUPADO) return
+            VueltasEnMarcha.apuntarSiFallo(e)
             val n = (fallos[otroId] ?: 0) + 1
             fallos[otroId] = n
             if (n == RelojDeSincro.FALLOS_PARA_AVISAR) decir("No se pudo sincronizar solo con $nombre (${e.message ?: e.javaClass.simpleName})")
@@ -389,9 +394,11 @@ object SincronizacionAutomatica {
                 }
                 if (r.puerto > 0) disco.apuntarDireccion(otroId, host, r.puerto)
                 fallos.remove(otroId)
+                VueltasEnMarcha.apuntar(true)
                 if (r.trajoAlgo) decir("Chat compartido con ${r.quien.nombre}: " + resumen(r.hecho))
             } catch (e: Throwable) {
                 if (e.message == Protocolo.OCUPADO) continue
+                VueltasEnMarcha.apuntarSiFallo(e)
                 val n = (fallos[otroId] ?: 0) + 1
                 fallos[otroId] = n
                 if (n == RelojDeSincro.FALLOS_PARA_AVISAR) decir("No se pudo sincronizar solo con $nombre (${e.message ?: e.javaClass.simpleName})")

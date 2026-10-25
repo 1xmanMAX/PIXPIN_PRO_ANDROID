@@ -151,6 +151,8 @@ fun FichaDelChat(
     var seccion by remember { mutableStateOf(Seccion.PROYECTOS) }
     var consulta by remember { mutableStateOf<String?>(null) }
     var abierta by remember { mutableStateOf<SeccionesDelChat.Cosa?>(null) }
+    // **La hoja de la foto del chat**, tocando el avatar de arriba (25-oct-2026, la isla del PC). Ver [HojaDeLaFotoDelChat].
+    var cambiandoFoto by remember { mutableStateOf(false) }
     val filesDir = LocalContext.current.filesDir
     val porId = remember(mensajes) { mensajes.associateBy { it.id } }
     // Lo de cada pestaña, con la búsqueda aplicada; lo nuevo primero, como se enseña.
@@ -181,7 +183,7 @@ fun FichaDelChat(
     ) {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()) {
-                Cabecera(nombre, subtitulo, chatDe, consulta, { consulta = it }, onCerrar)
+                Cabecera(nombre, subtitulo, chatDe, consulta, { consulta = it }, onCerrar, onFoto = { cambiandoFoto = true })
                 Pestanas(seccion, cuentas) { seccion = it; abierta = null }
                 HorizontalDivider()
                 Box(Modifier.fillMaxSize()) {
@@ -198,6 +200,7 @@ fun FichaDelChat(
                     }
                 }
             }
+            if (cambiandoFoto && chatDe != null) HojaDeLaFotoDelChat(chatDe, nombre) { cambiandoFoto = false }
             val i = enLaPrevia
             if (i != null) {
                 Previa(
@@ -227,7 +230,9 @@ private fun Cabecera(
     chatDe: String?,
     consulta: String?,
     onConsulta: (String?) -> Unit,
-    onCerrar: () -> Unit
+    onCerrar: () -> Unit,
+    /** Tocar el avatar: cambiar la foto del chat (no en la conversación general, que no tiene). */
+    onFoto: () -> Unit = {}
 ) {
     Row(
         Modifier.fillMaxWidth().height(64.dp).padding(horizontal = 8.dp),
@@ -248,14 +253,13 @@ private fun Cabecera(
                 modifier = Modifier.weight(1f)
             )
         } else {
-            // El avatar redondo de 40, como la cabecera del PC: el logo o su icono.
-            val logo = logoDe(chatDe)
-            Box(
-                Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary, CircleShape),
-                contentAlignment = Alignment.Center
+            // El avatar redondo de 40, como la cabecera del PC: su foto o su icono. Tocarlo cambia la
+            // foto del chat (en el PC, pulsar el avatar de la isla).
+            CirculoDelChat(
+                chatDe, nombre, 40.dp, MaterialTheme.colorScheme.primary,
+                if (chatDe != null) Modifier.clip(CircleShape).clickable(onClick = onFoto) else Modifier
             ) {
-                if (logo != null) Image(logo, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                else Icon(
+                Icon(
                     if (chatDe == null) Icons.Filled.BookmarkBorder else Icons.Filled.Folder, null,
                     tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(22.dp)
                 )
@@ -429,20 +433,13 @@ private fun Proyectos(
 
 @Composable
 private fun AvatarDelChat(c: Conversacion) {
-    val logo = logoDe(c.proyecto)
-    Box(
-        Modifier.size(46.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer, CircleShape),
-        contentAlignment = Alignment.Center
-    ) {
-        when {
-            c.proyecto == null -> Icon(Icons.Filled.BookmarkBorder, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-            logo != null -> Image(logo, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-            // Sin logo, las iniciales, como el PC.
-            else -> Text(
-                iniciales(c.nombre), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onPrimaryContainer
-            )
-        }
+    CirculoDelChat(c.proyecto, c.nombre, 46.dp, MaterialTheme.colorScheme.primaryContainer) {
+        if (c.proyecto == null) Icon(Icons.Filled.BookmarkBorder, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        // Sin foto, las iniciales, como el PC.
+        else Text(
+            iniciales(c.nombre), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onPrimaryContainer
+        )
     }
 }
 

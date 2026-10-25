@@ -144,7 +144,16 @@ data class Proyecto(
      * entonces no se escribe. Ver [com.forge.pixpin.ia.app.ChatDelAsistente].
      */
     @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
-    val asistente: Boolean? = null
+    val asistente: Boolean? = null,
+    /**
+     * **La foto del chat** (25-oct-2026, lo del PC `b7868c5`): imagen, emoji o iniciales con su
+     * degradado, el campo `avatar` del `Proyecto` que va por la red. Se guarda **crudo**: un `tipo`
+     * o una clave que este aparato aún no conozca vuelve tal cual (regla 1), y la fusión
+     * ([com.forge.pixpin.sincro.Mezcla]) lo junta campo a campo como el PC. Nulo, lo de siempre, y
+     * entonces no se escribe. Ver [com.forge.pixpin.guardados.FotoDelChat].
+     */
+    @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+    val avatar: kotlinx.serialization.json.JsonObject? = null
 )
 
 /**

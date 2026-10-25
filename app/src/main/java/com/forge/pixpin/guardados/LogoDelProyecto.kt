@@ -3,16 +3,9 @@ package com.forge.pixpin.guardados
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.withContext
 import java.io.File
 
 /**
@@ -27,6 +20,10 @@ import java.io.File
  * lados a la vez; mandarlo solo desde aquí dejaría al PC con un archivo que no sabe leer.
  *
  * El círculo no se hornea en los píxeles como en el PC: Compose recorta redondo al pintar.
+ *
+ * **Desde el 25-oct-2026 manda la foto del chat** ([FotoDelChat], que sí viaja): un logo de antes
+ * pasa a ser la foto del chat al arrancar ([FotosDelChat.adoptarLogosDeAntes]) y se borra, y nada
+ * nuevo se guarda aquí. Queda esto para leer lo que hubiera.
  */
 object LogoDelProyecto {
     /** Cambia cada vez que se pone o se quita un logo: quien lo pinta vuelve a mirar. */
@@ -91,19 +88,4 @@ object LogoDelProyecto {
 
     /** Lo ya leído, sin tocar el disco: para el primer fotograma, que no espere. */
     fun enMemoria(proyecto: String): ImageBitmap? = leidos[proyecto]?.orElse(null)
-}
-
-/**
- * El logo de [proyecto] para pintarlo, o nulo (y se pinta el círculo de siempre). Se lee fuera
- * del hilo de la pantalla y se vuelve a leer al ponerlo o quitarlo.
- */
-@Composable
-fun logoDe(proyecto: String?): ImageBitmap? {
-    if (proyecto == null) return null
-    val contexto = LocalContext.current
-    val version by LogoDelProyecto.version.collectAsState()
-    val logo by produceState(LogoDelProyecto.enMemoria(proyecto), proyecto, version) {
-        value = withContext(Dispatchers.IO) { LogoDelProyecto.leer(contexto, proyecto) }
-    }
-    return logo
 }

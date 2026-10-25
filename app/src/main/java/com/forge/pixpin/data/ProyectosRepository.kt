@@ -72,6 +72,9 @@ class ProyectosRepository(context: Context) {
         escribir()
         // Una hoja quitada se lleva lo suyo (los comentarios de una hoja nota, su tinta…).
         runCatching { com.forge.pixpin.sincro.AnotacionesDelAdjunto.borrarLoDeHojasQuitadas(app.filesDir, todosAntes, _proyectos.value) }
+        // Y una foto del chat cambiada, su imagen vieja. Ver [com.forge.pixpin.guardados.FotoDelChat.sobrantes].
+        if (antes?.avatar != null && antes.avatar != sellado.avatar)
+            runCatching { com.forge.pixpin.sincro.Disco(app.filesDir).borrarFotosSobrantes(todosAntes, _proyectos.value) }
         // **Todo pasa por el chat**: lo nuevo del proyecto se cuenta en su conversación.
         // Ver [com.forge.pixpin.guardados.ChatDeLosProyectos].
         com.forge.pixpin.guardados.ChatDeLosProyectos.alGuardar(app, antes, sellado)

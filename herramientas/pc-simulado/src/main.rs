@@ -122,7 +122,7 @@ impl CapturasDelAparato for EnCarpeta {
     fn listar(&self) -> Option<Vec<Local>> {
         Some(listado(&self.carpeta()).into_iter().map(|n| {
             let r = self.carpeta().join(&n);
-            Local { cuando: hora_de(&r), bytes: std::fs::metadata(&r).unwrap().len() as i64, mime: "image/png".into(), nombre: n }
+            Local { cuando: hora_de(&r), bytes: std::fs::metadata(&r).unwrap().len() as i64, mime: "image/png".into(), nombre: n, texto: String::new() }
         }).collect())
     }
     fn abrir(&self, nombre: &str) -> Option<PathBuf> {
@@ -217,7 +217,13 @@ fn ver(raiz: &Path) {
             "id": m.id, "uid": m.codigo_unico(), "clase": m.clase.as_ref().map(|c| format!("{c:?}")),
             "nombre": m.nombre, "texto": m.texto, "respondeA": m.responde_a, "ruta": m.ruta,
         })).collect();
-        chats.push(serde_json::json!({"id": f.id, "nombre": f.nombre, "mensajes": lista}));
+        // La foto del chat (25-oct-2026), tal cual la guarda el PC en su ficha, y si su imagen esta.
+        let foto = pixpin_proyecto::avatar::valor_de(&f).cloned();
+        let imagen = pixpin_proyecto::avatar::de_ficha(&f)
+            .and_then(|a| pixpin_proyecto::avatar::ruta_de_la_imagen(raiz, &f.id, &a))
+            .and_then(|r| std::fs::read(r).ok())
+            .map(|b| String::from_utf8_lossy(&b).into_owned());
+        chats.push(serde_json::json!({"id": f.id, "nombre": f.nombre, "mensajes": lista, "avatar": foto, "imagenDelAvatar": imagen}));
     }
     let mut archivos = Vec::new();
     fn recorrer(base: &Path, d: &Path, sal: &mut Vec<String>) {
@@ -264,6 +270,24 @@ fn suelto(codigo: &str, puerto: u16, ficheros: &[String]) {
     c.adios();
 }
 
+/// **Pone la foto del chat** de un proyecto del PC (por su nombre), como la hoja del PC:
+/// `imagen <bytes>` la guarda como `avatar-<ms>.png` en su carpeta; `emoji <e>` con un fondo de
+/// la paleta; `iniciales`, lo de siempre.
+fn foto(raiz: &Path, nombre: &str, tipo: &str, valor: Option<&String>) {
+    use pixpin_proyecto::avatar::{self, Avatar};
+    let f = Indice::leer(raiz).proyectos.into_iter().find(|f| f.nombre == nombre).expect("no hay ese proyecto");
+    let cuando = ahora();
+    let a = match tipo {
+        "imagen" => {
+            let rel = avatar::guardar_imagen(raiz, &f.id, valor.unwrap().as_bytes(), cuando).unwrap();
+            Avatar::imagen(&rel, cuando)
+        }
+        "emoji" => Avatar::emoji(valor.unwrap(), Some(("#FF885E", "#FF516A")), cuando),
+        _ => Avatar::iniciales(None, cuando),
+    };
+    avatar::poner(raiz, &f.id, &a).unwrap();
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let raiz = Path::new(&a[2]);
@@ -273,6 +297,7 @@ fn main() {
         "dirigir" => dirigir(raiz, a[3].parse().unwrap()),
         "ver" => ver(raiz),
         "galeria" => ver_galeria(raiz),
+        "foto" => foto(raiz, &a[3], &a[4], a.get(5)),
         // Aqui `raiz` es el codigo del grupo: no hace falta disco.
         "suelto" => suelto(&a[2], a[3].parse().unwrap(), &a[4..]),
         _ => panic!("orden desconocida"),

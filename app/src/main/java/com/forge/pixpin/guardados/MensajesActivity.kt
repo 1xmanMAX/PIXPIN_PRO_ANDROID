@@ -129,7 +129,6 @@ import androidx.compose.ui.zIndex
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.AccountCircle
-import androidx.compose.material.icons.filled.HideImage
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
@@ -331,6 +330,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     /** El mensaje al que saltar al entrar, si lo pidió un enlace. */
     private var irAlMensajePedido by mutableStateOf<String?>(null)
 
+    /** La hoja de la foto del chat abierta con una foto de un mensaje: el chat y la foto. Ver [HojaDeLaFotoDelChat]. */
+    private var fotoDelChatCon by mutableStateOf<Pair<String, File>?>(null)
+
     /** De qué conversación viene este intento. */
     private fun aplicar(intent: Intent?) {
         intent?.getStringExtra(EXTRA_IR_AL_MENSAJE)?.let { irAlMensajePedido = it; intent.removeExtra(EXTRA_IR_AL_MENSAJE) }
@@ -380,6 +382,19 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             )
         }
 
+        /**
+         * **Abre el chat [proyecto] (o el general) llevado al mensaje [mensaje]** y resaltado, desde
+         * la sección «Mensajes» del buscador de la lista de chats (25-oct-2026, PC `d106969`): el
+         * mismo camino que «Ver en el chat», sin tarea nueva para que atrás vuelva a la lista.
+         */
+        fun abrirChatEn(context: android.content.Context, proyecto: String?, nombre: String, mensaje: String) {
+            context.startActivity(
+                Intent(context, MensajesActivity::class.java)
+                    .also { if (proyecto != null) it.putExtra(EXTRA_CHAT_DE, proyecto).putExtra(EXTRA_NOMBRE_DEL_CHAT, nombre) }
+                    .putExtra(EXTRA_IR_AL_MENSAJE, mensaje)
+            )
+        }
+
         /** Abre la conversación de un proyecto. */
         fun abrirChatDe(context: android.content.Context, proyecto: String, nombre: String) {
             context.startActivity(
@@ -396,6 +411,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun Pantalla() {
+        fotoDelChatCon?.let { (p, f) ->
+            HojaDeLaFotoDelChat(p, FotosDelChat.proyectoDe(this, p)?.nombre ?: nombreDelChat, conImagen = f) { fotoDelChatCon = null }
+        }
         insertandoEnNota?.let { m ->
             DialogoDeNotas(m.proyecto, onCerrar = { insertandoEnNota = null }) { p, h ->
                 insertandoEnNota = null
@@ -1855,24 +1873,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         // salirse (usuario, 9-sep-2026). A 28 queda holgado
                                         // dentro de los 46 de la píldora pase lo que pase con
                                         // el texto de al lado.
-                                        // **Con su logo, si el proyecto tiene** (4-oct-2026). Ver
-                                        // [LogoDelProyecto].
-                                        val logo = logoDe(chatDe)
-                                        Box(
-                                            Modifier
-                                                .size(28.dp)
-                                                .clip(androidx.compose.foundation.shape.CircleShape)
-                                                .background(
-                                                    MaterialTheme.colorScheme.primary,
-                                                    androidx.compose.foundation.shape.CircleShape
-                                                ),
-                                            contentAlignment = Alignment.Center
-                                        ) {
-                                            if (logo != null) androidx.compose.foundation.Image(
-                                                logo, contentDescription = null,
-                                                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
-                                                modifier = Modifier.fillMaxSize()
-                                            ) else Icon(
+                                        // **Con su foto del chat, si tiene** (4-oct-2026 el logo; 25-oct la
+                                        // foto que viaja). Ver [CirculoDelChat].
+                                        CirculoDelChat(chatDe, nombreDelChat, 28.dp, MaterialTheme.colorScheme.primary) {
+                                            Icon(
                                                 if (chatDe == null) Icons.Filled.BookmarkBorder
                                                 else Icons.Filled.Folder,
                                                 contentDescription = null,
@@ -3422,19 +3426,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         menuAbierto = false; verMas = false; letra()
                     }
                 }
-                // **Una foto del chat de un proyecto, de logo suyo** (4-oct-2026, lo del PC).
-                // Se mira el disco solo aquí, con el menú ya abierto en «Más». Ver [LogoDelProyecto].
+                // **Una foto del chat de un proyecto, de foto del chat** (4-oct-2026 como logo; desde
+                // el 25-oct, la foto del chat que viaja): abre la hoja de la foto con ella puesta, para
+                // recortarla. Quitarla es «Como siempre» en la hoja. Ver [HojaDeLaFotoDelChat].
                 val delProyecto = m.proyecto
                 if (delProyecto != null && m.clase == Clase.IMAGEN && m.ruta != null && !m.enBuzon) {
                     DelMenu(com.forge.pixpin.R.string.guardados_logo_poner, Icons.Filled.AccountCircle) {
                         menuAbierto = false; verMas = false
-                        ponerDeLogo(delProyecto, File(m.ruta))
-                    }
-                    if (LogoDelProyecto.tiene(this@MensajesActivity, delProyecto)) {
-                        DelMenu(com.forge.pixpin.R.string.guardados_logo_quitar, Icons.Filled.HideImage) {
-                            menuAbierto = false; verMas = false
-                            lifecycleScope.launch(Dispatchers.IO) { LogoDelProyecto.quitar(this@MensajesActivity, delProyecto) }
-                        }
+                        fotoDelChatCon = delProyecto to File(m.ruta)
                     }
                 }
               }
@@ -6526,23 +6525,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 ).show()
             } else {
                 Toast.makeText(this@MensajesActivity, com.forge.pixpin.R.string.guardados_aligerar_nada, Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /**
-     * Deja [foto] de logo de [proyecto]: se recorta y se reduce fuera del hilo de la pantalla, y
-     * la lista y la cabecera lo vuelven a leer solas. Ver [LogoDelProyecto].
-     */
-    private fun ponerDeLogo(proyecto: String, foto: File) {
-        lifecycleScope.launch(Dispatchers.IO) {
-            val hecho = LogoDelProyecto.poner(this@MensajesActivity, proyecto, foto)
-            withContext(Dispatchers.Main) {
-                Toast.makeText(
-                    this@MensajesActivity,
-                    if (hecho) com.forge.pixpin.R.string.guardados_logo_hecho else com.forge.pixpin.R.string.guardados_logo_error,
-                    Toast.LENGTH_SHORT
-                ).show()
             }
         }
     }

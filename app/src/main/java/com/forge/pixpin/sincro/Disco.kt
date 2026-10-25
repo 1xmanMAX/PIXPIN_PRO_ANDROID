@@ -474,7 +474,21 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             escribirProyectos(despues)
         }
         AnotacionesDelAdjunto.borrarLoDeHojasQuitadas(filesDir, antes, despues)
+        borrarFotosSobrantes(antes, despues)
         alCambiar(Cambio.PROYECTOS)
+    }
+
+    /**
+     * **La foto del chat vieja, fuera** (25-oct-2026, como `avatar::limpiar_tras_llegar` del PC):
+     * cuando la foto de un proyecto cambia —aquí o porque llegó otra—, la imagen que ya no nombra
+     * nadie se borra, sin lápida: al no nombrarla ningún proyecto ya no está en el [alcance] y no
+     * viaja. Solo lo de dentro de `files` y con nombre de foto. Ver [com.forge.pixpin.guardados.FotoDelChat.sobrantes].
+     */
+    fun borrarFotosSobrantes(antes: List<Proyecto>, despues: List<Proyecto>) {
+        for (r in com.forge.pixpin.guardados.FotoDelChat.sobrantes(antes, despues)) {
+            val rel = rutas.relativa(r) ?: continue
+            if (permitida(rel)) runCatching { File(filesDir, rel).delete() }
+        }
     }
 
     private fun escribirProyectos(lista: List<Proyecto>) {
