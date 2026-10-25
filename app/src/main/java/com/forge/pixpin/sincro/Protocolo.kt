@@ -54,8 +54,17 @@ object Protocolo {
     private val ocupados: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
 
     /** Por carpeta y no para todo el proceso: en las pruebas, los dos «aparatos» viven en la misma JVM. */
-    fun ocupar(disco: Disco): Boolean = ocupados.add(disco.filesDir.absolutePath)
-    fun soltar(disco: Disco) { ocupados.remove(disco.filesDir.absolutePath) }
+    fun ocupar(disco: Disco): Boolean =
+        ocupados.add(disco.filesDir.absolutePath).also { if (it) VueltasEnMarcha.empezar() }
+
+    /**
+     * Libre otra vez. **Ocupar y soltar cuentan las vueltas en marcha** (25-oct-2026): toda sesión
+     * pasa por aquí, la pida quien la pida, y mientras dura el botón de sincronizar gira. Ver
+     * [VueltasEnMarcha].
+     */
+    fun soltar(disco: Disco) {
+        if (ocupados.remove(disco.filesDir.absolutePath)) VueltasEnMarcha.acabar()
+    }
     /**
      * **Lo más grande que se acepta como `suelto`** (un archivo del PC a lo que esté abierto): 2 GB,
      * lo mismo que el PC, para que pasen vídeos. Va a disco trozo a trozo, no a memoria. Por
@@ -358,6 +367,11 @@ class Respondedor(
         }
         try {
             responder(canal, otro)
+            VueltasEnMarcha.apuntar(true)
+        } catch (e: Throwable) {
+            // La que pide el otro aparato al llamar también dice cómo acabó (el botón, en rojo).
+            VueltasEnMarcha.apuntarSiFallo(e)
+            throw e
         } finally {
             Protocolo.soltar(disco)
         }
@@ -392,6 +406,10 @@ class Respondedor(
         }
         try {
             responder(canal, otro, AccesoDePersona(disco, compartidos, yo.id, persona.id))
+            VueltasEnMarcha.apuntar(true)
+        } catch (e: Throwable) {
+            VueltasEnMarcha.apuntarSiFallo(e)
+            throw e
         } finally {
             Protocolo.soltar(disco)
         }

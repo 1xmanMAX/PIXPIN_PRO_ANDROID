@@ -225,6 +225,71 @@ class SincronizarConElPcTest {
         sinRepetidos()
     }
 
+    /** El chat del PC por su nombre, como lo enseña `ver` (con su `avatar` y lo que lleva su imagen). */
+    private fun chatDelPc(nombre: String): JsonObject =
+        verPc()["chats"]!!.jsonArray.map { it.jsonObject }.single { it.s("nombre") == nombre }
+
+    @Test
+    fun `la foto del chat viaja con su imagen entre el PC y el movil, en los dos sentidos`() {
+        // El manual del PC, §10 (25-oct-2026): `avatar` es un campo más del Proyecto, su imagen va
+        // con ruta portátil y la nombra el proyecto, así que viaja con él.
+        desdeElMovil(unirme = true)
+        desdeElMovil()
+        val obra = { movil.leerProyectos().single { it.nombre == "Obra del PC" } }
+        assertNull("sin foto no sale ningún campo", obra().avatar)
+
+        // 1. Una imagen puesta en el PC llega al móvil con su fichero, con la ruta local del móvil.
+        orden("foto", pc.path, "Obra del PC", "imagen", "PNG de la foto")
+        desdeElMovil()
+        val llego = com.forge.pixpin.guardados.FotoDelChat.de(obra())!!
+        assertEquals("imagen", llego.tipo)
+        assertTrue("ruta del móvil: ${llego.ruta}", llego.ruta!!.startsWith(movil.filesDir.absolutePath + "/guardados/pc/"))
+        assertTrue(llego.ruta!!.substringAfterLast('/').startsWith("avatar-"))
+        assertEquals("PNG de la foto", File(llego.ruta!!).readText())
+        val quieta = desdeElMovil()
+        assertEquals("otra vuelta no mueve nada", 0, quieta.traidos + quieta.enviados + quieta.fusionados)
+
+        // 2. Un emoji puesto en el móvil llega al PC, y la imagen vieja se va de los dos.
+        val ahora = System.currentTimeMillis()
+        movil.guardarProyecto(com.forge.pixpin.guardados.FotoDelChat.conFoto(obra(),
+            com.forge.pixpin.guardados.FotoDelChat.emoji("🏗️", "#FFCD6A" to "#FFA85C", ahora), ahora))
+        assertFalse("la vieja se va del móvil", File(llego.ruta!!).exists())
+        desdeElMovil()
+        val enPc = chatDelPc("Obra del PC")["avatar"]!!.jsonObject
+        assertEquals("emoji", enPc.s("tipo"))
+        assertEquals("🏗️", enPc.s("emoji"))
+        assertEquals("#FFCD6A", enPc.s("color"))
+        assertEquals("#FFA85C", enPc.s("color2"))
+        val archivos = verPc()["archivos"]!!.jsonArray.map { it.jsonPrimitive.content }
+        assertTrue("la vieja se va del PC: $archivos", archivos.none { it.substringAfterLast('/').startsWith("avatar-") })
+
+        // 3. Una imagen puesta en el móvil llega al PC, que la encuentra y la lee.
+        val png = File(movil.filesDir, com.forge.pixpin.guardados.FotoDelChat.rutaRelativaDeImagen(ahora + 1)).apply { parentFile!!.mkdirs(); writeText("PNG del móvil") }
+        movil.guardarProyecto(com.forge.pixpin.guardados.FotoDelChat.conFoto(obra(),
+            com.forge.pixpin.guardados.FotoDelChat.imagen(png.absolutePath, ahora + 1), ahora + 1))
+        desdeElPc()
+        val conImagen = chatDelPc("Obra del PC")
+        assertEquals("imagen", conImagen["avatar"]!!.jsonObject.s("tipo"))
+        assertEquals("el PC lee la imagen del móvil", "PNG del móvil", conImagen.s("imagenDelAvatar"))
+
+        // 4. Volver a lo de siempre en el PC también viaja: se escribe, no se borra.
+        orden("foto", pc.path, "Obra del PC", "iniciales")
+        desdeElMovil()
+        val siempre = obra().avatar!!
+        assertEquals("iniciales", siempre.s("tipo"))
+        assertNull(siempre["color"])
+        assertTrue(com.forge.pixpin.guardados.FotoDelChat.de(obra())!!.esLoDeSiempre)
+
+        // 5. Un tipo que el PC no conoce vuelve tal cual, con sus claves.
+        val raro = Json.parseToJsonElement("""{"tipo":"animado","gif":"x","cuando":${ahora + 5}}""").jsonObject
+        movil.guardarProyecto(obra().copy(avatar = raro, tocado = ahora + 5))
+        desdeElMovil()
+        desdeElPc()
+        assertEquals("x", chatDelPc("Obra del PC")["avatar"]!!.jsonObject.s("gif"))
+        assertEquals(raro, obra().avatar)
+        sinRepetidos()
+    }
+
     @Test
     fun `tareas al instante - lo tachado en el movil llega al PC con la vuelta recortada`() {
         desdeElMovil(unirme = true)

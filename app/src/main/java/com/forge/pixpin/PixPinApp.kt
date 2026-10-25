@@ -162,6 +162,9 @@ class PixPinApp : Application() {
         // si tarda, la lista aparece primero y las portadas después.
         scope.launch(Dispatchers.IO) {
             runCatching { proyectos.reponerLosPdf() }
+            // **El logo de antes empieza a viajar como foto del chat** (25-oct-2026, como el `logo.png`
+            // del PC). Ver [com.forge.pixpin.guardados.FotosDelChat.adoptarLogosDeAntes].
+            runCatching { com.forge.pixpin.guardados.FotosDelChat.adoptarLogosDeAntes(this@PixPinApp) }
             // **Los tres códigos a lo que no los tenga** (15-sep-2026): el único, el de chat y la
             // fecha, para que se vean en el chat y viajen al compartir. Ver [com.forge.pixpin.sincro.Codigos].
             runCatching { com.forge.pixpin.sincro.Red.disco(this@PixPinApp).sellar() }

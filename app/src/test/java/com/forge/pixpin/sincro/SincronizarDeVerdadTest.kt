@@ -740,6 +740,85 @@ class SincronizarDeVerdadTest {
         assertTrue(telefono.leerProyectos().single().pdfOrigen!!.startsWith(telefono.filesDir.absolutePath))
     }
 
+    // ------------------------------------------------------------ la foto del chat
+
+    /** La foto del chat del proyecto [id] en un aparato, leída. */
+    private fun foto(d: Disco, id: String) = com.forge.pixpin.guardados.FotoDelChat.de(d.leerProyectos().single { it.id == id })
+
+    /** Pone la foto como la hoja: con una imagen nueva, su fichero `guardados/avatar-<ms>.png`, y el proyecto tocado. */
+    private fun ponerFoto(d: Disco, id: String, a: com.forge.pixpin.guardados.FotoDelChat.Avatar) {
+        val p = d.leerProyectos().single { it.id == id }
+        d.guardarProyecto(com.forge.pixpin.guardados.FotoDelChat.conFoto(p, a, reloj++))
+    }
+
+    private fun imagenDeFoto(d: Disco, bytes: String): String {
+        val f = File(d.filesDir, com.forge.pixpin.guardados.FotoDelChat.rutaRelativaDeImagen(reloj++)).apply { parentFile!!.mkdirs(); writeText(bytes) }
+        return f.absolutePath
+    }
+
+    @Test
+    fun `la foto del chat viaja con su imagen, vuelve cambiada y lo que no se entiende se conserva`() {
+        // Lo de `sincronizar_con_el_movil.rs` del PC (25-oct-2026), entre dos aparatos Android.
+        emparejar()
+        proyecto(telefono, Proyecto("pr-1", "Obra", tocado = 5))
+        mensaje(telefono, "t1", "en la obra", proyecto = "pr-1")
+        sincronizar(listOf("pr-1"))
+        assertNull("sin foto no sale ningún campo", tableta.leerProyectos().single().avatar)
+
+        // 1. Una imagen puesta en el teléfono llega a la tableta con su fichero, con su ruta local.
+        val ruta = imagenDeFoto(telefono, "PNG de la foto")
+        ponerFoto(telefono, "pr-1", com.forge.pixpin.guardados.FotoDelChat.imagen(ruta, reloj))
+        sincronizar(listOf("pr-1"))
+        val llego = foto(tableta, "pr-1")!!
+        assertEquals("imagen", llego.tipo)
+        assertTrue("con su ruta de la tableta: ${llego.ruta}", llego.ruta!!.startsWith(tableta.filesDir.absolutePath + "/guardados/avatar-"))
+        assertEquals("PNG de la foto", File(llego.ruta!!).readText())
+        assertTrue("la imagen va en el alcance del chat", tableta.alcance("pr-1").keys.any { it.startsWith("guardados/avatar-") })
+        assertEquals("nada que juntar", 0, sincronizar(listOf("pr-1")).fusionados)
+
+        // 2. Un emoji puesto en la tableta llega al teléfono, y la imagen que ya no se usa se va de los dos.
+        ponerFoto(tableta, "pr-1", com.forge.pixpin.guardados.FotoDelChat.emoji("🏗️", "#FFCD6A" to "#FFA85C", reloj))
+        assertFalse("la vieja se va de la tableta", File(llego.ruta!!).exists())
+        sincronizar(listOf("pr-1"))
+        val enTel = foto(telefono, "pr-1")!!
+        assertEquals("🏗️", enTel.elEmoji)
+        assertEquals(0xffcd6a to 0xffa85c, enTel.fondo)
+        assertFalse("y del teléfono", File(ruta).exists())
+
+        // 3. Volver a lo de siempre también viaja (se escribe, no se borra).
+        ponerFoto(telefono, "pr-1", com.forge.pixpin.guardados.FotoDelChat.iniciales(null, reloj))
+        sincronizar(listOf("pr-1"))
+        val siempre = tableta.leerProyectos().single().avatar!!
+        assertEquals(kotlinx.serialization.json.JsonPrimitive("iniciales"), siempre["tipo"])
+        assertNull(siempre["color"])
+
+        // 4. Un tipo que este aparato no conoce (de un PixPin más nuevo) vuelve tal cual, con sus claves.
+        val raro = kotlinx.serialization.json.Json.parseToJsonElement("""{"tipo":"animado","gif":"x","cuando":$reloj}""") as kotlinx.serialization.json.JsonObject
+        val q = tableta.leerProyectos().single()
+        proyecto(tableta, q.copy(avatar = raro, tocado = reloj++))
+        sincronizar(listOf("pr-1"))
+        assertEquals(raro, telefono.leerProyectos().single().avatar)
+        assertTrue(foto(telefono, "pr-1")!!.esLoDeSiempre)
+    }
+
+    @Test
+    fun `la foto del chat cambiada en un solo lado pasa aunque el otro tenga el proyecto tocado mas tarde`() {
+        // Como el PC con un proyecto nacido allí, que no mueve su `tocado`: cambió en un solo lado.
+        emparejar()
+        proyecto(telefono, Proyecto("pr-1", "Obra", tocado = 5))
+        sincronizar(listOf("pr-1"))
+        val q = tableta.leerProyectos().single()
+        proyecto(tableta, q.copy(nombre = "Obra nueva", tocado = 9_000_000))
+        val p = telefono.leerProyectos().single()
+        proyecto(telefono, p.copy(avatar = com.forge.pixpin.guardados.FotoDelChat.emoji("🌳", null, 6).aJson()))
+        sincronizar(listOf("pr-1"))
+        for (d in listOf(telefono, tableta)) {
+            val x = d.leerProyectos().single()
+            assertEquals("Obra nueva", x.nombre)
+            assertEquals("🌳", com.forge.pixpin.guardados.FotoDelChat.de(x)!!.elEmoji)
+        }
+    }
+
     // ------------------------------------------------------------ envío de una vez
 
     private fun enviar(cosas: List<Pair<Envio.Elemento, File>>, codigoDelEmisor: String, codigoDelReceptor: String,

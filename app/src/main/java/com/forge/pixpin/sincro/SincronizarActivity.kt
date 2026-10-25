@@ -238,8 +238,11 @@ class SincronizarActivity : ComponentActivity() {
         if (trabajo?.isActive == true) return
         trabajo = lifecycleScope.launch(Dispatchers.IO) {
             val hecho = Sesion.Hecho()
+            // Toda la vuelta cuenta para el botón de sincronizar, también mientras conecta. Ver [VueltasEnMarcha].
+            VueltasEnMarcha.empezar()
             try {
                 val v = unaVuelta(host, puerto, nombre, preguntar = true, hecho = hecho, rotulo = "")
+                if (!v.cancelada) VueltasEnMarcha.apuntar(true)
                 fase = when {
                     v.cancelada -> Fase.Nada
                     else -> Fase.Terminado(
@@ -249,7 +252,10 @@ class SincronizarActivity : ComponentActivity() {
                     )
                 }
             } catch (e: Exception) {
+                VueltasEnMarcha.apuntarSiFallo(e)
                 fase = Fase.Fallo(explicar(e, nombre))
+            } finally {
+                VueltasEnMarcha.acabar()
             }
             version++
         }
@@ -278,6 +284,14 @@ class SincronizarActivity : ComponentActivity() {
         val aparatos = lista.filter { it.host != null }
         if (aparatos.isEmpty()) return
         trabajo = lifecycleScope.launch(Dispatchers.IO) {
+            // Toda la ronda cuenta como una: entre aparato y aparato el botón no se para.
+            VueltasEnMarcha.empezar()
+            try { conTodos(aparatos) } finally { VueltasEnMarcha.acabar() }
+        }
+    }
+
+    private suspend fun conTodos(aparatos: List<Miembro>) {
+        run {
             val hecho = Sesion.Hecho()
             val avisos = LinkedHashSet<String>()
             val fallaron = LinkedHashMap<String, String>()
@@ -294,7 +308,7 @@ class SincronizarActivity : ComponentActivity() {
                     val rotulo = if (rondas > 1) "Ronda $ronda de $rondas · " else ""
                     try {
                         val v = unaVuelta(host, m.puerto, m.nombre, preguntar = false, hecho = hecho, rotulo = rotulo)
-                        if (v.cancelada) { fase = Fase.Nada; return@launch }
+                        if (v.cancelada) { fase = Fase.Nada; return }
                         bytes += v.bytes
                         avisos += v.avisos
                         alDia += v.nombre
@@ -304,6 +318,8 @@ class SincronizarActivity : ComponentActivity() {
                 }
             }
             val segundos = (System.currentTimeMillis() - empezo) / 1000.0
+            // La ronda salió si quedó al día con alguno: que uno estuviera apagado no pone el botón en rojo.
+            VueltasEnMarcha.apuntar(alDia.isNotEmpty())
             fase = if (alDia.isEmpty()) {
                 Fase.Fallo(fallaron.values.joinToString("\n\n").ifBlank { "No se pudo con ninguno." })
             } else {

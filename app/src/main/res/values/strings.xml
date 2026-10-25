@@ -734,10 +734,7 @@
     <string name="guardados_describir_editar">Editar descripción</string>
     <string name="guardados_describir_pista">Añade una descripción…</string>
     <!-- El logo de un proyecto desde una foto de su chat. Ver LogoDelProyecto.kt. -->
-    <string name="guardados_logo_poner">Usar de logo</string>
-    <string name="guardados_logo_quitar">Quitar logo</string>
-    <string name="guardados_logo_hecho">Logo del proyecto puesto</string>
-    <string name="guardados_logo_error">No se pudo poner esa imagen de logo</string>
+    <string name="guardados_logo_poner">Usar de foto del chat</string>
     <string name="guardados_ya_no_esta">Este archivo ya no está</string>
     <string name="guardados_compartir">Compartir</string>
     <string name="guardados_abrir_con">Abrir con otra app</string>
@@ -1097,4 +1094,28 @@
     <string name="funciones_galeria_detalle">Todas las capturas que has guardado</string>
     <string name="funciones_figuras">Figuras</string>
     <string name="funciones_figuras_detalle">Tu biblioteca de figuras para los lienzos</string>
+
+    <!-- La foto del chat (25-oct-2026, PC d95e9a7): imagen, emoji o color en el círculo. -->
+    <string name="foto_chat_menu">Cambiar foto del chat…</string>
+    <string name="foto_chat_titulo">Foto del chat</string>
+    <string name="foto_chat_imagen">Elegir imagen…</string>
+    <string name="foto_chat_pegar">Pegar imagen</string>
+    <string name="foto_chat_quitar">Como siempre</string>
+    <string name="foto_chat_buscar">Buscar emoji</string>
+    <string name="foto_chat_sin_emojis">Ningún emoji se llama así</string>
+    <string name="foto_chat_fondo">Fondo</string>
+    <string name="foto_chat_recorte">Arrastra para mover · pellizca para acercar</string>
+    <string name="foto_chat_guardar">Guardar</string>
+    <string name="foto_chat_cancelar">Cancelar</string>
+    <string name="foto_chat_sin_imagen">No hay ninguna imagen copiada</string>
+    <string name="foto_chat_error">No se pudo guardar la foto del chat</string>
+    <!-- Buscar en todos los chats desde la lista (25-oct-2026, PC d106969). -->
+    <string name="chat_buscar">Buscar chats y mensajes</string>
+    <plurals name="chat_buscar_mensajes">
+        <item quantity="one">Mensajes · 1</item>
+        <item quantity="other">Mensajes · %d</item>
+    </plurals>
+    <string name="chat_buscar_ver_mas">Ver %d más</string>
+    <string name="chat_buscar_nada">Nada con eso</string>
+    <string name="sincronizar_boton">Sincronizar</string>
 </resources>

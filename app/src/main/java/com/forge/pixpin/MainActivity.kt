@@ -397,11 +397,14 @@ fun TarjetaDeConfiguracion(
             // [com.forge.pixpin.sincro.SincronizarActivity].
             androidx.compose.material3.OutlinedButton(
                 onClick = {
+                    // Pulsarlo es ver el fallo: la pantalla de Sincronizar dice qué pasó.
+                    com.forge.pixpin.sincro.VueltasEnMarcha.olvidarFallo()
                     context.startActivity(Intent(context, com.forge.pixpin.sincro.SincronizarActivity::class.java))
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp)
             ) {
-                Icon(Icons.Filled.Sync, contentDescription = null, Modifier.size(20.dp))
+                // **Gira mientras se sincroniza** y se marca en rojo si falló (25-oct-2026). Ver [com.forge.pixpin.ui.IconoDeSincronizar].
+                com.forge.pixpin.ui.IconoDeSincronizar(androidx.compose.material3.LocalContentColor.current, MaterialTheme.colorScheme.background, 20.dp)
                 Text("Sincronizar", modifier = Modifier.padding(start = 8.dp))
             }
 
