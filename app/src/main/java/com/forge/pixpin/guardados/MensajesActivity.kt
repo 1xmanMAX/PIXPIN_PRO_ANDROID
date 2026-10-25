@@ -2272,6 +2272,20 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         eligiendoQue = false
                         eligiendoMini = true
                     }
+                    // **Una carpeta de páginas** (25-oct-2026, del PC): un cuaderno que junta lienzos.
+                    BotonDeAdjuntar(
+                        Icons.AutoMirrored.Filled.MenuBook,
+                        com.forge.pixpin.R.string.guardados_adj_carpeta,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        val chat = chatDe
+                        lifecycleScope.launch {
+                            val nueva = withContext(Dispatchers.IO) { runCatching { CarpetasDelChat.crear(this@MensajesActivity, chat) }.getOrNull() }
+                            refrescar()
+                            nueva?.let { CarpetaActivity.abrir(this@MensajesActivity, it.id) }
+                        }
+                    }
                         }
                     }
                 }
@@ -3098,6 +3112,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 DelMenu(com.forge.pixpin.R.string.guardados_reenviar,
                         Icons.AutoMirrored.Filled.Forward) {
                     menuAbierto = false; acciones.reenviar()
+                }
+                // **Añadir a carpeta…** (25-oct-2026, del PC): una hoja del chat a un cuaderno. Ver [CarpetasDelChat].
+                if (CarpetaDePaginas.puedeIr(m) && m.clase != Clase.VOZ) {
+                    DelMenu(com.forge.pixpin.R.string.guardados_anadir_a_carpeta, Icons.AutoMirrored.Filled.MenuBook) {
+                        menuAbierto = false
+                        CarpetasDelChat.preguntarDonde(this@MensajesActivity, m)
+                    }
                 }
                 // **Guardar como receta** (§4.7): la pregunta que contestó, como botón del chat «Asistente».
                 if (m.clase == Clase.NOTA && com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m)) {
@@ -4529,6 +4550,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
 
     @Composable
     private fun FilaDeMiniApp(m: Mensaje, onCambiar: (String) -> Unit) {
+        // **Una carpeta de páginas** (25-oct-2026, del PC): su tarjeta, no su JSON. Ver [CarpetaDePaginas].
+        if (CarpetaDePaginas.esCarpeta(m)) { TarjetaDeCarpeta(m); return }
         // **Una tabla del PC** (mini-app `tabla`, el JSON de la tabla en el texto) o una hoja editada
         // de un Excel del chat: se ve como tabla, no como su JSON. Tocarla la abre en el editor de
         // tablas, que guarda en este mismo mensaje. Ver [TablasDelChat].
@@ -7239,7 +7262,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
             Clase.MINIAPP ->
-                if (TablasDelChat.esTabla(m)) {
+                if (CarpetaDePaginas.esCarpeta(m)) CarpetaActivity.abrir(this, m.id)
+                else if (TablasDelChat.esTabla(m)) {
                     // Una hoja de un libro se abre con sus hermanas en pestañas, como el Excel.
                     val libro = m.referencia?.let { TablasDelChat.partirLibro(it) }?.first
                     val ref = m.referencia
