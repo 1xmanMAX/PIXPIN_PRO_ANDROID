@@ -112,6 +112,7 @@ import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.filled.EmojiEmotions
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Forum
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.material.icons.filled.PictureAsPdf
@@ -3138,6 +3139,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             texto = (m.transcripcion ?: m.texto).ifBlank { m.nombre }.takeIf { it.isNotBlank() },
                             mensaje = m.id, proyecto = m.proyecto
                         )
+                    }
+                }
+                // **Enviar a Anki** (25-oct-2026, como el PC): una clase grabada, una foto o una nota
+                // con preguntas, en tarjetas. Ver [com.forge.pixpin.anki.EnviarAAnkiActivity].
+                if (com.forge.pixpin.anki.AnkiDelMensaje.sePuede(m)) {
+                    DelMenu(com.forge.pixpin.R.string.guardados_enviar_anki, Icons.Filled.School) {
+                        menuAbierto = false
+                        com.forge.pixpin.anki.EnviarAAnkiActivity.abrir(this@MensajesActivity, m.id)
                     }
                 }
                 DelMenu(com.forge.pixpin.R.string.guardados_etiquetar,

@@ -47,6 +47,10 @@
         android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:maxSdkVersion="32" />
 
+    <!-- «Enviar a Anki» del menú de un mensaje: escribir las tarjetas en AnkiDroid por su proveedor
+         de contenido. Es un permiso «peligroso» de AnkiDroid: se pide al usarlo. Ver anki/AnkiDroid.kt. -->
+    <uses-permission android:name="com.ichi2.anki.permission.READ_WRITE_DATABASE" />
+
     <!-- Leer en voz alta un Word o un libro: desde Android 11 los motores de voz (el de Google)
          solo se ven si se declara que se buscan. Ver ui/LectorEnVoz.kt. -->
     <queries>
@@ -56,6 +60,8 @@
         <!-- «Escanear» en el clip del chat: el escáner del usuario, «Escáner Pro Max». Sin esto,
              en Android 11+ no se ve y el botón diría siempre que falta. Ver guardados/EscanerProMax.kt. -->
         <package android:name="com.scannerpromax" />
+        <!-- «Enviar a Anki»: sin esto, en Android 11+ AnkiDroid no se ve y siempre saldría el fichero. -->
+        <package android:name="com.ichi2.anki" />
         <intent>
             <action android:name="com.scannerpromax.action.SCAN" />
         </intent>
@@ -527,6 +533,19 @@
             La llamada secreta: un recordatorio que suena como una llamada y se oye por el
             auricular. Sale encima del bloqueo. Ver LlamadaSecretaActivity.
         -->
+        <!-- El horario de clases de la semana: sus llamadas suenan con la llamada secreta. Ver horario/. -->
+        <activity
+            android:name=".horario.HorarioActivity"
+            android:exported="false"
+            android:taskAffinity="${applicationId}.horario"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
+        <!-- «Enviar a Anki»: sin pantalla, para poder pedir el permiso de AnkiDroid. Ver anki/. -->
+        <activity
+            android:name=".anki.EnviarAAnkiActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <activity
             android:name=".pin.LlamadaSecretaActivity"
             android:exported="false"

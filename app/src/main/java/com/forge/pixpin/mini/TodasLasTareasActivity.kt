@@ -267,6 +267,9 @@ class TodasLasTareasActivity : ComponentActivity() {
                             style = MaterialTheme.typography.labelMedium, color = Cristal.tinta.copy(alpha = 0.7f)
                         )
                     }
+                    // **El horario de clases** (25-oct-2026): cada asignatura es una lista de tareas.
+                    // Ver [com.forge.pixpin.horario.HorarioActivity].
+                    BotonRedondo(Icons.Filled.CalendarMonth, "Horario", { com.forge.pixpin.horario.HorarioActivity.abrir(this@TodasLasTareasActivity) }, tamano = 44.dp)
                 }
 
                 // Buscador.

@@ -52,6 +52,13 @@ class RecordatorioReceiver : BroadcastReceiver() {
         // se esté haciendo— con lo que decía, y se le quita la hora para que no quede una
         // alarma fantasma en la conversación. Ver `MensajesActivity.ponerRecordatorio`.
         // **Una tarea con hora** (`⏰` en su texto, como el PC). Ver [RecordatoriosDeTareas].
+        // **Una clase o una evaluación del horario** (25-oct-2026): suena como una llamada. Ver
+        // [com.forge.pixpin.horario.AvisosDelHorario].
+        if (pinId.startsWith(com.forge.pixpin.horario.Horario.PREFIJO)) {
+            val pendiente = goAsync()
+            Thread { try { com.forge.pixpin.horario.AvisosDelHorario.sonar(context, pinId) } finally { pendiente.finish() } }.start()
+            return
+        }
         if (pinId.startsWith(com.forge.pixpin.mini.AlarmasDeTareas.PREFIJO)) {
             RecordatoriosDeTareas.sonar(context, pinId)
             return

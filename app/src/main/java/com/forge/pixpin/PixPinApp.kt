@@ -122,6 +122,9 @@ class PixPinApp : Application() {
         // **Las tareas con hora** (`⏰`, como el PC): sus alarmas se rehacen al arrancar —también
         // tras reiniciar el teléfono, que las borra— y cada vez que cambia el chat, con un respiro
         // para no rehacerlas por cada tecla. Ver [com.forge.pixpin.pin.RecordatoriosDeTareas].
+        // **Las llamadas del horario de clases**, también al arrancar (y tras reiniciar el teléfono).
+        // Ver [com.forge.pixpin.horario.AvisosDelHorario].
+        scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.horario.AvisosDelHorario.reprogramar(this@PixPinApp) } }
         @OptIn(kotlinx.coroutines.FlowPreview::class)
         scope.launch(Dispatchers.IO) {
             com.forge.pixpin.guardados.MensajesStore.cambios.debounce(1_500).collect {
