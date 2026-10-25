@@ -29,13 +29,21 @@ import java.io.File
 object ExportarExcel {
 
     /** [hojas]: los nombres de las hojas que se ven (las pestañas). [vista]: la hoja en pantalla. */
-    fun compartible(c: Context, ruta: String, nombre: String, hojas: List<String>, vista: () -> android.view.View?): Compartible {
+    /**
+     * [deTablas] (25-oct-2026): las tablas que se están viendo (una tabla del chat o de un proyecto,
+     * o un libro visto por sus tablas), que se exportan tal cual; sin ellas se leen de [ruta]. Sin
+     * [ruta] (una tabla, que no es un archivo) no hay «Original» ni «.pixpin».
+     */
+    fun compartible(
+        c: Context, ruta: String?, nombre: String, hojas: List<String>, vista: () -> android.view.View?,
+        deTablas: List<com.forge.pixpin.motor.TablaDeCalculo>? = null
+    ): Compartible {
         val titulo = nombre.substringBeforeLast('.').ifBlank { "Libro" }
         val paginas = hojas.mapIndexed { i, n -> Compartible.Pagina("h$i", n.ifBlank { "Hoja ${i + 1}" }) }
-        var leidas: List<ImportarHojas.HojaImportada>? = null
+        var leidas: List<ImportarHojas.HojaImportada>? = deTablas?.map { ImportarHojas.HojaImportada(TablasEnElVisor.nombreDePestana(it.nombre), it) }
         val cerrojo = Any()
         fun tablas(): List<ImportarHojas.HojaImportada> = synchronized(cerrojo) {
-            leidas ?: ImportarHojas.leer(File(ruta), nombre).also { leidas = it }
+            leidas ?: (if (ruta != null) ImportarHojas.leer(File(ruta), nombre) else emptyList()).also { leidas = it }
         }
         /** Las tablas de las páginas elegidas (por su nombre; si no casa ninguno, todas). */
         fun elegidas(claves: List<String>): List<ImportarHojas.HojaImportada> {
@@ -63,8 +71,10 @@ object ExportarExcel {
                 com.forge.pixpin.tabla.archivoDeLaTabla(c, h.tabla, false)?.let { Compartible.Salida(it, "text/csv", "«${h.nombre}»: los valores, para Excel o Sheets") }
             }))
             addAll(ExportarVisor.imagenes(c, { titulo }) { vista()?.let { ExportarVisor.fotoDe(it) } })
-            add(ExportarVisor.original(c, ruta, nombre))
-            add(ExportarVisor.pixpin(c, ruta, nombre))
+            if (ruta != null) {
+                add(ExportarVisor.original(c, ruta, nombre))
+                add(ExportarVisor.pixpin(c, ruta, nombre))
+            }
         }
         return Compartible(titulo, paginas, formatos)
     }

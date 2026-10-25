@@ -165,6 +165,12 @@ import java.util.Date
  *
  * Sin identificador abre la **lista de tablas**; con él, esa tabla. Cada tabla va en su tarea,
  * como las notas y los croquis (ver el manifiesto).
+ *
+ * **Desactivada, no quitada** (25-oct-2026, el usuario: «quita la visualización de Excel antigua…
+ * de momento quita la edición de Excel»): ya no la abre nadie; las tablas se ven y se anotan en el
+ * visor de hojas ([com.forge.pixpin.excel.ExcelActivity.abrirTablas], [com.forge.pixpin.excel.EntradaDeHojas]).
+ * Se queda entera —y lo que guarda y sincroniza, también— para cuando vuelva la edición
+ * ([com.forge.pixpin.excel.ExcelActivity.EDITAR_EN_TABLAS]).
  */
 class TablaActivity : ComponentActivity() {
 

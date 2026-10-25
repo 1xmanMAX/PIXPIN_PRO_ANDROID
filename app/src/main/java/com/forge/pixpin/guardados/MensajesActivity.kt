@@ -7422,17 +7422,19 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             Clase.MINIAPP ->
                 if (CarpetaDePaginas.esCarpeta(m)) CarpetaActivity.abrir(this, m.id)
                 else if (TablasDelChat.esTabla(m)) {
-                    // Una hoja de un libro se abre con sus hermanas en pestañas, como el Excel.
+                    // **Una tabla del chat se ve en el visor de hojas, sin editar** (25-oct-2026, el
+                    // usuario: «quita la visualización de Excel antigua»); se anota con el riel. Una hoja
+                    // de un libro, con sus hermanas en pestañas, como el Excel. Ver [com.forge.pixpin.excel.EntradaDeHojas].
                     val libro = m.referencia?.let { TablasDelChat.partirLibro(it) }?.first
                     val ref = m.referencia
                     if (libro != null && ref != null) lifecycleScope.launch {
                         val hojas = withContext(Dispatchers.IO) { TablasDelChat.hechas(almacen.leer(), libro).map { LibroDelChat.idDeHoja(libro, it.first) } }
-                        com.forge.pixpin.tabla.TablaActivity.abrir(this@MensajesActivity, ref, hojas = hojas)
+                        com.forge.pixpin.excel.ExcelActivity.abrirDestino(this@MensajesActivity, com.forge.pixpin.excel.EntradaDeHojas.destino(ref, hojas))
                     }
-                    else com.forge.pixpin.tabla.TablaActivity.abrir(this, TablasDelChat.idDe(m))
+                    else com.forge.pixpin.excel.ExcelActivity.abrirDestino(this, com.forge.pixpin.excel.EntradaDeHojas.destino(TablasDelChat.idDe(m)))
                 }
                 else com.forge.pixpin.mini.MiniActivity.abrir(this, m.id)
-            Clase.TABLA -> m.referencia?.let { com.forge.pixpin.tabla.TablaActivity.abrir(this, it) }
+            Clase.TABLA -> m.referencia?.let { com.forge.pixpin.excel.ExcelActivity.abrirDestino(this, com.forge.pixpin.excel.EntradaDeHojas.destino(it)) }
             Clase.CROQUIS -> m.referencia?.let {
                 com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(this, m.proyecto, it)
             }
@@ -7563,28 +7565,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         com.forge.pixpin.office.AbrirOffice.diapositivasAProyecto(this, ruta, m.nombre)
                     // **Un Excel se ve como en Excel** (11-oct-2026, lo del PC): estilos, formatos de
                     // número y fecha, combinaciones, paneles… en el visor de hojas, que lo abre al
-                    // instante y desde el que se pasa a Tablas («A tabla»). Sin el .so, o un .xls
-                    // antiguo, lo de antes. Ver [com.forge.pixpin.excel.ExcelActivity].
-                    com.forge.pixpin.excel.ExcelActivity.seAbre(m.nombre, ruta) ->
+                    // instante. **Y todo lo demás también** (25-oct-2026, el usuario: «quita la
+                    // visualización de Excel antigua y todo lo incorporas en la nueva»): un `.xls`, un
+                    // `.ods`, un `.csv` o un libro con hojas editadas se ven por sus tablas en el mismo
+                    // visor, solo para mirar y anotar; ya no se abre la vista de Tablas. El visor decide
+                    // cómo y, si no se deja leer, lo manda a otra aplicación. Ver [com.forge.pixpin.excel.EntradaDeHojas].
+                    com.forge.pixpin.excel.EntradaDeHojas.esHojaDeCalculo(m.nombre, ruta) ->
                         com.forge.pixpin.excel.ExcelActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name }, mensaje = m.id)
-                    // **Un Excel se abre en Tablas**, con una pestaña por hoja, y no en otra
-                    // aplicación. Ver [LibroDelChat].
-                    LibroDelChat.esLibro(m) -> lifecycleScope.launch {
-                        val leido = withContext(Dispatchers.IO) { runCatching { LibroDelChat.tablas(this@MensajesActivity, m) } }
-                        leido.onSuccess { hojas ->
-                            if (hojas.isEmpty()) abrirFuera(ruta)
-                            else com.forge.pixpin.tabla.TablaActivity.abrir(
-                                this@MensajesActivity, hojas.first().first, hojas = hojas.map { it.first }
-                            )
-                        }.onFailure { e ->
-                            Toast.makeText(
-                                this@MensajesActivity,
-                                (e as? com.forge.pixpin.motor.ImportarHojas.NoSeLee)?.message ?: "No se pudo leer la hoja de cálculo",
-                                Toast.LENGTH_LONG
-                            ).show()
-                            abrirFuera(ruta)
-                        }
-                    }
                     else -> abrirFuera(ruta)
                 }
             }
