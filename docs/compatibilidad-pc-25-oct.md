@@ -57,3 +57,20 @@ sincronizable». **Nada de esto se ha probado en un teléfono**: compila y pasan
   por el mensaje `auto-figuras` del chat «Asistente». Antes, guardar una figura en el teléfono
   mandaba al PC una biblioteca sin las de serie, y el PC no las volvía a poner.
 - `figuras.json` se lee una vez por versión del fichero (con las de serie son 10 MB).
+
+## v0.133.0: lo del PC de 553f43f a 078c8ba
+
+- **Ficha del chat como el panel de medios de Telegram** (`guardados/FichaDelChat.kt`, al tocar el
+  título): Proyectos primero, Fotos (con las de las notas ricas), Vídeos, Dibujos, Archivos,
+  Enlaces, Voz y Fijados, por meses, con buscador y previa a pantalla completa. `PROYECTOS` es solo
+  de la pantalla, como en el PC: no se guarda ni viaja.
+- **Nota rica revisada**: paréntesis en rutas, `<…>`, enlaces Markdown, `![]()` dentro de código,
+  nunca rutas de red ni con `..`; resumen «🖼 foto» en la lista de chats.
+- **Ir a una marca** con los límites de zoom del editor.
+- **Grabar clase**: calidad de vídeo Ligero/Normal/Nítido como el PC, dos modos («Pantalla y
+  sonido», «Audio y capturas») y **Estudiar la clase** (vídeo o captura del minuto, barra con
+  capturas y marcadores, transcripción que sigue). Marcadores en `marcadores:[{ms,texto}]`, mismas
+  claves que el PC.
+- Del documento del PC «el motor en Android»: hilo de audio con prioridad, `VOICE_RECOGNITION` /
+  `CAMCORDER`, micrófono perdido que se reabre rellenando con silencio. Los motores de escritorio
+  (WASAPI, D3D11, Media Foundation) no se portan.
