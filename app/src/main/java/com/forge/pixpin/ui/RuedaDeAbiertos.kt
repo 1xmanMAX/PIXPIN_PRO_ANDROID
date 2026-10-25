@@ -60,7 +60,9 @@ import com.forge.pixpin.motor.elToqueDeCuatroDedos
 fun abrirLoAbierto(context: Context, l: LienzoAbierto, desdeProyecto: String? = l.proyecto) {
     (context.applicationContext as? PixPinApp)?.lienzosAbiertos?.anunciarRelevo()
     when (l.clase) {
-        Abiertos.TABLA -> com.forge.pixpin.tabla.TablaActivity.abrir(context, l.ruta, desdeProyecto = desdeProyecto)
+        // Una tabla que quedó en la rueda se ve en el visor de hojas, sin editar (25-oct-2026: la vista
+        // de Tablas ya no se abre). Ver [com.forge.pixpin.excel.EntradaDeHojas].
+        Abiertos.TABLA -> com.forge.pixpin.excel.ExcelActivity.abrirDestino(context, com.forge.pixpin.excel.EntradaDeHojas.destino(l.ruta))
         Abiertos.CROQUIS -> com.forge.pixpin.croquis3d.Croquis3DActivity.abrir(
             context, l.proyecto, l.ruta, desdeProyectos = desdeProyecto != null
         )

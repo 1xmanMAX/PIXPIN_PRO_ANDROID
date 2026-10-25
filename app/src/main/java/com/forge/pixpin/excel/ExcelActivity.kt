@@ -34,7 +34,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.OpenInNew
@@ -59,11 +58,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.lifecycleScope
-import com.forge.pixpin.ui.theme.BarraDeCristal
-import com.forge.pixpin.ui.theme.BotonDeBarra
-import com.forge.pixpin.ui.theme.Cristal
 import com.forge.pixpin.ui.theme.PixPinTheme
-import com.forge.pixpin.ui.theme.SuperficieDeCristal
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -79,7 +74,15 @@ import java.io.File
  * enlace); abajo, las pestañas de las hojas y lo que falta por leer.
  *
  * Se abre al instante: la primera pantalla sale con las primeras filas y el resto llega por
- * detrás ([LibroExcel]). Un libro que no se deja leer va por donde iba antes (a Tablas).
+ * detrás ([LibroExcel]).
+ *
+ * **El único visor de hojas de cálculo** (25-oct-2026, el usuario: «quita la visualización de Excel
+ * antigua y todo lo incorporas en la nueva… solo visualización normal, pero que se pueda anotar»):
+ * aquí se ven también los `.xls`/`.ods`/`.csv` que el .so no lee, los libros con hojas editadas y
+ * las tablas del chat y de los proyectos ([abrirTablas]), pasadas al visor ([TablasEnElVisor]).
+ * Nada se edita; la vista de Tablas queda sin entrada ([EntradaDeHojas]). Lo que no se deja leer,
+ * con otra aplicación. Arriba la pastilla, a la derecha el riel y abajo la tira de pestañas como
+ * la del PC (`hoja_office::pintar_pestanas`); «Copiar» va en la línea de la celda.
  *
  * **Luna/sol** (PC 74801b4): la hoja en oscuro o en claro, para todos los visores a la vez y
  * recordado en este aparato ([com.forge.pixpin.office.Oscuro]). En la línea de la celda, **la nota**
@@ -96,10 +99,12 @@ class ExcelActivity : ComponentActivity() {
             systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
         }
         val ruta = intent?.getStringExtra(EXTRA_RUTA)
-        if (ruta == null) { finish(); return }
-        val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { File(ruta).name }
+        val tablas = intent?.getStringArrayListExtra(EXTRA_TABLAS).orEmpty()
+        if (ruta == null && tablas.isEmpty()) { finish(); return }
+        val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { ruta?.let { File(it).name }.orEmpty() }
         val mensaje = intent?.getStringExtra(EXTRA_MENSAJE)
-        setContent { PixPinTheme { Pantalla(ruta, nombre, mensaje) } }
+        val activa = intent?.getStringExtra(EXTRA_ACTIVA)
+        setContent { PixPinTheme { Pantalla(ruta, tablas, activa, nombre, mensaje) } }
     }
 
     override fun onDestroy() {
@@ -120,8 +125,9 @@ class ExcelActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Pantalla(ruta: String, nombre: String, mensaje: String?) {
+    private fun Pantalla(ruta: String?, ids: List<String>, activaId: String?, nombreDado: String, mensaje: String?) {
         var abierto by remember { mutableStateOf<LibroExcel?>(null) }
+        var nombre by remember { mutableStateOf(nombreDado) }
         var vista by remember { mutableStateOf<VistaHoja?>(null) }
         /**
          * Sube con cada cambio de la selección, de lo leído o del zoom. Solo la leen la línea de la
@@ -133,14 +139,45 @@ class ExcelActivity : ComponentActivity() {
         // **Exportar** (14-oct-2026, como el PC): la hoja de compartir de siempre. Ver [ExportarExcel].
         var exportando by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
 
-        LaunchedEffect(ruta) {
-            val l = withContext(Dispatchers.IO) { LibroExcel.abrir(ruta) }
-            if (l == null) {
-                Toast.makeText(this@ExcelActivity, "No se pudo leer el libro: se abre en Tablas", Toast.LENGTH_LONG).show()
-                aTabla(ruta, nombre, mensaje, alFallar = true) { finish() }
+        // ---- **El riel de todos los visores** (24-oct-2026, como el PC `visor_hoja/riel.rs`):
+        // marcadores en una celda, el lápiz con la tinta de cada hoja y los marcos numerados. Lo del
+        // chat va con el código de su mensaje y viaja:
+        // - `anot-<uid>.marcas`: `id:columna:hoja·10⁷+fila:emoji` ([POR_HOJA]);
+        // - `anot-<uid>.vistas.json`: el aumento y la esquina de cada marcador;
+        // - `anot-<uid>-h<i>.excalidraw.gz`: la tinta de la hoja `i`, en píxeles de la hoja al 100 %;
+        // - `anot-<uid>.marcos.json`: los marcos, con `parte` = la hoja.
+        // Una tabla (25-oct-2026) usa el código de lo que la lleva: ver [HojasParaVer.uidDeTabla]. ----
+        var base by remember { mutableStateOf<String?>(null) }
+        var listo by remember { mutableStateOf(false) }
+        /** Las tablas que se ven, si no es el archivo leído por el .so: lo que se exporta. */
+        var tablasVistas by remember { mutableStateOf<List<com.forge.pixpin.motor.TablaDeCalculo>?>(null) }
+
+        // **Todo se abre aquí, solo para ver y anotar** (25-oct-2026, el usuario: «quita la
+        // visualización de Excel antigua y todo lo incorporas en la nueva»): un archivo con el .so o
+        // por sus tablas, y las tablas del chat y de los proyectos. Lo que no se deja leer, con otra
+        // aplicación; nunca la vista de Tablas. Ver [HojasParaVer].
+        LaunchedEffect(ruta, ids) {
+            val leido = withContext(Dispatchers.IO) {
+                runCatching { if (ruta != null) HojasParaVer.deArchivo(applicationContext, ruta, nombreDado, mensaje) else HojasParaVer.deIds(applicationContext, ids, activaId) }
+            }
+            val a = leido.getOrNull()
+            if (a == null) {
+                Toast.makeText(
+                    this@ExcelActivity,
+                    (leido.exceptionOrNull() as? com.forge.pixpin.motor.ImportarHojas.NoSeLee)?.message
+                        ?: if (ruta != null) "No se pudo leer la hoja de cálculo" else "No se encontró la tabla",
+                    Toast.LENGTH_LONG
+                ).show()
+                if (ruta != null) com.forge.pixpin.ui.AbrirCon.abrir(this@ExcelActivity, File(ruta))
+                finish()
                 return@LaunchedEffect
             }
+            val l = a.libro
             libro = l
+            if (nombre.isBlank()) nombre = a.nombre
+            base = a.uid?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(it) }
+            listo = true
+            tablasVistas = a.tablas
             activa = l.libro.activa.takeIf { l.libro.hojas.getOrNull(it)?.let { h -> h.visible && h.tipo == 0 } == true }
                 ?: l.libro.hojas.indexOfFirst { it.visible && it.tipo == 0 }.coerceAtLeast(0)
             abierto = l
@@ -153,21 +190,6 @@ class ExcelActivity : ComponentActivity() {
         var aLaVista by remember { mutableStateOf(true) }
         var toques by remember { mutableIntStateOf(0) }
 
-        // ---- **El riel de todos los visores** (24-oct-2026, como el PC `visor_hoja/riel.rs`):
-        // marcadores en una celda, el lápiz con la tinta de cada hoja y los marcos numerados. Lo del
-        // chat va con el código de su mensaje y viaja:
-        // - `anot-<uid>.marcas`: `id:columna:hoja·10⁷+fila:emoji` ([POR_HOJA]);
-        // - `anot-<uid>.vistas.json`: el aumento y la esquina de cada marcador;
-        // - `anot-<uid>-h<i>.excalidraw.gz`: la tinta de la hoja `i`, en píxeles de la hoja al 100 %;
-        // - `anot-<uid>.marcos.json`: los marcos, con `parte` = la hoja. ----
-        var base by remember { mutableStateOf<String?>(null) }
-        var listo by remember { mutableStateOf(false) }
-        LaunchedEffect(ruta) {
-            base = withContext(Dispatchers.IO) {
-                com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(filesDir, ruta)?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.delPdf(it) }
-            }
-            listo = true
-        }
         val marcosDoc = remember(base) { com.forge.pixpin.ui.MarcosDelVisor(base?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(filesDir, it) }) }
         val vistas = remember(base) { com.forge.pixpin.ui.VistasDelVisor(base?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivoDeVistas(filesDir, it) }) }
         val archivoDeMarcas = remember(base) { base?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.marcas(filesDir, it) } }
@@ -303,8 +325,13 @@ class ExcelActivity : ComponentActivity() {
             }
             com.forge.pixpin.ui.PastillaDeLector(
                 visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo && !ocultarParaImprimir,
-                nombre = nombre.substringBeforeLast('.').ifBlank { "Excel" },
-                archivo = nombre.takeIf { it.contains('.') } ?: "libro.xlsx",
+                nombre = (if (ruta != null) nombre.substringBeforeLast('.') else nombre).ifBlank { "Excel" },
+                // Una tabla de PixPin lleva el icono de un libro: se ve como uno.
+                archivo = nombre.takeIf { ruta != null && it.contains('.') } ?: "libro.xlsx",
+                // **Pocos botones, como los demás visores** (25-oct-2026, el usuario: «uno limpio y con un
+                // diseño simple, que tenga la misma UI que los demás visualizadores»): luna/sol, exportar y
+                // abrir con otra aplicación. «Copiar» va en la línea de la celda, con algo elegido (el PC
+                // no tiene botón: Ctrl+C).
                 botones = listOfNotNull(
                     com.forge.pixpin.ui.BotonDeLector(if (oscuro) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuro) "Claro" else "Oscuro") {
                         oscuro = !oscuro
@@ -312,18 +339,17 @@ class ExcelActivity : ComponentActivity() {
                         vista?.oscuro = oscuro
                         toques++
                     },
-                    if (abierto != null) com.forge.pixpin.ui.BotonDeLector(Icons.Filled.ContentCopy, "Copiar") { vista?.let { copiar(it) }; toques++ } else null,
                     // «A tabla» (editar los datos en la vista de Tablas) **desactivado, no quitado** (25-oct-2026,
                     // el usuario): de momento el Excel solo se mira y se anota. Ver [EDITAR_EN_TABLAS].
-                    if (EDITAR_EN_TABLAS) com.forge.pixpin.ui.BotonDeLector(Icons.Filled.TableChart, "A tabla") { aTabla(ruta, nombre, mensaje, alFallar = false) } else null,
+                    if (EDITAR_EN_TABLAS && ruta != null) com.forge.pixpin.ui.BotonDeLector(Icons.Filled.TableChart, "A tabla") { aTabla(ruta, nombre, mensaje, alFallar = false) } else null,
                     abierto?.let { l ->
                         com.forge.pixpin.ui.BotonDeLector(com.forge.pixpin.ui.IconoDeCompartir, "Exportar") {
                             val hojas = l.libro.hojas.filter { it.visible && it.tipo == 0 }.map { it.nombre }
-                            exportando = ExportarExcel.compartible(this@ExcelActivity, ruta, nombre, hojas) { vista }
+                            exportando = ExportarExcel.compartible(this@ExcelActivity, ruta, nombre, hojas, { vista }, tablasVistas)
                             toques++
                         }
                     },
-                    com.forge.pixpin.ui.BotonDeLector(Icons.Filled.OpenInNew, "Abrir con") { com.forge.pixpin.ui.AbrirCon.abrir(this@ExcelActivity, File(ruta)) }
+                    ruta?.let { r -> com.forge.pixpin.ui.BotonDeLector(Icons.Filled.OpenInNew, "Abrir con") { com.forge.pixpin.ui.AbrirCon.abrir(this@ExcelActivity, File(r)) } }
                 ),
                 modifier = Modifier.align(Alignment.TopCenter)
             )
@@ -375,98 +401,129 @@ class ExcelActivity : ComponentActivity() {
                     cambiado = { contenido -> if (contenido) cambiosDeTinta++; tickDeTinta++ }
                 )
             }
-            // Abajo, flotando: la línea de la celda (con algo elegido) y las pestañas de las hojas.
+            // Abajo: la línea de la celda (con algo elegido), flotando en el cristal de los visores, y
+            // la tira de las pestañas de las hojas, como la del PC.
             if (l != null && !anotando && !marcosDoc.activo && !poniendoMarca && !marcosDoc.imprimiendo && !ocultarParaImprimir) Column(
-                Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 6.dp),
+                Modifier.align(Alignment.BottomCenter).fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                LineaDeCelda(vista, marca) { activa = it }
-                Row(Modifier.padding(horizontal = 8.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    val hojas = remember(l) { l.libro.hojas.withIndex().filter { it.value.visible } }
-                    // Con una sola hoja no hay pestañas que elegir: no tapan nada.
-                    if (hojas.size > 1) LazyRow(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        itemsIndexed(hojas, key = { _, h -> h.index }) { _, h ->
-                            val puesta = h.index == activa
-                            Text(
-                                h.value.nombre,
-                                color = if (puesta) Cristal.tintaPuesta else Cristal.tinta,
-                                fontWeight = if (puesta) FontWeight.SemiBold else FontWeight.Normal,
-                                style = MaterialTheme.typography.labelLarge,
-                                maxLines = 1,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(14.dp))
-                                    .background(if (puesta) Cristal.puesto else Cristal.barra)
-                                    .clickable(enabled = h.value.tipo == 0) { activa = h.index; vista?.ponerHoja(h.index) }
-                                    .padding(horizontal = 14.dp, vertical = 8.dp)
-                            )
-                        }
-                    } else Spacer(Modifier.weight(1f))
-                    EstadoDeLaHoja(vista, marca)
+                val hojas = remember(l) { l.libro.hojas.withIndex().filter { it.value.visible } }
+                LineaDeCelda(vista, marca, alCopiar = { vista?.let { copiar(it) }; toques++ }) { activa = it }
+                // Con una sola hoja no hay pestañas que elegir: no tapan nada (lo que falta por leer y el
+                // zoom, solos a la derecha).
+                if (hojas.size > 1) PestanasDeHojas(hojas, activa, oscuro, vista, marca) { i -> activa = i; vista?.ponerHoja(i) }
+                else Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(end = 8.dp, bottom = 6.dp), horizontalArrangement = Arrangement.End) {
+                    EstadoDeLaHoja(vista, marca, oscuro, flotando = true)
                 }
             }
         }
     }
 
-    /** La línea de la celda (como la barra de fórmulas; las fórmulas no se evalúan: se enseña lo guardado). */
+    /**
+     * **La tira de las pestañas, la del PC** (`hoja_office::pintar_pestanas`, 25-oct-2026, el usuario:
+     * «uno limpio y con un diseño simple»): una franja gris clara pegada abajo, con su línea de arriba;
+     * la hoja que se ve, sobre el papel, en negrita y subrayada en el verde de Excel; las demás, planas
+     * con una rayita entre ellas. Sin cristal ni fichas: es parte de la hoja, como en Excel.
+     */
     @Composable
-    private fun LineaDeCelda(v: VistaHoja?, marca: androidx.compose.runtime.IntState, alCambiarDeHoja: (Int) -> Unit) {
-        @Suppress("UNUSED_VARIABLE") val leer = marca.intValue
-        // Solo con una celda elegida: sin ella, la hoja se ve entera.
-        if (v?.seleccion == null) return
-        SuperficieDeCristal(Modifier.padding(horizontal = 8.dp).fillMaxWidth().height(40.dp)) {
-            Row(Modifier.fillMaxSize().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
-                val sel = v?.seleccion
-                val (fa, ca) = v?.activa ?: (0 to 0)
-                val unaSola = sel != null && v.hoja?.geo?.combinadaEn(fa, ca) == sel
-                Text(
-                    if (sel != null) ExcelTexto.referencia(sel, unaSola) else "",
-                    color = Cristal.tinta, fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium,
-                    maxLines = 1, modifier = Modifier.widthIn(min = 56.dp)
-                )
-                Box(Modifier.padding(horizontal = 8.dp).width(1.dp).height(22.dp).background(Cristal.tinta.copy(alpha = 0.3f)))
-                val texto = v?.textoDe(fa, ca).orEmpty().replace("\r", "").replace("\n", " ⏎ ")
-                Text(texto, color = Cristal.tinta, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                // La nota de la celda: se lee entera al tocar.
-                val nota = v?.comentarioDe(fa, ca)
-                if (nota != null) {
-                    Text(
-                        "Nota", color = Cristal.tintaPuesta, style = MaterialTheme.typography.labelLarge, maxLines = 1,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { verNota(nota) }.padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
-                // La lista desplegable: sus valores, solo para ver (como el PC: no se cambia el libro).
-                if (v != null && v.conLista(fa, ca)) {
-                    var valores by remember(fa, ca) { mutableStateOf<List<String>?>(null) }
-                    Box {
-                        Text(
-                            "Lista ▾", color = Cristal.tintaPuesta, style = MaterialTheme.typography.labelLarge, maxLines = 1,
-                            modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable {
-                                libro?.lista(v.indice, fa, ca) { l -> runOnUiThread { valores = l.orEmpty() } }
-                            }.padding(horizontal = 8.dp, vertical = 4.dp)
-                        )
-                        androidx.compose.material3.DropdownMenu(expanded = valores != null, onDismissRequest = { valores = null }) {
-                            val l = valores.orEmpty()
-                            if (l.isEmpty()) androidx.compose.material3.DropdownMenuItem(text = { Text("Sin valores que enseñar") }, onClick = { valores = null }, enabled = false)
-                            for (x in l) androidx.compose.material3.DropdownMenuItem(text = { Text(x, maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { valores = null })
+    private fun PestanasDeHojas(
+        hojas: List<IndexedValue<Pxhj.InfoHoja>>, activa: Int, oscuro: Boolean, v: VistaHoja?,
+        marca: androidx.compose.runtime.IntState, alElegir: (Int) -> Unit
+    ) {
+        val fondo = if (oscuro) Color(0xFF262626) else Color(0xFFF3F3F3)
+        val papel = if (oscuro) Color(com.forge.pixpin.office.Oscuro.PAPEL) else Color.White
+        val linea = if (oscuro) Color(0xFF3C3C3C) else Color(0xFFD4D4D4)
+        val texto = if (oscuro) Color(0xFFDDDDDD) else Color(0xFF212121)
+        val verde = if (oscuro) Color(0xFF4CAF7A) else Color(0xFF217346)
+        Column(Modifier.fillMaxWidth().background(fondo).navigationBarsPadding()) {
+            Box(Modifier.fillMaxWidth().height(1.dp).background(linea))
+            Row(Modifier.fillMaxWidth().height(36.dp), verticalAlignment = Alignment.CenterVertically) {
+                LazyRow(Modifier.weight(1f).fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 8.dp)) {
+                    itemsIndexed(hojas, key = { _, h -> h.index }) { _, h ->
+                        val puesta = h.index == activa
+                        Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                Modifier.fillMaxSize().background(if (puesta) papel else Color.Transparent)
+                                    .clickable(enabled = h.value.tipo == 0) { alElegir(h.index) }
+                                    .padding(horizontal = 14.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    h.value.nombre, color = texto, maxLines = 1,
+                                    fontWeight = if (puesta) FontWeight.Bold else FontWeight.Normal,
+                                    style = MaterialTheme.typography.labelLarge
+                                )
+                                if (puesta) Box(Modifier.matchParentSize().padding(bottom = 1.dp), contentAlignment = Alignment.BottomCenter) {
+                                    Box(Modifier.fillMaxWidth().height(2.dp).background(verde))
+                                }
+                            }
+                            Box(Modifier.width(1.dp).height(16.dp).background(linea))
                         }
                     }
                 }
-                val enlace = v?.hoja?.geo?.enlaceEn(fa, ca)
-                if (enlace != null && v != null) {
-                    // El enlace se abre con este botón y no al tocar la celda: tocar es elegir.
-                    Text(
-                        "Abrir", color = Cristal.tintaPuesta, style = MaterialTheme.typography.labelLarge, maxLines = 1,
-                        modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { abrirEnlace(v, enlace)?.let(alCambiarDeHoja) }
-                            .padding(horizontal = 8.dp, vertical = 4.dp)
-                    )
-                }
+                EstadoDeLaHoja(v, marca, oscuro, flotando = false)
             }
         }
     }
 
-    /** Lo que falta por leer y el zoom, a la derecha de las pestañas. */
+    /**
+     * La línea de la celda (como la barra de fórmulas; las fórmulas no se evalúan: se enseña lo
+     * guardado), en la pastilla de cristal de los visores ([com.forge.pixpin.ui.CRISTAL_DE_VISOR]) y
+     * con lo que se puede hacer con la celda: **Copiar** lo elegido, leer su nota, ver su lista, abrir
+     * su enlace.
+     */
     @Composable
-    private fun EstadoDeLaHoja(v: VistaHoja?, marca: androidx.compose.runtime.IntState) {
+    private fun LineaDeCelda(v: VistaHoja?, marca: androidx.compose.runtime.IntState, alCopiar: () -> Unit, alCambiarDeHoja: (Int) -> Unit) {
+        @Suppress("UNUSED_VARIABLE") val leer = marca.intValue
+        // Solo con una celda elegida: sin ella, la hoja se ve entera.
+        if (v?.seleccion == null) return
+        val accion = Color(0xFF8AB4F8)
+        @Composable
+        fun Accion(t: String, al: () -> Unit) = Text(
+            t, color = accion, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.Bold, maxLines = 1,
+            modifier = Modifier.clip(RoundedCornerShape(50)).clickable(onClick = al).padding(horizontal = 8.dp, vertical = 6.dp)
+        )
+        Row(
+            Modifier.padding(horizontal = 12.dp).fillMaxWidth().height(40.dp)
+                .clip(RoundedCornerShape(50)).background(com.forge.pixpin.ui.CRISTAL_DE_VISOR).padding(start = 14.dp, end = 4.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            val sel = v.seleccion
+            val (fa, ca) = v.activa
+            val unaSola = sel != null && v.hoja?.geo?.combinadaEn(fa, ca) == sel
+            Text(
+                if (sel != null) ExcelTexto.referencia(sel, unaSola) else "",
+                color = Color.White, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1, modifier = Modifier.widthIn(min = 48.dp)
+            )
+            Box(Modifier.padding(horizontal = 8.dp).width(1.dp).height(20.dp).background(Color.White.copy(alpha = 0.3f)))
+            val texto = v.textoDe(fa, ca).orEmpty().replace("\r", "").replace("\n", " ⏎ ")
+            Text(texto, color = Color.White, style = MaterialTheme.typography.bodyMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+            Accion("Copiar", alCopiar)
+            // La nota de la celda: se lee entera al tocar.
+            val nota = v.comentarioDe(fa, ca)
+            if (nota != null) Accion("Nota") { verNota(nota) }
+            // La lista desplegable: sus valores, solo para ver (como el PC: no se cambia el libro).
+            if (v.conLista(fa, ca)) {
+                var valores by remember(fa, ca) { mutableStateOf<List<String>?>(null) }
+                Box {
+                    Accion("Lista ▾") { libro?.lista(v.indice, fa, ca) { l -> runOnUiThread { valores = l.orEmpty() } } }
+                    androidx.compose.material3.DropdownMenu(expanded = valores != null, onDismissRequest = { valores = null }) {
+                        val l = valores.orEmpty()
+                        if (l.isEmpty()) androidx.compose.material3.DropdownMenuItem(text = { Text("Sin valores que enseñar") }, onClick = { valores = null }, enabled = false)
+                        for (x in l) androidx.compose.material3.DropdownMenuItem(text = { Text(x, maxLines = 1, overflow = TextOverflow.Ellipsis) }, onClick = { valores = null })
+                    }
+                }
+            }
+            // El enlace se abre con este botón y no al tocar la celda: tocar es elegir.
+            val enlace = v.hoja?.geo?.enlaceEn(fa, ca)
+            if (enlace != null) Accion("Abrir") { abrirEnlace(v, enlace)?.let(alCambiarDeHoja) }
+        }
+    }
+
+    /** Lo que falta por leer y el zoom: a la derecha de las pestañas, o flotando si no las hay. */
+    @Composable
+    private fun EstadoDeLaHoja(v: VistaHoja?, marca: androidx.compose.runtime.IntState, oscuro: Boolean, flotando: Boolean) {
         @Suppress("UNUSED_VARIABLE") val leer = marca.intValue
         val hoja = v?.hoja
         val estado = buildList {
@@ -474,7 +531,15 @@ class ExcelActivity : ComponentActivity() {
             val z = v?.zoom ?: 1.0
             if (kotlin.math.abs(z - 1.0) > 0.004) add("${(z * 100).toInt()} %")
         }.joinToString("  ·  ")
-        if (estado.isNotEmpty()) Text(estado, color = Cristal.tinta.copy(alpha = 0.85f), style = MaterialTheme.typography.labelMedium, maxLines = 1, modifier = Modifier.padding(start = 8.dp).clip(RoundedCornerShape(12.dp)).background(Cristal.barra).padding(horizontal = 10.dp, vertical = 6.dp))
+        if (estado.isEmpty()) return
+        if (flotando) Text(
+            estado, color = Color.White, style = MaterialTheme.typography.labelMedium, maxLines = 1,
+            modifier = Modifier.clip(RoundedCornerShape(50)).background(com.forge.pixpin.ui.CRISTAL_DE_VISOR).padding(horizontal = 12.dp, vertical = 6.dp)
+        )
+        else Text(
+            estado, color = if (oscuro) Color(0xFFAAAAAA) else Color(0xFF6B6B6B), style = MaterialTheme.typography.labelMedium, maxLines = 1,
+            modifier = Modifier.padding(horizontal = 10.dp)
+        )
     }
 
     /** La nota o el comentario de la celda, entero (con sus respuestas). */
@@ -526,8 +591,10 @@ class ExcelActivity : ComponentActivity() {
     /**
      * **Lo de antes: el libro en Tablas de PixPin**, una tabla por hoja, editable. Con un mensaje
      * del chat, la misma tabla que se abría al tocarlo ([com.forge.pixpin.guardados.LibroDelChat]).
+     * **Desactivado, no quitado** (25-oct-2026): sin [EDITAR_EN_TABLAS] no hace nada.
      */
     private fun aTabla(ruta: String, nombre: String, mensaje: String?, alFallar: Boolean, alAcabar: (() -> Unit)? = null) {
+        if (!EDITAR_EN_TABLAS) return
         lifecycleScope.launch {
             val id = mensaje ?: "f${File(ruta).let { "${it.absolutePath}|${it.length()}|${it.lastModified()}" }.hashCode().toUInt()}"
             val leido = withContext(Dispatchers.IO) { runCatching { com.forge.pixpin.guardados.LibroDelChat.tablas(applicationContext, id, ruta, nombre) } }
@@ -548,6 +615,8 @@ class ExcelActivity : ComponentActivity() {
         private const val EXTRA_RUTA = "ruta"
         private const val EXTRA_NOMBRE = "nombre"
         private const val EXTRA_MENSAJE = "mensaje"
+        private const val EXTRA_TABLAS = "tablas"
+        private const val EXTRA_ACTIVA = "activa"
 
         /**
          * **Editar los datos de un Excel en la vista de Tablas**: apagado de momento (25-oct-2026, el
@@ -566,6 +635,29 @@ class ExcelActivity : ComponentActivity() {
                 Intent(c, ExcelActivity::class.java).putExtra(EXTRA_RUTA, ruta).putExtra(EXTRA_NOMBRE, nombre).putExtra(EXTRA_MENSAJE, mensaje)
                     .apply { if (c !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
             )
+        }
+
+        /**
+         * **Unas tablas de PixPin, para ver y anotar** (25-oct-2026: lo que antes abría la vista de
+         * Tablas): la mini-app `tabla` del chat (`mini-<mensaje>`), las hojas de un Excel del chat
+         * (`libro-<mensaje>-<hoja>`, todas en pestañas y en su orden) o la tabla de un proyecto. [activa]:
+         * la que se ve al abrir. Ver [EntradaDeHojas.destino].
+         */
+        fun abrirTablas(c: Context, ids: List<String>, activa: String? = ids.firstOrNull()) {
+            if (ids.isEmpty()) return
+            runCatching {
+                c.startActivity(
+                    Intent(c, ExcelActivity::class.java).putStringArrayListExtra(EXTRA_TABLAS, ArrayList(ids)).putExtra(EXTRA_ACTIVA, activa)
+                        .apply { if (c !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+                )
+            }
+        }
+
+        /** Lo que dice [EntradaDeHojas.destino], abierto: las tablas o el archivo, aquí. Falso si no es para este visor. */
+        fun abrirDestino(c: Context, d: EntradaDeHojas.Destino, ruta: String? = null, nombre: String? = null, mensaje: String? = null): Boolean = when (d) {
+            is EntradaDeHojas.Destino.Tablas -> { abrirTablas(c, d.ids, d.activa); true }
+            EntradaDeHojas.Destino.Archivo -> if (ruta != null) { abrir(c, ruta, nombre, mensaje); true } else false
+            EntradaDeHojas.Destino.OtraCosa -> false
         }
     }
 }
