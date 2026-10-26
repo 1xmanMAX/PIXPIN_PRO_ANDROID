@@ -199,3 +199,14 @@ PDF); en la ficha del chat, las carpetas en «Archivos».
   líneas dudosas) y no pisa el que llega del PC.
 - **Motor de voz por defecto: Whisper**, como el PC. Quien eligió otro lo conserva; si Whisper no
   carga (teléfonos de 32 bits), se usa Vosk en vez de fallar.
+
+## v0.145.0: sin la pantalla de Proyectos y atrás que vuelve al chat (26-oct)
+
+- **Fuera la pantalla de Proyectos**, como el PC (c687285f, 2439c5cf): la app abre en la lista de
+  chats; cada proyecto es su chat. Lo de la pantalla vive ahora en el chat (hojas como mensajes,
+  «Lienzo nuevo», «Nota», «Croquis 3D» en adjuntar; fusionar páginas en la selección), en el menú al
+  mantener un chat de la lista (renombrar, compartir, copias, borrar, personas, foto) y en la ficha
+  del chat (pestaña Proyectos). La configuración (permisos, bolita, sincronizar, ajustes) pasa a
+  `ConfiguracionActivity`, con el engranaje de la lista. Ningún dato ni la sincronización cambian.
+- **Atrás**: lienzo o visor → el chat de donde se abrió → la lista de chats → salir (`Volver.kt`).
+  Antes los editores cerraban hacia Proyectos, que borraba el chat de la pila, y atrás salía.
