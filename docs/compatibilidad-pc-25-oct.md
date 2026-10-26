@@ -187,3 +187,15 @@ código real del PC (`herramientas/pc-simulado`, comando `clase`): el protocolo 
 Interfaz como el PC: tarjetas de carpeta y de grabación con sus iconos, botón de abrir la carpeta,
 «Estudiar»; dentro, cada pieza con su icono y su visor (vídeo en la app, voz con su barra, imagen,
 PDF); en la ficha del chat, las carpetas en «Archivos».
+
+## v0.144.0: leer texto en el teléfono (Indra) y Whisper por defecto (26-oct)
+
+- **OCR con Indra** (opción 2 de `docs/ocr.md` del PC): el motor del escáner portado a
+  `ocr/indra/`, sin OpenCV (las operaciones del `pixpin-indra` del PC) y sobre el `libonnxruntime.so`
+  que ya trae el APK (por JNA, como Qwen3-ASR). Los pesos (26 MB, licencia de Datalab) los baja el
+  usuario en Ajustes › Capturar › «Leer texto (OCR)», con su sha256; nunca van en el APK.
+  Se usa en la captura («Texto»), en el pin de imagen («Copiar texto») y en la galería (busca y
+  filtra por el texto). El texto sale como `texto_de_imagen` del PC (párrafos, columnas, sin
+  líneas dudosas) y no pisa el que llega del PC.
+- **Motor de voz por defecto: Whisper**, como el PC. Quien eligió otro lo conserva; si Whisper no
+  carga (teléfonos de 32 bits), se usa Vosk en vez de fallar.
