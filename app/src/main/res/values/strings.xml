@@ -634,7 +634,9 @@
     <string name="motor_voz_importado">Modelo importado</string>
     <string name="motor_voz_importar_no">Ese archivo no es un modelo que conozca (vosk-model-*.zip, tiny/base/small-*.onnx, *-tokens.txt).</string>
     <string name="motor_voz_title">Motor de voz</string>
-    <string name="motor_voz_desc">Con qué se pasan los audios a texto, en el teléfono y sin red. Vosk es rápido y ligero; Whisper entiende mejor el habla natural pero es más lento y pesa más. El modelo se baja una sola vez.</string>
+    <string name="motor_voz_desc">Con qué se pasan los audios a texto, en el teléfono y sin red. Vosk es rápido y ligero; Whisper entiende mejor el habla natural pero es más lento y pesa más; es el de fábrica, como en el PC. El modelo se baja una sola vez.</string>
+    <string name="pin_copiar_texto">Copiar texto</string>
+    <string name="pin_leyendo">Leyendo…</string>
     <string name="motor_voz_vosk">Vosk (38 MB)</string>
     <string name="motor_voz_whisper">Whisper %1$s (%2$d MB)</string>
     <string name="motor_voz_tamano_whisper">Tamaño de Whisper: tiny es el rápido y el que más se equivoca; base, el punto medio; small, el más fino y el más lento.</string>

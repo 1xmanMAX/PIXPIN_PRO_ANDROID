@@ -94,6 +94,12 @@ class OrtPorJna private constructor(
             return if (n == 0) FloatArray(0) else datos().getFloatArray(0, n)
         }
 
+        /** **Enteros de 64 bits** (26-oct-2026): las clases y los largos que da el `rec.onnx` de Indra (`ocr/indra/ModelosPorJna`). */
+        fun comoI64(): LongArray {
+            val n = elementos().toInt()
+            return if (n == 0) LongArray(0) else datos().getLongArray(0, n)
+        }
+
         override fun close() {
             if (suelto) return
             suelto = true

@@ -66,9 +66,14 @@ object CatalogoDeAjustes {
             "Las capturas se van solas a la papelera del teléfono pasados estos días, salvo las conservadas.",
             listOf("dias_caducidad"), "caducidad caducar borrar papelera dias capturas galeria conservar"
         ) { it.diasCaducidad },
-        // **Reconocer texto (OCR)** (25-oct-2026, `[ocr]` del PC, en su Captura): el teléfono no
-        // tiene motor que elegir ni diccionario que bajar (`docs/ocr.md`, § Android), así que de
-        // esa sección solo llega «Mi vocabulario».
+        // **Reconocer texto (OCR)** (25-oct-2026, `[ocr]` del PC, en su Captura). Desde el
+        // 26-oct el teléfono tiene motor que elegir —sin lector o Indra, que se baja aparte— y
+        // «Corregir con el diccionario», como el PC; «Mi vocabulario» ya estaba.
+        Opcion(
+            "ocr-motor", Seccion.CAPTURAR, "Leer texto (OCR)",
+            "Indra lee el texto de capturas, pines y fotos en el teléfono, sin red. Se baja aparte (26 MB).",
+            listOf("ocr_motor", "ocr_corregir"), "ocr reconocer texto leer imagen indra copiar diccionario corregir licencia bajar borrar"
+        ) { listOf(it.ocrMotor, it.ocrCorregir) },
         Opcion(
             "ocr-vocabulario", Seccion.CAPTURAR, "Mi vocabulario",
             "Nombres, siglas o términos que el texto leído de una foto debe preferir (E030, Arequipa…).",

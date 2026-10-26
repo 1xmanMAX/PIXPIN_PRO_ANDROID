@@ -66,6 +66,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -198,6 +199,14 @@ fun CaptureScreen(
     var dragMode by remember { mutableStateOf(DragMode.NONE) }
     var dragAnchor by remember { mutableStateOf(Offset.Zero) }
     var busy by remember { mutableStateOf(false) }
+    // **«Texto»** (26-oct-2026, `captura2-ocr` del PC): leer el texto del recorte y copiarlo. Solo
+    // sale con un lector (Indra elegido y bajado), y abrir la captura lo calienta por debajo
+    // (PC e121d70) para que leer no pague además el medio segundo de cargarlo.
+    var hayOcr by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        hayOcr = withContext(Dispatchers.IO) { com.forge.pixpin.ocr.indra.MotorIndra.enUso(context) }
+        if (hayOcr) com.forge.pixpin.ocr.indra.MotorIndra.precargar(context)
+    }
 
     var magnifierPos by remember { mutableStateOf<Offset?>(null) }
     var pickedColor by remember { mutableIntStateOf(0) }
@@ -544,6 +553,17 @@ fun CaptureScreen(
                         ))
                         onFinish()
                     },
+                    onText = if (!hayOcr) null else {
+                        {
+                            bake { baked ->
+                                // Leer va en su hilo y sigue con la pantalla ya cerrada: el texto llega
+                                // al portapapeles al acabar (con su aviso). La copia es del pedido.
+                                val copia = baked.copy(baked.config ?: Bitmap.Config.ARGB_8888, false)
+                                if (copia != null) com.forge.pixpin.ocr.CopiarTexto.pedir(context, copia)
+                                onFinish()
+                            }
+                        }
+                    },
                     onCopy = {
                         bake { baked ->
                             val ok = withContext(Dispatchers.IO) { Export.copyToClipboard(context, baked) }
@@ -780,7 +800,9 @@ private fun ActionBar(
     onScroll: () -> Unit,
     onCopy: () -> Unit,
     onShare: () -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    /** Leer el texto y copiarlo; null sin lector (no sale el botón). */
+    onText: (() -> Unit)? = null
 ) {
     Card(shape = RoundedCornerShape(30.dp)) {
         Row(
@@ -804,6 +826,7 @@ private fun ActionBar(
             ToolbarButton(Icons.Filled.Edit, active = false, onClick = onAnnotate)
             ToolbarButton(Icons.Filled.ExpandMore, active = false, onClick = onScroll)
             ToolbarButton(Icons.Filled.ContentCopy, active = false, onClick = onCopy)
+            if (onText != null) ToolbarButton(Icons.Filled.TextFields, active = false, onClick = onText)
             ToolbarButton(Icons.Filled.IosShare, active = false, onClick = onShare)
             ToolbarButton(Icons.Filled.Close, active = false, onClick = onClose)
         }

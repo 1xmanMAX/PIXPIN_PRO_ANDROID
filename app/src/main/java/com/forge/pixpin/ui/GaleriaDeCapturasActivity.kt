@@ -79,9 +79,12 @@ import java.io.File
  * larga) con Conservar, Pinear, Copiar y Borrar —con «Deshacer» en vez de preguntar—; y la hoja de
  * detalle con «Conservar» y «Dar 7 días más».
  *
- * **Sin texto de dentro**: el PC busca también lo que pone en la captura con el OCR de Windows;
- * PixPin para Android no lleva ningún OCR, así que aquí se busca por nombre y fecha y no sale el
- * filtro «Con texto». Las reglas viven en [GaleriaLogica] y [CaducidadDeCapturas], sin Android.
+ * **El texto de dentro** (26-oct-2026): como el PC, se busca también por lo que pone en la
+ * captura. Lo da su entrada compartida (si la leyó el PC, llega al sincronizar) o, con Indra
+ * elegido y bajado, se lee aquí en segundo plano, de una en una y las nuevas primero
+ * ([com.forge.pixpin.ocr.TextoDeLaGaleria]); entonces sale también el filtro «Con texto». Sin
+ * lector y sin textos del PC, se busca por nombre y fecha como antes. Las reglas viven en
+ * [GaleriaLogica] y [CaducidadDeCapturas], sin Android.
  */
 class GaleriaDeCapturasActivity : ComponentActivity() {
 
@@ -194,11 +197,30 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
 
         // ---------------------------------------------------------------- la vista
         val lista = capturas
-        val zona = remember { java.util.TimeZone.getDefault() }
-        val fichas = remember(lista, registro, dias) {
-            lista?.map { c -> GaleriaLogica.Ficha(c.nombre, c.extension, c.cuando, CaducidadDeCapturas.seVaEl(registro, c.nombre, c.cuando, dias)) } ?: emptyList()
+        // **El texto de dentro**: lo ya sabido (del PC o de la caché) y, con Indra, lo que falta,
+        // leído por debajo mientras la galería está abierta. Lo leído viaja con su entrada.
+        var textos by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
+        var hayOcr by remember { mutableStateOf(false) }
+        LaunchedEffect(lista, deLaSincro) {
+            val l = lista ?: return@LaunchedEffect
+            val leibles = l.map { com.forge.pixpin.ocr.TextoDeLaGaleria.Leible(it.nombre, it.bytes, it.mime, it.uri) }
+            val sabidos = withContext(Dispatchers.IO) { com.forge.pixpin.ocr.TextoDeLaGaleria.conocidos(this@GaleriaDeCapturasActivity, raiz, leibles) }
+            textos = sabidos
+            hayOcr = withContext(Dispatchers.IO) { com.forge.pixpin.ocr.indra.MotorIndra.enUso(this@GaleriaDeCapturasActivity) }
+            if (!hayOcr) return@LaunchedEffect
+            for (c in com.forge.pixpin.ocr.TextoDeLaGaleria.pendientes(leibles, sabidos.keys)) {
+                val t = withContext(Dispatchers.IO) { com.forge.pixpin.ocr.TextoDeLaGaleria.leer(this@GaleriaDeCapturasActivity, raiz, c) } ?: continue
+                textos = textos + (c.nombre to t)
+                // Un respiro entre una y otra, como el PC: no quitarle el procesador a quien mira.
+                kotlinx.coroutines.delay(40)
+            }
         }
-        val carril = remember(fichas, ahora) { GaleriaLogica.carril(fichas, ahora, hayOcr = false, zona = zona) }
+        val zona = remember { java.util.TimeZone.getDefault() }
+        val fichas = remember(lista, registro, dias, textos) {
+            lista?.map { c -> GaleriaLogica.Ficha(c.nombre, c.extension, c.cuando, CaducidadDeCapturas.seVaEl(registro, c.nombre, c.cuando, dias), textos[c.nombre]) } ?: emptyList()
+        }
+        val conTexto = hayOcr || textos.values.any { it.isNotBlank() }
+        val carril = remember(fichas, ahora, conTexto) { GaleriaLogica.carril(fichas, ahora, hayOcr = conTexto, zona = zona) }
         // Si el filtro elegido deja de salir (no queda ningún GIF), vuelve a «Todas».
         LaunchedEffect(carril) { if (carril.none { it.first == filtro }) filtro = Filtro.TODAS }
         val vista = remember(fichas, filtro, consulta, ahora) {
@@ -250,7 +272,7 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
                         color = Cristal.tinta.copy(alpha = 0.75f), modifier = Modifier.padding(24.dp)
                     )
                     else -> {
-                        Buscador(consulta) { consulta = it }
+                        Buscador(consulta, conTexto) { consulta = it }
                         LazyRow(contentPadding = PaddingValues(horizontal = 12.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(carril, key = { it.first }) { (f, n) ->
                                 FilterChip(
@@ -333,10 +355,10 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun Buscador(consulta: String, onCambio: (String) -> Unit) {
+    private fun Buscador(consulta: String, conTexto: Boolean, onCambio: (String) -> Unit) {
         OutlinedTextField(
             value = consulta, onValueChange = onCambio, singleLine = true,
-            placeholder = { Text("Buscar por nombre o fecha", maxLines = 1) },
+            placeholder = { Text(if (conTexto) "Buscar por nombre, fecha o texto" else "Buscar por nombre o fecha", maxLines = 1) },
             leadingIcon = { Icon(Icons.Default.Search, null) },
             trailingIcon = { if (consulta.isNotEmpty()) IconButton(onClick = { onCambio("") }) { Icon(Icons.Default.Close, "Borrar la búsqueda") } },
             keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),

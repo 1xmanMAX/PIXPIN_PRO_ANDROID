@@ -346,10 +346,21 @@ object Transcriptor {
         }
     }
 
+    /**
+     * **El motor que de verdad pasa a texto** con lo elegido (puro): Whisper —y Qwen3-ASR, cuyo
+     * respaldo es Whisper— solo si sherpa-onnx carga; si no, Vosk. Google y Vosk, tal cual.
+     */
+    internal fun motorQueVa(elegido: String, whisperVa: Boolean): String =
+        if (!whisperVa && (elegido == com.forge.pixpin.data.MOTOR_WHISPER || elegido == com.forge.pixpin.data.MOTOR_QWEN3)) com.forge.pixpin.data.MOTOR_VOSK
+        else elegido
+
     /** Un PCM entero por el motor que haya elegido el usuario: Google, Vosk, Whisper o Qwen3-ASR (con Whisper de reserva). */
     private fun reconocerPcm(context: Context, pcm: File, idioma: String, avance: (Float) -> Unit): Resultado {
         run {
-            val motor = ajustes(context)?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_VOSK
+            val elegido = ajustes(context)?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_POR_DEFECTO
+            // **Whisper sin sherpa-onnx** (26-oct-2026): Whisper es ya el de fábrica, y en un teléfono
+            // de 32 bits no carga; antes eso era «sin motor», ahora se pasa con Vosk, que sí va.
+            val motor = motorQueVa(elegido, MotorWhisper.soportado())
             val segmentos = if (motor == com.forge.pixpin.data.MOTOR_GOOGLE) {
                 if (!MotorGoogle.disponible(context)) return Resultado.Fallo(SIN_MOTOR, "Google: hace falta Android 13 y su reconocimiento en el dispositivo")
                 val etiqueta = when (val i = MotorGoogle.idiomaInstalado(context, idioma)) {

@@ -181,8 +181,13 @@ data class Settings(
      * **[MOTOR_QWEN3]** (25-oct-2026, `[voz] motor = "qwen3"` del PC): Qwen3-ASR-0.6B, que se baja
      * aparte (988 MB) solo al elegirlo y solo se ofrece con 6 GB de memoria o más. Sin bajar, o si
      * falla, se pasa con Whisper. Es de este teléfono: los ajustes no se sincronizan.
+     *
+     * **De fábrica, Whisper** (26-oct-2026, antes Vosk): como el PC, donde `MotorDeVoz` es Whisper
+     * por omisión y el de reserva de Qwen3-ASR (`crates/pixpin-voz`, a6b0054/51e09de). Solo cambia
+     * para quien nunca eligió: lo elegido a mano está guardado y se respeta. En un teléfono donde
+     * Whisper no carga (32 bits) se pasa con Vosk ([com.forge.pixpin.guardados.Transcriptor]).
      */
-    val motorDeVoz: String = MOTOR_VOSK,
+    val motorDeVoz: String = MOTOR_POR_DEFECTO,
 
     /**
      * **En qué idioma se habla en los audios** («es», «en»…); vacío = el del teléfono.
@@ -346,7 +351,19 @@ data class Settings(
      * En el teléfono corrige lo que lee de una foto la visión del asistente (ver
      * [com.forge.pixpin.ocr.CorrectorOcr.conVocabulario]).
      */
-    val ocrVocabulario: String = ""
+    val ocrVocabulario: String = "",
+    /**
+     * **Con qué se lee el texto de las imágenes** (26-oct-2026, `[ocr] motor` del PC):
+     * [OCR_NINGUNO] (de fábrica: el teléfono no trae lector, como el PC trae el de Windows) o
+     * [OCR_INDRA], que se baja aparte (unos 26 MB) solo al elegirlo, por la licencia de sus pesos.
+     * Con Indra elegido pero sin bajar, es como no tenerlo. Ver [com.forge.pixpin.ocr.indra.MotorIndra].
+     */
+    val ocrMotor: String = OCR_NINGUNO,
+    /**
+     * Corregir con el diccionario español las palabras que Indra lee con poca confianza (solo en
+     * páginas en español; nunca cifras ni códigos). `[ocr] corregir` del PC, de fábrica sí.
+     */
+    val ocrCorregir: Boolean = true
 ) {
 
     private val apagadasTools: Set<com.forge.pixpin.motor.Tool>
@@ -502,6 +519,8 @@ class SettingsRepository(private val context: Context) {
         val DIAS_CADUCIDAD = intPreferencesKey("dias_caducidad")
         val HERRAMIENTAS_APAGADAS = stringSetPreferencesKey("herramientas_apagadas")
         val OCR_VOCABULARIO = stringPreferencesKey("ocr_vocabulario")
+        val OCR_MOTOR = stringPreferencesKey("ocr_motor")
+        val OCR_CORREGIR = booleanPreferencesKey("ocr_corregir")
         /** Las barras de cada formato: `formato_pdf_tools`, `formato_pdf_groups`… */
         fun herramientasDe(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio) = stringSetPreferencesKey("formato_${s.nombre}_tools")
         fun gruposDe(s: com.forge.pixpin.motor.HerramientasPorSitio.Sitio) = stringPreferencesKey("formato_${s.nombre}_groups")
@@ -533,7 +552,7 @@ class SettingsRepository(private val context: Context) {
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
             modoNoche = runCatching { ModoNoche.valueOf(prefs[Keys.MODO_NOCHE] ?: "") }
                 .getOrDefault(ModoNoche.COSMOS),
-            motorDeVoz = prefs[Keys.MOTOR_DE_VOZ] ?: MOTOR_VOSK,
+            motorDeVoz = prefs[Keys.MOTOR_DE_VOZ] ?: MOTOR_POR_DEFECTO,
             idiomaDeVoz = prefs[Keys.IDIOMA_DE_VOZ] ?: "",
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
             modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "tiny",
@@ -573,7 +592,9 @@ class SettingsRepository(private val context: Context) {
             palabrasMagicas = prefs[Keys.PALABRAS],
             diasCaducidad = (prefs[Keys.DIAS_CADUCIDAD] ?: com.forge.pixpin.capture.CaducidadDeCapturas.DIAS).coerceAtLeast(0),
             herramientasApagadas = prefs[Keys.HERRAMIENTAS_APAGADAS] ?: emptySet(),
-            ocrVocabulario = prefs[Keys.OCR_VOCABULARIO] ?: ""
+            ocrVocabulario = prefs[Keys.OCR_VOCABULARIO] ?: "",
+            ocrMotor = prefs[Keys.OCR_MOTOR]?.takeIf { it == OCR_INDRA } ?: OCR_NINGUNO,
+            ocrCorregir = prefs[Keys.OCR_CORREGIR] ?: true
         )
     }
 
@@ -912,6 +933,15 @@ class SettingsRepository(private val context: Context) {
         context.dataStore.edit { if (texto.isBlank()) it.remove(Keys.OCR_VOCABULARIO) else it[Keys.OCR_VOCABULARIO] = texto.trim() }
     }
 
+    /** El lector de texto: [OCR_NINGUNO] o [OCR_INDRA]. Ver [Settings.ocrMotor]. */
+    suspend fun setOcrMotor(motor: String) {
+        context.dataStore.edit { it[Keys.OCR_MOTOR] = motor }
+    }
+
+    suspend fun setOcrCorregir(si: Boolean) {
+        context.dataStore.edit { it[Keys.OCR_CORREGIR] = si }
+    }
+
     suspend fun setDiasCaducidad(dias: Int) {
         context.dataStore.edit { it[Keys.DIAS_CADUCIDAD] = dias.coerceAtLeast(0) }
     }
@@ -950,9 +980,16 @@ fun claveDePagina(ruta: String?, pagina: Int): String = if (ruta.isNullOrBlank()
 /** Cómo se ve la aplicación. [COSMOS], el del sistema solar, es el de fábrica desde el 17-sep-2026. */
 enum class ModoNoche { SISTEMA, CLARO, OSCURO, AUTO, COSMOS }
 
+/** Sin lector de texto (de fábrica). Ver [Settings.ocrMotor]. */
+const val OCR_NINGUNO = "ninguno"
+/** Indra OCR de Datalab, bajado aparte. */
+const val OCR_INDRA = "indra"
+
 const val MOTOR_VOSK = "vosk"
 const val MOTOR_WHISPER = "whisper"
 const val MOTOR_GOOGLE = "google"
+/** El de quien no eligió: Whisper, como en el PC. Ver [Settings.motorDeVoz]. */
+const val MOTOR_POR_DEFECTO = MOTOR_WHISPER
 /** Qwen3-ASR-0.6B, con Whisper de reserva. Ver [com.forge.pixpin.guardados.qwen3.MotorQwen3]. */
 const val MOTOR_QWEN3 = "qwen3"
 /** Whisper con dos idiomas: cada trozo en el idioma en que se dijo. */

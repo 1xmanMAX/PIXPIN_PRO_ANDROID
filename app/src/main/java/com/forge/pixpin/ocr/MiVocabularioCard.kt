@@ -29,8 +29,9 @@ import kotlinx.coroutines.launch
 /**
  * **«Mi vocabulario»** en Ajustes › Capturar (25-oct-2026, la fila de `[ocr]` del PC). Se edita en
  * un diálogo y se guarda al aceptar —no a cada letra, que el almacén devolvería tarde y movería
- * el cursor—. Lo de debajo dice qué hace en el teléfono, que no es lo mismo que en el PC: allí lo
- * usa Indra al leer; aquí corrige lo que transcribe de una foto la visión del asistente.
+ * el cursor—. Lo de debajo dice qué hace en el teléfono: con Indra (26-oct-2026,
+ * [MotorOcrCard]) lo usa al leer, como el PC; sin lector, corrige lo que transcribe de una foto la
+ * visión del asistente.
  */
 @Composable
 fun MiVocabularioCard() {
@@ -52,10 +53,10 @@ fun MiVocabularioCard() {
                 maxLines = 3, overflow = TextOverflow.Ellipsis
             )
             Text(
-                "El teléfono no lleva lector de texto (OCR): las fotos las lee la visión del asistente, y lo que " +
-                    "se parezca claramente a uno de estos términos se escribe como tú lo pones. Nunca toca cifras " +
-                    "salvo las de un término tuyo (E03O → E030). Es el mismo «Mi vocabulario» que el del PC, pero no viaja: " +
-                    "escríbelo en cada aparato.",
+                "Con Indra, los prefiere al leer y corrige lo que se les parezca; sin lector, corrige lo que " +
+                    "transcribe de una foto la visión del asistente. Lo que se parezca claramente a uno de estos términos " +
+                    "se escribe como tú lo pones. Nunca toca cifras salvo las de un término tuyo (E03O → E030). Es el " +
+                    "mismo «Mi vocabulario» que el del PC, pero no viaja: escríbelo en cada aparato.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 6.dp)

@@ -369,6 +369,9 @@ class OverlayManager(private val app: PixPinApp) {
             newPin(PinType.IMAGE).copy(imagePath = imagePath)
         }
         createPin(state.copy(ventana = comoVentana))
+        // Pinear una foto calienta el lector de texto, si lo hay (PC e121d70): «Copiar texto» del pin
+        // no paga entonces el medio segundo de cargarlo.
+        com.forge.pixpin.ocr.indra.MotorIndra.precargar(app)
     }
 
     /**

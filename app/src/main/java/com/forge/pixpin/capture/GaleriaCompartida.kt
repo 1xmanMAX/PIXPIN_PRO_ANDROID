@@ -153,6 +153,23 @@ object GaleriaCompartida {
         )
     }
 
+    /**
+     * **El texto leído aquí, a las entradas** (26-oct-2026: el teléfono ya lee con Indra). Solo a
+     * las que ya tienen entrada y aún no traen texto: el del PC, si llegó antes, se queda (es el
+     * mismo formato, `texto_de_imagen`). No mueve `cambiado`: el texto es de la imagen, no una
+     * decisión sobre ella, y al juntar nunca se pierde ([juntar]). Las que aún no tienen entrada
+     * lo tendrán cuando la sincronización la cree y se vuelva a abrir la galería (está en la caché).
+     */
+    fun ponerTexto(e: Estado, textos: Map<String, String>): Estado {
+        if (textos.isEmpty()) return e
+        var cambio = false
+        val nuevas = e.entradas.map { en ->
+            val t = textos[en.nombre]
+            if (t.isNullOrBlank() || en.texto.isNotEmpty()) en else { cambio = true; en.copy(texto = t) }
+        }
+        return if (cambio) e.copy(entradas = nuevas) else e
+    }
+
     /** Las capturas de aquí que se quitaron en otro aparato: a la papelera. */
     fun aTirar(entradas: Collection<Entrada>, aqui: Set<String>): List<String> =
         entradas.filter { it.borrada && it.nombre in aqui }.map { it.nombre }

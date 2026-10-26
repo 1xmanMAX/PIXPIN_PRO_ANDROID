@@ -277,6 +277,33 @@ class PinWindowController(
     }
     private var emojiPicker: OverlayComposeWindow? = null
 
+    /**
+     * **«Copiar texto» del pin de imagen** (26-oct-2026, `pines::leer_texto` del PC): mientras Indra
+     * lee, el menú dice «Leyendo…»; lo que llegue con el pin ya cerrado u otra imagen se tira
+     * ([com.forge.pixpin.ocr.CopiarTexto]).
+     */
+    private val leyendoTexto = mutableStateOf(false)
+
+    private fun copiarTextoDelPin(s: PinState) {
+        val ruta = s.imagePath ?: return
+        if (leyendoTexto.value) return
+        leyendoTexto.value = true
+        val principal = android.os.Handler(android.os.Looper.getMainLooper())
+        Thread {
+            val b = runCatching { android.graphics.BitmapFactory.decodeFile(ruta) }.getOrNull()
+            principal.post {
+                if (b == null) {
+                    leyendoTexto.value = false
+                    toast(com.forge.pixpin.ocr.CopiarTexto.aviso(null))
+                    return@post
+                }
+                com.forge.pixpin.ocr.CopiarTexto.pedir(context, b, sigueValiendo = { window != null && pin.value.imagePath == ruta }) { _, _ ->
+                    leyendoTexto.value = false
+                }
+            }
+        }.apply { name = "pin-texto" }.start()
+    }
+
     private var touchHandler: OverlayTouchHandler? = null
 
     /** Esquina agarrable del cuadro de texto, en coordenadas de la ventana. */
@@ -2965,6 +2992,13 @@ class PinWindowController(
                             }
                             DelMenuDelPin(R.string.cd_edicion_avanzada) {
                                 mas = false; abrirEdicionAvanzada(s)
+                            }
+                            // Solo con un lector de texto (Indra elegido y bajado).
+                            val hayOcr = remember { com.forge.pixpin.ocr.indra.MotorIndra.enUso(context) }
+                            if (hayOcr) {
+                                DelMenuDelPin(if (leyendoTexto.value) R.string.pin_leyendo else R.string.pin_copiar_texto) {
+                                    mas = false; copiarTextoDelPin(s)
+                                }
                             }
                         }
                         // Una nota larga se maneja como un PDF, y solo si de verdad tiene
