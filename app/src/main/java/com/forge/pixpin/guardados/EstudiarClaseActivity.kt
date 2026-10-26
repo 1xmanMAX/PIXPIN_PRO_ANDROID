@@ -720,7 +720,8 @@ class EstudiarClaseActivity : ComponentActivity() {
 
         /** Abre la clase de la nota de voz [nota], en [ms] si se da (una pieza de su carpeta). */
         fun abrir(context: Context, nota: String, ms: Long = 0) {
-            context.startActivity(intento(context, nota, ms))
+            // Desde fuera y sin la aplicación abierta, con la lista de chats debajo. Ver [com.forge.pixpin.Volver.abrirEnLaApp].
+            com.forge.pixpin.Volver.abrirEnLaApp(context, intento(context, nota, ms))
         }
     }
 }

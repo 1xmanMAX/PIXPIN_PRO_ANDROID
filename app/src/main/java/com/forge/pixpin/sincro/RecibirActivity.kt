@@ -451,15 +451,11 @@ class RecibirActivity : ComponentActivity() {
         Spacer(Modifier.height(20.dp))
         val proyecto = e.guardados.firstNotNullOfOrNull { it.proyecto }
         Button(onClick = {
-            if (proyecto != null) {
-                startActivity(Intent(this, com.forge.pixpin.MainActivity::class.java)
-                    .putExtra(com.forge.pixpin.EXTRA_PROYECTOS, true)
-                    .putExtra(com.forge.pixpin.EXTRA_PROYECTO, proyecto))
-            } else {
-                startActivity(Intent(this, com.forge.pixpin.guardados.MensajesActivity::class.java))
-            }
+            // **Un proyecto que llega se abre en su chat** (26-oct-2026: ya no hay pantalla de
+            // Proyectos, un proyecto es su chat), con la lista de chats debajo.
+            com.forge.pixpin.Volver.alChat(this, proyecto)
             finish()
-        }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(if (proyecto != null) "Abrir el proyecto" else "Abrir la conversación") }
+        }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text(if (proyecto != null) "Abrir su chat" else "Abrir la conversación") }
         Spacer(Modifier.height(8.dp))
         OutlinedButton(onClick = { finish() }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Cerrar") }
     }

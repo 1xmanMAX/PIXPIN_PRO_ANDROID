@@ -1942,7 +1942,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 }
                 alAcabar()
                 if (hecho == null) Toast.makeText(this@VisorHtmlActivity, "No se pudo crear el proyecto", Toast.LENGTH_SHORT).show()
-                else { com.forge.pixpin.volverALosProyectos(this@VisorHtmlActivity, hecho.id); finish() }
+                else { com.forge.pixpin.Volver.alChat(this@VisorHtmlActivity, hecho.id); finish() }
             }
         }
     }

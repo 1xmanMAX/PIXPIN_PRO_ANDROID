@@ -1300,10 +1300,8 @@ class PlanoActivity : ComponentActivity() {
         fun esPlano(nombre: String?): Boolean = LectorDePlanos.esPlano(nombre)
 
         fun abrir(c: Context, ruta: String, nombre: String?) {
-            c.startActivity(
-                Intent(c, PlanoActivity::class.java).putExtra(EXTRA_RUTA, ruta).putExtra(EXTRA_NOMBRE, nombre)
-                    .apply { if (c !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-            )
+            // Desde fuera y sin la aplicación abierta, con la lista de chats debajo. Ver [com.forge.pixpin.Volver.abrirEnLaApp].
+            com.forge.pixpin.Volver.abrirEnLaApp(c, Intent(c, PlanoActivity::class.java).putExtra(EXTRA_RUTA, ruta).putExtra(EXTRA_NOMBRE, nombre))
         }
     }
 }

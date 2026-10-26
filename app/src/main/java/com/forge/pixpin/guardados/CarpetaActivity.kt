@@ -115,10 +115,9 @@ class CarpetaActivity : ComponentActivity() {
          * tocar su tarjeta en el chat); con [entera], enseña lo grabado y lo adjuntado.
          */
         fun abrir(context: Context, carpeta: String, entera: Boolean = false) {
-            context.startActivity(
-                Intent(context, CarpetaActivity::class.java).putExtra(EXTRA_CARPETA, carpeta)
-                    .putExtra(EXTRA_ENTERA, entera)
-                    .apply { if (context !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            // Desde fuera y sin la aplicación abierta, con la lista de chats debajo. Ver [com.forge.pixpin.Volver.abrirEnLaApp].
+            com.forge.pixpin.Volver.abrirEnLaApp(
+                context, Intent(context, CarpetaActivity::class.java).putExtra(EXTRA_CARPETA, carpeta).putExtra(EXTRA_ENTERA, entera)
             )
         }
 

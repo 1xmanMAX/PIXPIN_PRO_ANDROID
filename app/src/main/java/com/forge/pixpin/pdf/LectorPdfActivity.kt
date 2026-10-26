@@ -138,6 +138,15 @@ class LectorPdfActivity : ComponentActivity() {
         aPantallaCompleta()
         val ruta = intent?.getStringExtra(EXTRA_RUTA)
         if (ruta == null) { finish(); return }
+        // **Atrás vuelve al chat del que se abrió** (26-oct-2026): el lector vive en su propia tarea
+        // y, cerrado a secas, dejaba en el escritorio. Lo de Compose (anotar, presentar) se
+        // registra después y atiende antes. Ver [com.forge.pixpin.Volver].
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                com.forge.pixpin.Volver.alCerrar(this@LectorPdfActivity)
+                finish()
+            }
+        })
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty()
         // **En la multitarea, como una pestaña más** (19-sep-2026). Ver [com.forge.pixpin.ui.ConLaRueda].
         setContent {

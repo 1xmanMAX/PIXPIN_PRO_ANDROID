@@ -230,7 +230,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
          */
         fun abrir(
             context: Context, id: String, rutaDibujo: String?, imagenPath: String?,
-            /** Si se viene de la zona de proyectos: cerrar tiene que devolver ahí. */
+            /** El proyecto del que es: cerrar vuelve a su chat. Ver [com.forge.pixpin.Volver]. */
             desdeProyecto: String? = null
         ) {
             abrir(context, id, rutaDibujo, imagenPath, null, -1, desdeProyecto)
@@ -4698,7 +4698,6 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
      * Ver [com.forge.pixpin.EXTRA_DESDE_PROYECTO].
      */
     private fun cerrarYVolver() {
-        val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
         // **Y si no se vino de ningún proyecto, se vuelve a la aplicación igualmente.**
         //
         // Como el editor es la raíz de su propia tarea, `finish()` a secas no deja al usuario
@@ -4711,8 +4710,10 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         // Salir de verdad cierra todas las pestañas. Ver [com.forge.pixpin.data.LienzosAbiertos.cerrarTodos].
         guardarLosDeLaTira()
         abiertos.cerrarTodos()
-        if (vuelta != null) com.forge.pixpin.volverALosProyectos(this, vuelta)
-        else if (deDentro && isTaskRoot) com.forge.pixpin.volverALosProyectos(this, null)
+        // **Al chat del que se abrió, y de ahí a la lista** (26-oct-2026): antes se volvía a la
+        // pantalla de Proyectos, que al ser `singleTask` se llevaba por delante el chat que había
+        // encima. Ver [com.forge.pixpin.Volver].
+        com.forge.pixpin.Volver.alCerrar(this, desdeDentro = deDentro)
         finish()
     }
 

@@ -69,7 +69,8 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
             android.widget.Toast.makeText(this@NuevoProyectoCompartidoActivity, "Creando el proyecto…", android.widget.Toast.LENGTH_SHORT).show()
             val hecho = withContext(Dispatchers.IO) { runCatching { proyectoDe(app, uris) }.getOrNull() }
             avisar(hecho != null)
-            if (hecho != null) com.forge.pixpin.volverALosProyectos(this@NuevoProyectoCompartidoActivity, hecho.id)
+            // El proyecto nuevo es un chat: se abre él (26-oct-2026, sin pantalla de Proyectos).
+            if (hecho != null) com.forge.pixpin.Volver.alChat(this@NuevoProyectoCompartidoActivity, hecho.id)
             finishAndRemoveTask()
         }
     }

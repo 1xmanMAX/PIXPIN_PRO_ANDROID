@@ -9,7 +9,7 @@ import com.forge.pixpin.capture.CaptureFlow
 import com.forge.pixpin.floating.PinHostService
 import com.forge.pixpin.guardados.MensajesActivity
 import com.forge.pixpin.sincro.SincronizarActivity
-import com.forge.pixpin.volverALosProyectos
+import com.forge.pixpin.Volver
 
 /**
  * **Por donde entran los atajos**, los del icono y los del buscador del teléfono. Ver [Atajos].
@@ -71,12 +71,14 @@ class AtajoActivity : Activity() {
             Atajos.MENSAJES -> startActivity(
                 Intent(this, MensajesActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
-            Atajos.PROYECTOS -> volverALosProyectos(this, null)
+            // Sin pantalla de Proyectos (26-oct-2026): «Proyectos» es la lista de chats y un
+            // proyecto, su chat.
+            Atajos.PROYECTOS -> Volver.aLaLista(this)
             Atajos.PROYECTO -> {
                 // Si ya no existe —borrado en otro aparato y sincronizado—, a la lista.
                 val app = application as? PixPinApp
                 val existe = id != null && app?.proyectos?.porId(id) != null
-                volverALosProyectos(this, if (existe) id else null)
+                if (existe) Volver.alChat(this, id) else Volver.aLaLista(this)
             }
             // Un archivo del chat, abierto con su visor como al tocarlo allí. Si ya no está, el
             // chat se abre igual y no hace nada más: lo comprueba él, fuera del hilo principal.

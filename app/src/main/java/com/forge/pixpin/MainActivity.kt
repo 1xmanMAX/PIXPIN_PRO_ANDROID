@@ -79,60 +79,36 @@ import com.forge.pixpin.data.Settings
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.launch
 
-/** Pide abrir directamente la pantalla de proyectos. */
-const val EXTRA_PROYECTOS = "abrir_proyectos"
-
 /**
- * Qué proyecto abrir, si es que se viene a por uno concreto.
+ * Qué proyecto abrir, si es que se viene a por uno concreto: **se abre su chat**.
  *
- * Un acceso directo a un proyecto tiene que llevar **a ese proyecto**, no a la lista
- * donde está entre otros veinte. Con la lista entera, quien lo toca acaba buscando a mano
- * lo que acababa de pedir por su nombre.
+ * Un acceso directo a un proyecto tiene que llevar **a ese proyecto**, no a la lista donde está
+ * entre otros veinte. Desde el 26-oct-2026 un proyecto es su chat (ya no hay pantalla de
+ * Proyectos, como en el PC `c687285f`), así que lleva a su chat, con la lista de chats debajo.
  */
 const val EXTRA_PROYECTO = "abrir_proyecto"
 
 /**
- * **Volver a un proyecto dentro del montón**, no a él solo.
+ * **De qué proyecto se vino**, para saber a qué chat volver al cerrar un editor.
  *
- * Al cerrar un lienzo, un croquis o una nota, lo que se espera es la pantalla de siempre
- * —el paginador de proyectos— puesta en el proyecto del que se venía, y no la vista de un
- * proyecto suelto que es para los accesos directos. Lo pidió el usuario (5-sep-2026).
- */
-const val EXTRA_IR_A = "ir_a_proyecto"
-
-/**
- * **De dónde se vino, para saber a dónde volver.**
+ * Los editores —el lienzo, el croquis en el espacio, el de notas y la tabla— viven **en su propia
+ * tarea de Android**. Tiene que ser así: si compartieran tarea con la pantalla principal, abrirlos
+ * desde la bola flotante traería toda la aplicación al frente y uno acabaría capturando PixPin en
+ * vez de lo suyo. Pero eso tiene un precio: al cerrarlos, atrás no es de donde se vino, es lo que
+ * hubiera debajo de su tarea —casi siempre el escritorio—.
  *
- * Los editores —el lienzo, el croquis en el espacio y el de notas— viven **en su propia
- * tarea de Android**. Tiene que ser así: si compartieran tarea con la pantalla principal,
- * abrirlos desde la bola flotante traería toda la aplicación al frente y uno acabaría
- * capturando PixPin en vez de lo suyo. Pero eso tiene un precio: al cerrarlos, atrás no es
- * de donde se vino, es lo que hubiera debajo de su tarea —o sea la pantalla principal, o el
- * escritorio—. Abriendo una hoja desde un proyecto y cerrándola, uno acababa en la portada
- * de la aplicación en vez de en el proyecto que estaba mirando.
- *
- * Con esto puesto, el editor sabe que se vino de un proyecto y al cerrarse vuelve a él. El
- * valor es el id del proyecto, o vacío para la lista. Ver [volverALosProyectos].
+ * El valor es el id del proyecto (su chat), o vacío para la lista de chats. Lo lee [Volver], junto
+ * con [EXTRA_DESDE_CHAT], que es lo que pone el chat. El editor lo usa además para saber de qué
+ * proyecto es lo que tiene abierto.
  */
 const val EXTRA_DESDE_PROYECTO = "desde_proyecto"
 
 /**
- * Vuelve a la zona de proyectos. [proyecto] vacío es la lista; con id, ese proyecto.
- *
- * La pantalla principal es `singleTask`, así que esto no crea otra: trae al frente la que
- * ya hay y le llega por `onNewIntent`, que es justo lo que se quiere.
+ * **La pantalla principal es la lista de chats** (26-oct-2026, como el PC `c687285f`: «quita la
+ * opción de Proyectos»). Antes era el montón de proyectos, con la lista de chats a un botón; ahora
+ * cada proyecto es un chat y se llega a él desde aquí, y lo que solo estaba en la tarjeta de un
+ * proyecto vive en el chat, en su ficha o en el menú de su fila (ver [com.forge.pixpin.ui.ListaDeChats]).
  */
-fun volverALosProyectos(context: android.content.Context, proyecto: String?) {
-    runCatching {
-        context.startActivity(
-            Intent(context, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                .putExtra(EXTRA_PROYECTOS, true)
-                .also { if (!proyecto.isNullOrBlank()) it.putExtra(EXTRA_IR_A, proyecto) }
-        )
-    }
-}
-
 class MainActivity : ComponentActivity() {
 
     /**
@@ -150,6 +126,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         loQuePiden.value = intent
+        // **Sin el permiso de dibujar encima, la configuración delante** (la de antes era la
+        // primera tarjeta del montón de proyectos): quien acaba de instalar se la encuentra al
+        // abrir, como siempre. Solo al crearse: al girar no vuelve a saltar.
+        if (savedInstanceState == null && !AndroidSettings.canDrawOverlays(this)) ConfiguracionActivity.abrir(this)
+        if (savedInstanceState == null) abrirElProyectoPedido(intent)
         setContent {
             PixPinTheme {
                 OnboardingScreen(loQuePiden.value)
@@ -161,6 +142,19 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         loQuePiden.value = intent
+        abrirElProyectoPedido(intent)
+    }
+
+    /**
+     * **Un proyecto pedido es su chat** (26-oct-2026): se abre encima de la lista, en esta misma
+     * tarea, para que atrás vuelva a la lista. Si ya no existe (borrado en otro aparato), se queda
+     * la lista. Se quita del intento para que girar la pantalla no lo vuelva a abrir.
+     */
+    private fun abrirElProyectoPedido(i: Intent?) {
+        val id = i?.getStringExtra(EXTRA_PROYECTO) ?: return
+        i.removeExtra(EXTRA_PROYECTO)
+        val p = (application as? PixPinApp)?.proyectos?.porId(id) ?: return
+        com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(this, p.id, p.nombre)
     }
 }
 
@@ -173,61 +167,28 @@ private data class PermissionItem(
 )
 
 /**
- * Por dónde se entra: **directamente a los proyectos**.
- *
- * Antes había una portada —los permisos, «Comenzar», y dos botones para irse a otro
- * sitio— que se miraba una vez en la vida y luego estorbaba: en cuanto los tres permisos
- * estaban dados, la pantalla se saltaba sola y lo que ponía en ella no había forma de
- * volver a verlo sin retroceder a propósito.
- *
- * Eso mismo es ahora [TarjetaDeConfiguracion], la **primera tarjeta** del montón de
- * proyectos. Ahí no es una puerta que hay que cruzar, es una tarjeta más: se llega
- * deslizando, se lee de un vistazo si la bola está en marcha y se sigue bajando a lo que
- * uno venía a hacer. Y quien acaba de instalar la aplicación se la encuentra delante, que
- * es lo mismo que hacía la portada.
+ * Por dónde se entra: **la lista de chats** (26-oct-2026). Hasta hoy era el montón de proyectos,
+ * con la configuración de primera tarjeta y la lista de chats detrás de un botón; el PC quitó su
+ * pantalla de Proyectos (`c687285f`) y aquí se hace lo mismo. Atrás desde aquí sale de la
+ * aplicación: es lo último de la pila.
  */
 @Composable
-fun OnboardingScreen(loQuePiden: Intent? = null) {
-    val context = LocalContext.current
-    val actividad = context as? android.app.Activity
-    // Se puede entrar **directamente en un proyecto** desde fuera: es lo que hace que un
-    // acceso directo guardado abra lo que promete. Ver [Clase.PROYECTO].
-    val proyectoPedido = loQuePiden?.getStringExtra(EXTRA_PROYECTO)
-    // Y a cuál ir dentro del montón, al volver de un lienzo, un croquis o una nota.
-    val irA = loQuePiden?.getStringExtra(EXTRA_IR_A)
-    var enAjustes by remember { mutableStateOf(false) }
-
-    if (enAjustes) {
-        PantallaDeAjustes(onVolver = { enAjustes = false })
-        return
-    }
-    com.forge.pixpin.ui.PantallaDeProyectos(
-        app = context.applicationContext as PixPinApp,
-        soloEste = proyectoPedido,
-        irA = irA,
-        onAjustes = { enAjustes = true },
-        // Atrás sale de la aplicación: ya no hay ninguna pantalla detrás de esta a la
-        // que volver, la portada **es** la primera tarjeta de aquí dentro.
-        onVolver = { actividad?.finish() }
-    )
+fun OnboardingScreen(@Suppress("UNUSED_PARAMETER") loQuePiden: Intent? = null) {
+    val app = LocalContext.current.applicationContext as PixPinApp
+    val proyectos by app.proyectos.proyectos.collectAsState()
+    com.forge.pixpin.ui.ListaDeChats(proyectos)
 }
 
 /**
- * La configuración inicial, hecha una tarjeta más del montón de proyectos.
+ * La configuración inicial: lo que llevaba la portada —los permisos que falten, arrancar la bola,
+ * el informe de fallo si lo hay y la puerta a los ajustes—.
  *
- * Lleva lo que llevaba la portada —los permisos que falten, arrancar la bola, el informe
- * de fallo si lo hay y la puerta a los ajustes— y va **siempre la primera**, encima del
- * primer proyecto. Que esté en el mismo sitio y con la misma forma que lo demás es lo que
- * la hace útil pasado el primer día: se comprueba de un vistazo que la bola sigue en
- * marcha sin salir de donde uno estaba, y se vuelve a bajar.
- *
- * @param sinProyectos si no hay ningún proyecto todavía, para decirlo aquí: es la única
- *   tarjeta que hay, y una pantalla que solo enseña permisos no cuenta qué falta.
+ * Fue la primera tarjeta del montón de proyectos; desde el 26-oct-2026, sin esa pantalla, va en
+ * [ConfiguracionActivity]. Se comprueba de un vistazo que la bola sigue en marcha.
  */
 @Composable
 fun TarjetaDeConfiguracion(
     onAjustes: () -> Unit,
-    sinProyectos: Boolean,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -409,9 +370,8 @@ fun TarjetaDeConfiguracion(
             }
 
             Spacer(Modifier.height(8.dp))
-            // Ya no hace falta un botón de «Proyectos»: se está en ellos, a una
-            // deslizada de aquí. Queda la puerta a los ajustes, que sigue siendo otra
-            // pantalla porque son cuarenta interruptores y no una tarjeta.
+            // Sin botón de «Proyectos» (26-oct-2026, como el PC: cada proyecto es su chat). Queda
+            // la puerta a los ajustes, que es otra pantalla porque son cuarenta interruptores.
             Row(Modifier.fillMaxWidth()) {
                 // **Sin Croquis 3D ni Tablas aquí** (24-sep-2026): los pidió quitar el usuario porque
                 // se repiten más abajo, en los botones de cada proyecto, y solo ocupaban sitio.
@@ -448,15 +408,6 @@ fun TarjetaDeConfiguracion(
                         }
                     }
                 }
-            }
-
-            if (sinProyectos) {
-                Spacer(Modifier.height(16.dp))
-                Text(
-                    text = stringResource(R.string.proyectos_vacio),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
         }
     }

@@ -88,7 +88,8 @@ object AbrirOffice {
                 }
             }
             hecho.onSuccess { p ->
-                com.forge.pixpin.volverALosProyectos(a, p?.id)
+                // Su chat, que es el proyecto (26-oct-2026); sin proyecto, la lista de chats.
+                if (p != null) com.forge.pixpin.Volver.alChat(a, p.id) else com.forge.pixpin.Volver.aLaLista(a)
             }.onFailure { e ->
                 Toast.makeText(a, (e as? com.forge.pixpin.motor.Diapositivas.NoSeLee)?.message ?: "No se pudo leer la presentación", Toast.LENGTH_LONG).show()
             }

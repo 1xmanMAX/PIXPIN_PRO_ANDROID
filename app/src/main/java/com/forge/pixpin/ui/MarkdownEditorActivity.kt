@@ -319,13 +319,12 @@ class MarkdownEditorActivity : ComponentActivity() {
     }
 
     /**
-     * **Cerrar devuelve a donde se vino.** El editor vive en su propia tarea, así que sin
-     * decirlo atrás no es el proyecto que se estaba mirando sino lo que hubiera debajo.
-     * Ver [com.forge.pixpin.EXTRA_DESDE_PROYECTO].
+     * **Cerrar devuelve a donde se vino**: al chat del que se abrió, y de ahí a la lista de chats.
+     * El editor vive en su propia tarea, así que sin decirlo atrás no es ese chat sino lo que
+     * hubiera debajo, casi siempre el escritorio. Ver [com.forge.pixpin.Volver].
      */
     private fun cerrarYVolver() {
-        val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
-        if (vuelta != null) com.forge.pixpin.volverALosProyectos(this, vuelta)
+        com.forge.pixpin.Volver.alCerrar(this)
         finish()
     }
 
@@ -350,7 +349,7 @@ class MarkdownEditorActivity : ComponentActivity() {
          */
         fun abrir(
             context: Context, id: String, texto: String, desde: Int = -1,
-            /** Si se viene de la zona de proyectos: cerrar tiene que devolver ahí. */
+            /** El proyecto del que es: cerrar vuelve a su chat. Ver [com.forge.pixpin.Volver]. */
             desdeProyecto: String? = null,
             /** El mensaje de audio al que pertenece esta letra o texto, si es el caso. */
             mensaje: String? = null

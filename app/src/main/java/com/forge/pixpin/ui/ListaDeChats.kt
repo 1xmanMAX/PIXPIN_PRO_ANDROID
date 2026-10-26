@@ -10,7 +10,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BookmarkBorder
-import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.AccountCircle
@@ -48,18 +51,20 @@ import kotlinx.coroutines.withContext
 import java.util.Calendar
 
 /**
- * **Los chats, como una app de mensajería** (4-oct-2026, pedido del usuario): el botón de chat de
- * Proyectos ya no entra directo en el chat del proyecto, sino que **convierte la pantalla en la
- * lista de chats** —Mensajes guardados arriba y cada proyecto por su último mensaje, como
- * WhatsApp o Telegram—. El mismo sitio pasa a ser «Proyectos» y devuelve a las tarjetas. El
- * chat de un proyecto concreto sigue a un deslizamiento de su tarjeta.
+ * **Los chats, como una app de mensajería** (4-oct-2026, pedido del usuario): Mensajes guardados
+ * arriba y cada proyecto por su último mensaje, como WhatsApp o Telegram.
+ *
+ * **Y desde el 26-oct-2026 es la pantalla principal**: la de Proyectos se quitó, como en el PC
+ * (`c687285f`, «los proyectos no sirven»). Un proyecto es su chat; lo que solo se hacía desde su
+ * tarjeta —compartirlo entero, cambiarle el nombre, sus copias de seguridad, borrarlo— está en el
+ * menú de su fila (mantener pulsado, el clic derecho del PC, `menu_de_proyecto`), y sus hojas
+ * están en el chat y en su ficha. Atrás desde aquí sale de la aplicación.
  *
  * Las lecciones no cuentan como último mensaje: viven en su sección ([LeccionesStore.sinLecciones]).
  */
 @Composable
-internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
+internal fun ListaDeChats(proyectos: List<Proyecto>) {
     val contexto = LocalContext.current
-    BackHandler(onBack = onProyectos)
     val cambios by MensajesStore.cambios.collectAsState()
     var mensajes by remember { mutableStateOf<List<Mensaje>?>(null) }
     LaunchedEffect(cambios) {
@@ -73,8 +78,11 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
         mensajes?.let { com.forge.pixpin.asistente.ChatDelAsistente.buscar(proyectos, it)?.id }
             ?: com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR
     }
+    // **Todos, también los archivados** (26-oct-2026): archivar era de la pantalla de Proyectos,
+    // que los ponía al fondo; sin ella, esconderlos aquí los dejaba sin sitio (o con su id por
+    // nombre, si tenían mensajes).
     val charlas = remember(mensajes, proyectos) {
-        mensajes?.let { conversaciones(it, proyectos.filter { p -> !p.archivado }.associate { p -> p.id to p.nombre }, general, delAsistente) }
+        mensajes?.let { conversaciones(it, proyectos.associate { p -> p.id to p.nombre }, general, delAsistente) }
     }
     val alcance = rememberCoroutineScope()
     // **Los chats compartidos en los que estoy**, para su chapa (25-oct-2026, del PC `e3f1d60`). Se
@@ -123,6 +131,10 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
         proyectos.associate<Proyecto, String?, String> { it.id to it.nombre } + charlas.orEmpty().associate { it.proyecto to it.nombre }
     }
     var cambiandoFoto by remember { mutableStateOf<Conversacion?>(null) }
+    // Lo del menú de una fila: cambiarle el nombre, borrarlo y la hoja de compartir.
+    var renombrando by remember { mutableStateOf<Proyecto?>(null) }
+    var borrando by remember { mutableStateOf<Proyecto?>(null) }
+    var compartiendo by remember { mutableStateOf<Compartible?>(null) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
@@ -137,6 +149,11 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
                 Spacer(Modifier.weight(1f))
                 if (!enFunciones) androidx.compose.material3.IconButton(onClick = { consulta = if (consulta == null) "" else null }) {
                     Icon(Icons.Filled.Search, stringResource(R.string.chat_buscar), tint = Cristal.tinta)
+                }
+                // **Los ajustes y la configuración** (26-oct-2026): eran la primera tarjeta de la
+                // pantalla de Proyectos. Ver [com.forge.pixpin.ConfiguracionActivity].
+                androidx.compose.material3.IconButton(onClick = { com.forge.pixpin.ConfiguracionActivity.abrir(contexto) }) {
+                    Icon(Icons.Filled.Tune, stringResource(R.string.ajustes_titulo), tint = Cristal.tinta)
                 }
                 // **El botón de sincronizar gira mientras hay una vuelta en marcha** y lleva la marca
                 // roja si la última falló (25-oct-2026, PC `0470294`). Pulsarlo es ver qué pasó.
@@ -164,12 +181,30 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
             if (enFunciones) PestanaDeFunciones(onChat = { enFunciones = false }, Modifier.weight(1f).padding(bottom = 80.dp))
             else LazyColumn(contentPadding = PaddingValues(bottom = 110.dp)) {
                 items(filtradas, key = { it.proyecto ?: "general" }) { c ->
+                    val p = c.proyecto?.let { id -> proyectos.firstOrNull { it.id == id } }
                     Fila(
                         c, esDelAsistente = c.proyecto == delAsistente, compartido = c.proyecto?.let { compartidos[it] },
                         consulta = aguja,
-                        alMantener = if (c.proyecto != null && c.proyecto != com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR) {
-                            { cambiandoFoto = c }
-                        } else null
+                        acciones = if (c.proyecto != null && c.proyecto != com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR) {
+                            accionesDeLaFila(
+                                contexto, p,
+                                onCompartir = { pr ->
+                                    alcance.launch {
+                                        compartiendo = withContext(Dispatchers.IO) {
+                                            runCatching {
+                                                CompartirPaginas.de(
+                                                    contexto, pr.nombre, listOf(pr to null),
+                                                    wifi = { com.forge.pixpin.sincro.EnviarActivity.enviarProyecto(contexto, pr.id) }
+                                                )
+                                            }.onFailure { android.util.Log.e("PixPinCompartir", "lista", it) }.getOrNull()
+                                        }
+                                    }
+                                },
+                                onRenombrar = { renombrando = it },
+                                onFoto = { cambiandoFoto = c },
+                                onBorrar = { borrando = it }
+                            )
+                        } else emptyList()
                     ) {
                         if (c.proyecto == com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR) alcance.launch {
                             val p = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.Asistente.asegurarChat(contexto) }
@@ -208,18 +243,40 @@ internal fun ListaDeChats(proyectos: List<Proyecto>, onProyectos: () -> Unit) {
         cambiandoFoto?.let { c ->
             com.forge.pixpin.guardados.HojaDeLaFotoDelChat(c.proyecto!!, c.nombre, onCerrar = { cambiandoFoto = null })
         }
-        // El mismo botón, transformado: ahora lleva de vuelta a los proyectos.
+        compartiendo?.let { c -> HojaDeCompartir(c) { compartiendo = null } }
+        renombrando?.let { pr ->
+            DialogoDeNombre(pr.nombre, onCerrar = { renombrando = null }) { nuevo ->
+                val app = contexto.applicationContext as com.forge.pixpin.PixPinApp
+                app.proyectos.porId(pr.id)?.let { app.proyectos.guardar(com.forge.pixpin.motor.Proyectos.renombrado(it, nuevo, System.currentTimeMillis())) }
+                renombrando = null
+            }
+        }
+        borrando?.let { pr ->
+            // El mismo aviso que llevaba la tarjeta del proyecto: se va también de los otros
+            // aparatos, y queda copia por si acaso.
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { borrando = null },
+                title = { Text(stringResource(R.string.chat_borrar_titulo, pr.nombre)) },
+                text = { Text(stringResource(R.string.chat_borrar_aviso)) },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = {
+                        borrando = null
+                        (contexto.applicationContext as com.forge.pixpin.PixPinApp).proyectos.borrar(pr.id)
+                    }) { Text(stringResource(R.string.cd_delete), color = MaterialTheme.colorScheme.error) }
+                },
+                dismissButton = { androidx.compose.material3.TextButton(onClick = { borrando = null }) { Text(stringResource(android.R.string.cancel)) } }
+            )
+        }
+        // **El «+» de los chats** (25-oct-2026, del PC `e3f1d60`): normal o compartido. Es también
+        // como se crea un proyecto desde que no hay pantalla de Proyectos: un proyecto es un chat.
+        // El compartido nace ya en `compartidos.json` conmigo dentro y se abren sus personas para
+        // invitar (Añadir, el código y el QR), como «Compartir» de siempre.
         Row(
             Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            BotonRedondo(Icons.Filled.Folder, "Proyectos", onProyectos, tamano = 56.dp, puesto = true)
-            // **El «+» de los chats** (25-oct-2026, del PC `e3f1d60`): primero, normal o compartido.
-            // El compartido nace ya en `compartidos.json` conmigo dentro y se abren sus personas para
-            // invitar (Añadir, el código y el QR), como «Compartir» de siempre.
-            Spacer(Modifier.width(12.dp))
             Box {
-                BotonRedondo(Icons.Filled.Add, "Chat nuevo", { eligiendoNuevo = true }, tamano = 48.dp)
+                BotonRedondo(Icons.Filled.Add, "Chat nuevo", { eligiendoNuevo = true }, tamano = 56.dp, puesto = true)
                 com.forge.pixpin.guardados.MenuDeChatNuevo(eligiendoNuevo, { eligiendoNuevo = false }) { conPersonas ->
                     alcance.launch { chatNuevo(contexto, conPersonas) }
                 }
@@ -249,9 +306,44 @@ private fun InterruptorChatFunciones(enFunciones: Boolean, cambiar: (Boolean) ->
     }
 }
 
+/** **Una acción del menú de una fila** (mantener pulsado). [peligro]: en rojo, como «Borrar». */
+internal class AccionDeFila(
+    val texto: String,
+    val icono: androidx.compose.ui.graphics.vector.ImageVector,
+    val peligro: Boolean = false,
+    val hacer: () -> Unit
+)
+
 /**
- * **Un chat nuevo desde la lista** (25-oct-2026): el proyecto nuevo, como el «+» de Proyectos, y su
- * chat abierto. [conPersonas]: además compartido, y encima sus personas para invitar. Si compartir
+ * **El menú de la fila de un proyecto** (26-oct-2026), el `menu_de_proyecto` del clic derecho del
+ * PC en el teléfono: compartir el proyecto entero, sus personas, cambiar el nombre y la foto, sus
+ * copias de seguridad y borrarlo. Es lo que había en los tres puntos de su tarjeta de Proyectos.
+ * Sin el proyecto en la lista (un chat que solo dejó mensajes) queda la foto.
+ */
+private fun accionesDeLaFila(
+    contexto: android.content.Context, p: Proyecto?,
+    onCompartir: (Proyecto) -> Unit, onRenombrar: (Proyecto) -> Unit, onFoto: () -> Unit, onBorrar: (Proyecto) -> Unit
+): List<AccionDeFila> = buildList {
+    if (p != null) {
+        add(AccionDeFila(contexto.getString(R.string.guardados_compartir), IconoDeCompartir) { onCompartir(p) })
+        add(AccionDeFila(contexto.getString(R.string.guardados_personas), Icons.Filled.Groups) {
+            com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(contexto, p.id, p.nombre)
+        })
+        add(AccionDeFila(contexto.getString(R.string.proyecto_renombrar), Icons.Filled.Edit) { onRenombrar(p) })
+    }
+    add(AccionDeFila(contexto.getString(R.string.foto_chat_menu), Icons.Filled.AccountCircle, hacer = onFoto))
+    if (p != null) {
+        add(AccionDeFila(contexto.getString(R.string.chat_copias), Icons.Filled.History) {
+            com.forge.pixpin.sincro.CopiasActivity.abrir(contexto, p.id)
+        })
+        add(AccionDeFila(contexto.getString(R.string.cd_delete), Icons.Filled.Delete, peligro = true) { onBorrar(p) })
+    }
+}
+
+/**
+ * **Un chat nuevo desde la lista** (25-oct-2026): el proyecto nuevo y su chat abierto. Desde el
+ * 26-oct-2026 es **la** forma de crear un proyecto: el «+» de la pantalla de Proyectos se fue con
+ * ella. [conPersonas]: además compartido, y encima sus personas para invitar. Si compartir
  * falla, queda como chat normal y se avisa (`cc-nuevo-error` del PC).
  */
 private suspend fun chatNuevo(contexto: android.content.Context, conPersonas: Boolean) {
@@ -275,14 +367,14 @@ private fun abrir(contexto: android.content.Context, c: Conversacion) {
 private fun Fila(
     c: Conversacion, esDelAsistente: Boolean = false, compartido: com.forge.pixpin.sincro.EnElChat? = null,
     consulta: String = "",
-    /** Mantener pulsado: el menú con «Cambiar foto del chat…» (el clic derecho del PC). */
-    alMantener: (() -> Unit)? = null,
+    /** Mantener pulsado: el menú de la fila (el clic derecho del PC). Vacío, no hay menú. */
+    acciones: List<AccionDeFila> = emptyList(),
     alTocar: () -> Unit
 ) {
     var menu by remember { mutableStateOf(false) }
     Row(
         Modifier.fillMaxWidth()
-            .combinedClickable(onClick = alTocar, onLongClick = alMantener?.let { { menu = true } })
+            .combinedClickable(onClick = alTocar, onLongClick = if (acciones.isEmpty()) null else { { menu = true } })
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -302,10 +394,12 @@ private fun Fila(
                 MaterialTheme.colorScheme.background, Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 3.dp)
             )
             androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                androidx.compose.material3.DropdownMenuItem(
-                    text = { Text(stringResource(R.string.foto_chat_menu)) },
-                    leadingIcon = { Icon(Icons.Filled.AccountCircle, null) },
-                    onClick = { menu = false; alMantener?.invoke() }
+                for (a in acciones) androidx.compose.material3.DropdownMenuItem(
+                    text = { Text(a.texto, color = if (a.peligro) MaterialTheme.colorScheme.error else androidx.compose.ui.graphics.Color.Unspecified) },
+                    leadingIcon = {
+                        Icon(a.icono, null, tint = if (a.peligro) MaterialTheme.colorScheme.error else androidx.compose.material3.LocalContentColor.current)
+                    },
+                    onClick = { menu = false; a.hacer() }
                 )
             }
         }

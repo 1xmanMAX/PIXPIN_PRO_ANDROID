@@ -170,15 +170,14 @@ class Croquis3DActivity : ComponentActivity() {
     private val elProyecto: String? by lazy { intent?.getStringExtra(EL_PROYECTO) }
 
     /**
-     * **Cerrar devuelve a donde se vino.** Ver [com.forge.pixpin.EXTRA_DESDE_PROYECTO]: esta
-     * actividad vive en su propia tarea, así que sin decirlo, atrás no es el proyecto que se
-     * estaba mirando sino lo que hubiera debajo.
+     * **Cerrar devuelve a donde se vino**: al chat del que se abrió, y de ahí a la lista de chats.
+     * Esta actividad vive en su propia tarea, así que sin decirlo, atrás no es ese chat sino lo
+     * que hubiera debajo. Ver [com.forge.pixpin.Volver].
      */
     private fun cerrarYVolver() {
-        val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
         // Salir de verdad cierra la multitarea; pasar a otra pestaña no pasa por aquí.
         (application as? com.forge.pixpin.PixPinApp)?.lienzosAbiertos?.cerrarTodos()
-        if (vuelta != null) com.forge.pixpin.volverALosProyectos(this, vuelta)
+        com.forge.pixpin.Volver.alCerrar(this)
         finish()
     }
     /** Si está abierto el diálogo de la gráfica en el espacio. Ver [DialogoDeGrafica3D]. */
@@ -193,6 +192,12 @@ class Croquis3DActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // **El atrás del sistema, por el mismo camino que la flecha** (26-oct-2026): sin esto
+        // cerraba a secas y, siendo la raíz de su tarea, sacaba de la aplicación. Lo de Compose
+        // (diálogos, paneles) se registra después y atiende antes.
+        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() = cerrarYVolver()
+        })
         aPantallaCompleta()
         aTodoColor()
         Croquis3DAlmacen.cargar(this, elCroquis)?.let { controlador.cargar(it) }
@@ -3274,7 +3279,7 @@ private val RECORRIDO_DE_LA_LUZ = 180f
             context: Context,
             proyecto: String? = null,
             croquis: String? = null,
-            /** Si se viene de la zona de proyectos: cerrar tiene que devolver ahí. */
+            /** El proyecto del que es: cerrar vuelve a su chat. Ver [com.forge.pixpin.Volver]. */
             desdeProyectos: Boolean = false,
             /** En qué vista abrirlo, si se viene de una de sus láminas. */
             vista: String? = null

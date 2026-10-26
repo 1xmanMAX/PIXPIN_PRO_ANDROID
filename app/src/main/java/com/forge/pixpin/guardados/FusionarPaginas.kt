@@ -63,6 +63,25 @@ object FusionarPaginas {
     }
 
     /**
+     * **Lo mismo, desde lo marcado en el chat** (26-oct-2026). Fusionar se hacía marcando páginas
+     * en la tarjeta de Proyectos; sin esa pantalla, se marcan en el chat sus mensajes de página
+     * (los de «Adjuntar → Una página de un proyecto») y la barra de lo marcado ofrece «Fusionar».
+     *
+     * Vale si todo lo marcado son **páginas de un mismo PDF** —el de un proyecto, original o su
+     * copia limpia—, dos o más y no más de [FusionDePaginas.TOPE_DE_PAGINAS]. Sin Android: [existe]
+     * dice si un archivo está, para probarlo.
+     */
+    fun deMensajes(proyectos: List<Proyecto>, mensajes: List<Mensaje>, existe: (String) -> Boolean = { File(it).exists() }): Peticion? {
+        if (mensajes.size < 2 || mensajes.any { it.clase != Clase.PAGINA || it.ruta == null || it.pagina == null }) return null
+        val ruta = mensajes.map { it.ruta }.distinct().singleOrNull() ?: return null
+        val proyecto = proyectos.firstOrNull { it.pdfOrigen == ruta || it.pdfLimpio == ruta } ?: return null
+        val pdf = proyecto.pdfOrigen?.takeIf(existe) ?: ruta.takeIf(existe) ?: return null
+        val paginas = mensajes.mapNotNull { it.pagina }.distinct().sorted()
+        if (paginas.size < 2 || paginas.size > FusionDePaginas.TOPE_DE_PAGINAS) return null
+        return Peticion(proyecto, pdf, paginas)
+    }
+
+    /**
      * Monta el lienzo y lo deja en el proyecto. Devuelve la hoja nueva, o null si no se pudo
      * pintar ninguna página. Es trabajo de disco y de CPU: fuera del hilo de la pantalla.
      */

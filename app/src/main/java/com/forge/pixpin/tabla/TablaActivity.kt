@@ -191,7 +191,7 @@ class TablaActivity : ComponentActivity() {
                         onAbrir = { hojas = ArrayList(); abierta = it },
                         onNueva = { hojas = ArrayList(); abierta = "t-${System.currentTimeMillis()}" },
                         onImportadas = { ids -> hojas = ArrayList(ids); abierta = ids.first() },
-                        onCerrar = { finish() }
+                        onCerrar = { cerrarYVolver() }
                     )
                 } else key(id) {
                     val cargada by produceState<TablaDeCalculo?>(null, id) {
@@ -265,11 +265,11 @@ class TablaActivity : ComponentActivity() {
         Toast.makeText(this, "Añadida a «${proyecto.nombre}»", Toast.LENGTH_SHORT).show()
     }
 
+    /** **Cerrar devuelve al chat del que se abrió**, y de ahí a la lista. Ver [com.forge.pixpin.Volver]. */
     private fun cerrarYVolver() {
-        val vuelta = intent?.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
         // Salir de verdad cierra la multitarea; pasar a otra pestaña no pasa por aquí.
         (application as? com.forge.pixpin.PixPinApp)?.lienzosAbiertos?.cerrarTodos()
-        if (vuelta != null) com.forge.pixpin.volverALosProyectos(this, vuelta)
+        com.forge.pixpin.Volver.alCerrar(this)
         finish()
     }
 

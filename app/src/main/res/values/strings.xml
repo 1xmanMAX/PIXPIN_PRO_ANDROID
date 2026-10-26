@@ -1099,6 +1099,16 @@
 
     <!-- La foto del chat (25-oct-2026, PC d95e9a7): imagen, emoji o color en el círculo. -->
     <string name="foto_chat_menu">Cambiar foto del chat…</string>
+    <!-- Sin pantalla de Proyectos (26-oct-2026, como el PC c687285f): lo de su tarjeta, en el menú de la fila del chat y en el «+» del chat. -->
+    <string name="chat_copias">Copias de seguridad</string>
+    <string name="guardados_sin_proyecto">Ese proyecto ya no está en este aparato</string>
+    <string name="chat_borrar_titulo">¿Borrar «%1$s»?</string>
+    <string name="chat_borrar_aviso">Se borra el chat con sus hojas, también en tus otros aparatos la próxima vez que sincronices. Queda una copia en «Copias de seguridad» por si te arrepientes.</string>
+    <string name="guardados_adj_lienzo">Lienzo nuevo</string>
+    <string name="guardados_adj_nota">Nota</string>
+    <string name="guardados_adj_croquis">Croquis 3D</string>
+    <string name="atajo_chats">Chats</string>
+    <string name="atajo_chats_largo">Abrir la lista de chats</string>
     <string name="foto_chat_titulo">Foto del chat</string>
     <string name="foto_chat_imagen">Elegir imagen…</string>
     <string name="foto_chat_pegar">Pegar imagen</string>

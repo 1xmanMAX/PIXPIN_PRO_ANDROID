@@ -241,7 +241,7 @@ private suspend fun hacerFuncion(contexto: Context, f: Funcion) {
     when (f) {
         Funcion.GRABAR -> com.forge.pixpin.guardados.GrabarClaseActivity.abrir(contexto, null)
         Funcion.LIENZO -> {
-            val id = withContext(Dispatchers.IO) { lienzoEnGuardados(contexto) }
+            val id = withContext(Dispatchers.IO) { HojaNueva.lienzoSuelto(contexto, null) }
             if (id == null) Toast.makeText(contexto, "No se pudo crear el lienzo", Toast.LENGTH_SHORT).show()
             else com.forge.pixpin.motor.DrawEditorActivity.abrir(contexto, id, ExcalidrawStore.rutaDe(contexto, id), null)
         }
@@ -253,13 +253,3 @@ private suspend fun hacerFuncion(contexto: Context, f: Funcion) {
     }
 }
 
-/** **Un lienzo en blanco en «Guardados»**, como el «Lienzo» del «+» del chat: su id, o null si no se pudo escribir. */
-private fun lienzoEnGuardados(contexto: Context): String? = runCatching {
-    val ahora = System.currentTimeMillis()
-    val id = "dib-$ahora"
-    ExcalidrawStore.guardar(contexto, id, Scene()) ?: return@runCatching null
-    MensajesStore(contexto).anadir(
-        Mensaje(id = UUID.randomUUID().toString(), cuando = ahora, clase = Clase.DIBUJO, nombre = "Lienzo", referencia = id, proyecto = null)
-    )
-    id
-}.getOrNull()

@@ -241,10 +241,10 @@
             android:value="Floating overlay pins and quick capture entry points" />
 
         <!--
-            La portada ya no es lo que se abre: se llega a ella desde el menú de
-            Mensajes guardados, y sola cuando faltan permisos por conceder. Sigue
-            siendo `singleTask` porque los accesos directos a proyectos entran por
-            aquí y no deben apilar copias.
+            La lista de chats (26-oct-2026: ya no hay pantalla de Proyectos, como en el
+            PC). Es lo que abre el icono y lo último de la pila: chat encima, y encima
+            el visor. Sigue siendo `singleTask` porque los accesos directos entran por
+            aquí y no deben apilar copias. Ver Volver.kt.
         -->
         <activity
             android:name=".MainActivity"
@@ -260,6 +260,16 @@
                 android:name="android.app.shortcuts"
                 android:resource="@xml/shortcuts" />
         </activity>
+
+        <!--
+            La configuración (permisos, arrancar la bola, el informe de fallo) y los
+            ajustes. Era la primera tarjeta de la pantalla de Proyectos; sin ella, su
+            propia pantalla, en la tarea de quien la abre para que atrás vuelva ahí.
+        -->
+        <activity
+            android:name=".ConfiguracionActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden" />
 
         <!--
             Las lecciones aprendidas: la pantalla con tarjetas y buscador, y la hoja que sube para

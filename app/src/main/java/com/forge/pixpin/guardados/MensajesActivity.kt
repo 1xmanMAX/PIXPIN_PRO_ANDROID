@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.TableChart
 import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.material.icons.filled.FolderCopy
 import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -269,11 +270,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * Si a esta conversación se llegó **desde la general**, dentro de esta misma pantalla.
      *
      * Es lo que decide qué hace el botón de atrás, y da dos respuestas distintas porque
-     * son dos caminos distintos: viniendo de la lista de conversaciones, atrás devuelve a
-     * esa lista; viniendo de la pantalla de proyectos, atrás tiene que devolver **a
-     * proyectos**, que es de donde se venía. Sin esto, entrar al chat de un proyecto desde
-     * su tarjeta y volver atrás te dejaba en Mensajes guardados, en un sitio por el que no
-     * habías pasado.
+     * son dos caminos distintos: viniendo de la general (por su lista de conversaciones o su
+     * ficha), atrás devuelve a la general; viniendo de la lista de chats, atrás tiene que
+     * devolver **a la lista**, que es de donde se venía. Sin esto, entrar al chat de un
+     * proyecto desde la lista y volver atrás te dejaba en Mensajes guardados, en un sitio por
+     * el que no habías pasado.
      */
     private var vineDeLaGeneral by mutableStateOf(false)
 
@@ -325,6 +326,31 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         super.onNewIntent(intent)
         setIntent(intent)
         aplicar(intent)
+    }
+
+    /**
+     * **Todo lo que se abre desde el chat sabe de qué chat viene** (26-oct-2026, el usuario: «si
+     * estoy en el lienzo, al salir debe volver al chat desde donde se abrió»). Los editores y el
+     * lector viven en su propia tarea y, sin esto, al cerrarse dejaban al usuario en el escritorio.
+     * Va aquí, en el único sitio por el que pasan todos, y no en cada `abrir` de cada visor: así
+     * uno nuevo no puede olvidarse. Solo a lo nuestro: a otra aplicación no le dice nada.
+     * Ver [com.forge.pixpin.Volver].
+     */
+    override fun startActivity(intent: Intent, options: Bundle?) {
+        if (intent.component?.packageName == packageName && !intent.hasExtra(com.forge.pixpin.EXTRA_DESDE_CHAT)) {
+            intent.putExtra(com.forge.pixpin.EXTRA_DESDE_CHAT, chatDe ?: com.forge.pixpin.CHAT_GENERAL)
+        }
+        super.startActivity(intent, options)
+    }
+
+    /**
+     * **Abierto de raíz, al cerrarse va a la lista de chats** (26-oct-2026). Un chat que llega por
+     * la bola, un atajo, «Abrir con» o la vuelta de un editor con la aplicación cerrada es la raíz
+     * de su tarea, y atrás salía de PixPin; la pila tiene que ser visor → chat → lista → fuera.
+     */
+    override fun finish() {
+        if (isTaskRoot) com.forge.pixpin.Volver.aLaLista(this)
+        super.finish()
     }
 
     /** El mensaje al que saltar al entrar, si lo pidió un enlace. */
@@ -394,6 +420,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     .putExtra(EXTRA_IR_AL_MENSAJE, mensaje)
             )
         }
+
+        /** Pone en [i] el chat [proyecto] con su [nombre], como lo lee [aplicar]. Ver [com.forge.pixpin.Volver.alChat]. */
+        fun ponerChat(i: Intent, proyecto: String, nombre: String): Intent =
+            i.putExtra(EXTRA_CHAT_DE, proyecto).putExtra(EXTRA_NOMBRE_DEL_CHAT, nombre)
 
         /** Abre la conversación de un proyecto. */
         fun abrirChatDe(context: android.content.Context, proyecto: String, nombre: String) {
@@ -1778,6 +1808,20 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         )
                                     )
                                 }
+                                // **Fusionar páginas en un lienzo** (26-oct-2026): era de la caja de lo
+                                // marcado de Proyectos. Con dos o más páginas del PDF de un proyecto.
+                                // Ver [FusionarPaginas.deMensajes].
+                                val fusion = remember(loMarcado) {
+                                    FusionarPaginas.deMensajes((application as? PixPinApp)?.proyectos?.proyectos?.value.orEmpty(), loMarcado)
+                                }
+                                if (fusion != null) {
+                                    IconButton(onClick = {
+                                        marcados = emptySet()
+                                        fusionar(fusion)
+                                    }) {
+                                        Icon(Icons.Filled.Layers, contentDescription = getString(com.forge.pixpin.R.string.proyecto_fusionar))
+                                    }
+                                }
                                 if (loMarcado.any { !it.unido && UnirAlProyecto.sePuedeUnir(it) }) {
                                     IconButton(onClick = {
                                         unirAlProyecto(loMarcado.filterNot { it.unido }.sortedBy { it.cuando })
@@ -2082,15 +2126,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         SoltarActivity.abrir(this@MensajesActivity, chatDe)
                                     }
                                     // **Solo lo del chat** (25-oct-2026, como el PC): fuera «Proyectos» y
-                                    // «Iniciar», que están en la portada. Se queda «Ajustes» porque en el
-                                    // teléfono es la única puerta a la portada (y desde ella a los proyectos).
+                                    // «Iniciar», que están en la portada. Se queda «Ajustes»: en el teléfono
+                                    // no hay bandeja, y es la puerta a la configuración desde un chat.
                                     DelMenu(com.forge.pixpin.R.string.guardados_fondo, Icons.Filled.Palette) {
                                         masOpciones = false
                                         eligiendoFondo = true
                                     }
                                     DelMenu(com.forge.pixpin.R.string.ajustes_titulo) {
                                         masOpciones = false
-                                        abrirLaPortada(enProyectos = false)
+                                        abrirLaPortada()
                                     }
                                 }
                             }
@@ -2270,6 +2314,45 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     ) {
                         eligiendoQue = false
                         elegirArchivo.launch(arrayOf("*/*"))
+                    }
+                    // **Una hoja nueva: lienzo, nota o croquis** (26-oct-2026). Eran los botones de la
+                    // tarjeta de Proyectos; sin esa pantalla, se crean aquí, como el «Lienzo nuevo» y la
+                    // «Nota» del «+» del PC. En el chat de un proyecto van a sus hojas (y salen aquí
+                    // como un mensaje); en «Mensajes guardados», el lienzo va suelto, como el de Funciones.
+                    BotonDeAdjuntar(
+                        Icons.Filled.Draw,
+                        com.forge.pixpin.R.string.guardados_adj_lienzo,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        val app = application as? PixPinApp
+                        val p = app?.proyectos?.porId(chatDe)
+                        if (app != null && p != null) com.forge.pixpin.ui.HojaNueva.lienzo(this@MensajesActivity, app, p)
+                        else lifecycleScope.launch {
+                            val id = withContext(Dispatchers.IO) { com.forge.pixpin.ui.HojaNueva.lienzoSuelto(this@MensajesActivity, chatDe) }
+                            refrescar()
+                            if (id == null) Toast.makeText(this@MensajesActivity, "No se pudo crear el lienzo", Toast.LENGTH_SHORT).show()
+                            else com.forge.pixpin.motor.DrawEditorActivity.abrir(this@MensajesActivity, id, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@MensajesActivity, id), null)
+                        }
+                    }
+                    val delProyecto = (application as? PixPinApp)?.proyectos?.porId(chatDe)
+                    if (delProyecto != null) {
+                        BotonDeAdjuntar(
+                            Icons.AutoMirrored.Filled.Notes,
+                            com.forge.pixpin.R.string.guardados_adj_nota,
+                            ancho = anchoDelBoton
+                        ) {
+                            eligiendoQue = false
+                            (application as? PixPinApp)?.let { com.forge.pixpin.ui.HojaNueva.nota(this@MensajesActivity, it, delProyecto) }
+                        }
+                        BotonDeAdjuntar(
+                            Icons.Filled.ViewInAr,
+                            com.forge.pixpin.R.string.guardados_adj_croquis,
+                            ancho = anchoDelBoton
+                        ) {
+                            eligiendoQue = false
+                            (application as? PixPinApp)?.let { com.forge.pixpin.ui.HojaNueva.croquis(this@MensajesActivity, it, delProyecto) }
+                        }
                     }
                     BotonDeAdjuntar(
                         Icons.AutoMirrored.Filled.MenuBook,
@@ -2532,10 +2615,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
 
         if (fichaAbierta) {
+            // Todos, también los archivados: como la lista de chats desde que no hay pantalla de
+            // Proyectos que los guarde al fondo (26-oct-2026).
             val charlasDeLaFicha = remember(mensajes, proyectos, chatDelAsistente) {
                 conversaciones(
                     mensajes,
-                    proyectos.filter { !it.archivado }.associate { it.id to it.nombre },
+                    proyectos.associate { it.id to it.nombre },
                     getString(com.forge.pixpin.R.string.guardados_titulo),
                     chatDelAsistente ?: com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR
                 )
@@ -6850,19 +6935,34 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     }
 
     /**
-     * Abre la portada: los permisos, los ajustes y los proyectos.
+     * Abre la portada: los permisos, arrancar la bola y los ajustes.
      *
-     * Sigue existiendo entera; lo que ha cambiado es que ya no es el peaje de cada
-     * arranque. Se entra por el menú, o sola cuando falta algún permiso —ver
-     * [comprobarLaPortada]—, porque sin el permiso de dibujar encima la mitad de la
-     * aplicación no funciona y una conversación vacía no lo explicaría.
+     * Se entra por el menú, o sola cuando falta algún permiso —ver [comprobarLaPortada]—,
+     * porque sin el permiso de dibujar encima la mitad de la aplicación no funciona y una
+     * conversación vacía no lo explicaría. Desde el 26-oct-2026 es su propia pantalla
+     * ([com.forge.pixpin.ConfiguracionActivity]) y no la principal: la principal es
+     * `singleTask` y abrirla desde aquí borraba este chat de la pila.
      */
-    private fun abrirLaPortada(enProyectos: Boolean) {
-        startActivity(
-            Intent(this, com.forge.pixpin.MainActivity::class.java).apply {
-                if (enProyectos) putExtra(com.forge.pixpin.EXTRA_PROYECTOS, true)
+    /**
+     * Junta las páginas de [peticion] en un lienzo nuevo del proyecto y lo abre. Fuera del hilo de la
+     * pantalla: son varias páginas rasterizadas. Ver [FusionarPaginas.enUnLienzo].
+     */
+    private fun fusionar(peticion: FusionarPaginas.Peticion) {
+        val app = application as? PixPinApp ?: return
+        lifecycleScope.launch {
+            val hoja = withContext(Dispatchers.IO) {
+                runCatching { FusionarPaginas.enUnLienzo(this@MensajesActivity, app.proyectos, peticion, System.currentTimeMillis()) }.getOrNull()
             }
-        )
+            val dibujo = hoja?.dibujo
+            if (dibujo == null) Toast.makeText(this@MensajesActivity, com.forge.pixpin.R.string.proyecto_fusionar_fallo, Toast.LENGTH_SHORT).show()
+            else com.forge.pixpin.motor.DrawEditorActivity.abrir(
+                this@MensajesActivity, dibujo, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@MensajesActivity, dibujo), null, peticion.proyecto.id
+            )
+        }
+    }
+
+    private fun abrirLaPortada() {
+        com.forge.pixpin.ConfiguracionActivity.abrir(this)
     }
 
     /**
@@ -6876,7 +6976,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     private fun comprobarLaPortada() {
         if (yaMiroLosPermisos) return
         yaMiroLosPermisos = true
-        if (!android.provider.Settings.canDrawOverlays(this)) abrirLaPortada(enProyectos = false)
+        if (!android.provider.Settings.canDrawOverlays(this)) abrirLaPortada()
     }
 
     private var yaMiroLosPermisos = false
@@ -7419,15 +7519,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     )
                 }
             }
-            // Un proyecto abre la pantalla de proyectos. No se busca la fila: la lista es
-            // corta y llevar el desplazamiento hasta ella sería más código que valor.
-            // Un proyecto adjunto abre **ese** proyecto, no la lista donde vive.
-            Clase.PROYECTO -> startActivity(
-                Intent(this, com.forge.pixpin.MainActivity::class.java)
-                    .putExtra(com.forge.pixpin.EXTRA_PROYECTOS, true)
-                    .putExtra(com.forge.pixpin.EXTRA_PROYECTO, m.referencia)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
+            // **Un proyecto adjunto abre su chat** (26-oct-2026, sin pantalla de Proyectos: un
+            // proyecto es su chat). Encima de este, así que atrás vuelve aquí. Si ya no existe
+            // (borrado en otro aparato), se dice.
+            Clase.PROYECTO -> {
+                val p = (application as? PixPinApp)?.proyectos?.porId(m.referencia)
+                if (p == null) Toast.makeText(this, com.forge.pixpin.R.string.guardados_sin_proyecto, Toast.LENGTH_SHORT).show()
+                else if (p.id != chatDe) abrirChatDe(this, p.id, p.nombre)
+            }
             Clase.MINIAPP ->
                 if (CarpetaDePaginas.esCarpeta(m)) CarpetaActivity.abrir(this, m.id)
                 else if (TablasDelChat.esTabla(m)) {

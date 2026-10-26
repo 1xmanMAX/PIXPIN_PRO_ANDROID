@@ -95,8 +95,8 @@
         android:shortcutId="proyectos"
         android:enabled="true"
         android:icon="@drawable/atajo_proyecto"
-        android:shortcutShortLabel="@string/proyectos_titulo"
-        android:shortcutLongLabel="@string/atajo_proyectos_largo">
+        android:shortcutShortLabel="@string/atajo_chats"
+        android:shortcutLongLabel="@string/atajo_chats_largo">
         <intent
             android:action="android.intent.action.VIEW"
             android:data="pixpin://atajo/proyectos"

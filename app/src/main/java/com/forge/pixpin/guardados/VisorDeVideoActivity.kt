@@ -34,11 +34,9 @@ class VisorDeVideoActivity : Activity() {
             ruta.substringAfterLast('.', "").lowercase() in setOf("mp4", "m4v", "3gp", "webm", "mkv", "mov")
 
         fun abrir(context: Context, ruta: String, titulo: String) {
-            context.startActivity(
-                Intent(context, VisorDeVideoActivity::class.java)
-                    .putExtra(EXTRA_RUTA, ruta)
-                    .putExtra(EXTRA_TITULO, titulo)
-                    .apply { if (context !is Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            // Desde fuera y sin la aplicación abierta, con la lista de chats debajo. Ver [com.forge.pixpin.Volver.abrirEnLaApp].
+            com.forge.pixpin.Volver.abrirEnLaApp(
+                context, Intent(context, VisorDeVideoActivity::class.java).putExtra(EXTRA_RUTA, ruta).putExtra(EXTRA_TITULO, titulo)
             )
         }
     }

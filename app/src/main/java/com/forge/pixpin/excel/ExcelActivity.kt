@@ -631,9 +631,9 @@ class ExcelActivity : ComponentActivity() {
         fun seAbre(nombre: String?, ruta: String?): Boolean = LibroExcel.seAbre(nombre, ruta)
 
         fun abrir(c: Context, ruta: String, nombre: String?, mensaje: String? = null) {
-            c.startActivity(
-                Intent(c, ExcelActivity::class.java).putExtra(EXTRA_RUTA, ruta).putExtra(EXTRA_NOMBRE, nombre).putExtra(EXTRA_MENSAJE, mensaje)
-                    .apply { if (c !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
+            // Desde fuera y sin la aplicación abierta, con la lista de chats debajo. Ver [com.forge.pixpin.Volver.abrirEnLaApp].
+            com.forge.pixpin.Volver.abrirEnLaApp(
+                c, Intent(c, ExcelActivity::class.java).putExtra(EXTRA_RUTA, ruta).putExtra(EXTRA_NOMBRE, nombre).putExtra(EXTRA_MENSAJE, mensaje)
             )
         }
 
@@ -645,12 +645,9 @@ class ExcelActivity : ComponentActivity() {
          */
         fun abrirTablas(c: Context, ids: List<String>, activa: String? = ids.firstOrNull()) {
             if (ids.isEmpty()) return
-            runCatching {
-                c.startActivity(
-                    Intent(c, ExcelActivity::class.java).putStringArrayListExtra(EXTRA_TABLAS, ArrayList(ids)).putExtra(EXTRA_ACTIVA, activa)
-                        .apply { if (c !is android.app.Activity) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
-                )
-            }
+            com.forge.pixpin.Volver.abrirEnLaApp(
+                c, Intent(c, ExcelActivity::class.java).putStringArrayListExtra(EXTRA_TABLAS, ArrayList(ids)).putExtra(EXTRA_ACTIVA, activa)
+            )
         }
 
         /** Lo que dice [EntradaDeHojas.destino], abierto: las tablas o el archivo, aquí. Falso si no es para este visor. */
