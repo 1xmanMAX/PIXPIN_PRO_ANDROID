@@ -20,8 +20,8 @@ android {
         // que Android no tenía forma de saber que uno era más nuevo que otro
         // —a veces se niega a instalar encima— y desde el móvil no había manera
         // de comprobar cuál estaba puesto.
-        versionCode = 241
-        versionName = "0.142.0"
+        versionCode = 242
+        versionName = "0.143.0"
     }
 
     buildTypes {

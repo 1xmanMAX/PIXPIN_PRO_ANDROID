@@ -169,3 +169,21 @@ edición, solo ver y anotar con el editor avanzado; el de Windows, limpio, con l
 - **Buscar en todos los chats**: la lupa de la lista busca también dentro de los chats (sección
   «Mensajes») y filtra sin mirar tildes.
 - **El botón de sincronizar gira** mientras hay una vuelta y se marca en rojo si falló.
+
+## v0.143.0: las grabaciones y las carpetas, de verdad (26-oct)
+
+El usuario: «no se sincronizan las grabaciones ni hay interfaz para verlas». Probado contra el
+código real del PC (`herramientas/pc-simulado`, comando `clase`): el protocolo llevaba todo bien
+(voz, vídeo, capturas y carpetas, byte a byte, en los dos sentidos). Lo que fallaba:
+
+1. **El chat lo escondía todo**: lo que estaba dentro de una carpeta no salía aunque la tarjeta de
+   la carpeta no estuviera a la vista. Ahora solo se esconde si su tarjeta está en la misma lista.
+2. **Los chats nuevos no se sincronizaban solos** si ya se había elegido qué chats sincronizar con
+   un aparato (p. ej. el proyecto donde el PC grabó la clase). Ahora entran los creados después;
+   los que se quitaron a propósito siguen fuera.
+3. **Una vuelta cortada dejaba la grabación sin nada**: el vídeo grande iba primero. Ahora van los
+   ficheros de menor a mayor.
+
+Interfaz como el PC: tarjetas de carpeta y de grabación con sus iconos, botón de abrir la carpeta,
+«Estudiar»; dentro, cada pieza con su icono y su visor (vídeo en la app, voz con su barra, imagen,
+PDF); en la ficha del chat, las carpetas en «Archivos».
