@@ -28,16 +28,20 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.FolderCopy
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -121,14 +125,38 @@ class CarpetaActivity : ComponentActivity() {
         /**
          * **Abre una página** con lo que le toca: un lienzo, en el editor; una página de un PDF, en
          * el editor sobre su PDF; lo demás, con su visor del chat ([MensajesActivity.abrirYAbrir]).
+         *
+         * **Lo que se ve al momento, sin salir de la carpeta** (26-oct-2026, el usuario: «un icono
+         * para abrir las carpetas y todo eso, para visualizar también»): el vídeo, en
+         * [VisorDeVideoActivity]; la nota de voz suena con la barra del reproductor de esta pantalla;
+         * la foto, en el editor sobre ella (como en el chat); un PDF, en su lector. Antes todo eso
+         * pasaba por la conversación general, que se ponía delante de la carpeta y atrás ya no
+         * volvía a ella. Si el fichero aún no ha llegado (la sincronización lo trae detrás), se dice.
          */
         fun abrirPagina(context: Context, m: Mensaje) {
             val ref = m.referencia
+            val ruta = m.ruta
+            val hay = ruta != null && File(ruta).isFile
             when {
                 m.clase == Clase.DIBUJO && ref != null ->
                     com.forge.pixpin.motor.DrawEditorActivity.abrir(context, ref, ExcalidrawStore.rutaDe(context, ref), null)
                 m.clase == Clase.PAGINA && ref != null && m.ruta != null && m.pagina != null ->
                     com.forge.pixpin.motor.DrawEditorActivity.abrirPaginaDePdf(context, ref, ExcalidrawStore.rutaDe(context, ref), m.ruta, m.pagina)
+                ruta != null && !hay && m.clase != Clase.NOTA ->
+                    Toast.makeText(context, "«${m.nombre.ifBlank { "Esto" }}» aún no ha llegado a este aparato: sincroniza con el otro", Toast.LENGTH_LONG).show()
+                ruta != null && CarpetaDePaginas.piezaDe(m) == CarpetaDePaginas.Pieza.VIDEO && VisorDeVideoActivity.seVeAqui(ruta) ->
+                    VisorDeVideoActivity.abrir(context, ruta, m.nombre.ifBlank { File(ruta).name })
+                ruta != null && m.clase == Clase.VOZ -> Reproductor.alternar(ruta, tituloDeAudio(context, m))
+                ruta != null && m.clase == Clase.IMAGEN -> {
+                    // Como el chat: la foto se abre en el editor y se le apunta su dibujo la primera vez.
+                    val dibujo = m.dibujoDeLaFoto
+                    if (m.referencia == null) Thread {
+                        runCatching { MensajesStore(context).cambiar { l -> l.map { if (it.id == m.id) it.copy(referencia = dibujo) else it } } }
+                    }.start()
+                    com.forge.pixpin.motor.DrawEditorActivity.abrir(context, dibujo, ExcalidrawStore.rutaDe(context, dibujo), if (m.referencia == null) ruta else null)
+                }
+                ruta != null && ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true) ->
+                    com.forge.pixpin.pdf.LectorPdfActivity.abrir(context, ruta, m.nombre.ifBlank { File(ruta).name }, mensaje = m.id)
                 else -> MensajesActivity.abrirYAbrir(context, m.id)
             }
         }
@@ -204,25 +232,34 @@ class CarpetaActivity : ComponentActivity() {
         }
 
         Scaffold(
+            // La nota de voz que se toca aquí suena con su barra, sin salir de la carpeta.
+            bottomBar = { BarraDelReproductor() },
             topBar = {
                 TopAppBar(
                     navigationIcon = {
                         IconButton(onClick = { finish() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Atrás") }
                     },
                     title = {
-                        Column(Modifier.clickable { renombrandoCarpeta = true }) {
-                            Text(nombre, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            Text(
-                                if (grabacion) CarpetasDelChat.detalleDeGrabacion(documento) else cuantas(paginas.size),
-                                fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        // El icono de la barra del PC: el micrófono en una grabación, el libro en un cuaderno.
+                        Row(Modifier.clickable { renombrandoCarpeta = true }, verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                if (grabacion) Icons.Filled.Mic else Icons.AutoMirrored.Filled.MenuBook, null,
+                                modifier = Modifier.padding(end = 10.dp).size(24.dp)
                             )
+                            Column {
+                                Text(nombre, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(
+                                    if (grabacion) CarpetasDelChat.detalleDeGrabacion(documento) else cuantas(paginas.size),
+                                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     },
                     actions = {
                         if (grabacion) {
                             // Estudiar (si hay nota), adjuntar y compartir la grabación entera.
                             if (documento.voz.isNotEmpty()) IconButton(onClick = { EstudiarClaseActivity.abrir(this@CarpetaActivity, documento.voz) }) {
-                                Icon(Icons.Filled.School, "Estudiar")
+                                Icon(Icons.AutoMirrored.Filled.MenuBook, "Estudiar")
                             }
                             IconButton(onClick = { adjuntandoA = id; elegirAdjunto.launch(arrayOf("*/*")) }) {
                                 Icon(Icons.Filled.AttachFile, "Adjuntar a la clase")
@@ -235,7 +272,7 @@ class CarpetaActivity : ComponentActivity() {
                                         }.getOrNull()
                                     }
                                 }
-                            }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, "Compartir la grabación") }
+                            }) { Icon(Icons.Filled.IosShare, "Compartir la grabación") }
                         } else IconButton(enabled = !trabajando && paginas.isNotEmpty(), onClick = {
                             trabajando = true
                             Toast.makeText(this@CarpetaActivity, "Exportando el PDF…", Toast.LENGTH_SHORT).show()
@@ -248,7 +285,7 @@ class CarpetaActivity : ComponentActivity() {
                                 if (pdf == null) Toast.makeText(this@CarpetaActivity, "No se pudo exportar: no hay ninguna página con algo dentro", Toast.LENGTH_LONG).show()
                                 else CompartirNativo.archivo(this@CarpetaActivity, pdf, "application/pdf", pdf.name)
                             }
-                        }) { Icon(Icons.Filled.PictureAsPdf, "Exportar PDF") }
+                        }) { Icon(Icons.Filled.IosShare, "Exportar PDF") }
                     }
                 )
             },
@@ -354,7 +391,13 @@ class CarpetaActivity : ComponentActivity() {
                 contentAlignment = Alignment.Center
             ) { MiniaturaDePaginaDeCarpeta(m, Modifier.fillMaxSize()) }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text("$numero", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("$numero", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                    Icon(
+                        iconoDePieza(CarpetaDePaginas.piezaDe(m)), null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(start = 6.dp).size(14.dp)
+                    )
+                }
                 Text(titulo, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (m.nombre.isNotBlank() && m.nombre != titulo) {
                     Text(m.nombre, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -406,10 +449,13 @@ class CarpetaActivity : ComponentActivity() {
                 contentAlignment = Alignment.Center
             ) {
                 when {
-                    m.clase == Clase.VOZ -> Icon(Icons.Filled.Mic, null, tint = Color.Gray)
-                    m.id == c.video -> Icon(Icons.Filled.Videocam, null, tint = Color.Gray)
+                    m.clase == Clase.VOZ -> Icon(Icons.Filled.Mic, null, tint = Color.Gray, modifier = Modifier.size(32.dp))
                     else -> MiniaturaDePaginaDeCarpeta(m, Modifier.fillMaxSize())
                 }
+                // El vídeo, con su fotograma y el triángulo encima: se ve que se reproduce.
+                if (CarpetaDePaginas.piezaDe(m) == CarpetaDePaginas.Pieza.VIDEO) Icon(
+                    Icons.Filled.PlayCircle, null, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(32.dp)
+                )
                 if (esquina.isNotEmpty()) Text(
                     esquina, color = Color.White, fontSize = 11.sp,
                     modifier = Modifier.align(Alignment.TopStart).padding(4.dp)
@@ -417,6 +463,13 @@ class CarpetaActivity : ComponentActivity() {
                 )
             }
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        iconoDePieza(CarpetaDePaginas.piezaDe(m)), null, tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(end = 6.dp).size(16.dp)
+                    )
+                    Text(nombreDePieza(CarpetaDePaginas.piezaDe(m)), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
                 Text(p.titulo.ifBlank { m.nombre.ifBlank { CarpetasDelChat.PAGINA } }, fontSize = 16.sp, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 if (adjunto) Text(
                     "Adjunto · no es de la grabación", color = Color.White, fontSize = 11.sp,
@@ -453,15 +506,42 @@ class CarpetaActivity : ComponentActivity() {
 val COLOR_ADJUNTO = Color(0xFFCC730D)
 
 /**
+ * **El icono de cada pieza**, el mismo glifo que el PC ([CarpetaDePaginas.Pieza]; `icono_de` de
+ * `carpetas.rs`, Material Icons allí y aquí).
+ */
+fun iconoDePieza(p: CarpetaDePaginas.Pieza): androidx.compose.ui.graphics.vector.ImageVector = when (p) {
+    CarpetaDePaginas.Pieza.VIDEO -> Icons.Filled.Videocam
+    CarpetaDePaginas.Pieza.LIENZO -> Icons.Filled.Draw
+    CarpetaDePaginas.Pieza.PAGINA -> Icons.AutoMirrored.Filled.MenuBook
+    CarpetaDePaginas.Pieza.IMAGEN -> Icons.Filled.Image
+    CarpetaDePaginas.Pieza.VOZ -> Icons.Filled.Mic
+    CarpetaDePaginas.Pieza.NOTA -> Icons.Filled.EditNote
+    CarpetaDePaginas.Pieza.ARCHIVO -> Icons.Filled.Description
+}
+
+/** Cómo se llama cada pieza en su fila de la carpeta. */
+fun nombreDePieza(p: CarpetaDePaginas.Pieza): String = when (p) {
+    CarpetaDePaginas.Pieza.VIDEO -> "Vídeo"
+    CarpetaDePaginas.Pieza.LIENZO -> "Lienzo"
+    CarpetaDePaginas.Pieza.PAGINA -> "Página de PDF"
+    CarpetaDePaginas.Pieza.IMAGEN -> "Imagen"
+    CarpetaDePaginas.Pieza.VOZ -> "Nota de voz"
+    CarpetaDePaginas.Pieza.NOTA -> "Nota"
+    CarpetaDePaginas.Pieza.ARCHIVO -> "Archivo"
+}
+
+/**
  * **La miniatura de una página de la carpeta**: de un lienzo, su primera hoja (la de la plantilla,
  * si no el marco, si no todo: lo mismo que saldrá en el PDF); de una página de un PDF, la página con
- * lo anotado; de una foto, la foto; de lo demás, su icono.
+ * lo anotado; de una foto, la foto; de un vídeo, su primer fotograma (26-oct-2026); de lo demás, el
+ * icono de lo que es ([iconoDePieza]), como el PC cuando no hay dibujo que enseñar.
  */
 @Composable
 fun MiniaturaDePaginaDeCarpeta(m: Mensaje, modifier: Modifier = Modifier, lado: Int = 240) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
     val version = remember(m.referencia, m.ruta) {
-        m.referencia?.let { File(ExcalidrawStore.rutaDe(contexto, it)).lastModified() } ?: 0L
+        m.referencia?.let { File(ExcalidrawStore.rutaDe(contexto, it)).lastModified() }
+            ?: m.ruta?.let { File(it).lastModified() } ?: 0L
     }
     val mapa by produceState<Bitmap?>(null, m.id, m.referencia, version) {
         value = withContext(Dispatchers.IO) { runCatching { miniatura(contexto, m, lado) }.getOrNull() }
@@ -472,12 +552,13 @@ fun MiniaturaDePaginaDeCarpeta(m: Mensaje, modifier: Modifier = Modifier, lado: 
     } else if (m.clase == Clase.NOTA && m.texto.isNotBlank()) {
         Text(m.texto, fontSize = 7.sp, lineHeight = 8.sp, color = Color.DarkGray, overflow = TextOverflow.Clip, modifier = modifier.padding(4.dp))
     } else {
-        Icon(Icons.Filled.Description, contentDescription = null, tint = Color.Gray)
+        Icon(iconoDePieza(CarpetaDePaginas.piezaDe(m)), contentDescription = null, tint = Color.Gray)
     }
 }
 
-private suspend fun miniatura(contexto: Context, m: Mensaje, lado: Int): Bitmap? = when (m.clase) {
-    Clase.DIBUJO -> m.referencia?.let { ref ->
+private suspend fun miniatura(contexto: Context, m: Mensaje, lado: Int): Bitmap? = when {
+    CarpetaDePaginas.piezaDe(m) == CarpetaDePaginas.Pieza.VIDEO -> m.ruta?.takeIf { File(it).isFile }?.let { fotogramaDe(it, lado) }
+    m.clase == Clase.DIBUJO -> m.referencia?.let { ref ->
         val escena = ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(contexto, ref)) ?: return null
         val hoja = HojaDePlantilla.hojasDeCuaderno(escena, CarpetasDelChat.catalogo(contexto)).firstOrNull() ?: return null
         val escala = (lado / maxOf(hoja.caja.width, hoja.caja.height, 1.0)).coerceIn(0.02, 2.0)
@@ -485,126 +566,234 @@ private suspend fun miniatura(contexto: Context, m: Mensaje, lado: Int): Bitmap?
             escena.files[id]?.path?.let { ImageStore.load(it, lado) }
         }
     }
-    Clase.PAGINA -> {
+    m.clase == Clase.PAGINA -> {
         val pdf = m.ruta
         val n = m.pagina
         if (pdf == null || n == null) null
         else paginaAnotada(contexto, pdf, n, m.referencia, m.referencia?.let { ExcalidrawStore.rutaDe(contexto, it) }, lado)
     }
-    Clase.IMAGEN -> m.ruta?.let { ImageStore.load(it, lado) }
+    m.clase == Clase.IMAGEN -> m.ruta?.let { ImageStore.load(it, lado) }
     else -> null
+}
+
+/** El primer fotograma de un vídeo, a [lado] como mucho. */
+private fun fotogramaDe(ruta: String, lado: Int): Bitmap? {
+    val r = android.media.MediaMetadataRetriever()
+    return try {
+        r.setDataSource(ruta)
+        val f = r.getFrameAtTime(0) ?: return null
+        val escala = lado.toFloat() / maxOf(f.width, f.height, 1)
+        if (escala >= 1f) f
+        else Bitmap.createScaledBitmap(f, (f.width * escala).toInt().coerceAtLeast(1), (f.height * escala).toInt().coerceAtLeast(1), true)
+    } catch (_: Throwable) {
+        null
+    } finally {
+        runCatching { r.release() }
+    }
+}
+
+/**
+ * **Lo que la tarjeta de una carpeta sabe de sus piezas**: las que siguen en el chat, en su orden, y
+ * cuántas nombran un fichero que aún no está en este aparato (la sincronización trae los mensajes
+ * primero y los ficheros detrás: un vídeo de una hora tarda).
+ */
+private data class PiezasDeLaTarjeta(val vivas: List<Mensaje> = emptyList(), val sinLlegar: Int = 0)
+
+@Composable
+private fun piezasDe(m: Mensaje, documento: CarpetaDePaginas?): PiezasDeLaTarjeta {
+    val contexto = androidx.compose.ui.platform.LocalContext.current
+    val cambios by MensajesStore.cambios.collectAsState()
+    val piezas by produceState(PiezasDeLaTarjeta(), m.texto, cambios) {
+        val c = documento ?: return@produceState
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val todos = MensajesStore(contexto).leer()
+                val vivas = c.vivas(todos).map { todos[it.first] }
+                PiezasDeLaTarjeta(vivas, vivas.count { p -> p.ruta?.let { !File(it).isFile } == true })
+            }.getOrDefault(PiezasDeLaTarjeta())
+        }
+    }
+    return piezas
 }
 
 /**
  * **La tarjeta de una carpeta en el chat** (`ventana_chat` del PC): el cuaderno, su nombre, cuántas
  * páginas y las primeras en miniatura. Antes, un mensaje así se veía como su JSON en crudo, que es
  * lo que hace el chat con una mini-app que no conoce. Tocarla abre [CarpetaActivity].
+ *
+ * **Con su botón de abrir, como en Windows** (26-oct-2026, el usuario: «tienen que aparecer las
+ * carpetas, grabaciones, todo con iconos como en Windows, un icono para abrir las carpetas»): arriba
+ * el icono de lo que es (el libro de un cuaderno, el micrófono de una grabación: los glifos del PC),
+ * el nombre, lo que lleva y el botón de la carpeta abierta (lo que en el PC es «Abrir la carpeta» de
+ * su menú). Si algo de dentro aún no ha llegado a este aparato, lo dice: así no parece que la
+ * grabación esté rota mientras el vídeo viaja.
  */
 @Composable
 fun TarjetaDeCarpeta(m: Mensaje) {
     val documento = remember(m.texto) { CarpetaDePaginas.deMensaje(m) }
-    // La de una grabación es una sola tarjeta con su foto (PC e1150e8).
-    if (documento?.esGrabacion == true) TarjetaDeGrabacion(m, documento) else TarjetaDeCuaderno(m, documento)
-}
-
-@Composable
-private fun TarjetaDeCuaderno(m: Mensaje, documento: CarpetaDePaginas?) {
+    val piezas = piezasDe(m, documento)
     val contexto = androidx.compose.ui.platform.LocalContext.current
-    val cambios by MensajesStore.cambios.collectAsState()
-    val paginas by produceState<List<Mensaje>>(emptyList(), m.texto, cambios) {
-        val c = documento ?: return@produceState
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val todos = MensajesStore(contexto).leer()
-                c.vivas(todos).map { todos[it.first] }
-            }.getOrDefault(emptyList())
-        }
-    }
-    Column(Modifier.widthIn(min = 200.dp, max = 280.dp).padding(2.dp)) {
+    val grabacion = documento?.esGrabacion == true
+    val rojo = Color(0xFFE53935)
+    Column(Modifier.widthIn(min = 220.dp, max = 290.dp).padding(2.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Filled.FolderCopy, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(22.dp))
-            Column(Modifier.padding(start = 8.dp)) {
+            Box(
+                Modifier.size(34.dp).clip(RoundedCornerShape(8.dp))
+                    .background(if (grabacion) rojo.copy(alpha = 0.15f) else MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    if (grabacion) Icons.Filled.Mic else Icons.AutoMirrored.Filled.MenuBook, contentDescription = null,
+                    tint = if (grabacion) rojo else MaterialTheme.colorScheme.primary, modifier = Modifier.size(20.dp)
+                )
+            }
+            Column(Modifier.weight(1f).padding(start = 8.dp)) {
                 Text(
-                    m.nombre.ifBlank { CarpetasDelChat.NOMBRE_DE_SERIE },
+                    m.nombre.ifBlank { if (grabacion) "Grabación" else CarpetasDelChat.NOMBRE_DE_SERIE },
                     fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis
                 )
                 Text(
                     when {
                         documento == null -> "Carpeta de páginas"
-                        paginas.isEmpty() -> "Vacía"
-                        paginas.size == 1 -> "1 página"
-                        else -> "${paginas.size} páginas"
+                        grabacion -> CarpetasDelChat.detalleDeGrabacion(documento)
+                        piezas.vivas.isEmpty() -> "Vacía"
+                        piezas.vivas.size == 1 -> "1 página"
+                        else -> "${piezas.vivas.size} páginas"
                     },
-                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                    fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1
                 )
             }
+            // «Abrir la carpeta»: lo que lleva, cada cosa con su icono y su visor.
+            IconButton(onClick = { CarpetaActivity.abrir(contexto, m.id, entera = true) }, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.Filled.FolderOpen, contentDescription = "Abrir la carpeta", tint = MaterialTheme.colorScheme.primary)
+            }
         }
-        if (paginas.isNotEmpty()) {
-            Spacer(Modifier.height(6.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                paginas.take(3).forEach { p ->
-                    Box(
-                        Modifier.width(60.dp).height(80.dp).clip(RoundedCornerShape(4.dp)).background(Color.White),
-                        contentAlignment = Alignment.Center
-                    ) { MiniaturaDePaginaDeCarpeta(p, Modifier.fillMaxSize(), lado = 160) }
+        Spacer(Modifier.height(6.dp))
+        if (documento != null && grabacion) CuerpoDeGrabacion(m, documento, piezas) else CuerpoDeCuaderno(piezas)
+        if (piezas.sinLlegar > 0) Text(
+            if (piezas.sinLlegar == 1) "1 archivo aún no ha llegado a este aparato"
+            else "${piezas.sinLlegar} archivos aún no han llegado a este aparato",
+            fontSize = 11.sp, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(top = 4.dp)
+        )
+    }
+}
+
+/** Cuántas páginas se ven en la tarjeta de un cuaderno, una al lado de otra (`PAGINAS_EN_LA_TARJETA` del PC). */
+private const val PAGINAS_EN_LA_TARJETA = 3
+
+/**
+ * **El cuaderno** (`pintar_ojeada_carpeta` del PC): sus primeras páginas en fila, con su número en la
+ * esquina, y cuántas más lleva («+4»). Vacío, el libro.
+ */
+@Composable
+private fun CuerpoDeCuaderno(piezas: PiezasDeLaTarjeta) {
+    if (piezas.vivas.isEmpty()) {
+        Box(
+            Modifier.fillMaxWidth().height(80.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surface),
+            contentAlignment = Alignment.Center
+        ) { Icon(Icons.AutoMirrored.Filled.MenuBook, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(40.dp)) }
+    } else Box(Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            piezas.vivas.take(PAGINAS_EN_LA_TARJETA).forEachIndexed { k, p ->
+                Box(
+                    Modifier.width(72.dp).height(96.dp).clip(RoundedCornerShape(4.dp)).background(Color.White),
+                    contentAlignment = Alignment.Center
+                ) {
+                    MiniaturaDePaginaDeCarpeta(p, Modifier.fillMaxSize(), lado = 200)
+                    Text(
+                        "${k + 1}", color = Color.White, fontSize = 10.sp,
+                        modifier = Modifier.align(Alignment.TopStart).padding(3.dp)
+                            .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(50)).padding(horizontal = 5.dp)
+                    )
                 }
             }
         }
+        if (piezas.vivas.size > PAGINAS_EN_LA_TARJETA) Text(
+            "+${piezas.vivas.size - PAGINAS_EN_LA_TARJETA}", color = Color.White, fontSize = 13.sp,
+            modifier = Modifier.align(Alignment.BottomEnd).padding(4.dp)
+                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 2.dp)
+        )
     }
 }
 
 /**
- * **La tarjeta de una clase grabada** (25-oct-2026, `pintar_ojeada_grabacion` del PC, e1150e8): una sola
- * en el chat por toda la grabación. La primera captura de fondo (sin capturas, el icono del vídeo o
- * del micrófono), arriba la chapa «● Grabación», abajo lo que duró y cuántas capturas lleva y, si hay
- * nota, la pastilla «Estudiar» (la tarjeta entera abre la clase: ver [CarpetaActivity]).
+ * **La clase grabada** (25-oct-2026, `pintar_ojeada_grabacion` del PC, e1150e8): una sola tarjeta en
+ * el chat por toda la grabación. La primera captura de fondo (sin capturas, el fotograma del vídeo o
+ * el icono del micrófono), arriba la chapa «● Grabación», abajo lo que duró y cuántas capturas lleva.
+ * Debajo, **la tira de lo que lleva** (26-oct-2026): la nota, el vídeo y las capturas en pequeño, cada
+ * una con su icono, y los dos botones: «Estudiar» (el libro, como la pastilla del PC) y «Abrir» (la
+ * carpeta). Tocar la tarjeta fuera de los botones estudia la clase, como en el PC.
  */
 @Composable
-private fun TarjetaDeGrabacion(m: Mensaje, c: CarpetaDePaginas) {
+private fun CuerpoDeGrabacion(m: Mensaje, c: CarpetaDePaginas, piezas: PiezasDeLaTarjeta) {
     val contexto = androidx.compose.ui.platform.LocalContext.current
-    val cambios by MensajesStore.cambios.collectAsState()
-    val primera by produceState<Mensaje?>(null, m.texto, cambios) {
-        value = withContext(Dispatchers.IO) {
-            runCatching {
-                val todos = MensajesStore(contexto).leer()
-                c.capturas().firstNotNullOfOrNull { p -> todos.firstOrNull { it.id == p.id && it.clase == Clase.IMAGEN } }
-            }.getOrNull()
+    val porId = remember(piezas) { piezas.vivas.associateBy { it.id } }
+    val primera = remember(piezas, c) {
+        c.capturas().firstNotNullOfOrNull { p -> porId[p.id]?.takeIf { it.clase == Clase.IMAGEN } } ?: porId[c.video]
+    }
+    Box(
+        Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surface),
+        contentAlignment = Alignment.Center
+    ) {
+        if (primera != null) MiniaturaDePaginaDeCarpeta(primera, Modifier.fillMaxSize(), lado = 480)
+        else Icon(
+            if (c.video.isEmpty()) Icons.Filled.Mic else Icons.Filled.Videocam, null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp)
+        )
+        Row(
+            Modifier.align(Alignment.TopStart).padding(6.dp).background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(50))
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(Color(0xFFE53935)))
+            Text("Grabación", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(start = 5.dp))
+        }
+        Text(
+            CarpetasDelChat.detalleDeGrabacion(c), color = Color.White, fontSize = 11.sp,
+            modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
+                .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp)
+        )
+        if (c.video.isNotEmpty() && porId[c.video] != null) Icon(
+            Icons.Filled.PlayCircle, null, tint = Color.White.copy(alpha = 0.85f), modifier = Modifier.size(44.dp)
+        )
+    }
+    // La tira: lo grabado en pequeño, en su orden, con el icono de cada cosa.
+    val tira = remember(piezas, c) { c.deLaGrabacion().mapNotNull { porId[it.id] } }
+    if (tira.isNotEmpty()) Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        tira.take(TIRA).forEach { p ->
+            Box(
+                Modifier.size(48.dp, 36.dp).clip(RoundedCornerShape(4.dp)).background(MaterialTheme.colorScheme.surface),
+                contentAlignment = Alignment.Center
+            ) {
+                if (p.clase == Clase.IMAGEN) MiniaturaDePaginaDeCarpeta(p, Modifier.fillMaxSize(), lado = 120)
+                else Icon(iconoDePieza(CarpetaDePaginas.piezaDe(p)), null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(18.dp))
+            }
+        }
+        if (tira.size > TIRA) Box(Modifier.size(48.dp, 36.dp), contentAlignment = Alignment.Center) {
+            Text("+${tira.size - TIRA}", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
-    Column(Modifier.widthIn(min = 220.dp, max = 280.dp).padding(2.dp)) {
-        Text(m.nombre.ifBlank { "Grabación" }, fontSize = 15.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        Spacer(Modifier.height(6.dp))
-        Box(
-            Modifier.fillMaxWidth().height(150.dp).clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surface),
-            contentAlignment = Alignment.Center
-        ) {
-            val foto = primera
-            if (foto != null) MiniaturaDePaginaDeCarpeta(foto, Modifier.fillMaxSize(), lado = 480)
-            else Icon(
-                if (c.video.isEmpty()) Icons.Filled.Mic else Icons.Filled.Videocam, null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(48.dp)
-            )
-            Row(
-                Modifier.align(Alignment.TopStart).padding(6.dp).background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(50))
-                    .padding(horizontal = 8.dp, vertical = 3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(Modifier.size(8.dp).clip(RoundedCornerShape(50)).background(Color(0xFFE53935)))
-                Text("Grabación", color = Color.White, fontSize = 11.sp, modifier = Modifier.padding(start = 5.dp))
-            }
-            Text(
-                CarpetasDelChat.detalleDeGrabacion(c), color = Color.White, fontSize = 11.sp,
-                modifier = Modifier.align(Alignment.BottomStart).padding(6.dp)
-                    .background(Color.Black.copy(alpha = 0.65f), RoundedCornerShape(50)).padding(horizontal = 8.dp, vertical = 3.dp)
-            )
-            if (c.voz.isNotEmpty()) Row(
-                Modifier.align(Alignment.BottomEnd).padding(6.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(50))
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(Icons.Filled.School, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                Text("Estudiar", color = Color.White, fontSize = 12.sp, modifier = Modifier.padding(start = 4.dp))
-            }
+    Row(Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        if (c.voz.isNotEmpty()) Pastilla(Icons.AutoMirrored.Filled.MenuBook, "Estudiar", MaterialTheme.colorScheme.primary, Color.White) {
+            EstudiarClaseActivity.abrir(contexto, c.voz)
         }
+        Pastilla(Icons.Filled.FolderOpen, "Abrir", MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.onSurface) {
+            CarpetaActivity.abrir(contexto, m.id, entera = true)
+        }
+    }
+}
+
+/** Cuántas piezas caben en la tira de la tarjeta de una grabación. */
+private const val TIRA = 5
+
+/** Un botón redondeado con su icono y su rótulo, como las pastillas del PC. */
+@Composable
+private fun Pastilla(icono: androidx.compose.ui.graphics.vector.ImageVector, rotulo: String, fondo: Color, tinta: Color, alTocar: () -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(50)).background(fondo).clickable(onClick = alTocar).padding(horizontal = 12.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(icono, null, tint = tinta, modifier = Modifier.size(16.dp))
+        Text(rotulo, color = tinta, fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
     }
 }

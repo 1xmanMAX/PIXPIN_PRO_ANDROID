@@ -930,10 +930,37 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         File(carpeta, "elegidos/${limpio(otro)}.txt").readLines().filter { it.isNotBlank() }.toSet()
     }.getOrNull()
 
-    fun guardarElegidos(otro: String, chats: Set<String>) {
+    /**
+     * Apunta los chats elegidos con [otro] y, si se da, **los que se ofrecieron** al elegir
+     * ([ofrecidos]): con eso se sabe después qué chats son nuevos. Ver [elegidosAhora].
+     */
+    fun guardarElegidos(otro: String, chats: Set<String>, ofrecidos: Set<String>? = null) {
         val f = File(carpeta, "elegidos/${limpio(otro)}.txt")
         f.parentFile?.mkdirs()
         f.writeText(chats.joinToString("\n"))
+        if (ofrecidos != null) File(carpeta, "elegidos/${limpio(otro)}.ofrecidos").writeText((ofrecidos + chats).joinToString("\n"))
+    }
+
+    /** Los chats que se ofrecieron la última vez que se eligió con [otro]; null si no se apuntó (lo de antes). */
+    fun ofrecidos(otro: String): Set<String>? = runCatching {
+        File(carpeta, "elegidos/${limpio(otro)}.ofrecidos").readLines().filter { it.isNotBlank() }.toSet()
+    }.getOrNull()
+
+    /**
+     * **Los chats que van con [otro] ahora**, de entre [candidatos]: los elegidos la última vez y,
+     * además, **los que nacieron después** (no se ofrecieron entonces). Null si nunca se eligió: van
+     * todos.
+     *
+     * (26-oct-2026) Con la elección guardada, un chat nuevo —el proyecto donde el PC grabó la clase,
+     * el chat que se creó en el otro aparato— no estaba en la lista y **no viajaba nunca** en la
+     * sincronización automática; en la pantalla salía desmarcado. Al usuario le parecía que «no se
+     * sincronizan las grabaciones». Lo que se desmarcó a propósito sigue fuera; lo que nadie llegó a
+     * ver, entra. Sin la lista de ofrecidos (elegido con una versión de antes), como antes.
+     */
+    fun elegidosAhora(otro: String, candidatos: Collection<String>): Set<String>? {
+        val elegidos = elegidos(otro) ?: return null
+        val vistos = ofrecidos(otro) ?: return elegidos
+        return elegidos + candidatos.filter { it !in vistos }
     }
 
     fun ultimaVez(otro: String): Long = File(carpeta, "elegidos/${limpio(otro)}.cuando").let { f ->

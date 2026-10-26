@@ -98,6 +98,15 @@ data class CarpetaDePaginas(
     /** Si es la carpeta de una grabación. */
     val esGrabacion: Boolean get() = tipo == TIPO_GRABACION
 
+    /**
+     * **Qué es cada pieza de una carpeta**, para su icono y su visor (26-oct-2026, `icono_de` de
+     * `ventana_chat/carpetas.rs` del PC): un vídeo con la cámara (`VIDEOCAM`) aunque sea un archivo o
+     * una foto, un lienzo con el lápiz (`DRAW`), una página de un PDF con el libro (`MENU_BOOK`), una
+     * foto (`IMAGE`), una nota de voz con el micrófono (`MIC`), una nota (`EDIT_NOTE`) y lo demás con
+     * la hoja (`DESCRIPTION`).
+     */
+    enum class Pieza { VIDEO, LIENZO, PAGINA, IMAGEN, VOZ, NOTA, ARCHIVO }
+
     /** **Lo que es de la grabación**: la nota, el vídeo y las capturas, en su orden. En una carpeta de páginas, todas. */
     fun deLaGrabacion(): List<Pagina> = paginas.filter { !it.adjunto }
 
@@ -261,6 +270,36 @@ data class CarpetaDePaginas(
          */
         fun dentroDeCarpetas(mensajes: List<Mensaje>): Set<String> =
             mensajes.mapNotNull(::deMensaje).flatMapTo(HashSet()) { c -> c.paginas.map { it.id } }
+
+        /**
+         * **Lo que el chat enseña suelto** (26-oct-2026): [mensajes] sin lo que está dentro de una
+         * carpeta **que también está en [mensajes]**.
+         *
+         * **Por qué no basta [dentroDeCarpetas] de todo el archivo.** En la v0.142.0 se sacaba de
+         * todos los mensajes (todos los chats, las lecciones, lo del buzón) y se quitaba de la lista
+         * ya filtrada: si la carpeta no estaba en esa lista —otra sección, en el buzón, con un emoji
+         * puesto, o con su documento roto—, lo de dentro se quitaba igual y **no quedaba nada a la
+         * vista**: ni la tarjeta ni las piezas. El usuario: «no hay una interfaz para ver lo de las
+         * grabaciones, ni nada». Ahora solo se esconde lo que tiene su tarjeta al lado; si la carpeta
+         * falta, sus piezas salen sueltas, como en un aparato que no sabe de carpetas (§5 del manual
+         * del PC: «un aparato que no la sepa lo enseña suelto, sin perder nada»).
+         */
+        fun sueltosDelChat(mensajes: List<Mensaje>): List<Mensaje> {
+            val dentro = dentroDeCarpetas(mensajes)
+            if (dentro.isEmpty()) return mensajes
+            return mensajes.filter { it.id !in dentro || esCarpeta(it) }
+        }
+
+        /** Qué pieza es [m] ([Pieza]), como `icono_de` del PC. */
+        fun piezaDe(m: Mensaje): Pieza = when {
+            SeccionesDelChat.esVideo(m) -> Pieza.VIDEO
+            m.clase == Clase.DIBUJO -> Pieza.LIENZO
+            m.clase == Clase.PAGINA -> Pieza.PAGINA
+            m.clase == Clase.IMAGEN -> Pieza.IMAGEN
+            m.clase == Clase.VOZ -> Pieza.VOZ
+            m.clase == Clase.NOTA -> Pieza.NOTA
+            else -> Pieza.ARCHIVO
+        }
 
         /** Si el mensaje es una carpeta. */
         fun esCarpeta(m: Mensaje): Boolean = m.clase == Clase.MINIAPP && m.miniapp == MINIAPP

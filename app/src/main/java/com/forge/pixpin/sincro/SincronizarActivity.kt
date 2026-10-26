@@ -464,9 +464,10 @@ class SincronizarActivity : ComponentActivity() {
                 disco.apuntarDireccion(otro.id, host, sesion.puertoDelOtro.takeIf { it > 0 } ?: puerto)
                 val mios = disco.chats().associateBy { it.id }
                 val suyos = sesion.catalogo().associateBy { it.id }
-                val antes = disco.elegidos(otro.id)
                 val plan = planDeBorrados(sesion, mios, suyos)
                 val candidatos = (mios.keys + suyos.keys).distinct().filter { it !in plan.yaFuera && it !in plan.miosConLapida || it in plan.levantar }
+                // Lo elegido la última vez y lo que ha nacido después (26-oct-2026). Ver [Disco.elegidosAhora].
+                val antes = disco.elegidosAhora(otro.id, candidatos)
                 val filas = candidatos.map { id ->
                     val m = mios[id]; val s = suyos[id]
                     Fila(id, (m ?: s)!!.nombre, m, s, antes?.contains(id) ?: true, seBorraAqui = id in plan.aqui)
@@ -482,7 +483,7 @@ class SincronizarActivity : ComponentActivity() {
                     elegidos = puesto
                     loMioManda = pregunta.loMioManda.value
                     // Lo mío manda es cosa de una vez: lo marcado entonces no se recuerda como lo de siempre.
-                    if (!loMioManda) disco.guardarElegidos(otro.id, elegidos)
+                    if (!loMioManda) disco.guardarElegidos(otro.id, elegidos, ofrecidos = candidatos.toSet())
                 } else {
                     elegidos = antes ?: candidatos.toSet()
                 }

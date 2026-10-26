@@ -40,7 +40,8 @@ class VueltaCallada(private val disco: Disco, private val miPuerto: Int = 0, pri
             // Lo que tenga lápida en cualquiera de los dos, fuera: eso lo decide quien mire.
             val conLapida = disco.lapidas().map { it.chat }.toSet() + sesion.lapidas().map { it.chat }
             val candidatos = (mios.keys + suyos.keys).filter { it !in conLapida }
-            val elegidos = disco.elegidos(otro.id) ?: candidatos.toSet()
+            // Lo elegido y lo nacido después de elegir (26-oct-2026): ver [Disco.elegidosAhora].
+            val elegidos = disco.elegidosAhora(otro.id, candidatos) ?: candidatos.toSet()
             val hecho = Sesion.Hecho()
             for (chat in candidatos.filter { it in elegidos && (soloEstos == null || it in soloEstos) }) {
                 val prep = sesion.preparar(chat)

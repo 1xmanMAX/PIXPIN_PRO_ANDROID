@@ -410,7 +410,9 @@ internal fun vistazo(m: Mensaje): String = when (m.clase) {
     Clase.CROQUIS -> "🧊 " + m.nombre.ifBlank { "Croquis 3D" }
     Clase.PROYECTO -> "📁 " + m.nombre.ifBlank { "Proyecto" }
     // Una carpeta de páginas: su nombre, no su JSON (25-oct-2026). Ver [com.forge.pixpin.guardados.CarpetaDePaginas].
-    Clase.MINIAPP -> if (com.forge.pixpin.guardados.CarpetaDePaginas.esCarpeta(m)) "📒 " + m.nombre.ifBlank { "Carpeta de páginas" }
+    // La de una grabación, con el punto rojo de su tarjeta (26-oct-2026): que se sepa que llegó una clase.
+    Clase.MINIAPP -> if (com.forge.pixpin.guardados.CarpetaDePaginas.esGrabacion(m)) "🔴 " + m.nombre.ifBlank { "Grabación" }
+    else if (com.forge.pixpin.guardados.CarpetaDePaginas.esCarpeta(m)) "📒 " + m.nombre.ifBlank { "Carpeta de páginas" }
     else "☑️ " + m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().trim('#', ' ')
     Clase.ARCHIVO -> "📄 " + m.nombre.ifBlank { "Archivo" }
     // Las fotos de una nota rica, como «🖼 alt» y no su ruta (25-oct-2026). Ver [com.forge.pixpin.guardados.NotaRica.sinRutasDeFotos].
