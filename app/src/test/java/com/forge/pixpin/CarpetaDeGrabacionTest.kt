@@ -94,6 +94,38 @@ class CarpetaDeGrabacionTest {
         assertTrue(CarpetaDePaginas.dentroDeCarpetas(mensajes.take(2)).isEmpty())
     }
 
+    /**
+     * **Nada se queda sin verse** (26-oct-2026): el chat esconde lo de dentro solo si la tarjeta de su
+     * carpeta está en la misma lista. Con la carpeta fuera (otra sección, un emoji, el buzón) o con su
+     * documento roto, sus piezas salen sueltas; en la v0.142.0 desaparecían las dos cosas.
+     */
+    @Test fun lo_de_dentro_sale_suelto_si_su_carpeta_no_esta_a_la_vista() {
+        val g = CarpetaDePaginas.grabacion("v", 1000).anadirAlMinuto("v", "", 0)!!.anadirAlMinuto("f1", "", 500)!!
+        val voz = Mensaje(id = "v", cuando = 1, clase = Clase.VOZ, ruta = "/x/clase.m4a")
+        val foto = Mensaje(id = "f1", cuando = 2, clase = Clase.IMAGEN, ruta = "/x/f1.png")
+        val nota = Mensaje(id = "n", cuando = 3, clase = Clase.NOTA, texto = "suelta")
+        val carpeta = mensaje("Clase", g, 4)
+        assertEquals("con su tarjeta: solo la tarjeta y lo suelto", listOf("n", carpeta.id),
+            CarpetaDePaginas.sueltosDelChat(listOf(voz, foto, nota, carpeta)).map { it.id })
+        assertEquals("sin su carpeta en la lista: todo suelto", listOf("v", "f1", "n"),
+            CarpetaDePaginas.sueltosDelChat(listOf(voz, foto, nota)).map { it.id })
+        val rota = carpeta.copy(texto = "{no es json")
+        assertEquals("con la carpeta rota: la carpeta y sus piezas, a la vista", 4,
+            CarpetaDePaginas.sueltosDelChat(listOf(voz, foto, nota, rota)).size)
+    }
+
+    /** El icono de cada pieza, como `icono_de` del PC: un vídeo es vídeo aunque sea un archivo. */
+    @Test fun cada_pieza_de_una_carpeta_tiene_su_tipo() {
+        fun de(clase: Clase, nombre: String = "") = CarpetaDePaginas.piezaDe(Mensaje(id = "x", cuando = 0, clase = clase, nombre = nombre))
+        assertEquals(CarpetaDePaginas.Pieza.VIDEO, de(Clase.ARCHIVO, "Clase (1).mp4"))
+        assertEquals(CarpetaDePaginas.Pieza.ARCHIVO, de(Clase.ARCHIVO, "apuntes.pdf"))
+        assertEquals(CarpetaDePaginas.Pieza.VOZ, de(Clase.VOZ, "Clase.m4a"))
+        assertEquals(CarpetaDePaginas.Pieza.IMAGEN, de(Clase.IMAGEN, "clase-1-1.png"))
+        assertEquals(CarpetaDePaginas.Pieza.LIENZO, de(Clase.DIBUJO))
+        assertEquals(CarpetaDePaginas.Pieza.PAGINA, de(Clase.PAGINA))
+        assertEquals(CarpetaDePaginas.Pieza.NOTA, de(Clase.NOTA))
+    }
+
     @Test fun lo_adjuntado_a_la_clase_va_aparte_de_lo_grabado() {
         var c = CarpetaDePaginas.grabacion("v", 1000).anadirAlMinuto("v", "", 0)!!.anadirAlMinuto("f1", "⏱ 0:01", 1000)!!
         c = c.adjuntar("pdf", "Apuntes")!!

@@ -1028,7 +1028,14 @@ class Sesion private constructor(
 
     fun aplicarArchivos(prep: PreparadoArchivos, hecho: Hecho, avance: (Long) -> Unit = {}) {
         val cuenta = Fusion.Cuenta()
-        for (p in prep.pasos) {
+        // **Lo pequeño primero** (26-oct-2026). Una grabación son una nota, unas capturas y un vídeo
+        // de cientos de megas; si la vuelta se corta a mitad del vídeo (la Wi-Fi del teléfono que se
+        // duerme, la aplicación que se cierra), lo que iba detrás no llegaba y la tarjeta salía sin
+        // nada que abrir. Así la voz y las capturas ya están cuando empieza el vídeo, y el vídeo se
+        // vuelve a ofrecer en la vuelta siguiente (el protocolo no reanuda). El orden no cambia lo
+        // que queda: cada archivo va por su lado.
+        val pasos = prep.pasos.sortedBy { maxOf(prep.mios[it.sena]?.bytes ?: 0L, prep.suyos[it.sena]?.bytes ?: 0L) }
+        for (p in pasos) {
             val rel = p.sena
             val texto = disco.esTexto(rel)
             val mio = prep.mios[rel]

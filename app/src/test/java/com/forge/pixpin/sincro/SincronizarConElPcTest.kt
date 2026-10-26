@@ -483,6 +483,135 @@ class SincronizarConElPcTest {
         assertEquals(setOf("captura.png", "nueva-pc.png"), capturasPc().keys)
     }
 
+    // ------------------------------------------------------- grabaciones y carpetas (26-oct-2026)
+    // El usuario, con la v0.142.0: «no se están sincronizando las grabaciones, ni hay una interfaz
+    // para verlas». Una clase grabada como la graba el PC (`pc-simulado clase`, que llama a
+    // `carpeta_de_paginas` de verdad) tiene que llegar entera —voz, vídeo de varios megas con
+    // paréntesis en el nombre, capturas y su carpeta— y verse; y una grabada aquí, llegar al PC y
+    // que el PC la lea como grabación.
+
+    /** La huella FNV-1a de 64 bits de un fichero, como `huella` de `pc-simulado`. */
+    private fun huella(f: File): String {
+        var h = -0x340d631b7bdddcdbL
+        f.inputStream().buffered().use { e ->
+            while (true) {
+                val b = e.read()
+                if (b < 0) break
+                h = (h xor b.toLong()) * 0x100000001b3L
+            }
+        }
+        return java.lang.Long.toUnsignedString(h, 16).padStart(16, '0')
+    }
+
+    @Test
+    fun `una clase grabada en el PC llega al movil con voz, video, capturas y su carpeta, y se ve`() {
+        desdeElMovil(unirme = true)
+        desdeElMovil()
+        val hecha = Json.parseToJsonElement(orden("clase", pc.path, "Clases del PC", "5").trim().lines().last()).jsonObject
+        fun id(k: String) = hecha.s(k)!!
+        desdeElMovil()
+        val ms = movil.leerMensajes()
+        val porId = ms.associateBy { it.id }
+        val voz = porId[id("voz")] ?: error("la voz no llegó: ${ms.map { it.id to it.nombre }}")
+        assertEquals(Clase.VOZ, voz.clase)
+        assertEquals("clase", voz.grabacion)
+        assertEquals(id("video"), voz.video!!["id"]!!.jsonPrimitive.content)
+        assertEquals(2, voz.capturas!!.size)
+        assertEquals(300_000L, File(voz.ruta!!).length())
+        val video = porId.getValue(id("video"))
+        assertEquals("Clase 25-oct (1).mp4", video.nombre)
+        assertEquals(id("voz"), video.enGrabacion!!["de"]!!.jsonPrimitive.content)
+        val mp4 = File(video.ruta!!)
+        assertTrue("el vídeo está en el móvil: ${video.ruta}", mp4.isFile)
+        assertEquals(hecha["largoDelVideo"]!!.jsonPrimitive.long, mp4.length())
+        assertEquals("el vídeo llega byte a byte", id("huellaDelVideo"), huella(mp4))
+        for ((n, c) in hecha["capturas"]!!.jsonArray.withIndex()) {
+            val img = porId.getValue(c.jsonPrimitive.content)
+            assertEquals(Clase.IMAGEN, img.clase)
+            assertEquals("PNG captura ${n + 1}", File(img.ruta!!).readText())
+            assertEquals(id("voz"), img.enGrabacion!!["de"]!!.jsonPrimitive.content)
+        }
+        // La carpeta de la grabación, entera y leída como grabación.
+        val carpeta = porId.getValue(id("carpeta"))
+        val doc = com.forge.pixpin.guardados.CarpetaDePaginas.deMensaje(carpeta)!!
+        assertTrue(doc.esGrabacion)
+        assertEquals(id("voz"), doc.voz)
+        assertEquals(id("video"), doc.video)
+        assertEquals(90_000L, doc.duracionMs)
+        assertEquals(listOf(id("voz"), id("video")) + hecha["capturas"]!!.jsonArray.map { it.jsonPrimitive.content }, doc.paginas.map { it.id })
+        assertEquals(listOf(65_000L, 80_000L), doc.capturas().map { it.ms })
+        val diario = com.forge.pixpin.guardados.CarpetaDePaginas.deMensaje(porId.getValue(id("diario")))!!
+        assertEquals(listOf(id("nota"), id("foto")), diario.paginas.map { it.id })
+        assertEquals("JPG de la pizarra", File(porId.getValue(id("foto")).ruta!!).readText())
+        // Y se ve: en el chat del proyecto, las dos tarjetas de carpeta y nada de lo de dentro suelto;
+        // dentro de cada carpeta, todas sus piezas, con su fichero.
+        val delChat = ms.filter { Disco.chatDe(it) == id("proyecto") }
+        val sueltos = com.forge.pixpin.guardados.CarpetaDePaginas.sueltosDelChat(delChat)
+        assertEquals(setOf(id("carpeta"), id("diario")), sueltos.filter { com.forge.pixpin.guardados.CarpetaDePaginas.esCarpeta(it) }.map { it.id }.toSet())
+        assertTrue("nada de dentro suelto", sueltos.none { it.id in doc.paginas.map { p -> p.id } + diario.paginas.map { p -> p.id } })
+        assertEquals(doc.paginas.size, doc.vivas(delChat).size)
+        // Otra vuelta: nada se mueve (el vídeo con paréntesis no vuelve a viajar) ni se repite.
+        val quieta = desdeElMovil()
+        assertEquals("otra vuelta no mueve nada", 0, quieta.traidos + quieta.enviados + quieta.fusionados)
+        desdeElPc()
+        val otra = desdeElMovil()
+        assertEquals(0, otra.traidos + otra.enviados + otra.fusionados)
+        sinRepetidos()
+    }
+
+    @Test
+    fun `una clase grabada en el movil llega al PC con sus ficheros y el PC la lee como grabacion`() {
+        desdeElMovil(unirme = true)
+        desdeElMovil()
+        val ahora = System.currentTimeMillis()
+        val obra = movil.leerProyectos().single { it.nombre == "Obra del PC" }.id
+        // Como `GrabarClaseService.guardar`: la voz y el vídeo en `guardados/`, las capturas también.
+        val m4a = File(movil.filesDir, "guardados/clase_$ahora.m4a").apply { parentFile!!.mkdirs(); writeBytes(ByteArray(200_000) { 3 }) }
+        val mp4 = File(movil.filesDir, "guardados/${ahora}_Clase (2).mp4").apply { writeBytes(ByteArray((3 shl 20) + 77) { (it % 249).toByte() }) }
+        val png = File(movil.filesDir, "guardados/clase-$ahora-1.png").apply { writeText("PNG del móvil") }
+        val vozId = "voz-movil-$ahora"
+        val videoId = "video-movil-$ahora"
+        val capId = "cap-movil-$ahora"
+        val enlaces = listOf(com.forge.pixpin.guardados.GrabarClase.Enlace(30_000, capId))
+        val lista = listOf(
+            Mensaje(id = vozId, cuando = ahora, clase = Clase.VOZ, ruta = m4a.path, nombre = "Clase 26-oct.m4a", bytes = m4a.length(),
+                duracionMs = 60_000, proyecto = obra, grabacion = com.forge.pixpin.guardados.GrabarClase.CLASE,
+                capturas = com.forge.pixpin.guardados.GrabarClase.capturasEnJson(enlaces),
+                video = com.forge.pixpin.guardados.GrabarClase.videoEnJson(videoId)),
+            Mensaje(id = videoId, cuando = ahora + 1, clase = Clase.ARCHIVO, ruta = mp4.path, nombre = "Clase (2).mp4", bytes = mp4.length(),
+                proyecto = obra, enGrabacion = com.forge.pixpin.guardados.GrabarClase.enGrabacion(vozId, 0)),
+            Mensaje(id = capId, cuando = ahora + 2, clase = Clase.IMAGEN, ruta = png.path, nombre = png.name, texto = "⏱ 0:30 · Clase 26-oct",
+                proyecto = obra, enGrabacion = com.forge.pixpin.guardados.GrabarClase.enGrabacion(vozId, 30_000)),
+        )
+        val doc = com.forge.pixpin.guardados.GrabarClase.carpetaDeLaGrabacion(vozId, 60_000, videoId, enlaces)
+        val carpeta = com.forge.pixpin.guardados.CarpetaDePaginas.mensajeNuevo("Clase 26-oct", ahora + 3, obra, doc)
+        for (m in lista + carpeta) File(movil.filesDir, "guardados.jsonl").appendText(Disco.JSON.encodeToString(Mensaje.serializer(), m) + "\n")
+        movil.sellar()
+
+        desdeElPc()
+        val enPc = verPc()["chats"]!!.jsonArray.map { it.jsonObject }.single { it.s("nombre") == "Obra del PC" }
+        val porId = enPc["mensajes"]!!.jsonArray.map { it.jsonObject }.associateBy { it.s("id") }
+        val v = porId[vozId] ?: error("la voz no llegó al PC: ${porId.keys}")
+        assertEquals("Voz", v.s("clase"))
+        assertEquals(200_000L, v["largo"]!!.jsonPrimitive.long)
+        assertEquals("clase", v["resto"]!!.jsonObject.s("grabacion"))
+        val vid = porId.getValue(videoId)
+        assertEquals("el PC abre el vídeo entero", huella(mp4), vid.s("huella"))
+        assertEquals(vozId, vid["resto"]!!.jsonObject["enGrabacion"]!!.jsonObject.s("de"))
+        assertEquals("PNG del móvil".toByteArray().size.toLong(), porId.getValue(capId)["largo"]!!.jsonPrimitive.long)
+        val c = porId.getValue(carpeta.id)["carpeta"]!!.jsonObject
+        assertEquals("el PC la lee como grabación: $c", true, c["grabacion"]!!.jsonPrimitive.content.toBoolean())
+        assertEquals(vozId, c.s("voz"))
+        assertEquals(videoId, c.s("video"))
+        assertEquals(listOf(capId), c["capturas"]!!.jsonArray.map { it.jsonPrimitive.content })
+        assertEquals("el PC no la enseña suelta", setOf(vozId, videoId, capId), enPc["dentro"]!!.jsonArray.map { it.jsonPrimitive.content }.toSet())
+        // El texto de la carpeta, byte a byte el mismo en los dos.
+        assertEquals(carpeta.texto, porId.getValue(carpeta.id).s("texto"))
+        val quieta = desdeElMovil()
+        assertEquals("otra vuelta no mueve nada", 0, quieta.traidos + quieta.enviados + quieta.fusionados)
+        sinRepetidos()
+    }
+
     private companion object {
         const val CODIGO = "ABCDE23456"
     }

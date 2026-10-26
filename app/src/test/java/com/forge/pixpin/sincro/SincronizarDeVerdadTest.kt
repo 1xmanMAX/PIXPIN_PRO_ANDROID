@@ -1149,6 +1149,31 @@ class SincronizarDeVerdadTest {
         assertNull(tableta.leerMensajes().firstOrNull { it.id == "t-obra" })
     }
 
+    /**
+     * **Un chat nacido después de elegir viaja solo** (26-oct-2026): con la elección guardada, el
+     * proyecto donde el otro aparato grabó una clase no estaba en la lista y no llegaba nunca. Lo
+     * desmarcado a propósito sigue fuera.
+     */
+    @Test
+    fun `un chat nacido despues de elegir viaja en la vuelta callada y lo desmarcado no`() {
+        emparejar()
+        proyecto(telefono, Proyecto("obra", "Obra", tocado = 5))
+        vueltaCallada(null)
+        // Se eligió solo el general; la obra se desmarcó a propósito.
+        telefono.guardarElegidos("id-tab", setOf(Disco.GENERAL), ofrecidos = setOf(Disco.GENERAL, "obra"))
+        mensaje(telefono, "n-obra", "acta", proyecto = "obra")
+        // En la tableta nace un proyecto nuevo, con una clase dentro.
+        proyecto(tableta, Proyecto("clases", "Clases", tocado = reloj++))
+        mensaje(tableta, "voz-clase", "la clase", proyecto = "clases")
+        vueltaCallada(null)
+        assertNotNull("el chat nuevo llega", telefono.leerMensajes().firstOrNull { it.id == "voz-clase" })
+        assertNull("lo desmarcado no", tableta.leerMensajes().firstOrNull { it.id == "n-obra" })
+        assertEquals(setOf(Disco.GENERAL, "clases"), telefono.elegidosAhora("id-tab", listOf(Disco.GENERAL, "obra", "clases")))
+        // Caso de antes: sin la lista de lo ofrecido, solo lo elegido.
+        telefono.guardarElegidos("id-otro", setOf(Disco.GENERAL))
+        assertEquals(setOf(Disco.GENERAL), telefono.elegidosAhora("id-otro", listOf(Disco.GENERAL, "clases")))
+    }
+
     @Test
     fun `sellar no relee lo ya sellado pero sella lo que llega despues`() {
         emparejar()
@@ -1334,6 +1359,74 @@ class SincronizarDeVerdadTest {
             assertEquals(listOf("foto-de-la-tableta"), c.adjuntos().map { it.id })
             assertEquals(listOf("voz", "video", "foto"), c.deLaGrabacion().map { it.id })
         }
+        quieto()
+    }
+
+    /**
+     * **Una clase grabada, con sus ficheros, de un aparato a otro y de vuelta** (26-oct-2026, el
+     * usuario con la v0.142.0: «no se están sincronizando las grabaciones»). Como la deja
+     * `GrabarClaseService`: la voz, un vídeo de varios megas —varios tramos del cable y por encima del
+     * umbral de la caché de resúmenes— con paréntesis en el nombre, dos capturas y la carpeta de la
+     * grabación detrás. Todo llega byte a byte, el chat enseña la tarjeta y nada suelto, la carpeta
+     * abre todas sus piezas, y otra vuelta ya no mueve nada. Luego una grabada en el otro aparato hace
+     * el camino de vuelta, en el chat de un proyecto.
+     */
+    @Test
+    fun `una clase grabada viaja con voz, video, capturas y su carpeta, en los dos sentidos`() {
+        emparejar()
+        fun grabar(d: Disco, sufijo: String, proyecto: String?): Map<String, File> {
+            val dir = File(d.filesDir, "guardados").apply { mkdirs() }
+            val m4a = File(dir, "clase_$sufijo.m4a").apply { writeBytes(ByteArray(150_000) { (it % 7).toByte() }) }
+            val mp4 = File(dir, "${sufijo}_Clase (1).mp4").apply { writeBytes(ByteArray((5 shl 20) + 33) { (it % 251).toByte() }) }
+            val png1 = File(dir, "clase-$sufijo-1.png").apply { writeText("captura 1 de $sufijo") }
+            val png2 = File(dir, "clase-$sufijo-2.png").apply { writeText("captura 2 de $sufijo") }
+            val enlaces = listOf(GrabarClase.Enlace(65_000, "cap1-$sufijo"), GrabarClase.Enlace(80_000, "cap2-$sufijo"))
+            val lista = d.leerMensajes()
+            val nuevos = listOf(
+                Mensaje(id = "voz-$sufijo", cuando = reloj++, clase = Clase.VOZ, ruta = m4a.absolutePath, nombre = "Clase.m4a",
+                    bytes = m4a.length(), duracionMs = 90_000, proyecto = proyecto, grabacion = GrabarClase.CLASE,
+                    capturas = GrabarClase.capturasEnJson(enlaces), video = GrabarClase.videoEnJson("vid-$sufijo")),
+                Mensaje(id = "vid-$sufijo", cuando = reloj++, clase = Clase.ARCHIVO, ruta = mp4.absolutePath, nombre = "Clase (1).mp4",
+                    bytes = mp4.length(), proyecto = proyecto, enGrabacion = GrabarClase.enGrabacion("voz-$sufijo", 0)),
+                Mensaje(id = "cap1-$sufijo", cuando = reloj++, clase = Clase.IMAGEN, ruta = png1.absolutePath, nombre = png1.name,
+                    proyecto = proyecto, enGrabacion = GrabarClase.enGrabacion("voz-$sufijo", 65_000)),
+                Mensaje(id = "cap2-$sufijo", cuando = reloj++, clase = Clase.IMAGEN, ruta = png2.absolutePath, nombre = png2.name,
+                    proyecto = proyecto, enGrabacion = GrabarClase.enGrabacion("voz-$sufijo", 80_000)),
+                CarpetaDePaginas.mensajeNuevo("Clase $sufijo", reloj++, proyecto,
+                    GrabarClase.carpetaDeLaGrabacion("voz-$sufijo", 90_000, "vid-$sufijo", enlaces)).copy(id = "car-$sufijo"),
+            )
+            File(d.filesDir, "guardados.jsonl").writeText((lista + nuevos).joinToString("") { Disco.JSON.encodeToString(Mensaje.serializer(), it) + "\n" })
+            d.sellar()
+            return mapOf("voz-$sufijo" to m4a, "vid-$sufijo" to mp4, "cap1-$sufijo" to png1, "cap2-$sufijo" to png2)
+        }
+        fun comprobar(d: Disco, sufijo: String, originales: Map<String, File>, chat: String) {
+            val ms = d.leerMensajes()
+            for ((id, f) in originales) {
+                val m = ms.singleOrNull { it.id == id } ?: fail("falta $id en ${d.filesDir}") as Nothing
+                val aqui = File(m.ruta!!)
+                assertTrue("$id con su fichero aquí: ${m.ruta}", aqui.isFile && aqui.absolutePath.startsWith(d.filesDir.absolutePath))
+                assertTrue("$id byte a byte", aqui.readBytes().contentEquals(f.readBytes()))
+            }
+            val delChat = ms.filter { Disco.chatDe(it) == chat }
+            val carpeta = CarpetaDePaginas.deMensaje(delChat.single { it.id == "car-$sufijo" })!!
+            assertTrue(carpeta.esGrabacion)
+            assertEquals("todas sus piezas se abren desde la carpeta", 4, carpeta.vivas(delChat).size)
+            val sueltos = CarpetaDePaginas.sueltosDelChat(delChat).map { it.id }
+            assertTrue("la tarjeta se ve", "car-$sufijo" in sueltos)
+            assertTrue("nada de dentro suelto: $sueltos", sueltos.none { it in originales.keys })
+        }
+        val delTelefono = grabar(telefono, "t", null)
+        sincronizar()
+        comprobar(tableta, "t", delTelefono, Disco.GENERAL)
+        quieto()
+
+        // Y una grabada en la tableta, en un proyecto, de vuelta al teléfono.
+        val p = Proyecto(id = "pr-clases", nombre = "Clases", tocado = reloj++)
+        proyecto(tableta, p)
+        val deLaTableta = grabar(tableta, "b", "pr-clases")
+        sincronizarDesde(tableta, telefono, "pr-clases")
+        comprobar(telefono, "b", deLaTableta, "pr-clases")
+        quieto("pr-clases")
         quieto()
     }
 

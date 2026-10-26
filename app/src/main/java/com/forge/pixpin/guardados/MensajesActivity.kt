@@ -915,16 +915,18 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val sinLecciones = remember(mensajes) { com.forge.pixpin.lecciones.LeccionesStore.sinLecciones(mensajes).filterNot { com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema(it) } }
         // **Lo de dentro de una carpeta no sale suelto** (25-oct-2026, PC 40daac7): una página de un
         // cuaderno o lo de una clase grabada lo representa la tarjeta de su carpeta. Solo en el chat
-        // (TODO) y sin buscar: en la galería y con la lupa se sigue viendo.
-        val dentro = remember(mensajes) { CarpetaDePaginas.dentroDeCarpetas(mensajes) }
+        // (TODO) y sin buscar: en la galería y con la lupa se sigue viendo. **Solo lo que tiene su
+        // tarjeta en la misma lista** (26-oct-2026, [CarpetaDePaginas.sueltosDelChat]): con la carpeta
+        // fuera de la vista, lo de dentro sale suelto en vez de desaparecer.
         val deEsteChat = remember(sinLecciones, chatDe) { delChat(sinLecciones, chatDe) }
         val deLaSeccion = remember(deEsteChat, seccion) { deSeccion(deEsteChat, seccion) }
-        val visibles = remember(deLaSeccion, consulta, porEtiqueta, sinLecciones, dentro) {
+        val visibles = remember(deLaSeccion, consulta, porEtiqueta, sinLecciones) {
             // **Desde el chat general se busca en todos** (14-sep-2026): los lienzos, fotos y
             // notas de todos los proyectos, por su nombre y su texto. Dentro del chat de un
             // proyecto, solo en ese.
             val buscados = when {
-                consulta.isNullOrBlank() && seccion == Seccion.TODO && dentro.isNotEmpty() -> deLaSeccion.filter { it.id !in dentro }
+                // Con un emoji elegido, primero el emoji: si la carpeta no lo lleva, lo suyo que sí, suelto.
+                consulta.isNullOrBlank() && seccion == Seccion.TODO -> CarpetaDePaginas.sueltosDelChat(porEmoji(deLaSeccion, porEtiqueta))
                 consulta.isNullOrBlank() -> deLaSeccion
                 chatDe == null -> buscar(deSeccion(sinLecciones, seccion), consulta!!)
                 else -> buscar(deLaSeccion, consulta!!)
@@ -7492,6 +7494,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         com.forge.pixpin.lecciones.LeccionActivity.abrir(this, File(ruta).name.removeSuffix(com.forge.pixpin.lecciones.LeccionesStore.EXTENSION))
                     ruta.substringAfterLast('.', "").equals("pdf", ignoreCase = true) ->
                         com.forge.pixpin.pdf.LectorPdfActivity.abrir(this, ruta, m.nombre)
+                    // **Un vídeo se ve aquí dentro** (26-oct-2026): el de una grabación del PC o del
+                    // móvil, o cualquier otro. Ver [VisorDeVideoActivity].
+                    SeccionesDelChat.esVideo(m) && VisorDeVideoActivity.seVeAqui(ruta) ->
+                        VisorDeVideoActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name })
                     // **Un IFC o un Revit, en el visor 3D** (10-oct-2026, pedido por el usuario: «ábrelos
                     // como en Windows, en una app separada, que en el canvas 3D se ve descolocado»). Es
                     // la lectura del PC (ifc-lite y rvt-rs, en el proceso de los planos), la misma que

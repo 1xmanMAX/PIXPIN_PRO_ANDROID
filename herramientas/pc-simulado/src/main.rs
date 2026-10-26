@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use pixpin_proyecto::almacen::{self, Ficha, Indice};
+use pixpin_proyecto::carpeta_de_paginas::{self, dentro_de_carpetas, Carpeta};
 use pixpin_proyecto::cuaderno::{self, Clase, Cuaderno, Mensaje, Sello};
 use pixpin_proyecto::vista::DiscoPc;
 use pixpin_sincro::galeria::{self, Caducidad, CapturasDelAparato, Entrada, Local};
@@ -213,17 +214,34 @@ fn ver(raiz: &Path) {
     let mut chats = Vec::new();
     for f in fichas {
         let ms = Cuaderno::leer_de(&almacen::carpeta(raiz, &f.id)).map(|c| c.mensajes).unwrap_or_default();
-        let lista: Vec<_> = ms.iter().map(|m| serde_json::json!({
-            "id": m.id, "uid": m.codigo_unico(), "clase": m.clase.as_ref().map(|c| format!("{c:?}")),
-            "nombre": m.nombre, "texto": m.texto, "respondeA": m.responde_a, "ruta": m.ruta,
-        })).collect();
+        let lista: Vec<_> = ms.iter().map(|m| {
+            // El fichero que nombra, como lo abre el PC (`vista::ruta_real`): su largo y su huella.
+            let fichero = m.ruta.as_deref()
+                .and_then(|r| pixpin_proyecto::vista::ruta_real(raiz, &f.id, r))
+                .and_then(|r| std::fs::read(r).ok());
+            // La carpeta, leida con el PC (`carpeta_de_paginas`).
+            let carpeta = Carpeta::de_mensaje(m).map(|c| serde_json::json!({
+                "grabacion": c.es_grabacion(), "voz": c.voz, "video": c.video, "duracionMs": c.duracion_ms,
+                "paginas": c.paginas.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+                "capturas": c.capturas().map(|p| p.id.clone()).collect::<Vec<_>>(),
+                "adjuntos": c.adjuntos().map(|p| p.id.clone()).collect::<Vec<_>>(),
+            }));
+            serde_json::json!({
+                "id": m.id, "uid": m.codigo_unico(), "clase": m.clase.as_ref().map(|c| format!("{c:?}")),
+                "nombre": m.nombre, "texto": m.texto, "respondeA": m.responde_a, "ruta": m.ruta,
+                "miniapp": m.miniapp, "resto": m.resto,
+                "largo": fichero.as_ref().map(|b| b.len()), "huella": fichero.as_ref().map(|b| huella(b)),
+                "carpeta": carpeta,
+            })
+        }).collect();
+        let dentro: Vec<String> = dentro_de_carpetas(&ms).into_iter().collect();
         // La foto del chat (25-oct-2026), tal cual la guarda el PC en su ficha, y si su imagen esta.
         let foto = pixpin_proyecto::avatar::valor_de(&f).cloned();
         let imagen = pixpin_proyecto::avatar::de_ficha(&f)
             .and_then(|a| pixpin_proyecto::avatar::ruta_de_la_imagen(raiz, &f.id, &a))
             .and_then(|r| std::fs::read(r).ok())
             .map(|b| String::from_utf8_lossy(&b).into_owned());
-        chats.push(serde_json::json!({"id": f.id, "nombre": f.nombre, "mensajes": lista, "avatar": foto, "imagenDelAvatar": imagen}));
+        chats.push(serde_json::json!({"id": f.id, "nombre": f.nombre, "mensajes": lista, "dentro": dentro, "avatar": foto, "imagenDelAvatar": imagen}));
     }
     let mut archivos = Vec::new();
     fn recorrer(base: &Path, d: &Path, sal: &mut Vec<String>) {
@@ -288,6 +306,82 @@ fn foto(raiz: &Path, nombre: &str, tipo: &str, valor: Option<&String>) {
     avatar::poner(raiz, &f.id, &a).unwrap();
 }
 
+/// **La huella de un fichero** (FNV-1a de 64 bits, en hexadecimal): la prueba la calcula igual en
+/// Kotlin para ver que un video llega byte a byte sin pasar sus megas por la salida.
+fn huella(b: &[u8]) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for x in b { h ^= *x as u64; h = h.wrapping_mul(0x100000001b3); }
+    format!("{h:016x}")
+}
+
+/// El proyecto del PC que se llama [nombre]; si no lo hay, se crea.
+fn proyecto_llamado(raiz: &Path, nombre: &str) -> Ficha {
+    let mut i = Indice::leer(raiz);
+    if let Some(f) = i.proyectos.iter().find(|f| f.nombre == nombre) { return f.clone() }
+    let ficha = Ficha::nueva(nombre, ahora(), &aparato());
+    i.proyectos.push(ficha.clone());
+    i.guardar(raiz).unwrap();
+    ficha
+}
+
+/// **Una clase grabada en el PC**, como `grabar_clase::guardar` (25-oct-2026): la nota de voz con
+/// `grabacion`/`capturas`/`video`, el `.mp4` (de [megas] MiB y pico: varios tramos del cable) con
+/// `enGrabacion`, dos capturas y, detras, la carpeta `tipo: "grabacion"` con todo dentro. Y una
+/// carpeta de paginas con una nota y una foto. Escribe en una linea los `id`.
+fn clase(raiz: &Path, nombre: &str, megas: usize) {
+    let f = proyecto_llamado(raiz, nombre);
+    let carpeta = almacen::carpeta(raiz, &f.id);
+    std::fs::create_dir_all(carpeta.join("archivos")).unwrap();
+    let audio = vec![7u8; 300_000];
+    let ruta_voz = almacen::guardar_adjunto(raiz, &f.id, "Clase 25-oct.m4a", &audio).unwrap();
+    let mut voz = Mensaje::adjunto(Clase::Voz, "Clase 25-oct.m4a", &ruta_voz, audio.len() as i64, &sello(&f, 1));
+    voz.duracion_ms = 90_000;
+    let video: Vec<u8> = (0..(megas << 20) + 123).map(|i| (i % 251) as u8).collect();
+    // «Clase (1).mp4»: el nombre con parentesis del segundo video del mismo nombre.
+    std::fs::write(carpeta.join("archivos/Clase 25-oct (1).mp4"), &video).unwrap();
+    let mut mp4 = Mensaje::adjunto(Clase::Archivo, "Clase 25-oct (1).mp4", "archivos/Clase 25-oct (1).mp4", video.len() as i64, &sello(&f, 2));
+    mp4.resto.insert("enGrabacion".into(), serde_json::json!({"de": voz.id, "ms": 0}));
+    let mut capturas = Vec::new();
+    for (n, ms) in [(1, 65_000i64), (2, 80_000)] {
+        let fichero = format!("clase-{}-{n}.png", ahora());
+        let ruta = almacen::guardar_adjunto(raiz, &f.id, &fichero, format!("PNG captura {n}").as_bytes()).unwrap();
+        let mut foto = Mensaje::adjunto(Clase::Imagen, &fichero, &ruta, 13, &sello(&f, 2 + n));
+        foto.texto = format!("⏱ 0{}:{:02} · Clase 25-oct", ms / 60_000, ms / 1000 % 60);
+        foto.resto.insert("enGrabacion".into(), serde_json::json!({"de": voz.id, "ms": ms}));
+        capturas.push((ms, foto));
+    }
+    voz.resto.insert("grabacion".into(), serde_json::json!("clase"));
+    voz.resto.insert("capturas".into(), serde_json::json!(capturas.iter().map(|(ms, m)| serde_json::json!({"ms": ms, "id": m.id})).collect::<Vec<_>>()));
+    voz.resto.insert("video".into(), serde_json::json!({"id": mp4.id}));
+    poner(raiz, &f, &voz);
+    poner(raiz, &f, &mp4);
+    for (_, m) in &capturas { poner(raiz, &f, m); }
+    let mut c = Carpeta::grabacion(&voz.id, 90_000);
+    c.video = mp4.id.clone();
+    c.anadir_al_minuto(&voz.id, "", 0);
+    c.anadir_al_minuto(&mp4.id, "", 0);
+    for (ms, m) in &capturas { c.anadir_al_minuto(&m.id, &format!("⏱ {}:{:02}", ms / 60_000, ms / 1000 % 60), *ms); }
+    let car = carpeta_de_paginas::mensaje_de_grabacion("Clase 25-10 10h58", &c, &sello(&f, 5));
+    poner(raiz, &f, &car);
+    // Una carpeta de paginas: una nota y una foto dentro.
+    let nota = Mensaje::nota("Dia 1: replanteo", &sello(&f, 6));
+    poner(raiz, &f, &nota);
+    let ruta = almacen::guardar_adjunto(raiz, &f.id, "pizarra.jpg", b"JPG de la pizarra").unwrap();
+    let foto = Mensaje::adjunto(Clase::Imagen, "pizarra.jpg", &ruta, 17, &sello(&f, 7));
+    poner(raiz, &f, &foto);
+    let mut d = Carpeta::default();
+    d.anadir(&nota.id, "Dia 1");
+    d.anadir(&foto.id, "Dia 2");
+    let mut diario = carpeta_de_paginas::mensaje_nuevo("Diario de obra", &sello(&f, 8));
+    diario.texto = d.escribir();
+    poner(raiz, &f, &diario);
+    println!("{}", serde_json::json!({
+        "proyecto": f.id, "voz": voz.id, "video": mp4.id, "huellaDelVideo": huella(&video), "largoDelVideo": video.len(),
+        "capturas": capturas.iter().map(|(_, m)| m.id.clone()).collect::<Vec<_>>(),
+        "carpeta": car.id, "diario": diario.id, "nota": nota.id, "foto": foto.id,
+    }));
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let raiz = Path::new(&a[2]);
@@ -298,6 +392,7 @@ fn main() {
         "ver" => ver(raiz),
         "galeria" => ver_galeria(raiz),
         "foto" => foto(raiz, &a[3], &a[4], a.get(5)),
+        "clase" => clase(raiz, &a[3], a.get(4).map(|m| m.parse().unwrap()).unwrap_or(5)),
         // Aqui `raiz` es el codigo del grupo: no hace falta disco.
         "suelto" => suelto(&a[2], a[3].parse().unwrap(), &a[4..]),
         _ => panic!("orden desconocida"),

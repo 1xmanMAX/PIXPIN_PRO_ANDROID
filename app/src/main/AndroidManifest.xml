@@ -273,6 +273,12 @@
             android:taskAffinity="${applicationId}.tareas"
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PixPin" />
+        <!-- El vídeo de un mensaje o de una grabación, aquí dentro (26-oct-2026): ver guardados/VisorDeVideoActivity. -->
+        <activity
+            android:name=".guardados.VisorDeVideoActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
+            android:theme="@style/Theme.PixPin" />
         <!-- Las carpetas de páginas del chat (25-oct-2026): ver guardados/CarpetaActivity. -->
         <activity
             android:name=".guardados.CarpetaActivity"

@@ -35,11 +35,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Brush
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.Mic
@@ -668,6 +670,9 @@ private fun Filas(
                                     enlace != null -> onAbrirEnlace(enlace.url)
                                     seccion == Seccion.VOZ -> m.ruta?.let { Reproductor.alternar(it, tituloDeAudio(contexto, m)) }
                                     seccion == Seccion.FIJADOS -> onVerEnElChat(m.id)
+                                    // Una carpeta o una grabación se abre entera, con lo que lleva
+                                    // (en el chat, tocar una grabación la estudia).
+                                    CarpetaDePaginas.esCarpeta(m) -> CarpetaActivity.abrir(contexto, m.id, entera = true)
                                     else -> onAbrir(m)
                                 }
                             },
@@ -678,7 +683,7 @@ private fun Filas(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     when (seccion) {
-                        Seccion.ARCHIVOS -> FilaDeArchivo(m, fechaDe)
+                        Seccion.ARCHIVOS -> if (CarpetaDePaginas.esCarpeta(m)) FilaDeCarpeta(m, porId, fechaDe) else FilaDeArchivo(m, fechaDe)
                         Seccion.ENLACES -> FilaDeEnlace(m, enlace)
                         Seccion.VOZ -> FilaDeVoz(m, fechaDe, sonando = suena.sonando && suena.ruta == m.ruta && m.ruta != null)
                         else -> FilaFijada(m, fechaDe)
@@ -727,6 +732,38 @@ private fun FilaDeArchivo(m: Mensaje, fechaDe: (Long) -> String) {
             fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1
         )
     }
+}
+
+/**
+ * **Una carpeta en «Archivos»** (26-oct-2026): con el icono del PC —el libro de un cuaderno, el
+ * micrófono de una grabación— en vez de la chapa de una extensión que no tiene, su nombre, lo que lleva
+ * («1:30 · 2 capturas», «3 páginas») y la carpeta abierta a la derecha, que es lo que hace tocarla.
+ * Antes salía como un archivo sin extensión («·») y no se sabía qué era.
+ */
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.FilaDeCarpeta(m: Mensaje, porId: Map<String, Mensaje>, fechaDe: (Long) -> String) {
+    val c = remember(m.texto) { CarpetaDePaginas.deMensaje(m) }
+    val grabacion = c?.esGrabacion == true
+    val color = if (grabacion) Color(0xFFE53935) else MaterialTheme.colorScheme.primary
+    Box(Modifier.size(46.dp).background(color, RoundedCornerShape(10.dp)), contentAlignment = Alignment.Center) {
+        Icon(if (grabacion) Icons.Filled.Mic else Icons.AutoMirrored.Filled.MenuBook, null, tint = Color.White)
+    }
+    Column(Modifier.weight(1f).padding(start = 12.dp)) {
+        Text(
+            m.nombre.ifBlank { if (grabacion) "Grabación" else CarpetasDelChat.NOMBRE_DE_SERIE },
+            fontSize = 15.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis
+        )
+        val lleva = when {
+            c == null -> "Carpeta"
+            grabacion -> CarpetasDelChat.detalleDeGrabacion(c)
+            else -> c.paginas.count { porId.containsKey(it.id) }.let { n -> if (n == 1) "1 página" else "$n páginas" }
+        }
+        Text(
+            listOf(lleva, fechaDe(m.cuando)).filter { it.isNotBlank() }.joinToString(" · "),
+            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1
+        )
+    }
+    Icon(Icons.Filled.FolderOpen, contentDescription = "Abrir la carpeta", tint = MaterialTheme.colorScheme.primary)
 }
 
 @Composable
