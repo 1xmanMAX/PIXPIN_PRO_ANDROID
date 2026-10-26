@@ -8,11 +8,11 @@ package com.forge.pixpin.ocr
  * cambian): **los mismos ficheros en el móvil, el PC y el escáner**, para que lean igual. Solo lo
  * de la escritura latina.
  *
- * **Por qué aquí no se baja nada todavía** (`docs/ocr.md` del PC, § Android): leer con Indra en el
- * teléfono pide además ONNX Runtime para Android (12,9 MB de `.so` en arm64, que el escáner baja
- * aparte para no engordar el APK) y el puerto del canal (`ocr/indra/` del escáner, ~2 800 líneas).
- * Los pesos tienen licencia **OpenRAIL-M modificada de Datalab**: no pueden ir en el APK; los baja
- * el usuario, si quiere. Esta lista es la que usará esa descarga, y la que dice el tamaño.
+ * **Lo baja [com.forge.pixpin.ocr.indra.MotorIndra]** (26-oct-2026; antes era solo la lista):
+ * al elegir Indra en Ajustes, a `files/indra/`, cada fichero comprobado con su sha256. El runtime
+ * no se baja: es el `libonnxruntime.so` que ya trae el APK (ver `ocr/indra/ModelosPorJna`). Los
+ * pesos tienen licencia **OpenRAIL-M modificada de Datalab**: no pueden ir en el APK; los baja el
+ * usuario, si quiere.
  */
 object CatalogoIndra {
     /** Commit de la etiqueta v1.1.0 de `datalab-to/indra-ocr`. */

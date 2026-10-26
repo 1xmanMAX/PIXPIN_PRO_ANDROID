@@ -11,9 +11,8 @@ package com.forge.pixpin.ocr
  * de formas (~2 MB de memoria en vez de ~80). Admite lo que usa `es_ES`: `FLAG UTF-8`, `PFX`/`SFX`
  * con condición, producto cruzado y un nivel de sufijo de continuación («-ción/S» → «-ciones»).
  *
- * **Hoy el teléfono no lo baja**: no tiene motor de OCR con confianza por letra (ver
- * [CorrectorOcr]), y sin ella corregir con el diccionario adivinaría. Queda listo para cuando lo
- * tenga (Indra del escáner, `catalogo` de [CatalogoIndra]).
+ * **Se baja con Indra** (26-oct-2026, [CatalogoIndra]) y lo usa su canal, que da confianza por
+ * letra. Sin Indra no se usa: corregir con el diccionario sin esa confianza adivinaría.
  *
  * Kotlin cuenta en `Char` (UTF-16) y el PC en caracteres Unicode: para el español —todo en el
  * plano básico— es lo mismo.

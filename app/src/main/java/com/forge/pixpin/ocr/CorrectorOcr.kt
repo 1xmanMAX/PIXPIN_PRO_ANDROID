@@ -17,8 +17,8 @@ data class CambioOcr(val de: String, val a: String, val origen: String)
 
 /**
  * **El LM de Indra para desempatar**: log P de la palabra (con espacio delante y detrás); NaN si no
- * sabe (una letra fuera de su vocabulario). En el PC es `Desempate { lm, vocab }`; aquí una función,
- * porque el teléfono aún no carga el LM.
+ * sabe (una letra fuera de su vocabulario). En el PC es `Desempate { lm, vocab }`; aquí una función
+ * (la da [com.forge.pixpin.ocr.indra.LmIndra.desempate]).
  */
 fun interface DesempateOcr {
     fun logp(palabra: String): Double
@@ -39,10 +39,10 @@ fun interface DesempateOcr {
  *
  * Banco del escáner (54 imágenes): CER 29,6 → 27,2 con todo el afinado.
  *
- * **En el teléfono, hoy** (`docs/ocr.md` del PC, § Android): PixPin Android no lleva motor de OCR;
- * lo único que lee texto de una foto es la visión del modelo del asistente. A eso se le pasa
- * **solo «Mi vocabulario»** ([conVocabulario]) —sin diccionario, que sin confianza por letra
- * adivinaría—; el resto queda probado y listo para cuando haya un lector con confianzas.
+ * **En el teléfono** (26-oct-2026): lo usa entero el canal de Indra
+ * ([com.forge.pixpin.ocr.indra.CanalIndra]), con la confianza de cada letra. A lo que transcribe
+ * de una foto la visión del asistente se le pasa **solo «Mi vocabulario»** ([conVocabulario]) —sin
+ * diccionario, que sin confianza por letra adivinaría—.
  */
 class CorrectorOcr(val lexico: Hunspell?, val vocabulario: Vocabulario) {
 
