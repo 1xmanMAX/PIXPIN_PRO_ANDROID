@@ -33,7 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -77,6 +76,9 @@ import kotlinx.coroutines.withContext
  * **Encima del código, tus aparatos** (25-oct-2026, como «Enviar por Wi-Fi» del PC): los del grupo,
  * con quién se ve en la Wi-Fi, y un toque manda directo por el canal cifrado del grupo, sin código
  * ni aprobar nada. El código y el QR siguen debajo para los de fuera. Ver [AlGrupo].
+ *
+ * **Solo lo que se usa** (27-oct-2026, pedido por el usuario): fuera los párrafos que explicaban
+ * la Wi-Fi y cada camino; quedan lo que se envía, tus aparatos, el código o el QR y la lista.
  */
 class EnviarActivity : ComponentActivity() {
 
@@ -520,10 +522,6 @@ class EnviarActivity : ComponentActivity() {
                 if (buscandoGrupo) CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
                 else androidx.compose.material3.TextButton(onClick = { lifecycleScope.launch { buscarAlGrupo() } }) { Text("Buscar otra vez") }
             }
-            Text(
-                "Están en tu grupo: se envía directo, sin escanear. Llega a lo que tengan abierto (un chat; un lienzo solo acepta fotos) o a Mensajes guardados.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
             Spacer(Modifier.height(6.dp))
             for (f in filas) {
                 val en = alGrupo[f.aparato.id]
@@ -575,12 +573,6 @@ class EnviarActivity : ComponentActivity() {
     private fun ElEscaner() {
         if (cosas.isEmpty()) return
         Text("Pasa la cámara por el código de cada uno", style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(4.dp))
-        Text(
-            "En el otro aparato: Recibir por Wi-Fi → «Enseñar mi código para que me envíen». Puedes escanear varios seguidos.",
-            style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
         Spacer(Modifier.height(10.dp))
         Box(
             Modifier.widthIn(max = 320.dp).fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp)),
@@ -640,8 +632,6 @@ class EnviarActivity : ComponentActivity() {
         )
         Spacer(Modifier.height(16.dp))
         if (escaneando) { ElEscaner(); return }
-        Text("En el otro teléfono: PixPin → Sincronizar → Recibir", style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
-        Spacer(Modifier.height(14.dp))
         Box(
             Modifier.widthIn(max = 300.dp).fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp)).background(Color.White).padding(14.dp)
         ) {
@@ -650,20 +640,6 @@ class EnviarActivity : ComponentActivity() {
         Spacer(Modifier.height(14.dp))
         Text("o escribe este código", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Text(Envio.legible(e.codigo), fontFamily = FontFamily.Monospace, fontSize = 40.sp, fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(16.dp))
-        Caja {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text("Los dos en la misma Wi-Fi", fontWeight = FontWeight.SemiBold)
-                    Text(
-                        "Si no hay Wi-Fi, uno puede activar su zona Wi-Fi y el otro conectarse a ella. No se usa internet.",
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-        }
         if (e.intentosMalos > 0) {
             Spacer(Modifier.height(8.dp))
             Text("Alguien probó con un código equivocado (${e.intentosMalos} de ${Envio.INTENTOS}).", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -672,11 +648,7 @@ class EnviarActivity : ComponentActivity() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
-            Text(
-                "Esperando… Pueden conectarse varios aparatos; a cada uno le das tú al botón. El código deja de valer al cerrar esta pantalla.",
-                style = MaterialTheme.typography.bodySmall,
-                textAlign = TextAlign.Center
-            )
+            Text("Esperando…", style = MaterialTheme.typography.bodySmall)
         }
     }
 

@@ -7,16 +7,22 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -34,16 +40,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Send
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sync
+import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -70,6 +79,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -80,6 +91,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.lifecycleScope
 import com.forge.pixpin.guardados.tamanoLegible
+import com.forge.pixpin.ui.ROJO_DE_FALLO
 import com.forge.pixpin.ui.theme.PixPinTheme
 import java.io.EOFException
 import java.net.InetAddress
@@ -145,6 +157,10 @@ class SincronizarActivity : ComponentActivity() {
     private val responden = mutableStateMapOf<String, Boolean>()
     private var trabajo: Job? = null
     private var version by mutableIntStateOf(0)
+    /** Con qué aparato se está sincronizando ahora, para que su tarjeta gire. Ver [TarjetaDeAparato]. */
+    private var sincronizandoCon by mutableStateOf<String?>(null)
+    /** Con quién falló la última vez que se le dio a sincronizar: su punto, en rojo hasta que se vuelva a probar. */
+    private val fallaronCon = mutableStateMapOf<String, Boolean>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -220,7 +236,7 @@ class SincronizarActivity : ComponentActivity() {
             val antes = porId[v.id]
             porId[v.id] = Miembro(v.id, v.nombre, v.datos["l"]?.ifBlank { null } ?: antes?.letra, v.host.hostAddress, v.puerto, true)
         }
-        return porId.values.sortedWith(compareByDescending<Miembro> { it.cerca }.thenBy { it.nombre })
+        return TarjetasDeAparatos.ordenar(porId.values.toList(), { it.cerca }, { it.nombre })
     }
 
     // ---------------------------------------------------------- sincronizar
@@ -234,12 +250,14 @@ class SincronizarActivity : ComponentActivity() {
         val cancelada: Boolean = false
     )
 
-    private fun sincronizarCon(host: String, puerto: Int, nombre: String) {
+    /** [id]: el del aparato, si se sabe, para que su tarjeta gire y diga si falló. Ver [TarjetaDeAparato]. */
+    private fun sincronizarCon(host: String, puerto: Int, nombre: String, id: String? = null) {
         if (trabajo?.isActive == true) return
         trabajo = lifecycleScope.launch(Dispatchers.IO) {
             val hecho = Sesion.Hecho()
             // Toda la vuelta cuenta para el botón de sincronizar, también mientras conecta. Ver [VueltasEnMarcha].
             VueltasEnMarcha.empezar()
+            id?.let { sincronizandoCon = it; fallaronCon.remove(it) }
             try {
                 val v = unaVuelta(host, puerto, nombre, preguntar = true, hecho = hecho, rotulo = "")
                 if (!v.cancelada) VueltasEnMarcha.apuntar(true)
@@ -253,9 +271,11 @@ class SincronizarActivity : ComponentActivity() {
                 }
             } catch (e: Exception) {
                 VueltasEnMarcha.apuntarSiFallo(e)
+                if (id != null && VueltasEnMarcha.fallo(e)) fallaronCon[id] = true
                 fase = Fase.Fallo(explicar(e, nombre))
             } finally {
                 VueltasEnMarcha.acabar()
+                sincronizandoCon = null
             }
             version++
         }
@@ -286,7 +306,7 @@ class SincronizarActivity : ComponentActivity() {
         trabajo = lifecycleScope.launch(Dispatchers.IO) {
             // Toda la ronda cuenta como una: entre aparato y aparato el botón no se para.
             VueltasEnMarcha.empezar()
-            try { conTodos(aparatos) } finally { VueltasEnMarcha.acabar() }
+            try { conTodos(aparatos) } finally { VueltasEnMarcha.acabar(); sincronizandoCon = null }
         }
     }
 
@@ -306,6 +326,8 @@ class SincronizarActivity : ComponentActivity() {
                     // lo sigue estando, y cada intento cuesta el tiempo de agotar la conexión.
                     if (m.nombre in fallaron) continue
                     val rotulo = if (rondas > 1) "Ronda $ronda de $rondas · " else ""
+                    sincronizandoCon = m.id
+                    fallaronCon.remove(m.id)
                     try {
                         val v = unaVuelta(host, m.puerto, m.nombre, preguntar = false, hecho = hecho, rotulo = rotulo)
                         if (v.cancelada) { fase = Fase.Nada; return }
@@ -314,6 +336,7 @@ class SincronizarActivity : ComponentActivity() {
                         alDia += v.nombre
                     } catch (e: Exception) {
                         fallaron[m.nombre] = explicar(e, m.nombre)
+                        if (VueltasEnMarcha.fallo(e)) fallaronCon[m.id] = true
                     }
                 }
             }
@@ -643,65 +666,63 @@ class SincronizarActivity : ComponentActivity() {
         Dialogos()
     }
 
+    /**
+     * **Tarjetas, papelera con su icono y «Añadir» siempre abajo** (27-oct-2026, pedido por el
+     * usuario). La pantalla es vertical y había sitio de sobra, pero se llenaba de explicaciones:
+     * cada aparato con «Disponible · sincronizado ahora mismo», el interruptor de «Sincronizar sola»
+     * —que ya va siempre encendida— y una caja grande de «Añadir otro aparato» en medio. Ahora los
+     * aparatos son tarjetas cuadradas de dos en dos ([TarjetaDeAparato]), y añadir es una pastilla
+     * amarilla fija abajo ([BotonAnadir]) que abre lo de siempre: el código del grupo.
+     */
     @Composable
     private fun Portada(identidad: Identidad) {
-        Column(
-            Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { finish() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
-                Text("Sincronizar", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
-            }
-            Text(
-                "Por la Wi-Fi, sin internet.",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(start = 16.dp, bottom = 16.dp)
-            )
-
-            EsteAparato(identidad)
-
-            // **Enviar y recibir, arriba** (16-sep-2026). Estaban al final de la pantalla, debajo
-            // de los aparatos del grupo, y el usuario ni los veía: «al final aparece recibir
-            // archivos, no le di clic». Es lo que más se usa y no necesita grupo, así que va
-            // delante de todo lo demás.
-            Titulo("Enviar o recibir archivos")
-            EnviarORecibir()
-
-            Titulo("Tus aparatos")
-            if (identidad.enGrupo) ConGrupo(identidad) else SinGrupo()
-
-            // **La papelera, a mano y sin pasar por un proyecto** (21-sep-2026): se abría desde el
-            // menú de un proyecto, y si lo borrado eran todos no quedaba por dónde entrar.
-            Titulo("Papelera")
-            Caja {
+        var anadiendo by remember { mutableStateOf(false) }
+        Column(Modifier.fillMaxSize().safeDrawingPadding()) {
+            Column(
+                Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "Proyectos borrados, lienzos sin proyecto y cómo estaba todo antes de cada sincronización.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    TextButton(onClick = { CopiasActivity.abrir(this@SincronizarActivity, null) }) { Text("Abrir") }
+                    IconButton(onClick = { finish() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Volver") }
+                    Text("Sincronizar", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                 }
-            }
+                Spacer(Modifier.height(8.dp))
 
-            val registro by Presencia.registro.collectAsState()
-            val atendiendo by Presencia.atendiendo.collectAsState()
-            if (atendiendo != null || registro.isNotEmpty()) {
-                Titulo("Actividad")
-                Caja {
-                    atendiendo?.let {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
-                            Spacer(Modifier.width(8.dp))
-                            Text(it, style = MaterialTheme.typography.bodyMedium)
+                EsteAparato(identidad)
+
+                // **Enviar y recibir, arriba** (16-sep-2026): es lo que más se usa y no necesita grupo.
+                Titulo("Enviar o recibir")
+                EnviarORecibir()
+
+                Titulo("Tus aparatos")
+                if (identidad.enGrupo) ConGrupo(identidad) else SinGrupo()
+
+                // **La papelera, a mano y sin pasar por un proyecto** (21-sep-2026), con su icono
+                // (27-oct-2026).
+                Spacer(Modifier.height(22.dp))
+                Papelera()
+
+                val registro by Presencia.registro.collectAsState()
+                val atendiendo by Presencia.atendiendo.collectAsState()
+                if (atendiendo != null || registro.isNotEmpty()) {
+                    Titulo("Actividad")
+                    Caja {
+                        atendiendo?.let {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
+                                Spacer(Modifier.width(8.dp))
+                                Text(it, style = MaterialTheme.typography.bodyMedium)
+                            }
                         }
+                        for (r in registro.take(5)) Text(r, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    for (r in registro.take(5)) Text(r, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
+                Spacer(Modifier.height(16.dp))
             }
-            Spacer(Modifier.height(40.dp))
+            BotonAnadir(Modifier.align(Alignment.CenterHorizontally).padding(top = 6.dp, bottom = 14.dp)) { anadiendo = true }
+        }
+        if (anadiendo) {
+            if (identidad.enGrupo) AnadirConGrupo(identidad) { anadiendo = false }
+            else AnadirSinGrupo { anadiendo = false }
         }
     }
 
@@ -734,14 +755,10 @@ class SincronizarActivity : ComponentActivity() {
                 onDismissRequest = { renombrando = false },
                 title = { Text("Nombre de este aparato") },
                 text = {
-                    Column {
-                        Text("Es como lo verán tus otros aparatos.", style = MaterialTheme.typography.bodySmall)
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = nombre, onValueChange = { nombre = it.take(40) }, singleLine = true,
-                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
-                        )
-                    }
+                    OutlinedTextField(
+                        value = nombre, onValueChange = { nombre = it.take(40) }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences)
+                    )
                 },
                 confirmButton = {
                     TextButton(enabled = nombre.isNotBlank(), onClick = {
@@ -754,246 +771,308 @@ class SincronizarActivity : ComponentActivity() {
         }
     }
 
+    /** Sin grupo no hay tarjetas: crear el grupo o unirse está en «Añadir». Ver [AnadirSinGrupo]. */
     @Composable
     private fun SinGrupo() {
-        var uniendo by remember { mutableStateOf(false) }
-        Caja {
+        Text(
+            "Todavía no hay otros aparatos.",
+            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 4.dp)
+        )
+    }
+
+    /**
+     * **Los del grupo, en tarjetas de dos en dos** (27-oct-2026). El orden y las filas los decide
+     * [TarjetasDeAparatos]; aquí solo se pintan. Debajo, «con todos» si se ven dos o más, sin la
+     * explicación de antes.
+     */
+    @Composable
+    private fun ConGrupo(identidad: Identidad) {
+        val lista = miembros(identidad)
+        if (lista.isEmpty()) {
             Text(
-                "Crea un grupo en uno de tus aparatos y únete desde los demás con su código. Solo los del grupo se sincronizan entre sí.",
-                style = MaterialTheme.typography.bodyMedium
+                "Todavía no hay otro aparato en el grupo.",
+                style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 4.dp)
             )
-            Spacer(Modifier.height(14.dp))
-            Button(onClick = {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    disco.crearGrupo(nombre = disco.identidad.leer(nombrePorOmision()).yo.nombre)
-                    withContext(Dispatchers.Main) { Presencia.reiniciar(); buscar(); version++ }
-                }
-            }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Crear un grupo") }
-            Spacer(Modifier.height(8.dp))
-            OutlinedButton(onClick = { uniendo = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Unirme con un código") }
         }
-        if (uniendo) {
-            var codigo by remember { mutableStateOf("") }
-            var direccion by remember { mutableStateOf("") }
-            val limpio = Grupo.limpiar(codigo)
-            AlertDialog(
-                onDismissRequest = { uniendo = false },
-                title = { Text("Unirme a un grupo") },
-                text = {
-                    Column {
-                        Text("Escribe el código que sale en «Añadir otro aparato» en uno del grupo. Ese aparato tiene que tener PixPin abierto y estar en tu misma Wi-Fi.")
-                        Spacer(Modifier.height(10.dp))
-                        OutlinedTextField(
-                            value = codigo, onValueChange = { codigo = it.take(14) }, singleLine = true,
-                            label = { Text("Código") }, placeholder = { Text("ABCDE-23456") },
-                            textStyle = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
-                            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters)
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(
-                            value = direccion, onValueChange = { direccion = it.take(40) }, singleLine = true,
-                            label = { Text("Dirección (solo si no lo encuentra)") }, placeholder = { Text("192.168.1.20:47474") }
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(enabled = Grupo.valido(limpio), onClick = {
-                        uniendo = false
-                        unirseCon(limpio, direccion.ifBlank { null })
-                    }) { Text("Unirme") }
-                },
-                dismissButton = { TextButton(onClick = { uniendo = false }) { Text("Cancelar") } }
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            for (fila in TarjetasDeAparatos.enFilas(lista)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    for (m in fila) TarjetaDeAparato(m, Modifier.weight(1f))
+                    // La última fila a medias: el hueco guarda el tamaño de la tarjeta.
+                    repeat(2 - fila.size) { Spacer(Modifier.weight(1f)) }
+                }
+            }
+        }
+        // **Todos de una vez** (16-sep-2026). Ver [sincronizarConTodos].
+        val disponibles = lista.filter { it.cerca && it.host != null }
+        if (disponibles.size > 1) {
+            Spacer(Modifier.height(12.dp))
+            OutlinedButton(onClick = { sincronizarConTodos(disponibles) }, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                Icon(Icons.Filled.Sync, contentDescription = null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Sincronizar con todos (${disponibles.size})")
+            }
+        }
+        Grupo.choques(identidad.miembros).forEach { (letra, quienes) ->
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Hay dos aparatos con la letra «$letra» (${quienes.joinToString { it.nombre }}). Sal del grupo en el que entró después y vuelve a unirte.",
+                color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall
             )
         }
     }
 
+    /**
+     * **Un aparato, una tarjeta cuadrada** (27-oct-2026): su letra, su nombre, **un punto** y su
+     * botón de sincronizar. El punto es verde si contesta, gris si no, rojo si la última vez que se
+     * le dio a su botón no se pudo, y del color de la app mientras se sincroniza con él (y entonces
+     * el icono del botón gira). Sin textos de estado: el punto lo dice. Ver [TarjetasDeAparatos].
+     */
     @Composable
-    private fun ConGrupo(identidad: Identidad) {
+    private fun TarjetaDeAparato(m: Miembro, modifier: Modifier) {
+        val sincronizando = sincronizandoCon == m.id
+        val punto = TarjetasDeAparatos.punto(m.cerca, sincronizando, fallaronCon[m.id] == true)
+        val color = when (punto) {
+            TarjetasDeAparatos.Punto.CERCA -> VERDE
+            TarjetasDeAparatos.Punto.SINCRONIZANDO -> MaterialTheme.colorScheme.primary
+            TarjetasDeAparatos.Punto.FALLO -> ROJO_DE_FALLO
+            TarjetasDeAparatos.Punto.LEJOS -> MaterialTheme.colorScheme.outline
+        }
+        Card(
+            modifier = modifier.aspectRatio(1f),
+            shape = RoundedCornerShape(18.dp),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+            elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        ) {
+            Column(Modifier.fillMaxSize().padding(14.dp)) {
+                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                    Letra(m.letra)
+                    Spacer(Modifier.weight(1f))
+                    Punto(color, tamano = 12.dp)
+                }
+                Spacer(Modifier.weight(1f))
+                Text(
+                    m.nombre, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.weight(1f))
+                Row(Modifier.fillMaxWidth()) {
+                    Spacer(Modifier.weight(1f))
+                    FilledTonalIconButton(
+                        onClick = { m.host?.let { sincronizarCon(it, m.puerto, m.nombre, m.id) } },
+                        enabled = m.host != null
+                    ) {
+                        IconoQueGira(sincronizando, contentDescription = "Sincronizar con ${m.nombre}")
+                    }
+                }
+            }
+        }
+    }
+
+    /** El de sincronizar, girando mientras [gira]. La animación solo existe mientras gira. */
+    @Composable
+    private fun IconoQueGira(gira: Boolean, contentDescription: String) {
+        if (gira) {
+            val giro = rememberInfiniteTransition(label = "tarjeta")
+            val angulo by giro.animateFloat(
+                0f, 360f, infiniteRepeatable(tween(1000, easing = LinearEasing), RepeatMode.Restart), label = "angulo"
+            )
+            Icon(Icons.Filled.Sync, contentDescription = contentDescription, modifier = Modifier.rotate(angulo))
+        } else {
+            Icon(Icons.Filled.Sync, contentDescription = contentDescription)
+        }
+    }
+
+    /** La papelera: su icono y su nombre, y se abre al tocar. Ver [CopiasActivity]. */
+    @Composable
+    private fun Papelera() {
+        Caja(relleno = PaddingValues(0.dp)) {
+            Row(
+                Modifier.fillMaxWidth().clickable { CopiasActivity.abrir(this@SincronizarActivity, null) }
+                    .padding(horizontal = 16.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.width(12.dp))
+                Text("Papelera", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+            }
+        }
+    }
+
+    /** **«Añadir», fijo abajo**: «+» en una pastilla amarilla (27-oct-2026, pedido por el usuario). */
+    @Composable
+    private fun BotonAnadir(modifier: Modifier = Modifier, alTocar: () -> Unit) {
+        Row(
+            modifier.shadow(3.dp, CircleShape).clip(CircleShape).background(AMARILLO).clickable(onClick = alTocar)
+                .padding(horizontal = 24.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.Add, contentDescription = null, tint = SOBRE_AMARILLO)
+            Spacer(Modifier.width(8.dp))
+            Text("Añadir", color = SOBRE_AMARILLO, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+        }
+    }
+
+    /**
+     * **Añadir sin grupo**: crear uno (y entonces sale su código, ver [AnadirConGrupo]) o unirse al
+     * de otro aparato con su código. Es lo que antes estaba en la caja de «Tus aparatos».
+     */
+    @Composable
+    private fun AnadirSinGrupo(cerrar: () -> Unit) {
+        var uniendo by remember { mutableStateOf(false) }
+        if (!uniendo) {
+            AlertDialog(
+                onDismissRequest = cerrar,
+                title = { Text("Añadir un aparato") },
+                text = {
+                    Column {
+                        Button(onClick = {
+                            // Sin cerrar: al crearse el grupo, este mismo diálogo pasa a enseñar el código.
+                            lifecycleScope.launch(Dispatchers.IO) {
+                                disco.crearGrupo(nombre = disco.identidad.leer(nombrePorOmision()).yo.nombre)
+                                withContext(Dispatchers.Main) { Presencia.reiniciar(); buscar(); version++ }
+                            }
+                        }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Crear un grupo") }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = { uniendo = true }, modifier = Modifier.fillMaxWidth().height(48.dp)) { Text("Unirme con un código") }
+                    }
+                },
+                confirmButton = {},
+                dismissButton = { TextButton(onClick = cerrar) { Text("Cancelar") } }
+            )
+        } else {
+            UnirmeConCodigo(cerrar)
+        }
+    }
+
+    /** El código de un aparato del grupo y, si no lo encuentra solo, su dirección. Ver [unirseCon]. */
+    @Composable
+    private fun UnirmeConCodigo(cerrar: () -> Unit) {
+        var codigo by remember { mutableStateOf("") }
+        var direccion by remember { mutableStateOf("") }
+        val limpio = Grupo.limpiar(codigo)
+        AlertDialog(
+            onDismissRequest = cerrar,
+            title = { Text("Unirme a un grupo") },
+            text = {
+                Column {
+                    Text("El código sale en «Añadir», en un aparato del grupo con PixPin abierto y en tu misma Wi-Fi.", style = MaterialTheme.typography.bodySmall)
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = codigo, onValueChange = { codigo = it.take(14) }, singleLine = true,
+                        label = { Text("Código") }, placeholder = { Text("ABCDE-23456") },
+                        textStyle = MaterialTheme.typography.titleMedium.copy(fontFamily = FontFamily.Monospace),
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters)
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = direccion, onValueChange = { direccion = it.take(40) }, singleLine = true,
+                        label = { Text("Dirección (solo si no lo encuentra)") }, placeholder = { Text("192.168.1.20:47474") }
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = Grupo.valido(limpio), onClick = {
+                    cerrar()
+                    unirseCon(limpio, direccion.ifBlank { null })
+                }) { Text("Unirme") }
+            },
+            dismissButton = { TextButton(onClick = cerrar) { Text("Cancelar") } }
+        )
+    }
+
+    /**
+     * **Añadir con grupo**: el código del grupo (se toca para verlo, que no quede a la vista de
+     * cualquiera), conectar con una dirección escrita y salir del grupo. Era la caja grande de
+     * «Añadir otro aparato» que había en medio de la pantalla.
+     */
+    @Composable
+    private fun AnadirConGrupo(identidad: Identidad, cerrar: () -> Unit) {
         var verCodigo by remember { mutableStateOf(false) }
         var saliendo by remember { mutableStateOf(false) }
         var aMano by remember { mutableStateOf(false) }
-        val lista = miembros(identidad)
-
-        Caja(relleno = PaddingValues(vertical = 6.dp)) {
-            if (lista.isEmpty()) {
-                Text(
-                    "Todavía no hay otro aparato en el grupo. Añade uno con el código de abajo.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                )
-            }
-            lista.forEachIndexed { i, m ->
-                if (i > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
-                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Letra(m.letra)
-                    Spacer(Modifier.width(12.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(m.nombre, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Punto(if (m.cerca) VERDE else MaterialTheme.colorScheme.outline)
-                            Spacer(Modifier.width(6.dp))
-                            val cuando = disco.ultimaVez(m.id)
-                            Text(
-                                (if (m.cerca) "Disponible" else "No encontrado") +
-                                    (if (cuando > 0) " · sincronizado ${haceCuanto(cuando)}" else ""),
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+        when {
+            aMano -> {
+                var texto by remember { mutableStateOf("") }
+                var mia by remember { mutableStateOf<String?>(null) }
+                LaunchedEffect(Unit) { mia = withContext(Dispatchers.IO) { Red.miDireccion(this@SincronizarActivity) } }
+                AlertDialog(
+                    onDismissRequest = cerrar,
+                    title = { Text("Conectar con una dirección") },
+                    text = {
+                        Column {
+                            OutlinedTextField(value = texto, onValueChange = { texto = it.take(40) }, singleLine = true, placeholder = { Text("192.168.1.20:47474") })
+                            Spacer(Modifier.height(12.dp))
+                            Text("La de este aparato:", style = MaterialTheme.typography.labelMedium)
+                            Text(mia?.let { "$it:${red.puerto.takeIf { p -> p > 0 } ?: Red.PUERTO}" } ?: "Sin Wi-Fi", fontFamily = FontFamily.Monospace, fontSize = 18.sp)
                         }
-                    }
-                    Spacer(Modifier.width(8.dp))
-                    if (m.cerca && m.host != null) {
-                        Button(onClick = { sincronizarCon(m.host, m.puerto, m.nombre) }, contentPadding = PaddingValues(horizontal = 14.dp)) {
-                            Icon(Icons.Filled.Sync, contentDescription = null, Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("Sincronizar")
-                        }
-                    } else if (m.host != null) {
-                        OutlinedButton(onClick = { sincronizarCon(m.host, m.puerto, m.nombre) }) { Text("Probar") }
-                    }
-                }
-            }
-            // **Todos de una vez** (16-sep-2026): con tres aparatos, sincronizar de uno en uno
-            // son seis pulsaciones y hay que acordarse del orden. Ver [sincronizarConTodos].
-            val disponibles = lista.filter { it.cerca && it.host != null }
-            if (disponibles.size > 1) {
-                Button(
-                    onClick = { sincronizarConTodos(disponibles) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp).height(48.dp)
-                ) {
-                    Icon(Icons.Filled.Sync, contentDescription = null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(8.dp))
-                    Text("Sincronizar con todos (${disponibles.size})")
-                }
-                Text(
-                    if (disponibles.size > 2) {
-                        "Sin preguntar nada, uno detrás de otro y en dos rondas, para que todos acaben con todo."
-                    } else {
-                        "Sin preguntar nada: va con lo que elegiste la última vez con cada uno."
                     },
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp).padding(bottom = 6.dp)
+                    confirmButton = {
+                        TextButton(enabled = partirDireccion(texto) != null, onClick = {
+                            cerrar()
+                            val (h, p) = partirDireccion(texto)!!
+                            sincronizarCon(h, p, h)
+                        }) { Text("Conectar") }
+                    },
+                    dismissButton = { TextButton(onClick = { aMano = false }) { Text("Atrás") } }
                 )
             }
-            if (lista.any { !it.cerca }) {
-                Text(
-                    "Si no aparece: que tenga PixPin abierto y esté en esta Wi-Fi.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
-                )
-            }
-            TextButton(onClick = { aMano = true }, modifier = Modifier.padding(horizontal = 6.dp)) { Text("Conectar con una dirección") }
-            // **Sincronizar sola** (9-oct-2026, como el PC desde el 8-oct): con PixPin abierto, con
-            // los del grupo que contesten. Ver [SincronizacionAutomatica].
-            var sola by remember { mutableStateOf(SincronizacionAutomatica.encendida(this@SincronizarActivity)) }
-            Row(
-                Modifier.fillMaxWidth().clickable { sola = !sola; SincronizacionAutomatica.poner(this@SincronizarActivity, sola) }
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Sincronizar sola", style = MaterialTheme.typography.bodyLarge)
-                    Text(
-                        "Con PixPin abierto, cada pocos minutos y al cambiar algo, con los del grupo que estén en esta Wi-Fi. No borra proyectos: eso, a mano.",
-                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                Spacer(Modifier.width(8.dp))
-                androidx.compose.material3.Switch(checked = sola, onCheckedChange = { sola = it; SincronizacionAutomatica.poner(this@SincronizarActivity, it) })
-            }
-        }
-
-        Spacer(Modifier.height(12.dp))
-        Caja {
-            Text("Añadir otro aparato", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-            Spacer(Modifier.height(4.dp))
-            Text("En el otro aparato: Sincronizar → «Unirme con un código».", style = MaterialTheme.typography.bodyMedium)
-            Spacer(Modifier.height(10.dp))
-            Box(
-                Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
-                    .clickable { verCodigo = !verCodigo }.padding(vertical = 14.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    if (verCodigo) Grupo.legible(identidad.codigo!!) else "Toca para ver el código",
-                    fontFamily = if (verCodigo) FontFamily.Monospace else FontFamily.Default,
-                    fontSize = if (verCodigo) 26.sp else 15.sp, fontWeight = FontWeight.Bold
-                )
-            }
-            Grupo.choques(identidad.miembros).forEach { (letra, quienes) ->
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    "Hay dos aparatos con la letra «$letra» (${quienes.joinToString { it.nombre }}). Sal del grupo en el que entró después y vuelve a unirte.",
-                    color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall
-                )
-            }
-            Spacer(Modifier.height(4.dp))
-            TextButton(onClick = { saliendo = true }) { Text("Salir del grupo", color = MaterialTheme.colorScheme.error) }
-        }
-
-        if (aMano) {
-            var texto by remember { mutableStateOf("") }
-            var mia by remember { mutableStateOf<String?>(null) }
-            LaunchedEffect(Unit) { mia = withContext(Dispatchers.IO) { Red.miDireccion(this@SincronizarActivity) } }
-            AlertDialog(
-                onDismissRequest = { aMano = false },
-                title = { Text("Conectar con una dirección") },
-                text = {
-                    Column {
-                        Text("Escribe la dirección que sale en el otro aparato, en esta misma ventana.")
-                        Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(value = texto, onValueChange = { texto = it.take(40) }, singleLine = true, placeholder = { Text("192.168.1.20:47474") })
-                        Spacer(Modifier.height(12.dp))
-                        Text("La de este aparato:", style = MaterialTheme.typography.labelMedium)
-                        Text(mia?.let { "$it:${red.puerto.takeIf { p -> p > 0 } ?: Red.PUERTO}" } ?: "Sin Wi-Fi", fontFamily = FontFamily.Monospace, fontSize = 18.sp)
-                    }
-                },
-                confirmButton = {
-                    TextButton(enabled = partirDireccion(texto) != null, onClick = {
-                        aMano = false
-                        val (h, p) = partirDireccion(texto)!!
-                        sincronizarCon(h, p, h)
-                    }) { Text("Conectar") }
-                },
-                dismissButton = { TextButton(onClick = { aMano = false }) { Text("Cerrar") } }
-            )
-        }
-        if (saliendo) {
-            AlertDialog(
+            saliendo -> AlertDialog(
                 onDismissRequest = { saliendo = false },
                 title = { Text("¿Salir del grupo?") },
-                text = { Text("Este aparato dejará de sincronizarse con los demás. No se borra nada. Si vuelves a unirte, la primera vez te preguntará por lo que haya cambiado en los dos lados.") },
-                confirmButton = { TextButton(onClick = { saliendo = false; disco.salirDelGrupo(); encontrados.clear(); Presencia.reiniciar(); version++ }) { Text("Salir") } },
+                text = { Text("Este aparato dejará de sincronizarse con los demás. No se borra nada.") },
+                confirmButton = {
+                    TextButton(onClick = { cerrar(); disco.salirDelGrupo(); encontrados.clear(); Presencia.reiniciar(); version++ }) {
+                        Text("Salir", color = MaterialTheme.colorScheme.error)
+                    }
+                },
                 dismissButton = { TextButton(onClick = { saliendo = false }) { Text("Cancelar") } }
+            )
+            else -> AlertDialog(
+                onDismissRequest = cerrar,
+                title = { Text("Añadir otro aparato") },
+                text = {
+                    Column {
+                        Text("En el otro: Sincronizar → Añadir → «Unirme con un código».", style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(10.dp))
+                        Box(
+                            Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
+                                .clickable { verCodigo = !verCodigo }.padding(vertical = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                if (verCodigo) Grupo.legible(identidad.codigo!!) else "Toca para ver el código",
+                                fontFamily = if (verCodigo) FontFamily.Monospace else FontFamily.Default,
+                                fontSize = if (verCodigo) 24.sp else 15.sp, fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Spacer(Modifier.height(6.dp))
+                        TextButton(onClick = { aMano = true }) { Text("Conectar con una dirección") }
+                        TextButton(onClick = { saliendo = true }) { Text("Salir del grupo", color = MaterialTheme.colorScheme.error) }
+                    }
+                },
+                confirmButton = { TextButton(onClick = cerrar) { Text("Cerrar") } }
             )
         }
     }
 
+    /** Recibir y enviar, sin más: lo de cada uno está en su pantalla. */
     @Composable
     private fun EnviarORecibir() {
-        Caja {
-            Text(
-                "A cualquiera con PixPin en tu misma Wi-Fi, sin grupo y sin internet: un lienzo, un proyecto o cualquier archivo.",
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Button(onClick = { RecibirActivity.abrir(this@SincronizarActivity) }, modifier = Modifier.weight(1f).height(48.dp)) {
-                    Icon(Icons.Filled.Download, contentDescription = null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Recibir")
-                }
-                OutlinedButton(onClick = { EnviarActivity.elegirArchivos(this@SincronizarActivity) }, modifier = Modifier.weight(1f).height(48.dp)) {
-                    Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, Modifier.size(18.dp))
-                    Spacer(Modifier.width(6.dp))
-                    Text("Enviar")
-                }
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Button(onClick = { RecibirActivity.abrir(this@SincronizarActivity) }, modifier = Modifier.weight(1f).height(48.dp)) {
+                Icon(Icons.Filled.Download, contentDescription = null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Recibir")
             }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                "En cada una eliges cómo: enseñar tu código para que lo escaneen, o escanear el del otro. " +
-                    "También se envía desde «Compartir» en cualquier app y desde el menú de cada proyecto.",
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            OutlinedButton(onClick = { EnviarActivity.elegirArchivos(this@SincronizarActivity) }, modifier = Modifier.weight(1f).height(48.dp)) {
+                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = null, Modifier.size(18.dp))
+                Spacer(Modifier.width(6.dp))
+                Text("Enviar")
+            }
         }
     }
 
@@ -1172,6 +1251,9 @@ class SincronizarActivity : ComponentActivity() {
 
 internal val VERDE = Color(0xFF2E9E4F)
 internal val ROJO = Color(0xFFE0453A)
+/** El amarillo de la pastilla de «Añadir» (27-oct-2026), y el color de lo que va encima. Igual en claro y oscuro. */
+internal val AMARILLO = Color(0xFFFFD54F)
+internal val SOBRE_AMARILLO = Color(0xFF3A2E00)
 
 /** Una caja que se nota: borde, fondo propio y esquinas redondas. */
 @Composable
