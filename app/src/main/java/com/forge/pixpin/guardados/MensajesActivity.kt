@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -100,6 +101,9 @@ import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Category
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Apps
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.CheckBox
 import androidx.compose.material.icons.filled.CheckBoxOutlineBlank
@@ -352,6 +356,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     override fun finish() {
         if (isTaskRoot) com.forge.pixpin.Volver.aLaLista(this)
         super.finish()
+    }
+
+    /** Dónde se quedó el chat [clave] la última vez, o nada. Ver [PosicionDelChat]. */
+    private fun posicionGuardada(clave: String): PosicionDelChat.Guardada? = runCatching {
+        PosicionDelChat.deTexto(getSharedPreferences(PREFS_POSICIONES, MODE_PRIVATE).getString(clave, null))
+    }.getOrNull()
+
+    private fun guardarPosicion(clave: String, g: PosicionDelChat.Guardada) {
+        runCatching { getSharedPreferences(PREFS_POSICIONES, MODE_PRIVATE).edit().putString(clave, PosicionDelChat.aTexto(g)).apply() }
     }
 
     /** El mensaje al que saltar al entrar, si lo pidió un enlace. */
@@ -1082,16 +1095,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         com.forge.pixpin.asistente.TarjetaDelAsistente(
                             Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 6.dp)
                         )
-                        val deSistema = remember(mensajes, chatDe) { mensajes.filter { it.proyecto == chatDe && com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema(it) } }
-                        com.forge.pixpin.asistente.FranjaDeSistema(deSistema, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA)) { m ->
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                // Una letra se va con su archivo (si no, el plano la vuelve a poner).
-                                if (m.id.startsWith(com.forge.pixpin.planos.LetrasQueViajan.PREFIJO_ID))
-                                    com.forge.pixpin.planos.LetrasQueViajan.quitarUna(com.forge.pixpin.sincro.Red.disco(this@MensajesActivity), System.currentTimeMillis(), m.id)
-                                else almacen.cambiar { todos -> todos.filterNot { it.id == m.id } }
-                                withContext(Dispatchers.Main) { refrescar() }
-                            }
-                        }
+                        // **Sin la franja de los mensajes de sistema** (27-oct-2026, pedido del usuario): las
+                        // letras de los planos, las figuras (`auto-figuras`), las automatizaciones y demás
+                        // `auto-*` salían en una franja encima de «Conversación nueva» que, al tocarla, se
+                        // abría tapando el chat. Siguen guardados y viajando igual; solo no se enseñan
+                        // aquí (ni como burbujas: ver [com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema]).
                         com.forge.pixpin.asistente.RecetasDelAsistente(Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 4.dp)) { pedido ->
                             val nota = Mensaje(id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.NOTA, texto = pedido, proyecto = chatDe)
                             almacen.anadir(nota)
@@ -1235,25 +1243,122 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // cabecera y el pie flotan encima, que es lo que se pidió («el chat va por
                     // detrás»). Los huecos se los pone la propia lista, midiendo a los dos.
             ) {
-            // **Se abre por el final.**
+            // **Se abre por el final, o donde se dejó** (27-oct-2026). Ver [PosicionDelChat].
             //
-            // La conversación va del más viejo al más nuevo, así que abrir por arriba
-            // dejaba mirando lo de hace tres meses: había que desplazarse hasta abajo
-            // cada vez para ver lo que uno acababa de mandar. Se arranca en la última
-            // fila, que es donde está lo de hoy.
-            val lista = rememberLazyListState(
-                initialFirstVisibleItemIndex = (visibles.size + tramos.size - 1)
-                    .coerceAtLeast(0)
-            )
-            // **Y cuando los mensajes llegan después, también.** Se leen del disco fuera del hilo
-            // de la pantalla, así que al montarse la lista aún estaba vacía: el índice inicial era
-            // el 0 y el chat abría por el primer mensaje (lo reportó el usuario el 13-sep-2026).
-            // La primera vez que hay algo, se baja al último, sin animación.
-            var yaAbajo by remember { mutableStateOf(false) }
-            androidx.compose.runtime.LaunchedEffect(visibles.isNotEmpty()) {
-                if (yaAbajo || visibles.isEmpty()) return@LaunchedEffect
-                yaAbajo = true
-                runCatching { lista.scrollToItem((visibles.size + tramos.size - 1).coerceAtLeast(0)) }
+            // La conversación va del más viejo al más nuevo, así que abrir por arriba dejaba
+            // mirando lo de hace tres meses. Antes se bajaba una vez a la **fila** del último
+            // mensaje —que es poner su principio arriba: de una respuesta larga del asistente
+            // solo se veía la primera línea, «me aparece arriba»— y nadie volvía a bajar al
+            // crecer el pie o la respuesta. Ahora se baja al borde de abajo del último y, si al
+            // salir se había dejado subido, se vuelve a ese mensaje y a ese punto.
+            //
+            // Un estado por chat: al cambiar de chat aquí mismo, el nuevo empieza de cero y se
+            // coloca solo. Guardable, para que girar el teléfono no lo recoloque.
+            val claveDelChat = chatDe ?: com.forge.pixpin.sincro.Disco.GENERAL
+            val lista = androidx.compose.runtime.saveable.rememberSaveable(
+                claveDelChat, saver = androidx.compose.foundation.lazy.LazyListState.Saver
+            ) { androidx.compose.foundation.lazy.LazyListState() }
+            var colocado by androidx.compose.runtime.saveable.rememberSaveable(claveDelChat) { mutableStateOf(false) }
+            // Si se estaba abajo: lo que decide si algo nuevo arrastra la lista con él.
+            var pegadoAbajo by androidx.compose.runtime.saveable.rememberSaveable(claveDelChat) { mutableStateOf(true) }
+            // El último mensaje que llegó a verse, para la chapa del botón de bajar.
+            val leidoHasta = androidx.compose.runtime.saveable.rememberSaveable(claveDelChat) { mutableStateOf<String?>(null) }
+            val idsVisibles = remember(visibles) { visibles.map { it.id } }
+            val indiceDeVisibles = remember(idsVisibles) { HashMap<String, Int>(idsVisibles.size * 2).also { m -> idsVisibles.forEachIndexed { i, id -> m[id] = i } } }
+            val ultimaFila = (visibles.size + tramos.size - 1).coerceAtLeast(0)
+            val visiblesAhora by androidx.compose.runtime.rememberUpdatedState(idsVisibles)
+            val tramosAhora by androidx.compose.runtime.rememberUpdatedState(tramos)
+            val filtrado by androidx.compose.runtime.rememberUpdatedState(seccion != Seccion.TODO || consulta != null || porEtiqueta != null)
+            // **Colocarse al abrir y seguir abajo después**, en un solo sitio para que no se pisen.
+            androidx.compose.runtime.LaunchedEffect(lista) {
+                if (!colocado) {
+                    androidx.compose.runtime.snapshotFlow { visiblesAhora.isNotEmpty() }.first { it }
+                    val ids = visiblesAhora
+                    // Con un salto pedido (un enlace, «Ver en el chat», el buscador) manda el salto.
+                    val conSalto = irA != null || irAlMensajePedido != null
+                    val destino = if (conSalto || filtrado) PosicionDelChat.AlAbrir.Abajo
+                        else PosicionDelChat.alAbrir(posicionGuardada(claveDelChat), ids)
+                    val guardada = if (filtrado) null else posicionGuardada(claveDelChat)
+                    runCatching {
+                        when (destino) {
+                            is PosicionDelChat.AlAbrir.En -> {
+                                val fila = filaDe(tramosAhora, destino.id)
+                                if (fila >= 0) lista.scrollToItem(fila, destino.desplazamiento)
+                                pegadoAbajo = false
+                            }
+                            PosicionDelChat.AlAbrir.Abajo -> if (!conSalto) {
+                                lista.scrollToItem((ids.size + tramosAhora.size - 1).coerceAtLeast(0), ABAJO_DEL_TODO)
+                                pegadoAbajo = true
+                            }
+                        }
+                    }
+                    // Lo que no se vio la otra vez sigue sin verse; abriendo abajo, ya está visto.
+                    leidoHasta.value = if (destino is PosicionDelChat.AlAbrir.En)
+                        guardada?.leidoHasta?.takeIf { it in ids } ?: destino.id
+                    else ids.lastOrNull()
+                    colocado = true
+                }
+                var antes: PosicionDelChat.Foto? = null
+                androidx.compose.runtime.snapshotFlow {
+                    val info = lista.layoutInfo
+                    val ultima = info.visibleItemsInfo.lastOrNull()?.takeIf { it.index == info.totalItemsCount - 1 }
+                    PosicionDelChat.Foto(
+                        filas = info.totalItemsCount,
+                        ultima = ultima?.key ?: antes?.ultima.takeIf { antes?.filas == info.totalItemsCount },
+                        altoDeLaUltima = ultima?.size ?: -1,
+                        pie = info.afterContentPadding,
+                        abajo = !lista.canScrollForward
+                    )
+                }.collect { ahora ->
+                    when (PosicionDelChat.queHacer(antes, ahora, pegadoAbajo)) {
+                        PosicionDelChat.Accion.BAJAR -> if (irA == null) runCatching {
+                            lista.scrollToItem((ahora.filas - 1).coerceAtLeast(0), ABAJO_DEL_TODO)
+                        }
+                        PosicionDelChat.Accion.APUNTAR -> pegadoAbajo = ahora.abajo
+                        PosicionDelChat.Accion.NADA -> {}
+                    }
+                    antes = ahora
+                }
+            }
+            // **Lo visto**: el último mensaje en pantalla, si va más abajo que lo apuntado.
+            androidx.compose.runtime.LaunchedEffect(lista, indiceDeVisibles) {
+                androidx.compose.runtime.snapshotFlow {
+                    lista.layoutInfo.visibleItemsInfo.lastOrNull { (it.key as? String)?.let(indiceDeVisibles::containsKey) == true }?.key as? String
+                }.collect { ultimoEnPantalla ->
+                    if (colocado && ultimoEnPantalla != null) {
+                        leidoHasta.value = PosicionDelChat.masAvanzado(indiceDeVisibles, leidoHasta.value, ultimoEnPantalla)
+                    }
+                }
+            }
+            // **Se apunta al salir** (a otra pantalla, a otro chat o fuera): el primer mensaje que se
+            // ve y cuánto de él asoma, o nada si se estaba abajo. Con un filtro puesto no: lo que se
+            // ve no es el chat. Va con su propio estado ([lista], [leidoHasta]) y no con el del chat
+            // que venga después.
+            val ciclo = androidx.compose.ui.platform.LocalLifecycleOwner.current
+            androidx.compose.runtime.DisposableEffect(lista, ciclo) {
+                val apuntar = {
+                    if (colocado && !filtrado) {
+                        val info = lista.layoutInfo
+                        val primero = info.visibleItemsInfo.firstOrNull { (it.key as? String)?.startsWith("dia-") == false }
+                        val abajo = !lista.canScrollForward
+                        if (info.totalItemsCount > 0) guardarPosicion(
+                            claveDelChat,
+                            PosicionDelChat.Guardada(
+                                arriba = if (abajo) null else primero?.key as? String,
+                                desplazamiento = if (abajo || primero == null) 0 else (-primero.offset).coerceAtLeast(0),
+                                leidoHasta = leidoHasta.value
+                            )
+                        )
+                    }
+                }
+                val observador = androidx.lifecycle.LifecycleEventObserver { _, e ->
+                    if (e == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) apuntar()
+                }
+                ciclo.lifecycle.addObserver(observador)
+                onDispose {
+                    ciclo.lifecycle.removeObserver(observador)
+                    apuntar()
+                }
             }
             // Y al mandar algo nuevo, baja hasta ello. Sin esto, lo que acabas de
             // escribir aparece fuera de la vista y parece que no se ha mandado.
@@ -1270,6 +1375,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // era tocar y que no ocurriera nada, que es de las peores cosas que
                 // puede hacer un botón. Ahora se quita el filtro y se cambia de sección,
                 // y el salto se hace en la pasada siguiente, cuando la lista ya lo tiene.
+                // **Con los mensajes aún sin leer del disco, se espera** (27-oct-2026): un salto pedido
+                // al abrir (el buscador de la lista, un enlace) llegaba con la lista vacía, no
+                // encontraba el mensaje y se tiraba. Al cargar cambian los tramos y esto se repite.
+                if (cargando) return@LaunchedEffect
                 val elCitado = mensajes.firstOrNull { it.id == destino }
                 if (elCitado == null) {
                     irA = null
@@ -1322,8 +1431,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             // resultado, y el destello se gastaba en una burbuja que no estabas viendo.
             androidx.compose.runtime.LaunchedEffect(loMandado) {
                 if (loMandado == null || visibles.isEmpty()) return@LaunchedEffect
+                pegadoAbajo = true
                 runCatching {
-                    lista.animateScrollToItem((visibles.size + tramos.size - 1).coerceAtLeast(0))
+                    lista.animateScrollToItem(ultimaFila)
+                    // Y al borde de abajo, no al principio de lo mandado (ver [PosicionDelChat]).
+                    lista.scrollToItem(ultimaFila, ABAJO_DEL_TODO)
                 }
             }
             // **Lo que mide la cabecera flotante**, para que la lista le deje sitio.
@@ -1524,65 +1636,81 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     cuandoDeLaFila(tramos, lista.firstVisibleItemIndex)
                 }
             }
-            // **El botón de bajar al final.**
+            // **El botón de bajar al final, como el de Telegram** (27-oct-2026).
             //
-            // Sale al **subir cien puntos** y se va al bajar otros cien, no según lo cerca
-            // que se esté del final: es lo que hace Telegram (`ChatActivity.java:6714` y
-            // `:6847-6866`) y la diferencia importa. Con «aparece si no estás abajo» el
-            // botón parpadea con cada empujoncito del dedo; con la cuenta acumulada hay
-            // que moverse de verdad para que aparezca, y de verdad para que se vaya.
-            val alturaDeGatillo = with(densidadDePantalla) { SUBIDA_PARA_EL_BOTON.toPx() }
-            var subido by remember { mutableFloatStateOf(0f) }
-            var botonALaVista by remember { mutableStateOf(false) }
-            androidx.compose.runtime.LaunchedEffect(lista) {
-                var anterior = 0
-                androidx.compose.runtime.snapshotFlow {
-                    lista.firstVisibleItemIndex * 1000 - lista.firstVisibleItemScrollOffset
-                }.collect { ahora ->
-                    val delta = (ahora - anterior).toFloat()
-                    anterior = ahora
-                    if (delta < 0 && !botonALaVista) {
-                        subido += -delta
-                        if (subido > alturaDeGatillo) { botonALaVista = true; subido = 0f }
-                    } else if (delta > 0 && botonALaVista) {
-                        subido += delta
-                        if (subido > alturaDeGatillo) { botonALaVista = false; subido = 0f }
+            // Sale cuando se está lejos del final —más de cien puntos por encima del borde de abajo
+            // del último mensaje— y no por lo que se haya subido con el dedo, como antes: abriendo
+            // un chat donde se dejó (subido), el botón tiene que estar ya, sin haber tocado nada. Los
+            // cien puntos siguen siendo los de Telegram (`ChatActivity.java:6714`): un empujoncito
+            // del dedo no lo hace parpadear. Lleva encima cuántos mensajes hay sin ver por debajo.
+            //
+            // **Y encima del pie, no detrás**: iba a 12 puntos del borde de la pantalla, que es
+            // donde flota la caja de escribir, y quedaba tapado por ella.
+            val umbralDelBoton = with(densidadDePantalla) { SUBIDA_PARA_EL_BOTON.toPx() }
+            val lejosDelFinal by remember(lista) {
+                androidx.compose.runtime.derivedStateOf {
+                    if (!lista.canScrollForward) false
+                    else {
+                        val info = lista.layoutInfo
+                        val ultima = info.visibleItemsInfo.lastOrNull()
+                        ultima == null || ultima.index < info.totalItemsCount - 1 ||
+                            ultima.offset + ultima.size - (info.viewportEndOffset - info.afterContentPadding) > umbralDelBoton
                     }
                 }
             }
+            val cuantosSinLeer = remember(idsVisibles, leidoHasta.value) { PosicionDelChat.sinLeer(idsVisibles, leidoHasta.value) }
             // Se esconde además mientras se elige o se graba, como Telegram
             // (`updatePagedownButtonVisibility`, `:16906-16933`): ahí estorba a lo que
             // se está haciendo y encima se solapa con lo que sale por debajo.
             androidx.compose.animation.AnimatedVisibility(
-                visible = botonALaVista && !seleccionando && !grabando,
+                visible = lejosDelFinal && !seleccionando && !grabando,
                 enter = androidx.compose.animation.fadeIn() +
                     androidx.compose.animation.scaleIn(initialScale = 0.7f),
                 exit = androidx.compose.animation.fadeOut() +
                     androidx.compose.animation.scaleOut(targetScale = 0.7f),
-                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = altoDelPie + 12.dp)
             ) {
-                androidx.compose.material3.SmallFloatingActionButton(
-                    onClick = {
-                        val vuelta = volverA
-                        volverA = null
-                        alcanceDeLaLista.launch {
-                            runCatching {
-                                lista.animateScrollToItem(
-                                    vuelta ?: (visibles.size + tramos.size - 1)
-                                        .coerceAtLeast(0)
-                                )
+                Box(contentAlignment = Alignment.TopCenter) {
+                    androidx.compose.material3.SmallFloatingActionButton(
+                        onClick = {
+                            val vuelta = volverA
+                            volverA = null
+                            alcanceDeLaLista.launch {
+                                runCatching {
+                                    if (vuelta != null) lista.animateScrollToItem(vuelta)
+                                    else {
+                                        pegadoAbajo = true
+                                        lista.animateScrollToItem(ultimaFila)
+                                        lista.scrollToItem(ultimaFila, ABAJO_DEL_TODO)
+                                    }
+                                }
                             }
-                        }
-                    }
-                ) {
-                    Icon(
-                        if (volverA != null) Icons.AutoMirrored.Filled.Reply
-                        else Icons.Filled.KeyboardArrowDown,
-                        contentDescription = getString(
-                            if (volverA != null) com.forge.pixpin.R.string.guardados_volver_al_salto
-                            else com.forge.pixpin.R.string.guardados_al_final
+                        },
+                        modifier = Modifier.padding(top = if (cuantosSinLeer > 0 && volverA == null) 10.dp else 0.dp)
+                    ) {
+                        Icon(
+                            if (volverA != null) Icons.AutoMirrored.Filled.Reply
+                            else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = getString(
+                                if (volverA != null) com.forge.pixpin.R.string.guardados_volver_al_salto
+                                else com.forge.pixpin.R.string.guardados_al_final
+                            )
                         )
-                    )
+                    }
+                    // La chapa de lo no visto, arriba del botón como en Telegram.
+                    if (cuantosSinLeer > 0 && volverA == null) Box(
+                        Modifier
+                            .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+                            .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(11.dp))
+                            .padding(horizontal = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (cuantosSinLeer > 999) "999+" else cuantosSinLeer.toString(),
+                            color = MaterialTheme.colorScheme.onPrimary, fontSize = 12.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 
@@ -1931,7 +2059,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         Text(
                                             nombreDelChat.ifBlank {
                                                 getString(com.forge.pixpin.R.string.guardados_titulo)
-                                            }
+                                            },
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f, fill = false)
                                         )
                                         // La flechita es lo único que dice que aquí hay
                                         // algo que abrir. Sin ella, unas pestañas
@@ -1950,43 +2081,20 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                     // siempre que esté dentro, aunque sea solo (25-oct-2026, del PC
                                     // `e3f1d60`: «Compartido · 3 personas»). Tocarlo abre sus personas:
                                     // invitar, quitar, salir.
+                                    // **Sin «8 cosas · 17,3 MB» debajo del nombre** (27-oct-2026, pedido
+                                    // del usuario): no decía nada útil y le quitaba sitio al nombre. Se
+                                    // queda solo, si es compartido, con quién.
                                     val conQuien = enElChat?.let { com.forge.pixpin.sincro.EntrePersonas.chapa(it.personas) }
-                                    val resto = listOfNotNull(
-                                        // El tamaño solo si se sabe: casi nada
-                                        // guarda su peso, y `tamanoLegible(0)`
-                                        // devuelve vacío, así que el subtítulo
-                                        // decía «12 cosas · » con el separador
-                                        // colgando de la nada.
-                                        resources.getQuantityString(
-                                            com.forge.pixpin.R.plurals.guardados_cuantos,
-                                            deEsteChat.size, deEsteChat.size
-                                        ),
-                                        tamanoLegible(
-                                            deEsteChat.sumOf { it.bytes }
-                                        ).ifBlank { null }
-                                    ).joinToString(" · ")
-                                    if (mensajes.isNotEmpty() || conQuien != null) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (conQuien != null) {
-                                                val verde = androidx.compose.ui.graphics.Color(com.forge.pixpin.sincro.EntrePersonas.VERDE_COMPARTIDO)
-                                                Row(
-                                                    Modifier.clickable {
-                                                        chatDe?.let { com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(this@MensajesActivity, it, nombreDelChat) }
-                                                    },
-                                                    verticalAlignment = Alignment.CenterVertically
-                                                ) {
-                                                    Icon(Icons.Filled.Groups, contentDescription = null, tint = verde, modifier = Modifier.size(14.dp))
-                                                    Text(" $conQuien", fontSize = 12.sp, color = verde, maxLines = 1)
-                                                }
-                                                Text(" · ", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            }
-                                            Text(
-                                                resto,
-                                                fontSize = 12.sp,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                                            )
+                                    if (conQuien != null) {
+                                        val verde = androidx.compose.ui.graphics.Color(com.forge.pixpin.sincro.EntrePersonas.VERDE_COMPARTIDO)
+                                        Row(
+                                            Modifier.clickable {
+                                                chatDe?.let { com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(this@MensajesActivity, it, nombreDelChat) }
+                                            },
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(Icons.Filled.Groups, contentDescription = null, tint = verde, modifier = Modifier.size(14.dp))
+                                            Text(" $conQuien", fontSize = 12.sp, color = verde, maxLines = 1)
                                         }
                                     }
                                 }
@@ -2118,10 +2226,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                             com.forge.pixpin.sincro.ChatCompartidoActivity.entrar(this@MensajesActivity)
                                         }
                                     }
-                                    DelMenu(com.forge.pixpin.R.string.guardados_arrastrar, Icons.Filled.FileDownload) {
-                                        masOpciones = false
-                                        SoltarActivity.abrir(this@MensajesActivity, chatDe)
-                                    }
+                                    // Sin «Añadir arrastrando…» (27-oct-2026): arrastrar y soltar es cosa del PC;
+                                    // en el teléfono se adjunta con el clip o se comparte a PixPin. El recuadro sigue para los
+                                    // atajos y el asistente, que lo piden por su nombre.
                                     // **Solo lo del chat** (25-oct-2026, como el PC): fuera «Proyectos» y
                                     // «Iniciar», que están en la portada. Se queda «Ajustes»: en el teléfono
                                     // no hay bandeja, y es la puerta a la configuración desde un chat.
@@ -2271,60 +2378,22 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             //
             // Los botones son redondos y con icono porque **se reconocen sin leer**: a la
             // tercera vez uno ya va al de la derecha sin mirar la etiqueta.
-            androidx.compose.material3.ModalBottomSheet(
-                onDismissRequest = { eligiendoQue = false }
-            ) {
-                // **Cada botón ocupa el ancho partido entre 4,5**, no un reparto a
-                // partes iguales (`ChatAttachAlert.java:1505`). El medio botón que
-                // sobra es lo que dice que la fila sigue: con el reparto equitativo,
-                // cinco opciones parecen cinco y nadie desliza a buscar la sexta.
-                androidx.compose.foundation.layout.BoxWithConstraints(
-                    Modifier.fillMaxWidth().padding(bottom = 28.dp)
-                ) {
-                val anchoDelBoton = maxWidth / minOf(BOTONES_A_LA_VISTA, 4f)
-                androidx.compose.foundation.lazy.LazyRow(
-                    Modifier.fillMaxWidth().padding(horizontal = 8.dp)
-                ) {
-                    item {
-                        Row {
-                    BotonDeAdjuntar(
-                        Icons.Filled.Image,
-                        com.forge.pixpin.R.string.guardados_adj_fotos,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        pedirFotos()
-                    }
-                    // **Escanear**, siempre a la vista: sin el escáner instalado dice qué falta.
-                    BotonDeAdjuntar(
-                        Icons.Filled.DocumentScanner,
-                        com.forge.pixpin.R.string.guardados_adj_escanear,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        pedirEscaneo()
-                    }
-                    BotonDeAdjuntar(
-                        Icons.Filled.Description,
-                        com.forge.pixpin.R.string.guardados_adj_archivo,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        elegirArchivo.launch(arrayOf("*/*"))
-                    }
-                    // **Una hoja nueva: lienzo, nota o croquis** (26-oct-2026). Eran los botones de la
-                    // tarjeta de Proyectos; sin esa pantalla, se crean aquí, como el «Lienzo nuevo» y la
-                    // «Nota» del «+» del PC. En el chat de un proyecto van a sus hojas (y salen aquí
-                    // como un mensaje); en «Mensajes guardados», el lienzo va suelto, como el de Funciones.
-                    BotonDeAdjuntar(
-                        Icons.Filled.Draw,
-                        com.forge.pixpin.R.string.guardados_adj_lienzo,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
+            //
+            // **Ordenada como el «+» del PC** (27-oct-2026): buscador, lo de todos los días en una
+            // cuadrícula de cuatro con su color y «Más» debajo. Ver [OpcionesDeAdjuntar].
+            val delProyecto = (application as? PixPinApp)?.proyectos?.porId(chatDe)
+            val hacer: (OpcionesDeAdjuntar.Adjunto) -> Unit = { a ->
+                eligiendoQue = false
+                when (a) {
+                    OpcionesDeAdjuntar.Adjunto.FOTO -> pedirFotos()
+                    // Sin el escáner instalado dice qué falta.
+                    OpcionesDeAdjuntar.Adjunto.ESCANEAR -> pedirEscaneo()
+                    OpcionesDeAdjuntar.Adjunto.ARCHIVO -> elegirArchivo.launch(arrayOf("*/*"))
+                    // **Una hoja nueva** (26-oct-2026): en el chat de un proyecto va a sus hojas (y sale
+                    // aquí como un mensaje); en «Mensajes guardados», el lienzo va suelto.
+                    OpcionesDeAdjuntar.Adjunto.LIENZO -> {
                         val app = application as? PixPinApp
-                        val p = app?.proyectos?.porId(chatDe)
-                        if (app != null && p != null) com.forge.pixpin.ui.HojaNueva.lienzo(this@MensajesActivity, app, p)
+                        if (app != null && delProyecto != null) com.forge.pixpin.ui.HojaNueva.lienzo(this@MensajesActivity, app, delProyecto)
                         else lifecycleScope.launch {
                             val id = withContext(Dispatchers.IO) { com.forge.pixpin.ui.HojaNueva.lienzoSuelto(this@MensajesActivity, chatDe) }
                             refrescar()
@@ -2332,108 +2401,27 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             else com.forge.pixpin.motor.DrawEditorActivity.abrir(this@MensajesActivity, id, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@MensajesActivity, id), null)
                         }
                     }
-                    val delProyecto = (application as? PixPinApp)?.proyectos?.porId(chatDe)
-                    if (delProyecto != null) {
-                        BotonDeAdjuntar(
-                            Icons.AutoMirrored.Filled.Notes,
-                            com.forge.pixpin.R.string.guardados_adj_nota,
-                            ancho = anchoDelBoton
-                        ) {
-                            eligiendoQue = false
-                            (application as? PixPinApp)?.let { com.forge.pixpin.ui.HojaNueva.nota(this@MensajesActivity, it, delProyecto) }
-                        }
-                        BotonDeAdjuntar(
-                            Icons.Filled.ViewInAr,
-                            com.forge.pixpin.R.string.guardados_adj_croquis,
-                            ancho = anchoDelBoton
-                        ) {
-                            eligiendoQue = false
-                            (application as? PixPinApp)?.let { com.forge.pixpin.ui.HojaNueva.croquis(this@MensajesActivity, it, delProyecto) }
-                        }
+                    OpcionesDeAdjuntar.Adjunto.NOTA -> if (delProyecto != null) {
+                        (application as? PixPinApp)?.let { com.forge.pixpin.ui.HojaNueva.nota(this@MensajesActivity, it, delProyecto) }
                     }
-                    BotonDeAdjuntar(
-                        Icons.AutoMirrored.Filled.MenuBook,
-                        com.forge.pixpin.R.string.guardados_adj_pagina,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        eligiendoProyecto = true
+                    OpcionesDeAdjuntar.Adjunto.CROQUIS -> if (delProyecto != null) {
+                        (application as? PixPinApp)?.let { com.forge.pixpin.ui.HojaNueva.croquis(this@MensajesActivity, it, delProyecto) }
                     }
-                    BotonDeAdjuntar(
-                        Icons.Filled.Folder,
-                        com.forge.pixpin.R.string.guardados_adj_proyecto,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        eligiendoProyecto = false
-                    }
-                    // **Una canción con su letra, para cantarla** (27-oct-2026). Ver [CancionNuevaActivity].
-                    BotonDeAdjuntar(
-                        Icons.Filled.MusicNote,
-                        com.forge.pixpin.R.string.guardados_adj_musica,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        CancionNuevaActivity.abrir(this@MensajesActivity, chatDe)
-                    }
-                    // **Una conversación por turnos**, con un micrófono por persona y la
-                    // transcripción con nombres. Ver [ConversacionActivity].
-                    BotonDeAdjuntar(
-                        Icons.Filled.RecordVoiceOver,
-                        com.forge.pixpin.R.string.guardados_adj_conversacion,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        ConversacionActivity.abrir(this@MensajesActivity, chatDe)
-                    }
-                    // **Leer en voz alta y practicar la pronunciación.** El teleprónter va al
-                    // revés que una nota de voz: primero el texto, después la voz, y el texto
-                    // queda con sus minutos. Pronunciar es hablar, oírse y repetir, con una
-                    // guía delante. Ver [TelepronterActivity] y [PronunciarActivity].
-                    BotonDeAdjuntar(
-                        Icons.Filled.Subtitles,
-                        com.forge.pixpin.R.string.guardados_adj_telepronter,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        TelepronterActivity.abrir(this@MensajesActivity, chatDe)
-                    }
-                    BotonDeAdjuntar(
-                        Icons.Filled.Hearing,
-                        com.forge.pixpin.R.string.guardados_adj_pronunciar,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        PronunciarActivity.abrir(this@MensajesActivity, chatDe)
-                    }
-                    // **Grabar una clase o una reunión** con capturas en su minuto (25-oct-2026,
-                    // como el PC). Ver [GrabarClaseActivity].
-                    BotonDeAdjuntar(
-                        Icons.Filled.School,
-                        com.forge.pixpin.R.string.guardados_adj_clase,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        GrabarClaseActivity.abrir(this@MensajesActivity, chatDe)
-                    }
-                    // Las mini-apps: cosas que se llevan la cuenta solas —lo que falta
-                    // por hacer, lo que se lleva gastado— y que en una conversación con
-                    // uno mismo son justo lo que uno se manda para no olvidarlo.
-                    BotonDeAdjuntar(
-                        Icons.Filled.Checklist,
-                        com.forge.pixpin.R.string.guardados_adj_miniapp,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        eligiendoMini = true
-                    }
-                    // **Una carpeta de páginas** (25-oct-2026, del PC): un cuaderno que junta lienzos.
-                    BotonDeAdjuntar(
-                        Icons.AutoMirrored.Filled.MenuBook,
-                        com.forge.pixpin.R.string.guardados_adj_carpeta,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
+                    OpcionesDeAdjuntar.Adjunto.TAREAS -> { mandarMiniApp(com.forge.pixpin.mini.MiniApp.TAREAS); refrescar() }
+                    OpcionesDeAdjuntar.Adjunto.PAGINA -> eligiendoProyecto = true
+                    OpcionesDeAdjuntar.Adjunto.PROYECTO -> eligiendoProyecto = false
+                    // Una conversación por turnos, con un micrófono por persona. Ver [ConversacionActivity].
+                    OpcionesDeAdjuntar.Adjunto.CONVERSACION -> ConversacionActivity.abrir(this@MensajesActivity, chatDe)
+                    // Leer en voz alta y practicar la pronunciación. Ver [TelepronterActivity] y [PronunciarActivity].
+                    // Una canción con su letra, para cantarla (27-oct-2026). Ver [CancionNuevaActivity].
+                    OpcionesDeAdjuntar.Adjunto.MUSICA -> CancionNuevaActivity.abrir(this@MensajesActivity, chatDe)
+                    OpcionesDeAdjuntar.Adjunto.TELEPRONTER -> TelepronterActivity.abrir(this@MensajesActivity, chatDe)
+                    OpcionesDeAdjuntar.Adjunto.PRONUNCIAR -> PronunciarActivity.abrir(this@MensajesActivity, chatDe)
+                    // Grabar una clase o una reunión con capturas en su minuto. Ver [GrabarClaseActivity].
+                    OpcionesDeAdjuntar.Adjunto.CLASE -> GrabarClaseActivity.abrir(this@MensajesActivity, chatDe)
+                    OpcionesDeAdjuntar.Adjunto.MINIAPPS -> eligiendoMini = true
+                    // Una carpeta de páginas (25-oct-2026, del PC): un cuaderno que junta lienzos.
+                    OpcionesDeAdjuntar.Adjunto.CARPETA -> {
                         val chat = chatDe
                         lifecycleScope.launch {
                             val nueva = withContext(Dispatchers.IO) { runCatching { CarpetasDelChat.crear(this@MensajesActivity, chat) }.getOrNull() }
@@ -2441,19 +2429,20 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             nueva?.let { CarpetaActivity.abrir(this@MensajesActivity, it.id) }
                         }
                     }
-                    // **Una figura, eligiéndola viéndola** (25-oct-2026, como el PC). Ver [AdjuntarFigura].
-                    BotonDeAdjuntar(
-                        androidx.compose.material.icons.Icons.Filled.Category,
-                        com.forge.pixpin.R.string.guardados_adj_figura,
-                        ancho = anchoDelBoton
-                    ) {
-                        eligiendoQue = false
-                        adjuntandoFigura = true
-                    }
-                        }
-                    }
+                    // Una figura, eligiéndola viéndola (25-oct-2026, como el PC). Ver [AdjuntarFigura].
+                    OpcionesDeAdjuntar.Adjunto.FIGURA -> adjuntandoFigura = true
                 }
-                }
+            }
+            androidx.compose.material3.ModalBottomSheet(
+                onDismissRequest = { eligiendoQue = false }
+            ) {
+                HojaDelClip(
+                    OpcionesDeAdjuntar.hoja(
+                        conProyecto = delProyecto != null,
+                        asistente = chatDe != null && chatDe == chatDelAsistente
+                    ),
+                    hacer
+                )
             }
         }
 
@@ -2631,17 +2620,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
 
         if (fichaAbierta) {
-            // Todos, también los archivados: como la lista de chats desde que no hay pantalla de
-            // Proyectos que los guarde al fondo (26-oct-2026).
-            val charlasDeLaFicha = remember(mensajes, proyectos, chatDelAsistente) {
-                conversaciones(
-                    mensajes,
-                    proyectos.associate { it.id to it.nombre },
-                    getString(com.forge.pixpin.R.string.guardados_titulo),
-                    chatDelAsistente ?: com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR
-                )
-            }
-            val hojas = remember(sinLecciones) { SeccionesDelChat.hojasPorChat(sinLecciones) }
             val deLaFicha = remember(deEsteChat) { deEsteChat.filter { !it.enBuzon } }
             FichaDelChat(
                 nombre = nombreDelChat.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) },
@@ -2650,26 +2628,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 ),
                 chatDe = chatDe,
                 mensajes = deLaFicha,
-                charlas = charlasDeLaFicha,
-                hojas = hojas,
-                sinCrear = com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR,
-                resumenDe = { resumen(it) },
                 fechaDe = { fechaDe(it) },
                 onCerrar = { fichaAbierta = false },
-                // Otro chat: se cambia aquí mismo, por el mismo camino que la lista de chats.
-                onIrAlChat = { charla ->
-                    fichaAbierta = false
-                    if (charla.proyecto != null) {
-                        chatDe = charla.proyecto
-                        nombreDelChat = charla.nombre
-                        vineDeLaGeneral = true
-                    } else {
-                        chatDe = null
-                        nombreDelChat = ""
-                        vineDeLaGeneral = false
-                    }
-                    seccion = Seccion.TODO
-                },
                 // «Ver en el chat»: salir a propósito, a ese mensaje.
                 onVerEnElChat = { id ->
                     fichaAbierta = false
@@ -3088,8 +3048,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // **El buzón solo sale si hay algo dentro.** Una bandeja vacía siempre a la
         // vista enseña a no mirarla, y cuando por fin tenga algo ya nadie la mira.
         val secciones = remember(hayBuzon) {
-            // «Proyectos» es de la ficha del chat, no filtra la conversación. Ver [FichaDelChat].
-            Seccion.entries.filter { it != Seccion.PROYECTOS && (hayBuzon || it != Seccion.BUZON) }
+            Seccion.entries.filter { hayBuzon || it != Seccion.BUZON }
         }
         androidx.compose.foundation.lazy.LazyRow(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -3099,12 +3058,27 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // Píldoras enteras y de 38 de alto, como los chips de Telegram
                 // (`ChatActivity.java:8865-8907`). El chip de Material va con esquinas
                 // de ocho, que a este tamaño se lee como un botón cuadrado.
+                // **Con fondo lleno** (27-oct-2026, pedido del usuario): eran solo texto y filo, y
+                // al pasar los mensajes por debajo no se leían. Sin elegir, el tono de las
+                // pastillas de la cabecera (opaco, claro u oscuro según el tema); la elegida, el
+                // contenedor del color de la aplicación con su texto.
                 FilterChip(
                     selected = s == actual,
                     onClick = { onElegir(s) },
                     shape = androidx.compose.foundation.shape.CircleShape,
                     modifier = Modifier.height(ALTO_DE_LA_FICHA),
-                    label = { Text(nombreDe(s), fontSize = 13.sp) }
+                    label = { Text(nombreDe(s), fontSize = 13.sp) },
+                    colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                        labelColor = MaterialTheme.colorScheme.onSurface,
+                        selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                        selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                    ),
+                    border = androidx.compose.material3.FilterChipDefaults.filterChipBorder(
+                        enabled = true, selected = s == actual,
+                        borderColor = ColoresDelChat.filete(), selectedBorderColor = Color.Transparent
+                    ),
+                    elevation = androidx.compose.material3.FilterChipDefaults.filterChipElevation(elevation = 1.dp)
                 )
             }
         }
@@ -6214,40 +6188,107 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     /** El panel de figuras abierto para adjuntar una. Ver [HojaDeAdjuntarFigura]. */
     private var adjuntandoFigura by mutableStateOf(false)
 
+    /**
+     * **La hoja del clip** (27-oct-2026, como la del «+» del PC): el buscador, la cuadrícula de lo
+     * de todos los días y «Más». Ver [OpcionesDeAdjuntar].
+     */
     @Composable
-    private fun BotonDeAdjuntar(
-        icono: androidx.compose.ui.graphics.vector.ImageVector,
-        texto: Int,
-        ancho: androidx.compose.ui.unit.Dp = 96.dp,
-        onClick: () -> Unit
-    ) {
+    private fun HojaDelClip(hoja: OpcionesDeAdjuntar.Hoja, alElegir: (OpcionesDeAdjuntar.Adjunto) -> Unit) {
+        var buscado by remember { mutableStateOf("") }
+        val vista = remember(hoja, buscado) { OpcionesDeAdjuntar.filtrar(hoja, buscado) }
+        Column(
+            Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState())
+                .padding(horizontal = 16.dp).padding(bottom = 28.dp)
+        ) {
+            androidx.compose.material3.OutlinedTextField(
+                value = buscado, onValueChange = { buscado = it.take(60) }, singleLine = true,
+                placeholder = { Text("Buscar: lienzo, PDF, cronómetro…") },
+                leadingIcon = { Icon(Icons.Filled.Search, null) },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(Modifier.height(14.dp))
+            CuadriculaDelClip(vista.deSiempre, grande = true, alElegir)
+            if (vista.mas.isNotEmpty()) {
+                Text(
+                    "MÁS", fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = if (vista.deSiempre.isEmpty()) 0.dp else 8.dp, bottom = 8.dp, start = 4.dp)
+                )
+                CuadriculaDelClip(vista.mas, grande = false, alElegir)
+            }
+            if (vista.deSiempre.isEmpty() && vista.mas.isEmpty()) Text(
+                "Nada coincide con lo buscado", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
+            )
+        }
+    }
+
+    /** Cuatro por fila: el círculo de su color (los de todos los días) o del tono suave (los «Más»). */
+    @Composable
+    private fun CuadriculaDelClip(cuales: List<OpcionesDeAdjuntar.Adjunto>, grande: Boolean, alElegir: (OpcionesDeAdjuntar.Adjunto) -> Unit) {
+        for (fila in cuales.chunked(4)) {
+            Row(Modifier.fillMaxWidth().padding(bottom = 10.dp)) {
+                for (a in fila) Box(Modifier.weight(1f), contentAlignment = Alignment.TopCenter) {
+                    BotonDeAdjuntar(a, grande) { alElegir(a) }
+                }
+                repeat(4 - fila.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
+    }
+
+    @Composable
+    private fun BotonDeAdjuntar(a: OpcionesDeAdjuntar.Adjunto, grande: Boolean, onClick: () -> Unit) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.width(ancho).clickable(onClick = onClick)
+            modifier = Modifier.fillMaxWidth()
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(14.dp))
+                .clickable(onClick = onClick).padding(vertical = 6.dp)
         ) {
             Box(
                 Modifier
-                    .size(56.dp)
+                    .size(if (grande) 56.dp else 44.dp)
                     .background(
-                        MaterialTheme.colorScheme.primaryContainer,
+                        if (grande) Color(a.color) else MaterialTheme.colorScheme.secondaryContainer,
                         androidx.compose.foundation.shape.CircleShape
                     ),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
-                    icono,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer
+                    iconoDe(a), contentDescription = null,
+                    tint = if (grande) Color.White else MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(if (grande) 26.dp else 22.dp)
                 )
             }
             Text(
-                getString(texto),
-                fontSize = 11.sp,
+                a.rotulo,
+                fontSize = if (grande) 12.sp else 11.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 maxLines = 2,
-                modifier = Modifier.padding(top = 6.dp)
+                modifier = Modifier.padding(top = 6.dp, start = 2.dp, end = 2.dp)
             )
         }
+    }
+
+    private fun iconoDe(a: OpcionesDeAdjuntar.Adjunto): androidx.compose.ui.graphics.vector.ImageVector = when (a) {
+        OpcionesDeAdjuntar.Adjunto.FOTO -> Icons.Filled.Image
+        OpcionesDeAdjuntar.Adjunto.ARCHIVO -> Icons.Filled.Description
+        OpcionesDeAdjuntar.Adjunto.LIENZO -> Icons.Filled.Draw
+        OpcionesDeAdjuntar.Adjunto.NOTA -> Icons.AutoMirrored.Filled.Notes
+        OpcionesDeAdjuntar.Adjunto.TAREAS -> Icons.Filled.Checklist
+        OpcionesDeAdjuntar.Adjunto.CONVERSACION -> Icons.Filled.RecordVoiceOver
+        OpcionesDeAdjuntar.Adjunto.ESCANEAR -> Icons.Filled.DocumentScanner
+        OpcionesDeAdjuntar.Adjunto.CLASE -> Icons.Filled.School
+        OpcionesDeAdjuntar.Adjunto.FIGURA -> Icons.Filled.Category
+        OpcionesDeAdjuntar.Adjunto.PAGINA -> Icons.AutoMirrored.Filled.MenuBook
+        OpcionesDeAdjuntar.Adjunto.PROYECTO -> Icons.Filled.Folder
+        OpcionesDeAdjuntar.Adjunto.CARPETA -> Icons.Filled.FolderOpen
+        OpcionesDeAdjuntar.Adjunto.CROQUIS -> Icons.Filled.ViewInAr
+        OpcionesDeAdjuntar.Adjunto.TELEPRONTER -> Icons.Filled.Subtitles
+        OpcionesDeAdjuntar.Adjunto.PRONUNCIAR -> Icons.Filled.Hearing
+        OpcionesDeAdjuntar.Adjunto.MUSICA -> Icons.Filled.MusicNote
+        OpcionesDeAdjuntar.Adjunto.MINIAPPS -> Icons.Filled.Apps
     }
 
     /**
@@ -7783,7 +7824,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             Seccion.DIBUJOS -> com.forge.pixpin.R.string.guardados_dibujos
             Seccion.FIJADOS -> com.forge.pixpin.R.string.guardados_fijados
             Seccion.BUZON -> com.forge.pixpin.R.string.guardados_buzon
-            Seccion.PROYECTOS -> com.forge.pixpin.R.string.guardados_proyectos
         }
     )
 
@@ -8058,7 +8098,6 @@ private const val ALFA_DE_LA_CITA = 0.10f
 private const val PARTE_DE_LA_PANTALLA = 0.78f
 
 /** Cuántos botones de adjuntar caben antes de que el siguiente asome. */
-private const val BOTONES_A_LA_VISTA = 4.5f
 
 /** Lo que tarda el punto rojo en apagarse y volver. */
 private const val LATIDO_DEL_PUNTO = 700
@@ -8113,6 +8152,16 @@ private const val ESPERA_DE_LA_FECHA = 500L
 
 /** Cuánto hay que subir para que salga el botón de bajar, y cuánto bajar para que se vaya. */
 private val SUBIDA_PARA_EL_BOTON = 100.dp
+
+/**
+ * **El final del todo**: el desplazamiento que se le pide a la última fila para que su borde de abajo
+ * quede abajo (la lista lo recorta a lo que haya). Diez millones de píxeles: más que cualquier
+ * mensaje y lejos de desbordar un `Int` en las cuentas de la lista. Ver [PosicionDelChat].
+ */
+private const val ABAJO_DEL_TODO = 10_000_000
+
+/** Las preferencias donde cada chat apunta dónde se quedó. Ver [PosicionDelChat]. */
+private const val PREFS_POSICIONES = "posicion_de_los_chats"
 
 /** Los colores del estado de una transcripción: salió, con huecos, no se pudo. */
 private val VERDE_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFF43A047)

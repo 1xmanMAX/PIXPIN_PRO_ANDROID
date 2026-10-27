@@ -31,6 +31,9 @@ import com.forge.pixpin.ui.theme.PixPinTheme
  * montón de proyectos ([TarjetaDeConfiguracion]); sin esa pantalla, viven aquí y se llega desde el
  * engranaje de la lista de chats y desde «Ajustes» en los ⋮ del chat.
  *
+ * Desde el 27-oct-2026 se abre directa en los ajustes, con la bienvenida arriba (ver
+ * [TarjetaDeConfiguracion]).
+ *
  * Es otra actividad y no un estado de la principal porque la principal es `singleTask`: abrirla
  * desde un chat **borraría el chat que hay encima** y atrás ya no volvería a él.
  */
@@ -40,9 +43,15 @@ class ConfiguracionActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             PixPinTheme {
-                var enAjustes by rememberSaveable { mutableStateOf(intent?.getBooleanExtra(EXTRA_AJUSTES, false) == true) }
-                if (enAjustes) PantallaDeAjustes(onVolver = { enAjustes = false })
-                else PantallaDeConfiguracion(onAjustes = { enAjustes = true }, onVolver = { finish() })
+                // **Directo a los ajustes** (27-oct-2026, pedido del usuario): el engranaje abría
+                // antes la bienvenida y había que pulsar «Ajustes» otra vez. La bienvenida, con
+                // «Comenzar» y los permisos que falten, va ahora encima de las secciones.
+                PantallaDeAjustes(
+                    onVolver = { finish() },
+                    cabecera = {
+                        TarjetaDeConfiguracion(Modifier.fillMaxWidth().padding(bottom = 16.dp))
+                    }
+                )
             }
         }
     }
@@ -55,30 +64,13 @@ class ConfiguracionActivity : ComponentActivity() {
     }
 
     companion object {
-        private const val EXTRA_AJUSTES = "configuracion_ajustes"
-
-        fun abrir(context: android.content.Context, ajustes: Boolean = false) {
+        fun abrir(context: android.content.Context) {
             runCatching {
                 context.startActivity(
-                    Intent(context, ConfiguracionActivity::class.java).putExtra(EXTRA_AJUSTES, ajustes)
+                    Intent(context, ConfiguracionActivity::class.java)
                         .also { if (context !is android.app.Activity) it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
                 )
             }
-        }
-    }
-}
-
-/** [TarjetaDeConfiguracion] a pantalla entera, con su flecha de volver. */
-@Composable
-private fun PantallaDeConfiguracion(onAjustes: () -> Unit, onVolver: () -> Unit) {
-    Scaffold { relleno ->
-        Column(Modifier.fillMaxSize().padding(relleno)) {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onVolver) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.cd_close))
-                }
-            }
-            TarjetaDeConfiguracion(onAjustes = onAjustes, modifier = Modifier.fillMaxSize().padding(10.dp))
         }
     }
 }

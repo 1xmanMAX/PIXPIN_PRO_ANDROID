@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -699,7 +700,13 @@ class SincronizarActivity : ComponentActivity() {
                 // **La papelera, a mano y sin pasar por un proyecto** (21-sep-2026), con su icono
                 // (27-oct-2026).
                 Spacer(Modifier.height(22.dp))
-                Papelera()
+                // **Unirse al chat compartido de otra persona** (27-oct-2026, como la portada de
+                // Sincronizar del PC): la segunda puerta, además del «+» de la lista de chats.
+                Fila(Icons.Outlined.GroupAdd, "Unirse a un chat compartido") {
+                    ChatCompartidoActivity.entrar(this@SincronizarActivity)
+                }
+                Spacer(Modifier.height(10.dp))
+                Fila(Icons.Outlined.Delete, "Papelera") { CopiasActivity.abrir(this@SincronizarActivity, null) }
 
                 val registro by Presencia.registro.collectAsState()
                 val atendiendo by Presencia.atendiendo.collectAsState()
@@ -886,18 +893,18 @@ class SincronizarActivity : ComponentActivity() {
         }
     }
 
-    /** La papelera: su icono y su nombre, y se abre al tocar. Ver [CopiasActivity]. */
+    /** Una fila con su icono y su nombre, que hace algo al tocarla (la papelera, unirse a un chat). */
     @Composable
-    private fun Papelera() {
+    private fun Fila(icono: androidx.compose.ui.graphics.vector.ImageVector, nombre: String, alTocar: () -> Unit) {
         Caja(relleno = PaddingValues(0.dp)) {
             Row(
-                Modifier.fillMaxWidth().clickable { CopiasActivity.abrir(this@SincronizarActivity, null) }
+                Modifier.fillMaxWidth().clickable(onClick = alTocar)
                     .padding(horizontal = 16.dp, vertical = 14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Outlined.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                Icon(icono, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.width(12.dp))
-                Text("Papelera", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                Text(nombre, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             }
         }
     }

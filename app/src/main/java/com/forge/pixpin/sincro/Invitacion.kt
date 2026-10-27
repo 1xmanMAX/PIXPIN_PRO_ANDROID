@@ -48,6 +48,20 @@ object Invitacion {
         return DelQr(codigo, p[3].ifBlank { null }, p[4].toIntOrNull() ?: 0)
     }
 
+    /**
+     * **Por dónde se entra en un chat compartido** (27-oct-2026). El usuario no podía unirse: las
+     * instrucciones decían «PixPin → ⋮ → Entrar en chat», y esos tres puntos solo existían dentro de
+     * «Mensajes guardados», que ya no es lo primero que se ve. Ahora la puerta es el «+» de la lista
+     * de chats (como el PC, que la pone en el menú de su «+», `cc-menu-entrar`), y todos los textos
+     * que la explican salen de aquí para no volver a quedarse atrás.
+     */
+    const val UNIRSE = "Unirse a un chat compartido"
+    const val UNIRSE_DETALLE = "Con el código o el QR de quien te invita"
+    const val COMO_UNIRSE = "En el otro teléfono: PixPin → el «+» de abajo en la lista de chats → «$UNIRSE». " +
+        "Que escanee este QR o teclee el código."
+    const val COMO_INVITAR = "Quien te invita mantiene pulsado el chat en su lista (o lo abre → ⋮) → Personas → Añadir, " +
+        "y te enseña un QR y un código. Solo recibirás ese chat: nada más de su teléfono, y tú no le das nada tuyo."
+
     /** Lo que sale de entrar: el chat, y quién me invitó y dónde escucha (para apuntar su dirección). */
     class Entrada(val chat: ChatCompartido, val quien: Aparato, val puerto: Int)
 

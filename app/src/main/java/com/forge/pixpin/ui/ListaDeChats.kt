@@ -267,7 +267,8 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                 dismissButton = { androidx.compose.material3.TextButton(onClick = { borrando = null }) { Text(stringResource(android.R.string.cancel)) } }
             )
         }
-        // **El «+» de los chats** (25-oct-2026, del PC `e3f1d60`): normal o compartido. Es también
+        // **El «+» de los chats** (25-oct-2026, del PC `e3f1d60`): normal o compartido, y desde el
+        // 27-oct-2026 también unirse al compartido de otro con su código. Es también
         // como se crea un proyecto desde que no hay pantalla de Proyectos: un proyecto es un chat.
         // El compartido nace ya en `compartidos.json` conmigo dentro y se abren sus personas para
         // invitar (Añadir, el código y el QR), como «Compartir» de siempre.
@@ -277,7 +278,10 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
         ) {
             Box {
                 BotonRedondo(Icons.Filled.Add, "Chat nuevo", { eligiendoNuevo = true }, tamano = 56.dp, puesto = true)
-                com.forge.pixpin.guardados.MenuDeChatNuevo(eligiendoNuevo, { eligiendoNuevo = false }) { conPersonas ->
+                com.forge.pixpin.guardados.MenuDeChatNuevo(
+                    eligiendoNuevo, { eligiendoNuevo = false },
+                    alUnirse = { com.forge.pixpin.sincro.ChatCompartidoActivity.entrar(contexto) }
+                ) { conPersonas ->
                     alcance.launch { chatNuevo(contexto, conPersonas) }
                 }
             }

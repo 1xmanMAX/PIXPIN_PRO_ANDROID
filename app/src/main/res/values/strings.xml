@@ -699,9 +699,7 @@
     <string name="guardados_videos">Vídeos</string>
     <string name="guardados_enlaces">Enlaces</string>
     <!-- La ficha del chat (25-oct-2026, como la isla del PC). Ver FichaDelChat. -->
-    <string name="guardados_proyectos">Proyectos</string>
     <string name="ficha_titulo">Información</string>
-    <string name="ficha_este_chat">Este chat</string>
     <string name="ficha_mes">%1$s de %2$d</string>
     <string name="ficha_posicion">%1$d de %2$d</string>
     <string name="ficha_ver_en_el_chat">Ver en el chat</string>
@@ -716,11 +714,6 @@
     <string name="ficha_vacia_voz">Las notas de voz saldrán aquí</string>
     <string name="ficha_vacia_dibujos">Los dibujos del chat saldrán aquí</string>
     <string name="ficha_vacia_fijados">Lo que fijes saldrá aquí</string>
-    <string name="ficha_vacia_proyectos">Aún no hay proyectos</string>
-    <plurals name="ficha_hojas">
-        <item quantity="one">1 hoja</item>
-        <item quantity="other">%d hojas</item>
-    </plurals>
     <string name="guardados_voz">Voz</string>
     <string name="guardados_dibujos">Dibujos</string>
     <string name="guardados_fijados">Fijados</string>
@@ -986,10 +979,9 @@
     <string name="atajo_tarea">Tarea</string>
     <string name="atajo_tarea_largo">Nueva tarea</string>
     <string name="guardados_galeria">Galería de capturas</string>
-    <string name="guardados_arrastrar">Añadir arrastrando…</string>
     <!-- Chats compartidos con otras personas (13-oct-2026). Ver sincro/Compartidos. -->
     <string name="guardados_personas">Personas</string>
-    <string name="guardados_entrar_en_chat">Entrar en chat</string>
+    <string name="guardados_entrar_en_chat">Unirse a un chat compartido</string>
     <string name="guardados_cambiar_nombre">Cambiar nombre</string>
     <string name="atajo_buscar">Buscar</string>
     <string name="atajo_buscar_largo">PixPin: buscar en todo</string>

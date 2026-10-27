@@ -318,7 +318,7 @@ class ChatCompartidoActivity : ComponentActivity() {
                 Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
                     IconButton(onClick = { finish() }) { Icon(Icons.Filled.Close, contentDescription = "Cerrar") }
                     Column(Modifier.weight(1f)) {
-                        Text(if (chat == null) "Entrar en un chat" else "Personas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                        Text(if (chat == null) Invitacion.UNIRSE else "Personas", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
                         if (chat != null && nombreDelChat.isNotBlank()) {
                             Text("«$nombreDelChat»", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
@@ -449,7 +449,9 @@ class ChatCompartidoActivity : ComponentActivity() {
             Spacer(Modifier.height(16.dp))
             Caja {
                 Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
-                    Text("En el otro teléfono: PixPin → ⋮ → Entrar en chat. Que escanee esto o teclee el código.",
+                    // El camino de verdad (27-oct-2026): el «⋮ → Entrar en chat» que decía ya no existía
+                    // fuera de «Mensajes guardados». Ver [Invitacion.COMO_UNIRSE].
+                    Text(Invitacion.COMO_UNIRSE,
                         style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
                     Spacer(Modifier.height(12.dp))
                     Image(qr.asImageBitmap(), contentDescription = "Código QR de la invitación",
@@ -488,8 +490,7 @@ class ChatCompartidoActivity : ComponentActivity() {
             return
         }
         Caja {
-            Text("Quien te invita abre el chat → ⋮ → Personas → Añadir, y te enseña un código. " +
-                "Solo recibirás ese chat: nada más de su teléfono, y tú no le das nada tuyo.",
+            Text(Invitacion.COMO_INVITAR,
                 style = MaterialTheme.typography.bodyMedium)
         }
         Spacer(Modifier.height(16.dp))
@@ -513,9 +514,16 @@ class ChatCompartidoActivity : ComponentActivity() {
         Text("o escribe el código", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(6.dp))
         var codigo by remember { mutableStateOf("") }
+        // **Pegar el texto del QR también vale** (27-oct-2026): si llega por mensaje, trae la dirección
+        // y se entra sin buscar en la red. Ver [Invitacion.deLoEscrito].
+        var delQrPegado by remember { mutableStateOf<Invitacion.DelQr?>(null) }
         OutlinedTextField(
             value = Invitacion.legible(codigo),
-            onValueChange = { codigo = Invitacion.limpiar(it) },
+            onValueChange = { tecleado ->
+                val pegado = Invitacion.leerQr(tecleado)
+                delQrPegado = pegado
+                codigo = pegado?.codigo ?: Invitacion.limpiar(tecleado)
+            },
             singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
             textStyle = MaterialTheme.typography.headlineSmall.copy(fontFamily = FontFamily.Monospace, textAlign = TextAlign.Center),
@@ -523,7 +531,10 @@ class ChatCompartidoActivity : ComponentActivity() {
         )
         Spacer(Modifier.height(12.dp))
         Button(
-            onClick = { entrarCon(codigo, null, 0) },
+            onClick = {
+                val q = delQrPegado?.takeIf { it.codigo == codigo }
+                entrarCon(codigo, q?.host, q?.puerto ?: 0)
+            },
             enabled = Invitacion.valido(codigo) && !trabajando,
             modifier = Modifier.widthIn(max = 320.dp).fillMaxWidth().height(48.dp)
         ) { Text("Entrar", maxLines = 1) }
@@ -538,7 +549,10 @@ class ChatCompartidoActivity : ComponentActivity() {
             context.startActivity(Intent(context, ChatCompartidoActivity::class.java).putExtra(EXTRA_CHAT, proyecto).putExtra(EXTRA_NOMBRE, nombre))
         }
 
-        /** Entrar en un chat que otro comparte, con su código. */
+        /**
+         * Entrar en un chat que otro comparte, con su código. Se llega desde el «+» de la lista de
+         * chats («Unirse a un chat compartido»), desde Sincronizar y desde el ⋮ de «Mensajes guardados».
+         */
         fun entrar(context: Context) {
             context.startActivity(Intent(context, ChatCompartidoActivity::class.java))
         }

@@ -185,10 +185,15 @@ fun OnboardingScreen(@Suppress("UNUSED_PARAMETER") loQuePiden: Intent? = null) {
  *
  * Fue la primera tarjeta del montón de proyectos; desde el 26-oct-2026, sin esa pantalla, va en
  * [ConfiguracionActivity]. Se comprueba de un vistazo que la bola sigue en marcha.
+ *
+ * **Y desde el 27-oct-2026 es lo primero de los ajustes, no una pantalla delante** (pedido del
+ * usuario: el engranaje abría «Bienvenido a PixPin» y había que pulsar otra vez para llegar a los
+ * ajustes). Sin su botón de «Ajustes» (ya se está en ellos) ni el de «Mensajes guardados», que
+ * desde la lista de chats es la primera fila. Sin desplazamiento propio: va dentro del de los
+ * ajustes.
  */
 @Composable
 fun TarjetaDeConfiguracion(
-    onAjustes: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -273,8 +278,7 @@ fun TarjetaDeConfiguracion(
     Card(modifier) {
         Column(
             Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .fillMaxWidth()
                 .padding(20.dp)
         ) {
             Text(
@@ -339,20 +343,6 @@ fun TarjetaDeConfiguracion(
                 )
             }
 
-            Spacer(Modifier.height(12.dp))
-            // **La puerta a Mensajes guardados**, grande y aquí: estaba como un icono en la
-            // cabecera de los proyectos y ese hueco lo ocupa ahora la caja de exportar. Esta
-            // tarjeta es la portada, y es donde uno la busca. Lo pidió el usuario (6-sep-2026).
-            androidx.compose.material3.OutlinedButton(
-                onClick = {
-                    context.startActivity(Intent(context, com.forge.pixpin.guardados.MensajesActivity::class.java))
-                },
-                modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) {
-                Icon(Icons.Filled.BookmarkBorder, contentDescription = null, Modifier.size(20.dp))
-                Text(stringResource(R.string.guardados_titulo), modifier = Modifier.padding(start = 8.dp))
-            }
-
             Spacer(Modifier.height(8.dp))
             // **Sincronizar con los otros aparatos**, por la Wi-Fi y sin servidor. Ver
             // [com.forge.pixpin.sincro.SincronizarActivity].
@@ -367,21 +357,6 @@ fun TarjetaDeConfiguracion(
                 // **Gira mientras se sincroniza** y se marca en rojo si falló (25-oct-2026). Ver [com.forge.pixpin.ui.IconoDeSincronizar].
                 com.forge.pixpin.ui.IconoDeSincronizar(androidx.compose.material3.LocalContentColor.current, MaterialTheme.colorScheme.background, 20.dp)
                 Text("Sincronizar", modifier = Modifier.padding(start = 8.dp))
-            }
-
-            Spacer(Modifier.height(8.dp))
-            // Sin botón de «Proyectos» (26-oct-2026, como el PC: cada proyecto es su chat). Queda
-            // la puerta a los ajustes, que es otra pantalla porque son cuarenta interruptores.
-            Row(Modifier.fillMaxWidth()) {
-                // **Sin Croquis 3D ni Tablas aquí** (24-sep-2026): los pidió quitar el usuario porque
-                // se repiten más abajo, en los botones de cada proyecto, y solo ocupaban sitio.
-                TextButton(onClick = onAjustes, modifier = Modifier.weight(1f)) {
-                    Icon(Icons.Filled.Tune, contentDescription = null, Modifier.size(18.dp))
-                    Text(
-                        stringResource(R.string.ajustes_titulo),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
             }
 
             // **Los grupos de pestañas guardados, desde el menú** (19-sep-2026): un toque abre el
@@ -445,9 +420,10 @@ private fun TodoConcedido() {
  * opción, y son las de siempre: no se pierde ninguna.
  */
 @Composable
-fun PantallaDeAjustes(onVolver: () -> Unit) {
+fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {}) {
     com.forge.pixpin.ajustes.AjustesV2(
         onVolver = onVolver,
+        cabecera = cabecera,
         // **La versión, aquí abajo.** Si el número solo vive en el archivo de compilación, desde el
         // móvil no hay forma de saber qué build tienes puesto — y con los APK repartidos por enlace,
         // esa era la pregunta que no se podía responder.

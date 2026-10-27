@@ -131,7 +131,7 @@ import java.io.File
  * se quita de su campo (mantener pulsado). Del PC no se trae el teclado (espacio, J/L, M…).
  *
  * **Como los visores** (25-oct-2026, PC fe0c9c4 y 19c060f): claro u oscuro con la luna/el sol de
- * arriba; lo que se ve (el vídeo o la captura) **se acerca como un lienzo** —pellizcar hacia los dedos,
+ * arriba, el mismo modo recordado de los demás visores y sin el cielo del tema Cosmos (27-oct-2026); lo que se ve (el vídeo o la captura) **se acerca como un lienzo** —pellizcar hacia los dedos,
  * arrastrar— con [com.forge.pixpin.ui.Encuadre]; un toque reproduce o para y
  * **el doble toque solo encaja** (no reproduce: el toque suelto espera a ver si viene otro). Al lado,
  * el riel de todos los visores ([com.forge.pixpin.ui.RielDelVisor]): el marcador y **el lápiz, que
@@ -170,9 +170,15 @@ class EstudiarClaseActivity : ComponentActivity() {
         val inicio = intent.getLongExtra(EL_MINUTO, 0L)
         aPantallaCompleta()
         setContent {
-            // Claro u oscuro como los visores: null es lo de los Ajustes.
-            var oscuro by remember { mutableStateOf<Boolean?>(null) }
-            PixPinTheme(darkTheme = oscuro) { Pantalla(id, inicio) { oscuro = it } }
+            // **Claro u oscuro, el mismo de los visores y recordado** (27-oct-2026, pedido del
+            // usuario). Antes arrancaba con lo de los Ajustes (`null`), que con el tema Cosmos era el
+            // cielo estrellado, y tras tocar la luna/el sol ya no se podía volver a él: dos looks
+            // distintos para la misma pantalla. Ahora es solo día o noche, el de [com.forge.pixpin.office.Oscuro]
+            // (el del lector, Excel…), y el botón lo guarda para todos.
+            var oscuro by remember { mutableStateOf(com.forge.pixpin.office.Oscuro.activo(this)) }
+            PixPinTheme(darkTheme = oscuro) {
+                Pantalla(id, inicio) { oscuro = it; com.forge.pixpin.office.Oscuro.poner(this@EstudiarClaseActivity, it) }
+            }
         }
     }
 

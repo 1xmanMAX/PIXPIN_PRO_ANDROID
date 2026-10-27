@@ -164,6 +164,36 @@ class ChatsCompartidosTest {
         assertTrue(Invitacion.valido(Invitacion.nuevoCodigo()))
     }
 
+    /**
+     * **El texto del QR pegado en la caja del código** (27-oct-2026): con espacios o un salto de línea
+     * de más (como llega por mensaje) sigue dando el código y la dirección; y limpiarlo a ojo no
+     * daría el código, que es por lo que la caja lo lee como QR primero.
+     */
+    @Test
+    fun `el texto del QR pegado da el codigo y la direccion`() {
+        val pegado = "  " + Invitacion.textoDelQr("K7Q2M9XP", "192.168.1.5", 4000) + "\n"
+        val q = Invitacion.leerQr(pegado)!!
+        assertEquals(Invitacion.DelQr("K7Q2M9XP", "192.168.1.5", 4000), q)
+        assertFalse(Invitacion.limpiar(pegado) == "K7Q2M9XP")
+        // Sin dirección (no se supo la Wi-Fi): el código, y a buscar en la red.
+        assertEquals(Invitacion.DelQr("K7Q2M9XP", null, 0), Invitacion.leerQr(Invitacion.textoDelQr("K7Q2M9XP", null, 0)))
+        // Un código tecleado no es un QR.
+        assertNull(Invitacion.leerQr("K7Q2-M9XP"))
+    }
+
+    /**
+     * **Las instrucciones nombran la puerta que existe** (27-oct-2026): el usuario no pudo unirse porque
+     * decían «PixPin → ⋮ → Entrar en chat», y ese ⋮ no está en la lista de chats. Dicen el «+» y el
+     * nombre exacto de la fila de su menú.
+     */
+    @Test
+    fun `como unirse dice el mas de la lista y el nombre de su fila`() {
+        assertTrue(Invitacion.COMO_UNIRSE.contains("«+»"))
+        assertTrue(Invitacion.COMO_UNIRSE.contains("«${Invitacion.UNIRSE}»"))
+        assertFalse(Invitacion.COMO_UNIRSE.contains("Entrar en chat"))
+        assertTrue(Invitacion.COMO_INVITAR.contains("Personas → Añadir"))
+    }
+
     @Test
     fun `las claves acuerdan el mismo secreto y firman`() {
         val s1 = max.llaves.acordar(ana.llaves.publica)
