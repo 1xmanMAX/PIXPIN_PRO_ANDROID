@@ -331,6 +331,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                     TextButton(onClick = { Reproductor.otraVelocidad() }) {
                         Text(estado.velocidad.toString().removeSuffix(".0") + "×")
                     }
+                    // Altavoz o auricular de llamadas (27-oct-2026). Ver [com.forge.pixpin.audio.SalidaDeAudio].
+                    com.forge.pixpin.audio.BotonDeSalida(tamano = 40.dp)
                     Box(Modifier.weight(1f))
                     IconButton(enabled = m != null, onClick = { poniendo = posMs }) {
                         Icon(Icons.Filled.BookmarkAdd, getString(R.string.estudiar_marcador))

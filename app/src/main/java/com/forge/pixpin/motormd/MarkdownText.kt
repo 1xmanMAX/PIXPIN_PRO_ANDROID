@@ -518,6 +518,7 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
     // (5-sep-2026).
     var sonando by remember(medio.ruta) { mutableStateOf(false) }
     val reproductor = remember(medio.ruta) { arrayOfNulls<android.media.MediaPlayer>(1) }
+    val contextoDelAudio = androidx.compose.ui.platform.LocalContext.current
     androidx.compose.runtime.DisposableEffect(medio.ruta) {
         onDispose { com.forge.pixpin.audio.RealceAlOir.soltar(reproductor[0]); runCatching { reproductor[0]?.release() }; reproductor[0] = null }
     }
@@ -551,7 +552,10 @@ private fun MedioUi(medio: MarkdownBlock.Medio, baseSizeSp: Float) {
                             android.media.MediaPlayer().apply {
                                 setDataSource(medio.ruta)
                                 setOnCompletionListener { sonando = false }
+                                // Por el altavoz o el auricular de llamadas (27-oct-2026): ver `SalidaDeAudio`.
+                                val oido = com.forge.pixpin.audio.SalidaDeAudio.preparar(contextoDelAudio, this)
                                 prepare(); start()
+                                com.forge.pixpin.audio.SalidaDeAudio.sonando(contextoDelAudio, this, oido)
                             }
                         }.getOrNull()?.let {
                             // Lo grabado bajito, más alto (24-oct-2026): ver `RealceAlOir`.

@@ -82,7 +82,9 @@ class BibliotecaDeAudioActivity : ComponentActivity() {
                 Text(getString(R.string.biblioteca_audio), fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
             BarraDelReproductor(alTocarElTitulo = {
-                audios.firstOrNull { it.ruta == estado.ruta }?.let { LetraActivity.abrir(this@BibliotecaDeAudioActivity, it.id) }
+                audios.firstOrNull { it.ruta == estado.ruta }?.let {
+                    if (it.esMusica) MusicaActivity.abrir(this@BibliotecaDeAudioActivity, it.id) else LetraActivity.abrir(this@BibliotecaDeAudioActivity, it.id)
+                }
             })
             if (audios.isEmpty()) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -131,7 +133,11 @@ class BibliotecaDeAudioActivity : ComponentActivity() {
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
-                        IconButton(onClick = { LetraActivity.abrir(this@BibliotecaDeAudioActivity, m.id) }) {
+                        // La música se canta en el karaoke (27-oct-2026, [MusicaActivity]); lo demás, en la letra.
+                        IconButton(onClick = {
+                            if (esMusica) MusicaActivity.abrir(this@BibliotecaDeAudioActivity, m.id)
+                            else LetraActivity.abrir(this@BibliotecaDeAudioActivity, m.id)
+                        }) {
                             Icon(
                                 Icons.Filled.Lyrics,
                                 contentDescription = getString(R.string.letra_ver),

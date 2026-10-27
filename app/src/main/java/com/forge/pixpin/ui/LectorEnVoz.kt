@@ -220,8 +220,10 @@ class LectorEnVoz private constructor(context: Context) {
     // ([com.forge.pixpin.pin.LlamadaSecretaActivity]): modo de comunicación y el auricular como
     // salida; y la pantalla se apaga al acercarla a la cara. Solo mientras suena: al pausar, el
     // teléfono vuelve a como estaba, que no se quede «en llamada». ----
-    private var modoDeAntes: Int? = null
-    private var cerca: android.os.PowerManager.WakeLock? = null
+    //
+    // **Desde el 27-oct-2026 el truco vive en [com.forge.pixpin.audio.SalidaDeAudio]**, el mismo para
+    // todos los reproductores de la app: aquí solo se dice que suena por el auricular. Y **los
+    // audífonos mandan**: con unos puestos se lee por ellos aunque esté elegido el auricular.
 
     /** Cambia la salida; si estaba sonando, vuelve a empezar el trozo por la nueva. */
     fun porElAuricular(si: Boolean) {
@@ -231,43 +233,21 @@ class LectorEnVoz private constructor(context: Context) {
         if (_estado.value.leyendo) leer(actual, trozoActual, reproductor?.currentPosition ?: 0)
     }
 
+    /** Si se lee por el auricular de llamadas: elegido aquí y sin audífonos puestos. */
+    private fun alOido(): Boolean {
+        com.forge.pixpin.audio.SalidaDeAudio.iniciar(app)
+        return _estado.value.auricular && !com.forge.pixpin.audio.SalidaDeAudio.conAudifonos()
+    }
+
     private fun atributos(): AudioAttributes =
-        if (!_estado.value.auricular) ATRIBUTOS
-        else AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_VOICE_COMMUNICATION)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-            .build()
+        if (!alOido()) ATRIBUTOS else com.forge.pixpin.audio.SalidaDeAudio.atributosPara(true)
 
     private fun ponerLaSalida() {
-        if (!_estado.value.auricular) { devolverLaSalida(); return }
-        runCatching {
-            if (modoDeAntes == null) modoDeAntes = audio.mode
-            audio.mode = android.media.AudioManager.MODE_IN_COMMUNICATION
-            if (android.os.Build.VERSION.SDK_INT >= 31) {
-                audio.availableCommunicationDevices.firstOrNull { it.type == android.media.AudioDeviceInfo.TYPE_BUILTIN_EARPIECE }
-                    ?.let { audio.setCommunicationDevice(it) }
-            } else @Suppress("DEPRECATION") { audio.isSpeakerphoneOn = false }
-        }
-        runCatching {
-            val energia = app.getSystemService(android.os.PowerManager::class.java)
-            if (cerca == null && energia.isWakeLockLevelSupported(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK)) {
-                cerca = energia.newWakeLock(android.os.PowerManager.PROXIMITY_SCREEN_OFF_WAKE_LOCK, "pixpin:leyendo")
-                    .also { it.acquire(4 * 60 * 60 * 1000L) }
-            }
-        }
+        if (!alOido()) { devolverLaSalida(); return }
+        com.forge.pixpin.audio.SalidaDeAudio.sonando(app, this, alOido = true, rehacer = null) { _estado.value.leyendo }
     }
 
-    private fun devolverLaSalida() {
-        runCatching { if (cerca?.isHeld == true) cerca?.release() }
-        cerca = null
-        val antes = modoDeAntes ?: return
-        modoDeAntes = null
-        runCatching {
-            if (android.os.Build.VERSION.SDK_INT >= 31) audio.clearCommunicationDevice()
-            // Solo si sigue en el modo que se puso: si entró una llamada de verdad, es suyo.
-            if (audio.mode == android.media.AudioManager.MODE_IN_COMMUNICATION) audio.mode = antes
-        }
-    }
+    private fun devolverLaSalida() = com.forge.pixpin.audio.SalidaDeAudio.callado(this)
 
     private fun pedirElAudio(): Boolean =
         runCatching { audio.requestAudioFocus(foco) != android.media.AudioManager.AUDIOFOCUS_REQUEST_FAILED }.getOrDefault(true)

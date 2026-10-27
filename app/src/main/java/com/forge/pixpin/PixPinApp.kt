@@ -80,6 +80,8 @@ class PixPinApp : Application() {
         // **Las tablas que son mensajes del chat** (mini-app `tabla` y hojas editadas de un Excel):
         // quien carga o guarda una tabla por su id pasa por el chat sin saberlo. Ver [com.forge.pixpin.guardados.TablasDelChat].
         com.forge.pixpin.motor.TablasEnDisco.enMensajes = com.forge.pixpin.guardados.TablasDelChat(this)
+        // **Por dónde suena todo** (27-oct-2026): altavoz, auricular de llamadas o audífonos. Ver [com.forge.pixpin.audio.SalidaDeAudio].
+        runCatching { com.forge.pixpin.audio.SalidaDeAudio.iniciar(this) }
         // El símbolo del formato «moneda» de las celdas: el del aparato, como el PC usa el de Windows.
         runCatching {
             val l = java.util.Locale.getDefault()

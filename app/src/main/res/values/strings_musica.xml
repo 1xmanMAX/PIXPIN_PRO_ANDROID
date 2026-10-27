@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Música con su letra (27-oct-2026). Aparte de strings.xml para no pisarse con otros cambios. -->
+<resources>
+    <string name="guardados_adj_musica">Música</string>
+</resources>
