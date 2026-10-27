@@ -10,6 +10,8 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -25,6 +27,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -36,8 +39,7 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.PlayCircle
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.DragHandle
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.Mic
@@ -63,6 +65,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,6 +74,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -91,8 +105,14 @@ import kotlinx.coroutines.withContext
  * (la plantilla de la última, vacía, con el título siguiente) y «Exportar PDF».
  *
  * Lo que se cambia aquí es el mensaje de la carpeta ([CarpetasDelChat.cambiar]), que es lo que viaja.
- * En el PC las páginas se arrastran para reordenarlas; aquí, con las flechas de «Antes» y
- * «Después», que con el dedo no se confunden con desplazar la lista.
+ * **Las hojas se mueven con su asa** (27-oct-2026, el usuario: «tengo que tocar una y otra vez
+ * para mover una hoja; en pantalla táctil no es útil… mantengo, jalo arriba y la hoja sube»): donde
+ * estaban las flechas de «Antes» y «Después» está ahora el asa (≡), que arrastra la hoja como en el
+ * PC. Se coge el asa y la hoja sigue al dedo; las demás se apartan al pasar, la lista corre sola
+ * cerca de los bordes y cada cambio de puesto vibra. Solo el asa arrastra (el resto de la fila abre
+ * la hoja y desplaza la lista como siempre). Mientras se arrastra solo cambia lo que se ve
+ * ([OrdenDeHojas]); al soltar se escribe una vez con [CarpetaDePaginas.mover], el mismo documento que
+ * dejaban las flechas. Con TalkBack, el asa ofrece «Subir» y «Bajar» (las flechas, como acciones).
  *
  * **La carpeta de una grabación** (25-oct-2026, PC e1150e8) se ve igual, adaptada: la nota y el vídeo
  * con su icono y lo que duran, las capturas con su foto y su minuto, en el orden de la grabación (no
@@ -224,8 +244,60 @@ class CarpetaActivity : ComponentActivity() {
         var renombrandoPagina by remember { mutableStateOf<CarpetaDePaginas.Pagina?>(null) }
         var trabajando by remember { mutableStateOf(false) }
 
+        // El arrastre de las hojas (no en una grabación: lo grabado va en el orden del tiempo).
+        val estadoLista = rememberLazyListState()
+        val vibrar = LocalHapticFeedback.current
+        val densidad = LocalDensity.current
+        // El orden que se ve mientras se arrastra y hasta que el documento escrito lo trae; null: el del documento.
+        var ordenLocal by remember { mutableStateOf<List<String>?>(null) }
+        val arrastre = remember(estadoLista) {
+            ArrastreDeLista(estadoLista, alcance) { desde, hasta -> ordenLocal = ordenLocal?.let { OrdenDeHojas.mover(it, desde, hasta) } }
+        }
+        val vista = if (grabacion) paginas else OrdenDeHojas.segun(paginas, ordenLocal) { it.first.id }
+        val idsDelDocumento = paginas.map { it.first.id }
+        // Los gestos del asa viven más que una composición: leen siempre lo último.
+        val idsVistos by rememberUpdatedState(vista.map { it.first.id })
+        val idsEscritos by rememberUpdatedState(idsDelDocumento)
+        // Cuando llega el documento con el orden nuevo (o cambia por la sincronización), manda él.
+        LaunchedEffect(idsDelDocumento) { if (arrastre.clave == null) ordenLocal = null }
+        // La lista corre sola mientras la hoja está cerca del borde, aunque el dedo esté quieto.
+        LaunchedEffect(arrastre.clave) {
+            if (arrastre.clave != null) {
+                val franja = with(densidad) { 64.dp.toPx() }
+                val maximo = with(densidad) { 14.dp.toPx() }
+                while (true) {
+                    withFrameNanos { }
+                    val s = arrastre.sobrante(franja, maximo)
+                    if (s != 0f) {
+                        estadoLista.scrollBy(s)
+                        if (arrastre.recolocar()) vibrar.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    }
+                }
+            }
+        }
+
         fun cambiar(cambio: (CarpetaDePaginas) -> CarpetaDePaginas?) {
             alcance.launch(Dispatchers.IO) { CarpetasDelChat.cambiar(this@CarpetaActivity, id, cambio) }
+        }
+
+        /**
+         * **Se soltó la hoja [hoja]**: su puesto nuevo se escribe una sola vez. Si no se movió, o las
+         * hojas cambiaron a medio arrastre, o no se pudo escribir, vuelve el orden del documento.
+         */
+        fun soltar(hoja: String) {
+            arrastre.terminar()
+            val orden = ordenLocal
+            val hasta = orden?.indexOf(hoja) ?: -1
+            val escritos = idsEscritos
+            if (orden == null || hasta < 0 || orden.toSet() != escritos.toSet() || escritos.indexOf(hoja) == hasta) {
+                ordenLocal = null
+            } else alcance.launch {
+                val escrita = withContext(Dispatchers.IO) {
+                    runCatching { CarpetasDelChat.cambiar(this@CarpetaActivity, id) { c -> OrdenDeHojas.soltar(c, hoja, hasta) } }
+                        .onFailure { android.util.Log.e("PixPinCarpeta", "mover", it) }.getOrNull()
+                }
+                if (escrita == null || escrita.posicion(hoja) != hasta) ordenLocal = null
+            }
         }
 
         Scaffold(
@@ -312,17 +384,41 @@ class CarpetaActivity : ComponentActivity() {
             }
             LazyColumn(
                 Modifier.fillMaxSize().padding(relleno),
+                state = estadoLista,
                 contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 96.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                itemsIndexed(paginas, key = { _, (m, _) -> m.id }) { i, (m, p) ->
+                itemsIndexed(vista, key = { _, (m, _) -> m.id }) { i, (m, p) ->
                     if (grabacion) FilaDeGrabacion(m, p, documento, onQuitar = { cambiar { c -> c.quitar(m.id) } })
                     else FilaDePagina(
                         numero = i + 1,
                         m = m,
                         titulo = p.titulo.ifBlank { m.nombre.ifBlank { CarpetasDelChat.PAGINA } },
                         primera = i == 0,
-                        ultima = i == paginas.lastIndex,
+                        ultima = i == vista.lastIndex,
+                        // La que se arrastra va por encima, debajo del dedo; las demás se apartan con su animación.
+                        modifier = if (arrastre.clave == m.id) Modifier.zIndex(1f).graphicsLayer {
+                            translationY = arrastre.desplazamiento
+                            shadowElevation = 8.dp.toPx()
+                            shape = RoundedCornerShape(10.dp)
+                            clip = true
+                        } else Modifier.animateItem(),
+                        asa = Modifier.pointerInput(m.id) {
+                            detectDragGestures(
+                                onDragStart = {
+                                    val vistos = idsVistos
+                                    if (arrastre.empezar(m.id)) {
+                                        ordenLocal = vistos
+                                        vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                },
+                                onDragEnd = { soltar(m.id) },
+                                onDragCancel = { soltar(m.id) }
+                            ) { cambio, d ->
+                                cambio.consume()
+                                if (arrastre.arrastrar(d.y)) vibrar.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            }
+                        },
                         onAbrir = { abrirPagina(this@CarpetaActivity, m) },
                         onSubir = { cambiar { c -> c.subir(c.posicion(m.id)) } },
                         onBajar = { cambiar { c -> c.posicion(m.id).takeIf { it >= 0 }?.let(c::bajar) } },
@@ -362,6 +458,8 @@ class CarpetaActivity : ComponentActivity() {
         titulo: String,
         primera: Boolean,
         ultima: Boolean,
+        modifier: Modifier,
+        asa: Modifier,
         onAbrir: () -> Unit,
         onSubir: () -> Unit,
         onBajar: () -> Unit,
@@ -370,7 +468,7 @@ class CarpetaActivity : ComponentActivity() {
     ) {
         var menu by remember { mutableStateOf(false) }
         Row(
-            Modifier
+            modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(10.dp))
                 .background(MaterialTheme.colorScheme.surfaceVariant)
@@ -395,10 +493,19 @@ class CarpetaActivity : ComponentActivity() {
                     Text(m.nombre, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-            Column {
-                IconButton(enabled = !primera, onClick = onSubir, modifier = Modifier.size(36.dp)) { Icon(Icons.Filled.KeyboardArrowUp, "Antes") }
-                IconButton(enabled = !ultima, onClick = onBajar, modifier = Modifier.size(36.dp)) { Icon(Icons.Filled.KeyboardArrowDown, "Después") }
-            }
+            // El asa, donde estaban las flechas y del alto de las dos: se coge y se arrastra.
+            Box(
+                asa
+                    .size(40.dp, 72.dp)
+                    .semantics {
+                        contentDescription = "Mover la hoja: mantén y arrastra"
+                        customActions = buildList {
+                            if (!primera) add(CustomAccessibilityAction("Subir") { onSubir(); true })
+                            if (!ultima) add(CustomAccessibilityAction("Bajar") { onBajar(); true })
+                        }
+                    },
+                contentAlignment = Alignment.Center
+            ) { Icon(Icons.Filled.DragHandle, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Más") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
