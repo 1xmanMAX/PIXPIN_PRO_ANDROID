@@ -1350,9 +1350,12 @@ class VisorHtmlActivity : ComponentActivity() {
                 }
                 // **El riel de la derecha** (24-oct-2026, como el PC): marcador, lápiz y marco, y los
                 // marcadores debajo. En una página web el lápiz anota en píxeles CSS, como el PC.
+                // **Y se va con la pastilla** (27-oct-2026): al mover la página, y vuelve al tocar. Ver [RielALaVista].
                 if (!presentando && !marcosDoc.imprimiendo && pagina != null) {
                     val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
                     RielDelVisor(
+                        visible = RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarcador),
+                        alUsar = { aLaVista = true; toquesEnLaPagina++ },
                         poniendoMarca = poniendoMarcador, anotando = anotando, marcando = marcosDoc.activo,
                         onMarcador = if (elDocumento == null) null else ({
                             if (anotando) salir()

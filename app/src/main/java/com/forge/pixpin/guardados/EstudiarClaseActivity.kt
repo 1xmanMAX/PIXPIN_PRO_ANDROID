@@ -235,6 +235,9 @@ class EstudiarClaseActivity : ComponentActivity() {
                     contentAlignment = Alignment.Center
                 ) {
                     var caja by remember { mutableStateOf(com.forge.pixpin.ui.Encuadre.Caja(0f, 0f, 1f, 1f)) }
+                    // **El riel se va al mover lo que se ve y vuelve al tocar** (27-oct-2026), como en
+                    // todos los visores. Ver [com.forge.pixpin.ui.RielALaVista].
+                    var rielALaVista by remember { mutableStateOf(true) }
                     // Sin medidas de la imagen (el vídeo se encaja solo), la caja entera hace de imagen.
                     val w = if (anchoImg > 0f) anchoImg else caja.ancho
                     val h = if (altoImg > 0f) altoImg else caja.alto
@@ -257,12 +260,13 @@ class EstudiarClaseActivity : ComponentActivity() {
                             .pointerInput(m?.ruta) {
                                 // Un toque reproduce o para; el doble toque **solo** encaja (19c060f).
                                 detectTapGestures(
-                                    onTap = { m?.ruta?.let { Reproductor.alternar(it, titulo) } },
+                                    onTap = { rielALaVista = true; m?.ruta?.let { Reproductor.alternar(it, titulo) } },
                                     onDoubleTap = { encuadre = com.forge.pixpin.ui.Encuadre() }
                                 )
                             }
                             .pointerInput(w, h, caja) {
                                 detectTransformGestures { centro, mover, zoom, _ ->
+                                    if (zoom != 1f || mover.getDistance() > 0f) rielALaVista = false
                                     var e = encuadre
                                     if (zoom != 1f) e = e.acercar(caja, w, h, zoom, centro.x, centro.y)
                                     encuadre = e.mover(caja, w, h, mover.x, mover.y)
@@ -289,6 +293,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                     ) { Text(if (conVideo) "Capturas" else "Vídeo", color = Color.White, fontSize = 12.sp) }
                     // El riel de todos los visores: el marcador y el lápiz (anotar lo que se ve).
                     com.forge.pixpin.ui.RielDelVisor(
+                        visible = com.forge.pixpin.ui.RielALaVista.visible(rielALaVista, anotando != null, marcando = false, poniendoMarca = poniendo != null),
                         poniendoMarca = poniendo != null, anotando = anotando != null, marcando = false,
                         onMarcador = { if (m != null) poniendo = posMs },
                         onLapiz = {

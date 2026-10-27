@@ -41,6 +41,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -62,6 +64,7 @@ import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.AddComment
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Redo
 import androidx.compose.material.icons.automirrored.filled.Undo
@@ -111,11 +114,9 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.Info
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
-import com.forge.pixpin.motor.Hoja
 import com.forge.pixpin.motor.Proyectos
 import com.forge.pixpin.ui.theme.PixPinTheme
 
@@ -180,7 +181,6 @@ class MarkdownEditorActivity : ComponentActivity() {
                         cerrarYVolver()
                     },
                     onDescartar = { cerrarYVolver() },
-                    onAProyecto = { texto -> aUnProyecto(texto) },
                     detalle = { texto -> detalleDe(id, texto) },
                     comentarios = comentariosDeLaNota.value,
                     idDeLaNota = id,
@@ -291,34 +291,6 @@ class MarkdownEditorActivity : ComponentActivity() {
     }
 
     /**
-     * Mete la nota como una hoja del proyecto en curso.
-     *
-     * Va al que se esté usando —el mismo criterio que sigue una hoja dibujada—,
-     * y si no hay ninguno se abre uno. Así mandar una nota a un proyecto es un
-     * toque y no un paseo por una lista.
-     */
-    private fun aUnProyecto(texto: String) {
-        val app = application as? PixPinApp ?: return
-        val ahora = System.currentTimeMillis()
-        val proyecto = Proyectos.enCurso(app.proyectos.proyectos.value)
-            ?: app.proyectos.nuevo(getString(R.string.proyecto_nuevo_nombre), ahora)
-
-        val titulo = texto.lineSequence().firstOrNull { it.isNotBlank() }
-            ?.let { Menus.convertir(it, null) }
-            ?.take(40)
-            .orEmpty()
-
-        app.proyectos.guardar(
-            Proyectos.conHoja(
-                proyecto,
-                Hoja(id = "n-$ahora", nombre = titulo, nota = texto),
-                ahora
-            )
-        )
-        Toast.makeText(this, R.string.nota_a_proyecto, Toast.LENGTH_SHORT).show()
-    }
-
-    /**
      * **Cerrar devuelve a donde se vino**: al chat del que se abrió, y de ahí a la lista de chats.
      * El editor vive en su propia tarea, así que sin decirlo atrás no es ese chat sino lo que
      * hubiera debajo, casi siempre el escritorio. Ver [com.forge.pixpin.Volver].
@@ -376,7 +348,6 @@ private fun Pantalla(
     inicial: String,
     onGuardar: (String) -> Unit,
     onDescartar: () -> Unit,
-    onAProyecto: (String) -> Unit = {},
     desde: Int = -1,
     /** Qué archivo es esta nota y cuánto pesa, con su proyecto. Ver [com.forge.pixpin.motor.Detalle]. */
     detalle: (String) -> List<Pair<String, String>> = { emptyList() },
@@ -469,10 +440,33 @@ private fun Pantalla(
     // cada bloque ya compuesto, pero solo de uno en uno; esto es la página
     // entera, seguida, como la verá quien la reciba.
     // **Se abre mirando** (24-oct-2026, como todos los visores): una nota con algo escrito sale ya
-    // compuesta, y el lápiz del riel de la derecha pasa a escribir. Una nueva, o abierta desde un
-    // bloque concreto, empieza escribiendo.
-    var viendo by remember { mutableStateOf(inicial.isNotBlank() && desde < 0) }
+    // compuesta, y el lápiz del riel de la derecha anota; escribir es el botón de la pastilla.
+    // **Siempre** (27-oct-2026, el usuario: «que se abra siempre en modo visualización»): también una
+    // nueva —que invita a escribir— o abierta desde un bloque, que se abre mirando por ese sitio.
+    var viendo by remember { mutableStateOf(true) }
     val desplazado = rememberScrollState()
+    if (desde > 0 && inicial.isNotEmpty()) LaunchedEffect(Unit) {
+        // Por donde se estaba leyendo: lo escrito antes de [desde], en proporción al alto.
+        val alto = androidx.compose.runtime.snapshotFlow { desplazado.maxValue }.first { it > 0 }
+        desplazado.scrollTo((desde.toFloat() / inicial.length * alto).toInt().coerceIn(0, alto))
+    }
+    // ---- **Las barras, como en todos los visores** (27-oct-2026, el usuario: «que la nota tenga la
+    // misma interfaz que los demás visores»): la pantalla entera, la pastilla de cristal arriba y el
+    // riel a la derecha, que salen al tocar, se van al mover y solas a los pocos segundos. Escribiendo
+    // la pastilla se queda: lleva deshacer, rehacer y guardar. Ver [RielALaVista]. ----
+    var aLaVista by remember { mutableStateOf(true) }
+    var toques by remember { mutableIntStateOf(0) }
+    var menuAbierto by remember { mutableStateOf(false) }
+    LaunchedEffect(aLaVista, toques, viendo, menuAbierto) {
+        if (aLaVista && viendo && !menuAbierto) { kotlinx.coroutines.delay(3500); aLaVista = false }
+    }
+    LaunchedEffect(viendo) { aLaVista = true }
+    val barras = !viendo || aLaVista || menuAbierto
+    // **Lo que queda encima del texto**: la barra del sistema y la pastilla. El documento empieza ahí,
+    // como antes bajo la barra fija, para que la tinta y los marcos ya puestos no se corran.
+    val densidadDeLaPantalla = androidx.compose.ui.platform.LocalDensity.current
+    val margenArriba = androidx.compose.foundation.layout.WindowInsets.statusBars.getTop(densidadDeLaPantalla) +
+        with(densidadDeLaPantalla) { ALTO_DE_LA_PASTILLA.roundToPx() }
     // Los marcadores de la nota, en fracción del alto: el formato del PC para notas y páginas.
     var marcadores by remember { mutableStateOf(emptyList<com.forge.pixpin.motor.Lectura.Marcador>()) }
     var poniendoMarca by remember { mutableStateOf(false) }
@@ -502,7 +496,7 @@ private fun Pantalla(
     val marcosDeLaNota = remember(baseDeLaNota) {
         MarcosDelVisor(baseDeLaNota?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(contextoDelEditor.filesDir, it) })
     }
-    fun vistaDeLaTinta() = com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = -desplazado.value / densidadDeLaNota, zoom = densidadDeLaNota)
+    fun vistaDeLaTinta() = com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = (margenArriba - desplazado.value) / densidadDeLaNota, zoom = densidadDeLaNota)
     fun dejarDeAnotarLaNota() {
         if (!anotandoLaNota) return
         anotandoLaNota = false
@@ -519,8 +513,8 @@ private fun Pantalla(
                 ir = { m -> desplazado.scrollTo((m.y0 * densidadDeLaNota).toInt()) },
                 cajaEnVentana = { m ->
                     androidx.compose.ui.geometry.Rect(
-                        (m.x0 * densidadDeLaNota).toFloat(), (m.y0 * densidadDeLaNota - desplazado.value).toFloat(),
-                        (m.x1 * densidadDeLaNota).toFloat(), (m.y1 * densidadDeLaNota - desplazado.value).toFloat()
+                        (m.x0 * densidadDeLaNota).toFloat(), (m.y0 * densidadDeLaNota + margenArriba - desplazado.value).toFloat(),
+                        (m.x1 * densidadDeLaNota).toFloat(), (m.y1 * densidadDeLaNota + margenArriba - desplazado.value).toFloat()
                     ).translate(cajaDeLaNota.topLeft)
                 }
             )
@@ -702,119 +696,39 @@ private fun Pantalla(
             ?: "Nota"
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                // Con el icono del formato delante, como en los visores.
-                title = { Row(verticalAlignment = Alignment.CenterVertically) { IconoDeFormato("nota.md", Modifier.padding(end = 10.dp)); Text(titulo, maxLines = 1) } },
-                navigationIcon = {
-                    // Con algo escrito se pregunta: la flecha está pegada al
-                    // borde y se toca sin querer más de lo que parece.
-                    IconButton(
-                        onClick = { if (hayCambios) confirmandoDescarte = true else onDescartar() }
-                    ) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Descartar"
-                        )
-                    }
-                },
-                actions = {
-                    // **Escribir el texto** (el `EDIT_NOTE` del PC): el lápiz del riel es para anotar.
-                    IconButton(onClick = { dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; viendo = !viendo }) {
-                        Icon(
-                            if (viendo) Icons.Filled.EditNote else Icons.Filled.Visibility,
-                            contentDescription = if (viendo) "Escribir" else "Ver la nota",
-                            tint = if (!viendo) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                    // Deshacer y rehacer arriba a la derecha, como su
-                    // `historyButtons`. `pasos` está solo para que Compose sepa
-                    // que hay que volver a mirar si están habilitados: el
-                    // historial es un objeto normal y no un estado observable.
-                    @Suppress("UNUSED_EXPRESSION") pasos
-                    IconButton(
-                        onClick = {
-                            historial.deshacer(valor.text)?.let {
-                                valor = TextFieldValue(it, TextRange(it.length))
-                                recolocar(it)
-                                pasos++
-                            }
-                        },
-                        enabled = historial.puedeDeshacer
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = "Deshacer")
-                    }
-                    IconButton(
-                        onClick = {
-                            historial.rehacer(valor.text)?.let {
-                                valor = TextFieldValue(it, TextRange(it.length))
-                                recolocar(it)
-                                pasos++
-                            }
-                        },
-                        enabled = historial.puedeRehacer
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Redo, contentDescription = "Rehacer")
-                    }
-
-                    // El globo de los comentarios, con los abiertos.
-                    if (comentarios != null) {
-                        IconButton(onClick = { viendoComentarios = -1 }) {
-                            BadgedBox(badge = { if (fichero.abiertos > 0) Badge { Text("${fichero.abiertos}") } }) {
-                                Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "Comentarios")
-                            }
-                        }
-                    }
-                    // Lo de uso de vez en cuando, detrás de los tres puntos: la barra no daba para más.
-                    var menuMas by remember { mutableStateOf(false) }
-                    Box {
-                        IconButton(onClick = { menuMas = true }) { Icon(Icons.Filled.MoreVert, contentDescription = "Más") }
-                        DropdownMenu(expanded = menuMas, onDismissRequest = { menuMas = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Detalle") }, leadingIcon = { Icon(Icons.Filled.Info, null) },
-                                onClick = { menuMas = false; viendoDetalle = true }
-                            )
-                            // Mandar la nota a un proyecto: se queda como una hoja
-                            // más, con sus páginas, junto a los dibujos y las del PDF.
-                            DropdownMenuItem(
-                                text = { Text("Añadir a un proyecto") }, leadingIcon = { Icon(Icons.Filled.LibraryAdd, null) },
-                                onClick = { menuMas = false; onAProyecto(valor.text) }
-                            )
-                            DropdownMenuItem(text = { Text("Letra y tamaño") }, onClick = { menuMas = false; eligiendoVista = true })
-                            masAcciones.forEach { (nombre, hacer) ->
-                                DropdownMenuItem(text = { Text(nombre) }, onClick = { menuMas = false; hacer(valor.text) })
-                            }
-                        }
-                    }
-                    IconButton(onClick = {
-                        if (comentarios != null && fichero.comentarios.isNotEmpty()) cambiarComentarios(fichero, valor.text)
-                        onGuardar(valor.text)
-                    }) {
-                        Icon(
-                            Icons.Filled.Check,
-                            contentDescription = "Guardar",
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-            )
-        }
-    ) { hueco ->
-        Column(
-            Modifier
-                .fillMaxSize()
-                .padding(hueco)
-                .imePadding()
-        ) {
+    // **Sin barra fija** (27-oct-2026): la nota a pantalla completa, como los demás visores; lo que
+    // estaba en la barra va en la pastilla de cristal ([PastillaDeLector]) y en su ⋮, y atrás guarda.
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .imePadding()
+    ) {
+        Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
             Box(
                 Modifier
                     .fillMaxSize()
+                    // Mirando: tocar saca la pastilla y el riel, y mover los esconde. Solo mira el gesto.
+                    .then(
+                        if (viendo) Modifier.toqueOMovida(
+                            alTocar = { aLaVista = true; toques++ },
+                            alMover = { if (!anotandoLaNota && !marcosDeLaNota.activo) aLaVista = false }
+                        ) else Modifier
+                    )
                     .verticalScroll(desplazado)
+                    .padding(top = with(densidadDeLaPantalla) { margenArriba.toDp() })
+                    .then(if (viendo) Modifier.navigationBarsPadding() else Modifier)
                     .padding(16.dp)
             ) {
-                if (viendo) {
+                if (viendo && valor.text.isBlank()) {
+                    // Una nota vacía se abre mirando, así que invita a escribir.
+                    Text(
+                        "Nota vacía. Toca para escribir.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxWidth().clickable { viendo = false }.padding(vertical = 24.dp)
+                    )
+                } else if (viendo) {
                     val bloques = remember(valor.text) { Markdown.parse(valor.text) }
                     androidx.compose.runtime.CompositionLocalProvider(
                         com.forge.pixpin.motormd.LocalMediosTocables provides true,
@@ -881,8 +795,8 @@ private fun Pantalla(
                     onChange = { trazando ->
                         // Dos dedos mueven la nota: solo de alto, y sin salirse.
                         val vp = tintaDeLaNota.scene.viewport
-                        val y = (-vp.scrollY * densidadDeLaNota).toInt().coerceIn(0, desplazado.maxValue)
-                        tintaDeLaNota.setViewport(vp.copy(scrollX = 0.0, scrollY = -y / densidadDeLaNota))
+                        val y = (margenArriba - vp.scrollY * densidadDeLaNota).toInt().coerceIn(0, desplazado.maxValue)
+                        tintaDeLaNota.setViewport(vp.copy(scrollX = 0.0, scrollY = (margenArriba - y) / densidadDeLaNota))
                         alcanceDeMarcas.launch { desplazado.scrollTo(y) }
                         if (!trazando) tickDeLaTinta++
                     }
@@ -897,8 +811,8 @@ private fun Pantalla(
             }
             if (viendo && !anotandoLaNota && (marcosDeLaNota.activo || marcosDeLaNota.lista.isNotEmpty())) CapaDeMarcos(
                 marcosDeLaNota,
-                aPantalla = { x, y, _ -> androidx.compose.ui.geometry.Offset((x * densidadDeLaNota).toFloat(), (y * densidadDeLaNota - desplazado.value).toFloat()) },
-                aDocumento = { o -> PuntoDelDocumento(o.x / densidadDeLaNota, (o.y + desplazado.value) / densidadDeLaNota) },
+                aPantalla = { x, y, _ -> androidx.compose.ui.geometry.Offset((x * densidadDeLaNota).toFloat(), (y * densidadDeLaNota + margenArriba - desplazado.value).toFloat()) },
+                aDocumento = { o -> PuntoDelDocumento(o.x / densidadDeLaNota, (o.y - margenArriba + desplazado.value) / densidadDeLaNota) },
                 pxPorUnidad = { densidadDeLaNota },
                 alIr = { m -> alcanceDeMarcas.launch { desplazado.animateScrollTo((m.y0 * densidadDeLaNota).toInt()) } },
                 alImprimir = { imprimirLosMarcosDeLaNota() },
@@ -918,7 +832,10 @@ private fun Pantalla(
                 )
             }
             // **El riel de la derecha**: marcador, lápiz (anotar encima) y marcos, como en los visores.
+            // **Y se va con la pastilla** (27-oct-2026): al mover la nota, y vuelve al tocar. Ver [RielALaVista].
             if (viendo && !marcosDeLaNota.imprimiendo) RielDelVisor(
+                visible = RielALaVista.visible(barras, anotandoLaNota, marcosDeLaNota.activo, poniendoMarca),
+                alUsar = { toques++ },
                 poniendoMarca = poniendoMarca, anotando = anotandoLaNota, marcando = marcosDeLaNota.activo,
                 onMarcador = if (archivoDeMarcas == null) null else ({ dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = !poniendoMarca }),
                 onLapiz = {
@@ -935,12 +852,73 @@ private fun Pantalla(
                 },
                 modifier = Modifier.align(Alignment.CenterEnd)
             )
-            if (poniendoMarca) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter), onCerrar = { poniendoMarca = false }) { emoji ->
+            if (poniendoMarca) ElegirEmojiDeMarca(Modifier.align(Alignment.BottomCenter).navigationBarsPadding(), onCerrar = { poniendoMarca = false }) { emoji ->
                 poniendoMarca = false
                 val f = if (desplazado.maxValue <= 0) 0f else desplazado.value.toFloat() / desplazado.maxValue
                 marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, f, emoji, System.currentTimeMillis())
                 archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.escribir(it, com.forge.pixpin.motor.Lectura.aTexto(marcadores)) }
             }
+            // **La pastilla de cristal** (27-oct-2026), la de todos los visores: el icono «MD» y el
+            // nombre, y los botones. Mirando: escribir, los comentarios, compartir y el ⋮. Escribiendo:
+            // ver la nota, deshacer, rehacer, los comentarios, el ⋮ y guardar. Imprimir es mantener el
+            // marco del riel. Anotando o con los marcos se aparta, como en los demás.
+            // `pasos` está solo para que Compose vuelva a mirar deshacer y rehacer: el historial es
+            // un objeto normal y no un estado observable.
+            @Suppress("UNUSED_EXPRESSION") pasos
+            val botonDeComentarios = if (comentarios == null) null else BotonDeLector(Icons.Filled.ChatBubbleOutline, "Comentarios", insignia = fichero.abiertos) { viendoComentarios = -1 }
+            val guardarYCerrar = BotonDeLector(Icons.Filled.Check, "Guardar") {
+                if (comentarios != null && fichero.comentarios.isNotEmpty()) cambiarComentarios(fichero, valor.text)
+                onGuardar(valor.text)
+            }
+            PastillaDeLector(
+                visible = barras && !anotandoLaNota && !marcosDeLaNota.activo && !marcosDeLaNota.imprimiendo,
+                nombre = titulo,
+                archivo = "nota.md",
+                botones = if (viendo) listOfNotNull(
+                    // **Escribir el texto** (el `EDIT_NOTE` del PC): el lápiz del riel es para anotar.
+                    BotonDeLector(Icons.Filled.EditNote, "Escribir") {
+                        dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = false; viendo = false
+                    },
+                    botonDeComentarios,
+                    BotonDeLector(IconoDeCompartir, "Compartir") { CompartirNativo.texto(contextoDelEditor, valor.text, titulo); toques++ },
+                    guardarYCerrar.takeIf { hayCambios }
+                ) else listOfNotNull(
+                    BotonDeLector(Icons.Filled.Visibility, "Ver la nota") { viendo = true },
+                    // Deshacer y rehacer, como su `historyButtons`; solo cuando hay algo que deshacer o rehacer.
+                    if (historial.puedeDeshacer) BotonDeLector(Icons.AutoMirrored.Filled.Undo, "Deshacer") {
+                        historial.deshacer(valor.text)?.let {
+                            valor = TextFieldValue(it, TextRange(it.length))
+                            recolocar(it)
+                            pasos++
+                        }
+                    } else null,
+                    if (historial.puedeRehacer) BotonDeLector(Icons.AutoMirrored.Filled.Redo, "Rehacer") {
+                        historial.rehacer(valor.text)?.let {
+                            valor = TextFieldValue(it, TextRange(it.length))
+                            recolocar(it)
+                            pasos++
+                        }
+                    } else null,
+                    botonDeComentarios,
+                    guardarYCerrar
+                ),
+                // Lo de vez en cuando, detrás de los tres puntos. «Añadir a un proyecto» se fue
+                // (27-oct-2026, el usuario): la nota vive en su chat.
+                menu = { cerrar ->
+                    masAcciones.forEach { (nombre, hacer) ->
+                        DropdownMenuItem(text = { Text(nombre) }, onClick = { cerrar(); hacer(valor.text) })
+                    }
+                    DropdownMenuItem(text = { Text("Letra y tamaño") }, onClick = { cerrar(); eligiendoVista = true })
+                    DropdownMenuItem(
+                        text = { Text("Detalle") }, leadingIcon = { Icon(Icons.Filled.Info, null) },
+                        onClick = { cerrar(); viendoDetalle = true }
+                    )
+                    // Con algo escrito se pregunta antes de tirarlo. Ver [confirmandoDescarte].
+                    if (hayCambios) DropdownMenuItem(text = { Text("Descartar los cambios") }, onClick = { cerrar(); confirmandoDescarte = true })
+                },
+                alCambiarElMenu = { menuAbierto = it; toques++ },
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
             }
 
             if (!viendo) run {
@@ -1152,6 +1130,9 @@ private fun Pantalla(
         )
     }
 }
+
+/** Lo que ocupa la pastilla de arriba con su aire (8 dp encima, 38 dp de botón y un poco debajo). */
+private val ALTO_DE_LA_PASTILLA = 56.dp
 
 /**
  * El diálogo de enlace de Telegram (`EditTextCaption.makeSelectedUrl`).

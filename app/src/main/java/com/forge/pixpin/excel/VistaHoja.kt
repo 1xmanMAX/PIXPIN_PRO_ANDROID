@@ -71,6 +71,12 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
     var alCambiar: (() -> Unit)? = null
     /** Un toque suelto en la hoja (para sacar o esconder los mandos, como en los otros visores). */
     var alTocar: (() -> Unit)? = null
+    /**
+     * **El dedo mueve la hoja** (27-oct-2026): desplazar o pellizcar, para esconder la pastilla y el
+     * riel como en los demás visores ([com.forge.pixpin.ui.RielALaVista]). Una vez por gesto.
+     */
+    var alMover: (() -> Unit)? = null
+    private var movidoEnEsteGesto = false
 
     /** **Modo oscuro** (luna/sol del visor). */
     var oscuro: Boolean = false
@@ -1253,6 +1259,7 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
     private val gestos = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onDown(ev: MotionEvent): Boolean {
             scroller.forceFinished(true)
+            movidoEnEsteGesto = false
             arrastre = when {
                 ev.y < cabAlto && ev.x >= cabAncho -> 2
                 ev.x < cabAncho && ev.y >= cabAlto -> 3
@@ -1291,7 +1298,10 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
             if (escalando) return true
             when (arrastre) {
                 // Desplazar no avisa a las barras: no cambia nada de lo que enseñan.
-                0 -> { est.x += dx / e; est.y += dy / e; acotar(); invalidate() }
+                0 -> {
+                    est.x += dx / e; est.y += dy / e; acotar(); invalidate()
+                    if (!movidoEnEsteGesto) { movidoEnEsteGesto = true; alMover?.invoke() }
+                }
                 1 -> {} // lo lleva onTouchEvent (tras mantener, GestureDetector ya no avisa)
                 else -> elegirEncabezado(e2.x, e2.y, extender = true)
             }
@@ -1322,7 +1332,11 @@ class VistaHoja(context: Context, val libro: LibroExcel) : View(context) {
     private var escalando = false
 
     private val pinza = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
-        override fun onScaleBegin(d: ScaleGestureDetector): Boolean { escalando = true; scroller.forceFinished(true); return true }
+        override fun onScaleBegin(d: ScaleGestureDetector): Boolean {
+            escalando = true; scroller.forceFinished(true)
+            if (!movidoEnEsteGesto) { movidoEnEsteGesto = true; alMover?.invoke() }
+            return true
+        }
         override fun onScale(d: ScaleGestureDetector): Boolean { zoomEn(est.zoom * d.scaleFactor, d.focusX, d.focusY); return true }
         override fun onScaleEnd(d: ScaleGestureDetector) { escalando = false }
     })

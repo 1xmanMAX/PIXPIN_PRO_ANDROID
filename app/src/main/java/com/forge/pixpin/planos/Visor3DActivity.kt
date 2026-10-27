@@ -679,7 +679,11 @@ class Visor3DActivity : ComponentActivity() {
                 )
             }
             // **El riel de la derecha**: marcador, lápiz (anotar sobre esta vista) y marcos, como el PC.
+            // **Y se va con la pastilla** (27-oct-2026): al girar el modelo, y vuelve al tocar; midiendo o con
+            // las piezas abiertas se queda, que de él se sale. Ver [com.forge.pixpin.ui.RielALaVista].
             if (listo && !marcosDoc.imprimiendo && !ocultarParaImprimir) com.forge.pixpin.ui.RielDelVisor(
+                visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando != null, marcosDoc.activo, poniendoMarca, otraHerramienta = midiendo || viendoPiezas),
+                alUsar = { toques++ },
                 poniendoMarca = poniendoMarca, anotando = anotando != null, marcando = marcosDoc.activo,
                 onMarcador = { dejarDeAnotar(); marcosDoc.activo = false; poniendoMarca = !poniendoMarca },
                 onLapiz = { if (anotando != null) dejarDeAnotar() else { poniendoMarca = false; marcosDoc.activo = false; empezarAAnotar() } },

@@ -269,6 +269,8 @@ class ExcelActivity : ComponentActivity() {
                             nueva.oscuro = oscuro
                             nueva.alCambiar = { marca.intValue++ }
                             nueva.alTocar = { aLaVista = true; toques++ }
+                            // Mover la hoja esconde la pastilla y el riel, como en los demás visores.
+                            nueva.alMover = { if (!anotando) aLaVista = false }
                             nueva.marcos = { marcosDoc.lista }
                             l.alCambiar = { nueva.post { nueva.invalidate(); marca.intValue++ } }
                             nueva.ponerHoja(activa)
@@ -354,7 +356,10 @@ class ExcelActivity : ComponentActivity() {
                 modifier = Modifier.align(Alignment.TopCenter)
             )
             exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
+            // **El riel se va con la pastilla** (27-oct-2026): al mover la hoja, y vuelve al tocar. Ver [com.forge.pixpin.ui.RielALaVista].
             if (l != null && !marcosDoc.imprimiendo && !ocultarParaImprimir) com.forge.pixpin.ui.RielDelVisor(
+                visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarca),
+                alUsar = { toques++ },
                 poniendoMarca = poniendoMarca, anotando = anotando, marcando = marcosDoc.activo,
                 onMarcador = { if (anotando) { anotando = false; guardarTinta() }; marcosDoc.activo = false; poniendoMarca = !poniendoMarca },
                 onLapiz = if (base == null && listo) null else ({
