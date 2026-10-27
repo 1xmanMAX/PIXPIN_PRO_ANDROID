@@ -83,6 +83,15 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [ ] 30. Todo audio (música, notas de voz, grabaciones) se puede escuchar por el altavoz de
       llamadas (el del oído), además del altavoz normal y los audífonos.
 
+### Abrir archivos de fuera (como el «espacio» del PC)
+- [ ] 31. Abrir cualquier archivo de un formato aceptado (PDF, Word, EPUB, HTML, Excel, imágenes,
+      planos, 3D, Markdown…) desde otra app («Abrir con PixPin») directo en su visor, SIN guardarlo
+      en Mensajes guardados ni en ningún sitio: entrar, ver y salir.
+      - Con el visor completo: riel con lápiz (editor avanzado), marcos, imprimir, marcadores;
+        arriba día/noche y las funciones de cada formato; editar y compartir como siempre.
+      - Solo en este modo, dos botones nuevos: «Abrir en otra app» y «Guardar» (en Mensajes
+        guardados o en un chat), sin preguntar cada vez al salir.
+
 ## Pendiente de respuesta del usuario
 
 - Whisper «tiny» (actual) o «base» como el PC (161 MB de descarga).
