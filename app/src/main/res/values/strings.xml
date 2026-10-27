@@ -979,7 +979,6 @@
     <string name="atajo_tarea">Tarea</string>
     <string name="atajo_tarea_largo">Nueva tarea</string>
     <string name="guardados_galeria">Galería de capturas</string>
-    <string name="guardados_arrastrar">Añadir arrastrando…</string>
     <!-- Chats compartidos con otras personas (13-oct-2026). Ver sincro/Compartidos. -->
     <string name="guardados_personas">Personas</string>
     <string name="guardados_entrar_en_chat">Unirse a un chat compartido</string>

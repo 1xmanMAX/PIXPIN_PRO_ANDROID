@@ -139,9 +139,15 @@ fun CabeceraFlotante(
                         RoundedCornerShape(ALTO_DE_LA_PILDORA / 2)
                     ),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(0.dp),
-                content = menu
-            )
+                horizontalArrangement = Arrangement.spacedBy(0.dp)
+            ) {
+                // **La lupa y los tres puntos, más juntos** (27-oct-2026, pedido del usuario): cada
+                // botón ocupaba los 48 de la zona de toque mínima y entre los dos le quitaban al
+                // nombre del chat sitio que no usaban. A 40, lo que mide su círculo al pulsarlo.
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.material3.LocalMinimumInteractiveComponentSize provides 40.dp
+                ) { menu() }
+            }
         }
     }
 }

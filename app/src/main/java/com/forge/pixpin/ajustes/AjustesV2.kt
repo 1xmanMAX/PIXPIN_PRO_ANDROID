@@ -82,6 +82,11 @@ private val AZUL = androidx.compose.ui.graphics.Color(0xFF0A84FF)
 fun AjustesV2(
     onVolver: () -> Unit,
     pie: @Composable () -> Unit,
+    /**
+     * Lo de encima de las secciones (27-oct-2026): la bienvenida con «Comenzar», que era una
+     * pantalla aparte delante de los ajustes. Solo en la portada, sin buscar.
+     */
+    cabecera: @Composable () -> Unit = {},
     tarjeta: @Composable (id: String) -> Unit
 ) {
     val app = LocalContext.current.applicationContext as PixPinApp
@@ -151,6 +156,7 @@ fun AjustesV2(
             when {
                 busqueda.isNotBlank() -> Resultados(busqueda, ajustes, tarjeta)
                 seccion == null -> {
+                    cabecera()
                     for (s in Seccion.entries) FilaDeSeccion(s, ajustes) { abierta = s.name }
                     pie()
                 }
