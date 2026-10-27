@@ -39,6 +39,16 @@ const val CHAT_GENERAL = com.forge.pixpin.sincro.Disco.GENERAL
  */
 object Volver {
 
+    /**
+     * **El [EXTRA_DESDE_CHAT] de lo que se abre desde la lista de chats** (27-oct-2026): no es un
+     * chat, es la lista. Lo pone `MainActivity.startActivity`, como el chat pone el suyo. Hacía falta
+     * desde que la búsqueda de la lista abre lo encontrado directamente en su visor (el usuario: «al
+     * tocar un PDF, que lo abra directamente»): sin marca, el lector, que vive en su propia tarea,
+     * al cerrarse dejaba en el escritorio en vez de volver a los resultados. Con ella vuelve a la
+     * lista, que sigue con lo buscado (no se rehace: `singleTask` la trae tal cual estaba).
+     */
+    const val DESDE_LA_LISTA = "@lista"
+
     /** Adónde ir al cerrar una pantalla. */
     sealed interface Destino {
         /** Nada que hacer: debajo, en la misma tarea, está ya de donde se vino (o se vino de fuera). */
@@ -65,6 +75,7 @@ object Volver {
      */
     fun adonde(esRaiz: Boolean, desdeChat: String?, desdeProyecto: String?, desdeDentro: Boolean): Destino {
         if (!esRaiz) return Destino.Quedarse
+        if (desdeChat == DESDE_LA_LISTA) return Destino.ALaLista
         val chat = desdeChat?.takeIf { it.isNotBlank() } ?: desdeProyecto?.takeIf { it.isNotBlank() }
         return when {
             chat != null -> Destino.AlChat(chat)

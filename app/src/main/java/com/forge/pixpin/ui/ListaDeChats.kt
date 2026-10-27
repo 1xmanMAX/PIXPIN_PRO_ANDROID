@@ -19,6 +19,14 @@ import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Link
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.PlayCircle
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.ViewInAr
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
@@ -103,29 +111,44 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
     // nombre y su última línea sin mirar tildes y, debajo, la sección «Mensajes · N» con los
     // mensajes de cualquier chat que llevan lo escrito. Ver [com.forge.pixpin.guardados.BuscarEnChats].
     var consulta by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
-    BackHandler(enabled = consulta != null && !enFunciones) { consulta = null }
+    // **Las pestañas de la búsqueda** (27-oct-2026, el usuario: «arriba filtros como Archivos,
+    // Fotos…, como si todo estuviera dentro de un chat»): las de la ficha de un chat, sobre los
+    // mensajes de todos. Con una puesta salen solo los de esa clase, y sin escribir nada, todos los
+    // de esa clase de todos los chats. Ver [com.forge.pixpin.guardados.BuscarEnChats.SECCIONES].
+    var pestana by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(com.forge.pixpin.guardados.Seccion.TODO) }
+    val cerrarLaBusqueda = { consulta = null; pestana = com.forge.pixpin.guardados.Seccion.TODO }
+    BackHandler(enabled = consulta != null && !enFunciones) { cerrarLaBusqueda() }
     val aguja = consulta?.trim().orEmpty()
-    val filtradas = remember(charlas, aguja) {
-        if (aguja.isEmpty()) charlas.orEmpty()
+    val conPestana = consulta != null && pestana != com.forge.pixpin.guardados.Seccion.TODO
+    val filtradas = remember(charlas, aguja, conPestana) {
+        // Con una pestaña puesta, los chats no salen: lo que se mira son fotos, archivos…
+        if (conPestana) emptyList()
+        else if (aguja.isEmpty()) charlas.orEmpty()
         else charlas.orEmpty().filter { c ->
             com.forge.pixpin.guardados.BuscarEnChats.hayCoincidencia(c.nombre, aguja) ||
                 c.ultimo?.let { com.forge.pixpin.guardados.BuscarEnChats.hayCoincidencia(vistazo(it), aguja) } == true
         }
     }
     val indice = remember { com.forge.pixpin.guardados.BuscarEnChats.Indice() }
-    var tope by remember(aguja) { mutableIntStateOf(com.forge.pixpin.guardados.BuscarEnChats.DE_PRIMERAS) }
-    var hallado by remember { mutableStateOf<Pair<String, com.forge.pixpin.guardados.BuscarEnChats.Resultado>?>(null) }
+    val seccionBuscada = if (consulta != null) pestana else com.forge.pixpin.guardados.Seccion.TODO
+    // Lo que se busca: lo escrito y en qué pestaña. Cambiar cualquiera de las dos es otra búsqueda.
+    val clave = aguja to seccionBuscada
+    var tope by remember(clave) { mutableIntStateOf(com.forge.pixpin.guardados.BuscarEnChats.DE_PRIMERAS) }
+    var hallado by remember { mutableStateOf<Pair<Pair<String, com.forge.pixpin.guardados.Seccion>, com.forge.pixpin.guardados.BuscarEnChats.Resultado>?>(null) }
     // La espera de 180 ms desde la última tecla (el «debounce»: cada tecla cancela la anterior), el
     // índice fuera del hilo de la pantalla y, con algo nuevo en el chat (sincronizar, escribir), se
-    // repite sola. Sin nada escrito, la sección se va al momento.
-    LaunchedEffect(aguja, tope, mensajes) {
-        if (aguja.isEmpty()) { hallado = null; return@LaunchedEffect }
+    // repite sola. Sin nada escrito (y sin pestaña), la sección se va al momento.
+    LaunchedEffect(clave, tope, mensajes) {
+        if (aguja.isEmpty() && seccionBuscada == com.forge.pixpin.guardados.Seccion.TODO) { hallado = null; return@LaunchedEffect }
         val lista = mensajes ?: return@LaunchedEffect
-        if (hallado?.first != aguja) kotlinx.coroutines.delay(com.forge.pixpin.guardados.BuscarEnChats.ESPERA_MS)
-        val r = withContext(Dispatchers.Default) { indice.ponerAlDia(lista); indice.buscar(aguja, tope) }
-        hallado = aguja to r
+        if (hallado?.first?.first != aguja) kotlinx.coroutines.delay(com.forge.pixpin.guardados.BuscarEnChats.ESPERA_MS)
+        val r = withContext(Dispatchers.Default) { indice.ponerAlDia(lista); indice.buscar(aguja, tope, seccionBuscada) }
+        hallado = clave to r
     }
-    val resultado = hallado?.takeIf { it.first == aguja }?.second
+    val resultado = hallado?.takeIf { it.first == clave }?.second
+    // Las cuentas de las pestañas se quedan con la última búsqueda con lo mismo escrito: cambiar de
+    // pestaña no las borra mientras llega la nueva.
+    val cuentas = hallado?.takeIf { it.first.first == aguja }?.second?.porSeccion.orEmpty()
     // El nombre de cada chat, también de los archivados (que no salen en la lista pero sí se buscan).
     val nombres = remember(charlas, proyectos) {
         proyectos.associate<Proyecto, String?, String> { it.id to it.nombre } + charlas.orEmpty().associate { it.proyecto to it.nombre }
@@ -147,7 +170,7 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                     Modifier.padding(start = 16.dp, top = 10.dp, bottom = 8.dp)
                 )
                 Spacer(Modifier.weight(1f))
-                if (!enFunciones) androidx.compose.material3.IconButton(onClick = { consulta = if (consulta == null) "" else null }) {
+                if (!enFunciones) androidx.compose.material3.IconButton(onClick = { if (consulta == null) consulta = "" else cerrarLaBusqueda() }) {
                     Icon(Icons.Filled.Search, stringResource(R.string.chat_buscar), tint = Cristal.tinta)
                 }
                 // **Los ajustes y la configuración** (26-oct-2026): eran la primera tarjeta de la
@@ -171,12 +194,15 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                     placeholder = { Text(stringResource(R.string.chat_buscar)) },
                     leadingIcon = { Icon(Icons.Filled.Search, null) },
                     trailingIcon = {
-                        androidx.compose.material3.IconButton(onClick = { consulta = null }) { Icon(Icons.Filled.Close, null) }
+                        androidx.compose.material3.IconButton(onClick = cerrarLaBusqueda) { Icon(Icons.Filled.Close, null) }
                     },
                     shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).focusRequester(foco)
                 )
-                LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
+                // **El foco solo al abrir la lupa**, no al volver de un visor: con lo buscado ya
+                // escrito, el teclado saltando encima de los resultados tapaba lo que se iba a tocar.
+                LaunchedEffect(Unit) { if (consulta.isNullOrEmpty()) runCatching { foco.requestFocus() } }
+                PestanasDeLaBusqueda(pestana, cuentas) { pestana = it }
             }
             if (enFunciones) PestanaDeFunciones(onChat = { enFunciones = false }, Modifier.weight(1f).padding(bottom = 80.dp))
             else LazyColumn(contentPadding = PaddingValues(bottom = 110.dp)) {
@@ -224,7 +250,10 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                                 val e = r.encontrados[el.n]
                                 val proyecto = e.chat.takeIf { it != com.forge.pixpin.sincro.Disco.GENERAL }
                                 val nombre = nombres[proyecto] ?: if (proyecto == null) general else e.chat
-                                FilaDeMensaje(e, proyecto, nombre) { MensajesActivity.abrirChatEn(contexto, proyecto, nombre, e.id) }
+                                val irAlMensaje = { MensajesActivity.abrirChatEn(contexto, proyecto, nombre, e.id) }
+                                FilaDeResultado(e, proyecto, nombre, onIrAlMensaje = irAlMensaje) {
+                                    abrirLoEncontrado(contexto, e.mensaje, irAlMensaje)
+                                }
                             }
                             com.forge.pixpin.guardados.BuscarEnChats.Elemento.VerMas -> VerMas(
                                 minOf(com.forge.pixpin.guardados.BuscarEnChats.DE_PRIMERAS, r.total - r.encontrados.size)
@@ -232,7 +261,7 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                         }
                     }
                 }
-                if (aguja.isNotEmpty() && filtradas.isEmpty() && (r == null || r.encontrados.isEmpty()) && hallado?.first == aguja) item(key = "nada") {
+                if ((aguja.isNotEmpty() || conPestana) && filtradas.isEmpty() && (r == null || r.encontrados.isEmpty()) && hallado?.first == clave) item(key = "nada") {
                     Text(
                         stringResource(R.string.chat_buscar_nada), color = Cristal.tinta.copy(alpha = 0.6f),
                         modifier = Modifier.fillMaxWidth().padding(24.dp), textAlign = androidx.compose.ui.text.style.TextAlign.Center
@@ -460,35 +489,186 @@ private fun CabeceraDeMensajes(total: Int) {
 }
 
 /**
- * **Un mensaje encontrado**: lo que mide una fila de chat, con el avatar de su chat, el nombre del
- * chat, la fecha a la derecha y debajo su trozo en una línea, con lo encontrado en negrita y con un
- * fondo del color de enviar al 28 %.
+ * **Las pestañas de la búsqueda** (27-oct-2026): Todo, Fotos, Vídeos, Archivos, Enlaces, Voz y
+ * Dibujos, las mismas píldoras que dentro de un chat. Con algo buscado llevan cuántos hay en cada una.
  */
 @Composable
-private fun FilaDeMensaje(e: com.forge.pixpin.guardados.BuscarEnChats.Encontrado, proyecto: String?, nombre: String, alTocar: () -> Unit) {
-    val resalte = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = alTocar).padding(horizontal = 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun PestanasDeLaBusqueda(
+    actual: com.forge.pixpin.guardados.Seccion,
+    cuentas: Map<com.forge.pixpin.guardados.Seccion, Int>,
+    onElegir: (com.forge.pixpin.guardados.Seccion) -> Unit
+) {
+    androidx.compose.foundation.lazy.LazyRow(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        contentPadding = PaddingValues(horizontal = 16.dp),
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        if (proyecto == null) Box(Modifier.size(50.dp).clip(CircleShape).background(Cristal.boton, CircleShape), contentAlignment = Alignment.Center) {
-            Icon(Icons.Filled.BookmarkBorder, null, tint = Cristal.tinta)
-        }
-        else com.forge.pixpin.guardados.CirculoDelChat(proyecto, nombre, 50.dp, Cristal.boton) {
-            Text(nombre.trim().take(1).uppercase().ifBlank { "·" }, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta)
-        }
-        Column(Modifier.weight(1f).padding(start = 14.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(nombre, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Text(hora(e.cuando), fontSize = 12.sp, color = Cristal.tinta.copy(alpha = 0.6f))
-            }
-            Text(
-                tramado(e.fragmento.texto, e.fragmento.tramos, resalte),
-                fontSize = 14.sp, color = Cristal.tinta.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis
+        items(com.forge.pixpin.guardados.BuscarEnChats.SECCIONES) { s ->
+            val n = cuentas[s]
+            androidx.compose.material3.FilterChip(
+                selected = s == actual,
+                onClick = { onElegir(s) },
+                shape = CircleShape,
+                modifier = Modifier.height(34.dp),
+                label = { Text(nombreDeSeccion(s) + if (n != null) " $n" else "", fontSize = 13.sp) }
             )
         }
     }
+}
+
+@Composable
+private fun nombreDeSeccion(s: com.forge.pixpin.guardados.Seccion): String = stringResource(
+    when (s) {
+        com.forge.pixpin.guardados.Seccion.FOTOS -> R.string.guardados_fotos
+        com.forge.pixpin.guardados.Seccion.VIDEOS -> R.string.guardados_videos
+        com.forge.pixpin.guardados.Seccion.ARCHIVOS -> R.string.guardados_archivos
+        com.forge.pixpin.guardados.Seccion.ENLACES -> R.string.guardados_enlaces
+        com.forge.pixpin.guardados.Seccion.VOZ -> R.string.guardados_voz
+        com.forge.pixpin.guardados.Seccion.DIBUJOS -> R.string.guardados_dibujos
+        else -> R.string.guardados_todo
+    }
+)
+
+/**
+ * **Abrir lo encontrado** (27-oct-2026, el usuario: «al tocar un PDF, que lo abra directamente»):
+ * en su visor, con la misma regla que tocarlo en su burbuja ([com.forge.pixpin.guardados.AbrirMensaje]),
+ * si lo tiene; si no (una nota sin enlace, una nota de voz, un fichero que aún no llegó), a su sitio
+ * en el chat. La decisión es [com.forge.pixpin.guardados.BuscarEnChats.alTocar]. Atrás desde el
+ * visor vuelve aquí, con lo buscado (ver [com.forge.pixpin.Volver.DESDE_LA_LISTA]).
+ */
+private fun abrirLoEncontrado(contexto: android.content.Context, m: Mensaje?, irAlMensaje: () -> Unit) {
+    val actividad = actividadDe(contexto)
+    val accion = m?.let { com.forge.pixpin.guardados.BuscarEnChats.alTocar(it) { ruta -> java.io.File(ruta).exists() } }
+    if (m != null && actividad != null && accion == com.forge.pixpin.guardados.BuscarEnChats.AlTocar.ABRIR) {
+        com.forge.pixpin.guardados.AbrirMensaje.abrir(actividad, m)
+    } else irAlMensaje()
+}
+
+/** La pantalla que hay detrás de [contexto] (Compose puede darlo envuelto). */
+private fun actividadDe(contexto: android.content.Context): androidx.activity.ComponentActivity? {
+    var c: android.content.Context? = contexto
+    while (c != null) {
+        if (c is androidx.activity.ComponentActivity) return c
+        c = (c as? android.content.ContextWrapper)?.baseContext
+    }
+    return null
+}
+
+/**
+ * **Un resultado de la búsqueda, como en la ficha de un chat** (27-oct-2026): delante la cosa misma
+ * —la miniatura de la foto, del vídeo o del lienzo; el icono de su formato si es un archivo
+ * ([IconoDeArchivo])—, su nombre o su trozo con lo encontrado resaltado y, debajo, **en qué chat
+ * está** («en Mensajes guardados», con la foto del chat) y cuándo. Tocarla la abre
+ * ([abrirLoEncontrado]); el botón de la derecha, o mantenerla pulsada, lleva al mensaje en su chat.
+ */
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+private fun FilaDeResultado(
+    e: com.forge.pixpin.guardados.BuscarEnChats.Encontrado, proyecto: String?, nombre: String,
+    onIrAlMensaje: () -> Unit, alTocar: () -> Unit
+) {
+    val resalte = MaterialTheme.colorScheme.primary.copy(alpha = 0.28f)
+    val m = e.mensaje
+    // Lo de arriba: el nombre de la cosa si lo tiene (un archivo, una foto, un lienzo); el texto
+    // encontrado si es una nota. Debajo, el trozo encontrado si no es lo mismo que el nombre.
+    val titulo = when {
+        m == null || m.clase == Clase.NOTA -> null
+        m.clase == Clase.VOZ || m.clase == Clase.MINIAPP -> vistazo(m)
+        else -> m.nombre.ifBlank { vistazo(m) }
+    }
+    val trozo = e.fragmento.texto.takeIf { it.isNotBlank() && it != titulo }
+    Row(
+        Modifier.fillMaxWidth()
+            .combinedClickable(onClick = alTocar, onLongClick = onIrAlMensaje)
+            .padding(start = 20.dp, end = 6.dp, top = 8.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        MiniaturaDelResultado(m, proyecto, nombre)
+        Column(Modifier.weight(1f).padding(start = 14.dp)) {
+            if (titulo != null) Text(
+                titulo, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            if (trozo != null || titulo == null) Text(
+                if (trozo != null) tramado(trozo, e.fragmento.tramos, resalte)
+                else androidx.compose.ui.text.AnnotatedString(m?.let { vistazo(it) }.orEmpty()),
+                fontSize = 14.sp, color = Cristal.tinta.copy(alpha = if (titulo == null) 0.9f else 0.7f),
+                maxLines = if (titulo == null) 2 else 1, overflow = TextOverflow.Ellipsis
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 3.dp)) {
+                FotoPequenaDelChat(proyecto, nombre)
+                Text(
+                    stringResource(R.string.chat_buscar_en, nombre) + " · " + hora(e.cuando),
+                    fontSize = 12.sp, color = Cristal.tinta.copy(alpha = 0.6f),
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 5.dp)
+                )
+            }
+        }
+        androidx.compose.material3.IconButton(onClick = onIrAlMensaje) {
+            Icon(
+                Icons.Filled.ChatBubbleOutline, stringResource(R.string.chat_buscar_ir_al_mensaje),
+                tint = Cristal.tinta.copy(alpha = 0.7f), modifier = Modifier.size(20.dp)
+            )
+        }
+    }
+}
+
+/** La foto del chat en pequeño, para el «en …» de un resultado. */
+@Composable
+private fun FotoPequenaDelChat(proyecto: String?, nombre: String) {
+    if (proyecto == null) Box(Modifier.size(16.dp).clip(CircleShape).background(Cristal.boton, CircleShape), contentAlignment = Alignment.Center) {
+        Icon(Icons.Filled.BookmarkBorder, null, tint = Cristal.tinta, modifier = Modifier.size(11.dp))
+    }
+    else com.forge.pixpin.guardados.CirculoDelChat(proyecto, nombre, 16.dp, Cristal.boton) {
+        Text(nombre.trim().take(1).uppercase().ifBlank { "·" }, fontSize = 9.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta)
+    }
+}
+
+/**
+ * **Lo que va delante de un resultado**: la cosa en pequeño. Una foto, un vídeo (su primer
+ * fotograma), un lienzo o una página, su miniatura ([com.forge.pixpin.guardados.MiniaturaDePaginaDeCarpeta],
+ * la de las carpetas); un archivo, la hoja de su color con la extensión ([IconoDeArchivo]); lo demás,
+ * su icono. Una nota sin más no tiene cosa que enseñar: lleva la foto de su chat, como antes.
+ */
+@Composable
+private fun MiniaturaDelResultado(m: Mensaje?, proyecto: String?, nombre: String) {
+    val forma = androidx.compose.foundation.shape.RoundedCornerShape(10.dp)
+    val video = m != null && com.forge.pixpin.guardados.SeccionesDelChat.esVideo(m)
+    when {
+        m == null || (m.clase == Clase.NOTA && com.forge.pixpin.guardados.primerEnlace(m.texto) == null) ->
+            if (proyecto == null) Box(Modifier.size(50.dp).clip(CircleShape).background(Cristal.boton, CircleShape), contentAlignment = Alignment.Center) {
+                Icon(Icons.Filled.BookmarkBorder, null, tint = Cristal.tinta)
+            }
+            else com.forge.pixpin.guardados.CirculoDelChat(proyecto, nombre, 50.dp, Cristal.boton) {
+                Text(nombre.trim().take(1).uppercase().ifBlank { "·" }, fontSize = 20.sp, fontWeight = FontWeight.SemiBold, color = Cristal.tinta)
+            }
+        m.clase == Clase.ARCHIVO && !video -> Box(Modifier.size(50.dp), contentAlignment = Alignment.Center) {
+            IconoDeArchivo(m.nombre.ifBlank { m.ruta?.substringAfterLast('/') }, lado = 42.dp)
+        }
+        else -> Box(Modifier.size(50.dp).clip(forma).background(Cristal.boton, forma), contentAlignment = Alignment.Center) {
+            when {
+                video || m.clase == Clase.IMAGEN || m.clase == Clase.DIBUJO || m.clase == Clase.PAGINA ->
+                    com.forge.pixpin.guardados.MiniaturaDePaginaDeCarpeta(m, Modifier.fillMaxSize(), lado = 150)
+                else -> Icon(iconoDeClase(m), null, tint = Cristal.tinta, modifier = Modifier.size(26.dp))
+            }
+            if (video) Icon(
+                Icons.Filled.PlayCircle, null, tint = androidx.compose.ui.graphics.Color.White,
+                modifier = Modifier.size(22.dp)
+            )
+        }
+    }
+}
+
+/** El icono de lo que no tiene miniatura. */
+private fun iconoDeClase(m: Mensaje): androidx.compose.ui.graphics.vector.ImageVector = when {
+    com.forge.pixpin.guardados.CarpetaDePaginas.esCarpeta(m) -> Icons.Filled.Folder
+    m.clase == Clase.VOZ -> Icons.Filled.Mic
+    m.clase == Clase.TABLA -> Icons.Filled.TableChart
+    m.clase == Clase.CROQUIS -> Icons.Filled.ViewInAr
+    m.clase == Clase.PROYECTO -> Icons.Filled.Folder
+    m.clase == Clase.MINIAPP -> Icons.Filled.Checklist
+    m.clase == Clase.NOTA -> Icons.Filled.Link
+    else -> com.forge.pixpin.guardados.iconoDePieza(com.forge.pixpin.guardados.CarpetaDePaginas.piezaDe(m))
 }
 
 /** «Ver N más», centrada y del color de enviar: añade otros veinte. */

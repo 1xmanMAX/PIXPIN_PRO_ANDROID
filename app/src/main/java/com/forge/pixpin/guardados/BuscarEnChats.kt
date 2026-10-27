@@ -7,6 +7,11 @@ package com.forge.pixpin.guardados
  * **«Mensajes · N»** con los mensajes de *cualquier* chat que llevan lo escrito, del más nuevo al
  * más viejo, con su trozo de texto y lo encontrado resaltado; tocar uno abre su chat en él.
  *
+ * **Desde el 27-oct-2026, como si todo estuviera dentro de un chat** (el usuario): arriba las
+ * pestañas de la ficha ([SECCIONES]: Fotos, Vídeos, Archivos…), cada resultado con su miniatura y
+ * el chat donde está, y tocarlo **abre la cosa** en su visor ([alTocar], [AbrirMensaje]); «Ir al
+ * mensaje» lleva a su burbuja, que ahora sí llega aunque esté muy arriba ([adondeSaltar]).
+ *
  * Aquí la parte pura, copiada de `crates/pixpin-ui/src/buscar_en_chats.rs` con sus pruebas
  * (`BuscarEnChatsTest`) para que dé lo mismo en todos los aparatos: el índice ya aplanado, la
  * búsqueda con su tope, el trozo, la espera entre tecla y tecla y cómo se reparte la sección. Quien
@@ -107,29 +112,44 @@ object BuscarEnChats {
         val cuando: Long,
         val piezas: List<Pieza>,
         /** Su id en este aparato: por él se le encuentra al abrir el chat ([MensajesActivity.irAlMensaje]). */
-        val id: String = codigo
+        val id: String = codigo,
+        /** En qué pestañas de [SECCIONES] sale (fotos, archivos…), sin «Todo». Ver [seccionesDe]. */
+        val secciones: Set<Seccion> = emptySet()
     ) {
         internal fun piezaCon(agujaPlana: String): Int = piezas.indexOfFirst { it.plano.contains(agujaPlana) }
 
         companion object {
             /** Una entrada con los textos que se le den, sin los vacíos ni los repetidos. */
-            fun nueva(chat: String, codigo: String, cuando: Long, textos: List<String?>, id: String = codigo): Entrada {
+            fun nueva(
+                chat: String, codigo: String, cuando: Long, textos: List<String?>, id: String = codigo,
+                secciones: Set<Seccion> = emptySet()
+            ): Entrada {
                 val piezas = ArrayList<Pieza>()
                 for (t0 in textos) {
                     val t = t0?.trim().orEmpty()
                     if (t.isEmpty() || piezas.any { it.texto == t }) continue
                     piezas += Pieza(t)
                 }
-                return Entrada(chat, codigo, cuando, piezas, id)
+                return Entrada(chat, codigo, cuando, piezas, id, secciones)
             }
         }
     }
 
-    /** Un mensaje encontrado: cuál (por su posición en lo buscado) y en qué pieza. */
+    /**
+     * Un mensaje encontrado: cuál (por su posición en lo buscado) y en qué pieza (-1: ninguna, al
+     * mirar una pestaña sin haber escrito nada y sin texto que enseñar).
+     */
     data class Acierto(val entrada: Int, val pieza: Int)
 
-    /** Lo que dio una búsqueda: los primeros `tope` y cuántos hay en total. */
-    data class Hallado(val aciertos: List<Acierto> = emptyList(), val total: Int = 0) {
+    /**
+     * Lo que dio una búsqueda: los primeros `tope` y cuántos hay en total en la pestaña pedida, y
+     * [porSeccion], cuántos casan en cada pestaña de [SECCIONES] (el número de su chapa).
+     */
+    data class Hallado(
+        val aciertos: List<Acierto> = emptyList(),
+        val total: Int = 0,
+        val porSeccion: Map<Seccion, Int> = emptyMap()
+    ) {
         /** Si quedan por enseñar («Ver más»). */
         val hayMas: Boolean get() = total > aciertos.size
     }
@@ -137,19 +157,100 @@ object BuscarEnChats {
     /**
      * **Busca** [aguja] en [entradas], que tienen que venir ya del más nuevo al más viejo. Devuelve
      * los [tope] primeros y cuenta todos.
+     *
+     * **Con [seccion], solo lo de esa pestaña** (27-oct-2026, el usuario: «arriba filtros como
+     * Archivos, Fotos…, como si todo estuviera dentro de un chat»). Se filtra **antes** del tope y no
+     * después: filtrar los veinte primeros dejaba «Archivos» con dos aunque hubiera cuarenta. Y con
+     * una pestaña puesta **no hace falta escribir**: sin aguja salen todos los de esa clase de todos
+     * los chats, que es lo que hace la ficha de un chat con lo suyo. Sin aguja y en «Todo», nada:
+     * eso sería el archivo entero, y para eso ya está la lista de chats.
      */
-    fun buscar(entradas: Iterable<Entrada>, aguja: String, tope: Int): Hallado {
-        val plana = agujaPlana(aguja) ?: return Hallado()
+    fun buscar(entradas: Iterable<Entrada>, aguja: String, tope: Int, seccion: Seccion = Seccion.TODO): Hallado {
+        val plana = agujaPlana(aguja)
+        if (plana == null && seccion == Seccion.TODO) return Hallado()
         val aciertos = ArrayList<Acierto>()
         var total = 0
+        val porSeccion = HashMap<Seccion, Int>()
         for ((i, e) in entradas.withIndex()) {
-            val pieza = e.piezaCon(plana)
-            if (pieza >= 0) {
-                total++
-                if (aciertos.size < tope) aciertos += Acierto(i, pieza)
-            }
+            val pieza = if (plana == null) (if (e.piezas.isEmpty()) -1 else 0) else e.piezaCon(plana)
+            if (plana != null && pieza < 0) continue
+            porSeccion[Seccion.TODO] = (porSeccion[Seccion.TODO] ?: 0) + 1
+            for (s in e.secciones) porSeccion[s] = (porSeccion[s] ?: 0) + 1
+            if (seccion != Seccion.TODO && seccion !in e.secciones) continue
+            total++
+            if (aciertos.size < tope) aciertos += Acierto(i, pieza)
         }
-        return Hallado(aciertos, total)
+        return Hallado(aciertos, total, porSeccion)
+    }
+
+    // --- Las pestañas de la búsqueda (27-oct-2026) ---------------------------------------------
+
+    /**
+     * **Las pestañas de arriba de la búsqueda**: las de la ficha de un chat ([SeccionesDelChat.DE_LA_FICHA])
+     * con «Todo» delante y sin las que no son una clase de cosa: «Proyectos» (ya son las filas de
+     * chats) y «Fijados» (es de cada chat, no de todos).
+     */
+    val SECCIONES = listOf(
+        Seccion.TODO, Seccion.FOTOS, Seccion.VIDEOS, Seccion.ARCHIVOS, Seccion.ENLACES, Seccion.VOZ, Seccion.DIBUJOS
+    )
+
+    /**
+     * En qué pestañas de [SECCIONES] sale [m], con **la misma** regla que el chat ([deSeccion]): un
+     * vídeo no es foto ni archivo, una página de PDF es archivo, un enlace es lo que lleva una
+     * dirección… Así algo sale en «Archivos» aquí si y solo si sale en la ficha de su chat. Lo del
+     * buzón no sale en ninguna (en el chat tampoco): solo en «Todo».
+     */
+    fun seccionesDe(m: Mensaje): Set<Seccion> {
+        val una = listOf(m)
+        return SECCIONES.filterTo(HashSet()) { it != Seccion.TODO && deSeccion(una, it).isNotEmpty() }
+    }
+
+    // --- Qué hace tocar un resultado (27-oct-2026) ---------------------------------------------
+
+    /**
+     * **Qué hace tocar un resultado.** El usuario (27-oct-2026): «al tocar un PDF, que lo abra
+     * directamente; o, si quiero, que me lleve a ese mensaje. Ahora le doy clic y me abre el chat,
+     * pero no me lleva al mensaje». Lo que tiene visor se abre en él, como al tocarlo en su burbuja
+     * ([AbrirMensaje]); lo demás lleva a su sitio en el chat. «Ir al mensaje» (el botón de la fila,
+     * o mantenerla pulsada) lleva siempre.
+     */
+    enum class AlTocar { ABRIR, IR_AL_MENSAJE }
+
+    /**
+     * La decisión, sin Android. Lleva a la burbuja en vez de abrir:
+     *
+     * - **Una nota sin enlace ni hoja**: no hay nada que abrir —en el chat, tocarla no hace nada— y
+     *   lo que se quiere es leerla con lo de alrededor.
+     * - **Una nota de voz**: se escucha con la barra del reproductor, que vive en el chat.
+     * - **Lo que nombra un fichero que no está** en este aparato ([existe]; la sincronización trae
+     *   los mensajes antes que los ficheros): abrirlo no abriría nada, y en el chat se ve que falta.
+     * - Lo que no tiene a qué apuntar (un lienzo sin su dibujo, una página sin su PDF).
+     */
+    fun alTocar(m: Mensaje, existe: (String) -> Boolean = { true }): AlTocar {
+        val ruta = m.ruta
+        val abre = when (m.clase) {
+            Clase.VOZ -> false
+            Clase.NOTA -> m.referencia != null || primerEnlace(m.texto) != null
+            Clase.PROYECTO -> m.referencia != null
+            Clase.MINIAPP -> true
+            Clase.DIBUJO, Clase.TABLA, Clase.CROQUIS -> m.referencia != null
+            Clase.PAGINA -> ruta != null && m.pagina != null && m.referencia != null && existe(ruta)
+            Clase.IMAGEN, Clase.ARCHIVO -> ruta != null && existe(ruta)
+        }
+        return if (abre) AlTocar.ABRIR else AlTocar.IR_AL_MENSAJE
+    }
+
+    /**
+     * **A qué fila del chat se salta para llegar a [id]** (27-oct-2026), entre las que se ven
+     * ([visibles]): la suya si está; si no, **la tarjeta de la carpeta que lo lleva dentro** (lo de
+     * una carpeta no sale suelto en el chat, ver [CarpetaDePaginas.sueltosDelChat]), que es donde
+     * está a la vista. Null si no se ve de ninguna forma: hay que quitar filtros o cambiar de pestaña.
+     */
+    fun adondeSaltar(visibles: List<Mensaje>, id: String): String? {
+        if (visibles.any { it.id == id }) return id
+        return visibles.firstOrNull { c ->
+            CarpetaDePaginas.esCarpeta(c) && id in CarpetaDePaginas.dentroDeCarpetas(listOf(c))
+        }?.id
     }
 
     /** El orden en que se busca: lo más nuevo primero y, a la par, por chat y código. */
@@ -268,7 +369,8 @@ object BuscarEnChats {
         com.forge.pixpin.sincro.Codigos.unico(m),
         m.cuando,
         listOf(NotaRica.sinRutasDeFotos(m.texto), m.transcripcion, m.nombre),
-        id = m.id
+        id = m.id,
+        secciones = seccionesDe(m)
     )
 
     /**
@@ -278,11 +380,21 @@ object BuscarEnChats {
      */
     fun seVeEnElChat(m: Mensaje): Boolean = !com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema(m)
 
-    /** Un mensaje encontrado, listo para pintar. */
-    data class Encontrado(val chat: String, val id: String, val cuando: Long, val fragmento: Fragmento)
+    /**
+     * Un mensaje encontrado, listo para pintar. [mensaje] es el mensaje entero (27-oct-2026): con él
+     * la fila enseña su miniatura o su icono y se abre sin volver a leer el archivo.
+     */
+    data class Encontrado(
+        val chat: String, val id: String, val cuando: Long, val fragmento: Fragmento,
+        val mensaje: Mensaje? = null
+    )
 
-    /** Lo que da una búsqueda en el índice. */
-    data class Resultado(val encontrados: List<Encontrado> = emptyList(), val total: Int = 0) {
+    /** Lo que da una búsqueda en el índice; [porSeccion] como en [Hallado]. */
+    data class Resultado(
+        val encontrados: List<Encontrado> = emptyList(),
+        val total: Int = 0,
+        val porSeccion: Map<Seccion, Int> = emptyMap()
+    ) {
         val hayMas: Boolean get() = total > encontrados.size
     }
 
@@ -314,14 +426,16 @@ object BuscarEnChats {
         }
 
         @Synchronized
-        fun buscar(aguja: String, tope: Int): Resultado {
-            val hallado = buscar(orden, aguja, tope)
+        fun buscar(aguja: String, tope: Int, seccion: Seccion = Seccion.TODO): Resultado {
+            val hallado = buscar(orden, aguja, tope, seccion)
             return Resultado(
                 hallado.aciertos.map { a ->
                     val e = orden[a.entrada]
-                    Encontrado(e.chat, e.id, e.cuando, fragmento(e.piezas[a.pieza].texto, aguja, ANTES, LARGO))
+                    val trozo = if (a.pieza < 0) Fragmento() else fragmento(e.piezas[a.pieza].texto, aguja, ANTES, LARGO)
+                    Encontrado(e.chat, e.id, e.cuando, trozo, porId[e.id]?.first)
                 },
-                hallado.total
+                hallado.total,
+                hallado.porSeccion
             )
         }
     }
