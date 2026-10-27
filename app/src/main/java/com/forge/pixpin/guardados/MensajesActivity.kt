@@ -480,6 +480,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     androidx.compose.material3.TextButton(onClick = {
                         describiendo = null
                         val nuevo = Descripcion.conDescripcion(m, texto) ?: return@TextButton
+                        if (versionarSiEsAjeno(m) { it.copy(texto = nuevo.texto) }) return@TextButton
                         lifecycleScope.launch(Dispatchers.IO) {
                             almacen.actualizar(m.id) { it.copy(texto = nuevo.texto) }
                             MensajesStore.cambios.value = MensajesStore.cambios.value + 1
@@ -990,6 +991,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // cada burbuja** son varios miles de comparaciones en cada pasada; el mapa se
         // hace una vez, igual que [sitiosPorId] y por el mismo motivo.
         val porId = remember(mensajes) { mensajes.associateBy { it.id } }
+        // **Las versiones vinculadas** de un chat compartido: su rótulo y la lista de cada original.
+        val versionesDelChat = remember(mensajes, lados) {
+            VersionesEnElChat.delChat(mensajes, lados != null) { (quienDe(it) as? com.forge.pixpin.sincro.Quien.Otro)?.nombre }
+        }
 
         // **El pie del chat flota, como la cabecera** (lo pidió el usuario el 11-sep-2026): la
         // barra de escribir era una isla, pero vivía en el hueco inferior del andamio, así que
@@ -1407,7 +1412,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                     } }) { refrescar() }
                                 },
                                 cambiarTexto = { nuevo ->
-                                    guardarAparte({ lista -> lista.map {
+                                    if (!versionarSiEsAjeno(m) { it.copy(texto = nuevo) }) guardarAparte({ lista -> lista.map {
                                         if (it.id == m.id) it.copy(texto = nuevo) else it
                                     } }) { refrescar() }
                                 },
@@ -1472,6 +1477,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             },
                             onResponder = { respondiendo = m },
                             onIrAlCitado = { irA = m.respondeA },
+                            version = versionesDelChat.cabecera[m.id],
+                            versiones = versionesDelChat.versiones[m.id].orEmpty(),
+                            onIrA = { irA = it },
                             registrarFranja = { arriba, abajo ->
                                 franjas[m.id] = arriba..abajo
                             },
@@ -3199,6 +3207,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         onMantener: () -> Unit,
         onResponder: () -> Unit,
         onIrAlCitado: () -> Unit,
+        /** **«Versión de Ana»**, si es una versión de otro mensaje (27-oct-2026). Ver [VersionesEnElChat]. */
+        version: VersionesEnElChat.Rotulo? = null,
+        /** **Sus versiones**, si es un original que alguien ha tocado: el chip «2 versiones». */
+        versiones: List<VersionesEnElChat.Rotulo> = emptyList(),
+        /** Ir a un mensaje de este chat (el original, una versión). */
+        onIrA: (String) -> Unit = {},
         /**
          * Dónde cae esta fila en la ventana, para saber sobre cuál va el dedo.
          *
@@ -3791,6 +3805,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         end = pad.fin.dp, bottom = pad.abajo.dp
                     )
                 ) {
+                    // **Versiones vinculadas** (27-oct-2026): de quién es el original que esta
+                    // copia cambió, y en el original cuántas versiones tiene.
+                    version?.let { CabeceraDeVersion(it, onIrA) }
+                    if (versiones.isNotEmpty()) ChipDeVersiones(versiones, onIrA)
                     // A qué contesta, si contesta a algo: es lo que convierte una
                     // lista de cosas en una conversación donde uno se explica.
                     respondido?.let { citado ->
@@ -7488,8 +7506,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         )
     }
 
-    /** Abrir: cada clase se abre donde vive. Un dibujo en el lienzo, un PDF en su visor. */
-    private fun abrir(m: Mensaje) {
+    /**
+     * Abrir: cada clase se abre donde vive. Un dibujo en el lienzo, un PDF en su visor.
+     *
+     * **Lo de otra persona en un chat compartido se abre como versión mía** (27-oct-2026): el editor
+     * trabaja sobre una copia y el original no se toca. [tal]: abrir [m] sin más (la copia misma).
+     * Ver [abrirComoVersion].
+     */
+    private fun abrir(m: Mensaje, tal: Boolean = false) {
+        if (!tal && abrirComoVersion(m)) return
         when (m.clase) {
             Clase.VOZ -> m.ruta?.let { Reproductor.alternar(it, tituloDeAudio(this, m)) }
             // Una nota con un enlace dentro se abre en el navegador al tocarla: es lo que
@@ -7695,6 +7720,52 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         com.forge.pixpin.data.TiposDeArchivo.principal(ruta) ?: android.webkit.MimeTypeMap.getSingleton()
             .getMimeTypeFromExtension(ruta.substringAfterLast('.', "").lowercase()) ?: "*/*"
 
+    /**
+     * **Abrir lo de otra persona como versión mía** (27-oct-2026, «versiones vinculadas»): si [m] es
+     * ajeno y editable, se prepara la copia y el editor se abre sobre ella; lo que se cambie queda
+     * como «Versión de …» debajo del original. Devuelve si se encargó. Ver
+     * [com.forge.pixpin.sincro.VersionesVinculadas].
+     */
+    private fun abrirComoVersion(m: Mensaje): Boolean {
+        val otro = quienDe(m) as? com.forge.pixpin.sincro.Quien.Otro ?: return false
+        val como = com.forge.pixpin.sincro.VersionesVinculadas.como(m) ?: return false
+        if (como == com.forge.pixpin.sincro.VersionesVinculadas.Como.AL_MOMENTO) return false
+        lifecycleScope.launch {
+            val e = withContext(Dispatchers.IO) { VersionesEnElChat.empezar(this@MensajesActivity, almacen, m) }
+            if (e == null) {
+                Toast.makeText(this@MensajesActivity, "No se pudo preparar tu versión", Toast.LENGTH_SHORT).show()
+                return@launch
+            }
+            Toast.makeText(
+                this@MensajesActivity,
+                "Es de ${otro.nombre}: si lo cambias, se guarda como tu versión y lo suyo no se toca",
+                Toast.LENGTH_LONG
+            ).show()
+            abrir(e.version, tal = true)
+        }
+        return true
+    }
+
+    /**
+     * **Un cambio de un toque sobre lo de otra persona** (describir, tocar dentro de la burbuja de una
+     * mini-app): se hace en una versión mía y no en el suyo. Devuelve si se encargó; si no, el que
+     * llama cambia [m] en su sitio, como siempre.
+     */
+    private fun versionarSiEsAjeno(m: Mensaje, cambio: (Mensaje) -> Mensaje): Boolean {
+        val otro = quienDe(m) as? com.forge.pixpin.sincro.Quien.Otro ?: return false
+        if (com.forge.pixpin.sincro.VersionesVinculadas.como(m) == null) return false
+        lifecycleScope.launch {
+            val hecho = withContext(Dispatchers.IO) { VersionesEnElChat.alMomento(this@MensajesActivity, almacen, m, cambio) }
+            Toast.makeText(
+                this@MensajesActivity,
+                if (hecho) "Se guardó como tu versión; lo de ${otro.nombre} no se toca" else "No se pudo hacer tu versión",
+                Toast.LENGTH_SHORT
+            ).show()
+            recargarLaLista?.invoke()
+        }
+        return true
+    }
+
     private fun abrirFuera(ruta: String) {
         // Un APK se instala; lo demás, con la aplicación que se elija. Ver [com.forge.pixpin.ui.AbrirCon].
         com.forge.pixpin.ui.AbrirCon.abrir(this, File(ruta))
@@ -7703,6 +7774,16 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     override fun onResume() {
         super.onResume()
         ChatAlFrente.poner(this)
+        // **Al volver de un editor, lo cambiado sobre lo ajeno pasa a ser mi versión** (27-oct-2026).
+        // Con un respiro: el editor guarda al pausarse y algún visor lo hace en otro hilo.
+        lifecycleScope.launch {
+            kotlinx.coroutines.delay(800)
+            val hechas = withContext(Dispatchers.IO) { VersionesEnElChat.cerrar(this@MensajesActivity, almacen) }
+            if (hechas > 0) {
+                Toast.makeText(this@MensajesActivity, "Se guardó como tu versión; el original no se ha tocado", Toast.LENGTH_SHORT).show()
+                recargarLaLista?.invoke()
+            }
+        }
     }
 
     override fun onPause() {

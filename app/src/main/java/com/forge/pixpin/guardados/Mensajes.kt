@@ -375,7 +375,25 @@ data class Mensaje(
      * si no hay. Ver [EscanerProMax].
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val escaneado: Escaneado? = null
+    val escaneado: Escaneado? = null,
+
+    /**
+     * **Es una versión de otro mensaje** (27-oct-2026, «versiones vinculadas»; lo pidió el usuario:
+     * «en los chats compartidos yo edito lo que alguien me pasó y esa persona edita lo que yo le
+     * pasé, y al sincronizar hay incongruencias»). El **código único** ([com.forge.pixpin.sincro.Codigos.unico])
+     * del original, que es el mismo en todos los aparatos y en el PC; el id cambia de nombre al
+     * copiarse pero el código no. En un chat compartido, tocar lo de otra persona no lo cambia: hace
+     * una copia mía que lleva esto y contesta al original ([respondeA]). Ver
+     * [com.forge.pixpin.sincro.VersionesVinculadas] y `docs/versiones-en-chats-compartidos.md`.
+     *
+     * El PC lo guarda en el `resto` de su mensaje aunque no lo entienda, y lo ve como una respuesta.
+     * No se escribe si no hay.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val versionDe: String? = null,
+    /** Qué versión es de su original (1, 2…), para nombrarla: «Versión 2». Solo una etiqueta: dos aparatos pueden dar el mismo número. */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val versionN: Int? = null
 )
 
 /**
@@ -617,7 +635,10 @@ fun reenviado(m: Mensaje, aDondeVa: String?, ahora: Long, idNuevo: String): Mens
     // tabla o un croquis se duplica aparte, en [RamaDeMensaje], porque eso es trabajo de disco.
     unido = false,
     hojaDelTexto = null,
-    referencia = if (m.clase == Clase.NOTA) null else m.referencia
+    referencia = if (m.clase == Clase.NOTA) null else m.referencia,
+    // **Reenviada deja de ser versión** (27-oct-2026): su original se queda en el otro chat.
+    versionDe = null,
+    versionN = null
 )
 
 /** Cuánto aguanta algo en el buzón antes de irse solo. */
