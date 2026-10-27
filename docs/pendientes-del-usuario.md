@@ -99,3 +99,14 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 
 ### Voz
 - [~] 32. Whisper «base» por defecto, como el PC (161 MB de descarga; respuesta del usuario del 27-oct).
+
+### Lectura Veloz (repo `1xmanMAX/Speed-Reading-Tool`)
+- [ ] 33. Opción «Lectura veloz» en los visores (PDF, Word, EPUB, HTML, Markdown…): abre la app
+      directo con el archivo cargado, sin exportar, como «Escanear» abre el escáner.
+- [ ] 34. El marcador de lectura en voz alta se comparte en los dos sentidos y de forma continua:
+      Lectura Veloz arranca en el punto de PixPin y, mientras lee, PixPin va actualizando su marcador.
+- [ ] 35. Mención discreta de que el archivo se está leyendo («Leyendo en Lectura veloz · N %»),
+      como la chapa «Escaneado»; quizá una lista «Leyendo».
+- [ ] 36. Completar la integración según el manual de Android que deje Lectura Veloz. Se revisa su
+      repo cada 30 min hasta que aparezcan el manual y el código; luego se deja de revisar.
+      Propuesta de PixPin: `docs/integracion-lectura-veloz.md`.
