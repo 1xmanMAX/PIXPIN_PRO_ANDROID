@@ -1,82 +1,147 @@
 package com.forge.pixpin.guardados
 
+import android.content.ComponentName
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.widget.Toast
+import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Forum
+import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.material.icons.filled.OpenInNew
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.clickable
-import androidx.activity.compose.setContent
-import androidx.activity.ComponentActivity
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.UUID
 
 /**
- * **«Abrir con» PixPin** (19-sep-2026): una página web, un Word, un libro, un PDF, un PowerPoint,
- * una hoja de cálculo o una foto tocados en el gestor de archivos —o en cualquier otra
- * aplicación— salen con PixPin en la lista, y se abren aquí con el visor que les toca.
+ * **Lo que llega de otra aplicación: «Abrir con» PixPin y «Compartir» a PixPin.**
  *
- * **Y se quedan guardados**: al abrirse se hace **una copia en Guardados** (la conversación
- * general), porque la URI que entrega la otra aplicación caduca en cuanto esta pantalla muere y
- * porque lo que se abre una vez casi siempre se quiere volver a abrir. Lo pidió así el usuario.
- * Abrir dos veces el mismo archivo **no lo guarda dos veces**: se reconoce por nombre y peso.
+ * **27-oct-2026, el modo de paso** ([ModoDePaso]). El usuario: «quiero abrir cualquier archivo de
+ * los formatos que aceptamos como una app para abrir archivos: lo abro, lo veo, salgo y se cierra,
+ * sin guardarse en ningún lado». Hasta hoy (desde el 19-sep) «Abrir con» hacía una copia en
+ * Mensajes guardados y la abría desde el chat; ahora **no se guarda nada**: se copia a la caché de
+ * la sesión, se abre en su visor con todo y, al salir, se borra. Para quedárselo, el botón
+ * «Guardar» del visor ([com.forge.pixpin.ui.BarraDePaso]).
  *
- * Pregunta qué hacer —abrir, enviar por Wi-Fi o poner como pin— y, al abrir, copia, da de alta
- * el mensaje y le pasa el relevo al chat, que es quien sabe
- * abrir cada cosa ([MensajesActivity.abrir]). Así atrás, desde el visor, deja en el chat con el
- * archivo recién guardado a la vista.
+ * **Y compartir a PixPin, sin menú para lo conocido.** Compartir a PixPin enseñaba cuatro destinos
+ * en la hoja del sistema (el pin, Mensajes guardados, un proyecto nuevo, Wi-Fi), y el usuario: «quita
+ * ese menú para los formatos conocidos». Ahora hay **una sola entrada, «PixPin»**, y esta pantalla
+ * decide ([ModoDePaso.queHacerConLoCompartido]): un archivo que PixPin sabe ver se abre de paso
+ * como el «Abrir con»; un `.pixpin` se importa; y lo demás —un formato desconocido, varios
+ * archivos, un texto o un enlace— sale en un **menú corto** con lo que tiene sentido: guardarlo
+ * (en Mensajes guardados o en un chat), mandarlo por Wi-Fi a mis aparatos, ponerlo como pin o
+ * abrirlo con otra aplicación. Cada opción la cumple la pantalla de siempre.
+ *
+ * Su propia afinidad y sin historia: se quita de en medio en cuanto abre el visor, que vive en su
+ * propia tarea; atrás desde él vuelve a la aplicación que lo mandó.
  */
-class AbrirConPixPinActivity : ComponentActivity() {
-
-    /** Lo tocado, ya copiado a un temporal nuestro con su nombre: la URI del otro caduca. */
-    private class Traido(val archivo: File, val nombre: String, val tipo: String?)
+class AbrirConPixPinActivity : LanzadorDePaso() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
-        val uri = intent?.data
-        if (intent?.action != Intent.ACTION_VIEW || uri == null) { finish(); return }
-        lifecycleScope.launch {
-            // La copia va antes que nada: el permiso de lectura se va con esta pantalla.
-            val traido = withContext(Dispatchers.IO) { runCatching { traer(uri) }.getOrNull() }
-            if (traido == null) {
-                Toast.makeText(this@AbrirConPixPinActivity, "No se pudo abrir el archivo", Toast.LENGTH_SHORT).show()
-                finish()
-                return@launch
+        val i = intent
+        when (i?.action) {
+            Intent.ACTION_VIEW -> {
+                val uri = i.data ?: run { finish(); return }
+                lifecycleScope.launch { deUno(uri, i.type) }
             }
-            // **Tres cosas que hacer con él, a elegir** (19-sep-2026): abrirlo, mandarlo por
-            // Wi-Fi o dejarlo como pin. Antes, para las dos últimas había que ir a «compartir» y
-            // buscar PixPin otra vez; ahora «Abrir con» las ofrece todas, para cualquier archivo.
-            setContent {
-                com.forge.pixpin.ui.theme.PixPinTheme {
-                    androidx.compose.material3.AlertDialog(
-                        onDismissRequest = { traido.archivo.delete(); finishAndRemoveTask() },
-                        title = { androidx.compose.material3.Text(traido.nombre, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
-                        text = {
-                            androidx.compose.foundation.layout.Column {
-                                Opcion(androidx.compose.material.icons.Icons.Filled.OpenInNew, "Abrir") { abrir(traido) }
-                                Opcion(androidx.compose.material.icons.Icons.Filled.Wifi, "Enviar por Wi-Fi") { porWifi(traido) }
-                                Opcion(androidx.compose.material.icons.Icons.Filled.PushPin, "Poner como pin") { comoPin(traido) }
-                            }
-                        },
-                        confirmButton = {
-                            androidx.compose.material3.TextButton(onClick = { traido.archivo.delete(); finishAndRemoveTask() }) {
-                                androidx.compose.material3.Text(getString(com.forge.pixpin.R.string.cancel))
-                            }
+            Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> lifecycleScope.launch { compartido(i) }
+            else -> finish()
+        }
+    }
+
+    /** Un archivo: de paso en su visor; si PixPin no lo ve, al menú corto. */
+    private suspend fun deUno(uri: Uri, tipo: String?) {
+        // La copia va antes que nada: el permiso de lectura se va con esta pantalla.
+        val e = withContext(Dispatchers.IO) { AbrirDePaso.traer(this@AbrirConPixPinActivity, uri, mimeDado = tipo?.takeIf { it != "*/*" }) }
+        if (e == null) {
+            Toast.makeText(this, "No se pudo abrir el archivo", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+        val abierto = runCatching { AbrirDePaso.abrirEnSuVisor(this, e) }.getOrDefault(false)
+        if (abierto) finish() else menu(listOf(e), "", "")
+    }
+
+    private suspend fun compartido(i: Intent) {
+        val uris = if (i.action == Intent.ACTION_SEND) listOfNotNull(i.streamUri()) else i.streamUris()
+        val texto = i.getStringExtra(Intent.EXTRA_TEXT).orEmpty()
+        val asunto = i.getStringExtra(Intent.EXTRA_SUBJECT).orEmpty()
+        if (uris.isEmpty() && texto.isBlank()) { finish(); return }
+        val primero = uris.singleOrNull()
+        val nombre = primero?.let { withContext(Dispatchers.IO) { AbrirDePaso.nombreDe(this@AbrirConPixPinActivity, it) } }
+        val tipo = primero?.let { runCatching { contentResolver.getType(it) }.getOrNull() } ?: i.type?.takeIf { it != "*/*" }
+        when (ModoDePaso.queHacerConLoCompartido(uris.size, nombre, tipo)) {
+            ModoDePaso.Recibido.DE_PASO -> deUno(primero!!, tipo)
+            // Un `.pixpin` es un proyecto: lo importa quien siempre lo importó.
+            ModoDePaso.Recibido.IMPORTAR -> { pasarA(NuevoProyectoCompartidoActivity::class.java, Intent(i)); finish() }
+            ModoDePaso.Recibido.MENU -> {
+                val copias = withContext(Dispatchers.IO) { uris.mapNotNull { AbrirDePaso.traer(this@AbrirConPixPinActivity, it, if (uris.size == 1) nombre else null) } }
+                if (uris.isNotEmpty() && copias.isEmpty() && texto.isBlank()) {
+                    Toast.makeText(this, "No se pudo leer lo compartido", Toast.LENGTH_SHORT).show()
+                    finish()
+                } else menu(copias, texto, asunto)
+            }
+        }
+    }
+
+    /**
+     * **El menú corto**, para lo que no se abre de paso. Lo copiado se le pasa a cada pantalla con
+     * nuestras propias URI (la del otro caduca con esta pantalla). Las copias quedan en la caché de
+     * paso y se van en la limpieza al arrancar.
+     */
+    private fun menu(copias: List<AbrirDePaso.Estado>, texto: String, asunto: String) {
+        val hayChats = AbrirDePaso.chats(this).isNotEmpty()
+        val titulo = copias.singleOrNull()?.nombre ?: if (copias.size > 1) "${copias.size} archivos" else texto.take(60)
+        fun reenvio(): Intent {
+            val uris = ArrayList(copias.map { com.forge.pixpin.ui.AbrirCon.uriDe(this, File(it.ruta)) })
+            val r = if (uris.size > 1) Intent(Intent.ACTION_SEND_MULTIPLE).putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+            else Intent(Intent.ACTION_SEND).also { s -> uris.firstOrNull()?.let { s.putExtra(Intent.EXTRA_STREAM, it) } }
+            r.type = copias.singleOrNull()?.mime ?: if (copias.isEmpty()) "text/plain" else "*/*"
+            if (texto.isNotBlank()) r.putExtra(Intent.EXTRA_TEXT, texto)
+            if (asunto.isNotBlank()) r.putExtra(Intent.EXTRA_SUBJECT, asunto)
+            return r
+        }
+        val opciones = buildList {
+            add(Triple(Icons.Filled.Bookmark, "Guardar en Mensajes guardados") {
+                pasarA(GuardarCompartidoActivity::class.java, reenvio().putExtra(GuardarCompartidoActivity.EXTRA_A_LA_GENERAL, true))
+            })
+            if (hayChats) add(Triple(Icons.Filled.Forum, "Guardar en un chat…") { pasarA(GuardarCompartidoActivity::class.java, reenvio()) })
+            if (copias.isNotEmpty()) add(Triple(Icons.Filled.Wifi, "Enviar por Wi-Fi a mis aparatos") {
+                pasarA(com.forge.pixpin.sincro.EnviarActivity::class.java, reenvio())
+            })
+            copias.singleOrNull()?.let { e -> add(Triple(Icons.Filled.OpenInNew, "Abrir con otra aplicación") { com.forge.pixpin.ui.AbrirCon.abrir(this@AbrirConPixPinActivity, File(e.ruta), e.mime) }) }
+            add(Triple(Icons.Filled.PushPin, "Poner como pin") { pasarA(com.forge.pixpin.clipboard.ShareReceiverActivity::class.java, reenvio()) })
+        }
+        setContent {
+            com.forge.pixpin.ui.theme.PixPinTheme {
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { finish() },
+                    title = { androidx.compose.material3.Text(titulo, maxLines = 2, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis) },
+                    text = {
+                        androidx.compose.foundation.layout.Column {
+                            for ((icono, nombre, hacer) in opciones) Opcion(icono, nombre) { hacer(); finish() }
                         }
-                    )
-                }
+                    },
+                    confirmButton = {
+                        androidx.compose.material3.TextButton(onClick = { finish() }) {
+                            androidx.compose.material3.Text(getString(com.forge.pixpin.R.string.cancel))
+                        }
+                    }
+                )
             }
         }
     }
@@ -95,106 +160,33 @@ class AbrirConPixPinActivity : ComponentActivity() {
         }
     }
 
-    /** **Abrir**: una copia a Guardados y el relevo al chat, que sabe con qué se abre cada cosa. */
-    private fun abrir(t: Traido) {
-        lifecycleScope.launch {
-            val almacen = MensajesStore(this@AbrirConPixPinActivity)
-            val esMarkdown = t.nombre.substringAfterLast('.', "").lowercase() in setOf("md", "markdown")
-            // Una nota en Markdown se abre en su editor: se lee antes de que el temporal se vaya.
-            val texto = if (esMarkdown) withContext(Dispatchers.IO) { runCatching { t.archivo.readText() }.getOrNull() } else null
-            val id = withContext(Dispatchers.IO) { runCatching { guardar(almacen, t) }.getOrNull() }
-            when {
-                id == null -> Toast.makeText(this@AbrirConPixPinActivity, "No se pudo abrir el archivo", Toast.LENGTH_SHORT).show()
-                texto != null -> com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this@AbrirConPixPinActivity, "md-$id", texto)
-                else -> MensajesActivity.abrirYAbrir(this@AbrirConPixPinActivity, id)
-            }
-            finish()
-        }
-    }
-
-    /** El temporal, con su nombre de verdad, donde el proveedor de archivos sabe servirlo. */
-    private fun conSuNombre(t: Traido): File? = runCatching {
-        val limpio = t.nombre.replace(Regex("""[^\p{L}\p{N} ._-]"""), "_").takeLast(80).ifBlank { "archivo" }
-        File(File(cacheDir, "share").apply { mkdirs() }, limpio).also { t.archivo.copyTo(it, overwrite = true); t.archivo.delete() }
-    }.getOrNull()
-
-    /** **Enviar por Wi-Fi**: el envío de una vez, con su código y su QR. Ver [com.forge.pixpin.sincro.EnviarActivity]. */
-    private fun porWifi(t: Traido) {
-        lifecycleScope.launch {
-            val archivo = withContext(Dispatchers.IO) { conSuNombre(t) }
-            if (archivo == null) Toast.makeText(this@AbrirConPixPinActivity, "No se pudo preparar el envío", Toast.LENGTH_SHORT).show()
-            else com.forge.pixpin.sincro.EnviarActivity.enviarArchivo(this@AbrirConPixPinActivity, archivo.absolutePath, t.nombre)
-            finish()
-        }
-    }
-
-    /** **Poner como pin**: se le pasa a quien ya convierte en pin lo compartido. Ver [com.forge.pixpin.clipboard.ShareReceiverActivity]. */
-    private fun comoPin(t: Traido) {
-        lifecycleScope.launch {
-            val uri = withContext(Dispatchers.IO) {
-                conSuNombre(t)?.let { runCatching { androidx.core.content.FileProvider.getUriForFile(this@AbrirConPixPinActivity, "$packageName.fileprovider", it) }.getOrNull() }
-            }
-            if (uri == null) Toast.makeText(this@AbrirConPixPinActivity, "No se pudo hacer el pin", Toast.LENGTH_SHORT).show()
-            else runCatching {
-                startActivity(
-                    Intent(this@AbrirConPixPinActivity, com.forge.pixpin.clipboard.ShareReceiverActivity::class.java)
-                        .setAction(Intent.ACTION_SEND)
-                        .setType(t.tipo ?: "*/*")
-                        .putExtra(Intent.EXTRA_STREAM, uri)
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                )
-            }
-            finish()
-        }
-    }
-
-    private fun traer(uri: Uri): Traido? {
-        val tipo = contentResolver.getType(uri)
-        val nombre = nombreDe(uri).ifBlank { uri.lastPathSegment.orEmpty().substringAfterLast('/') }.ifBlank { "archivo" }
-        val temporal = File(cacheDir, "abrir_${System.currentTimeMillis()}_${nombre.hashCode()}")
-        contentResolver.openInputStream(uri)?.use { entra -> temporal.outputStream().use { entra.copyTo(it) } } ?: return null
-        if (temporal.length() == 0L) { temporal.delete(); return null }
-        return Traido(temporal, nombre, tipo)
-    }
-
-    /** Copia lo que señala [uri] a Guardados —o encuentra la copia de antes— y devuelve su mensaje. */
-    private fun guardar(almacen: MensajesStore, t: Traido): String? {
-        val tipo = t.tipo
-        val nombre = t.nombre
-        val temporal = t.archivo
-        val peso = temporal.length()
-
-        // ¿Ya está? Mismo nombre y mismo peso en la general. Un PDF se guarda aligerado, así que
-        // su peso no coincide con el de fuera: a ese se le reconoce solo por el nombre.
-        val esPdf = nombre.endsWith(".pdf", ignoreCase = true)
-        almacen.leer().lastOrNull { m ->
-            m.proyecto == null && m.nombre == nombre && m.ruta?.let { File(it).exists() } == true &&
-                (m.clase == Clase.ARCHIVO || m.clase == Clase.IMAGEN) && (esPdf || m.bytes == peso)
-        }?.let { temporal.delete(); return it.id }
-
-        val extension = android.webkit.MimeTypeMap.getSingleton().getExtensionFromMimeType(tipo)
-        val ruta = almacen.copiarAdjunto(temporal, nombre, extension) ?: run { temporal.delete(); return null }
-        temporal.delete()
-        val esImagen = tipo?.startsWith("image/") == true
-        val id = UUID.randomUUID().toString()
-        almacen.anadir(
-            Mensaje(
-                id = id,
-                cuando = System.currentTimeMillis(),
-                clase = if (esImagen) Clase.IMAGEN else Clase.ARCHIVO,
-                ruta = ruta,
-                nombre = nombre,
-                bytes = File(ruta).length(),
-                proyecto = null
+    /**
+     * Le pasa [i] a la pantalla [destino] de siempre, con permiso para leer lo que lleva. En su propia
+     * tarea (todas tienen afinidad propia): si fuera en la de quien compartió, su `finishAndRemoveTask`
+     * se llevaría por delante la aplicación de origen.
+     */
+    private fun pasarA(destino: Class<*>, i: Intent) {
+        runCatching {
+            startActivity(
+                i.setComponent(ComponentName(this, destino))
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK)
             )
-        )
-        return id
+        }.onFailure { Toast.makeText(this, "No se pudo", Toast.LENGTH_SHORT).show() }
     }
 
-    private fun nombreDe(uri: Uri): String = runCatching {
-        contentResolver.query(uri, null, null, null, null)?.use { fila ->
-            val columna = fila.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-            if (columna >= 0 && fila.moveToFirst()) fila.getString(columna).orEmpty() else ""
-        }.orEmpty()
-    }.getOrDefault("")
+    private fun Intent.streamUri(): Uri? =
+        if (Build.VERSION.SDK_INT >= 33) {
+            getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+        }
+
+    private fun Intent.streamUris(): List<Uri> =
+        if (Build.VERSION.SDK_INT >= 33) {
+            getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java) ?: emptyList()
+        } else {
+            @Suppress("DEPRECATION")
+            getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM) ?: emptyList()
+        }
 }

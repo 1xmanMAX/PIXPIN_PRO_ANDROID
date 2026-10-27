@@ -465,16 +465,8 @@
             android:noHistory="true"
             android:taskAffinity="${applicationId}.share"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
+            <!-- Sin entrada propia en «Compartir» desde el 27-oct-2026: compartir a PixPin es una sola
+                 entrada, que abre de paso o enseña el menú corto. Ver guardados/AbrirConPixPinActivity. -->
         </activity>
 
         <!--
@@ -497,16 +489,8 @@
             android:noHistory="true"
             android:taskAffinity="${applicationId}.proyecto"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
+            <!-- Sin entrada propia en «Compartir» desde el 27-oct-2026: compartir a PixPin es una sola
+                 entrada, que abre de paso o enseña el menú corto. Ver guardados/AbrirConPixPinActivity. -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -528,34 +512,10 @@
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="*/*" />
-                <data android:pathPattern=".*\\.ifc" />
-                <data android:pathPattern=".*\\.IFC" />
                 <data android:pathPattern=".*\\.obj" />
                 <data android:pathPattern=".*\\.OBJ" />
-                <data android:pathPattern=".*\\.rvt" />
-                <data android:pathPattern=".*\\.RVT" />
-                <data android:pathPattern=".*\\.dwg" />
-                <data android:pathPattern=".*\\.DWG" />
-                <data android:pathPattern=".*\\.dxf" />
-                <data android:pathPattern=".*\\.DXF" />
             </intent-filter>
-            <!--
-                Y por su tipo, cuando el explorador lo dice (un content:// no lleva extensión en la
-                ruta): IFC al visor 3D, DWG/DXF al visor de planos (10-oct-2026).
-            -->
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:scheme="content" />
-                <data android:scheme="file" />
-                <data android:mimeType="model/ifc" />
-                <data android:mimeType="application/ifc" />
-                <data android:mimeType="image/vnd.dwg" />
-                <data android:mimeType="application/acad" />
-                <data android:mimeType="application/dwg" />
-                <data android:mimeType="image/vnd.dxf" />
-                <data android:mimeType="application/dxf" />
-            </intent-filter>
+            <!-- Los IFC, RVT, DWG y DXF tocados se abren de paso desde el 27-oct-2026: ver AbrirConPixPinActivity. -->
         </activity>
         <!--
             La llamada secreta: un recordatorio que suena como una llamada y se oye por el
@@ -581,16 +541,49 @@
             android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen" />
         <!--
             «Abrir con» PixPin: lo que la aplicación sabe leer, tocado desde el gestor de archivos
-            o desde otra aplicación. Guarda una copia en Guardados y lo abre en su visor. Por tipo
-            y no por extensión: con `content://` la ruta no trae el nombre. Ver AbrirConPixPinActivity.
+            o desde otra aplicación. Desde el 27-oct-2026 se abre **de paso**, sin guardarlo en
+            ningún sitio (antes hacía una copia en Guardados). Por tipo y, para lo que los
+            exploradores no conocen, por extensión. Ver AbrirConPixPinActivity y ModoDePaso.
         -->
         <activity
             android:name=".guardados.AbrirConPixPinActivity"
             android:exported="true"
             android:label="@string/app_name"
             android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
             android:noHistory="true"
+            android:taskAffinity="${applicationId}.paso"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <!-- **Compartir a PixPin**: una sola entrada (27-oct-2026). Lo conocido se abre de paso; lo demás, menú corto. -->
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <!-- Modelos y planos por extensión: su tipo MIME no lo conoce casi ningún explorador. -->
+            <intent-filter android:label="@string/app_name">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="content" />
+                <data android:scheme="file" />
+                <data android:mimeType="*/*" />
+                <data android:pathPattern=".*\\.ifc" />
+                <data android:pathPattern=".*\\.IFC" />
+                <data android:pathPattern=".*\\.rvt" />
+                <data android:pathPattern=".*\\.RVT" />
+                <data android:pathPattern=".*\\.dwg" />
+                <data android:pathPattern=".*\\.DWG" />
+                <data android:pathPattern=".*\\.dxf" />
+                <data android:pathPattern=".*\\.DXF" />
+                <data android:pathPattern=".*\\.epub" />
+                <data android:pathPattern=".*\\.md" />
+            </intent-filter>
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
@@ -625,8 +618,18 @@
                 <data android:mimeType="application/x-dxf" />
                 <data android:mimeType="image/x-dxf" />
                 <data android:mimeType="application/x-autocad" />
+                <!-- De paso también (27-oct-2026): vídeo, LibreOffice Calc y los IFC por su tipo. -->
+                <data android:mimeType="video/*" />
+                <data android:mimeType="application/vnd.oasis.opendocument.spreadsheet" />
+                <data android:mimeType="model/ifc" />
+                <data android:mimeType="application/ifc" />
             </intent-filter>
         </activity>
+        <!-- «Guardar» de lo abierto de paso, en la tarea del visor. Ver guardados/GuardarDePasoActivity. -->
+        <activity
+            android:name=".guardados.GuardarDePasoActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPin" />
         <activity
             android:name=".guardados.GuardarCompartidoActivity"
             android:exported="true"
@@ -636,16 +639,8 @@
             android:noHistory="true"
             android:taskAffinity="${applicationId}.guardar"
             android:theme="@android:style/Theme.Translucent.NoTitleBar">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
+            <!-- Sin entrada propia en «Compartir» desde el 27-oct-2026: compartir a PixPin es una sola
+                 entrada, que abre de paso o enseña el menú corto. Ver guardados/AbrirConPixPinActivity. -->
         </activity>
 
         <!--
@@ -765,16 +760,8 @@
             android:taskAffinity="${applicationId}.enviar"
             android:excludeFromRecents="true"
             android:theme="@style/Theme.PixPin">
-            <intent-filter>
-                <action android:name="android.intent.action.SEND" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
-            <intent-filter>
-                <action android:name="android.intent.action.SEND_MULTIPLE" />
-                <category android:name="android.intent.category.DEFAULT" />
-                <data android:mimeType="*/*" />
-            </intent-filter>
+            <!-- Sin entrada propia en «Compartir» desde el 27-oct-2026: compartir a PixPin es una sola
+                 entrada, que abre de paso o enseña el menú corto. Ver guardados/AbrirConPixPinActivity. -->
         </activity>
         <activity
             android:name=".sincro.RecibirActivity"

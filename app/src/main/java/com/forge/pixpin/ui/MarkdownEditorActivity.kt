@@ -163,8 +163,11 @@ class MarkdownEditorActivity : ComponentActivity() {
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { comentariosDeLaNota.value = c }
         }
 
+        // **Un .md o un .txt abierto de paso** (27-oct-2026, desde otra aplicación sin guardarlo). Ver [com.forge.pixpin.guardados.ModoDePaso].
+        val paso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
         setContent {
             PixPinTheme {
+              Box(Modifier.fillMaxSize()) {
                 Pantalla(
                     inicial = inicial,
                     desde = desde,
@@ -174,7 +177,7 @@ class MarkdownEditorActivity : ComponentActivity() {
                         // La letra de una canción o el texto de un audio: vuelve a su mensaje.
                         intent.getStringExtra(EXTRA_MENSAJE)?.let { mensaje ->
                             Thread {
-                                com.forge.pixpin.guardados.MensajesStore(this).actualizar(mensaje) {
+                                com.forge.pixpin.guardados.MensajesStore(this@MarkdownEditorActivity).actualizar(mensaje) {
                                     it.copy(transcripcion = texto, estadoDelTexto = it.estadoDelTexto ?: com.forge.pixpin.guardados.TEXTO_LETRA)
                                 }
                             }.start()
@@ -190,6 +193,19 @@ class MarkdownEditorActivity : ComponentActivity() {
                     masAcciones = listOf("Compartir…" to { texto -> abrirCompartir(texto) })
                 )
                 compartiendo.value?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo.value = null } }
+                // **Abrir con…, Guardar y Compartir**, solo de paso. Ver [BarraDePaso].
+                var compartiendoDePaso by remember { mutableStateOf(false) }
+                BarraDePaso(paso, true, Modifier.align(Alignment.TopCenter), alCompartir = { compartiendoDePaso = true })
+                if (compartiendoDePaso && paso != null) HojaDeCompartir(
+                    remember {
+                        com.forge.pixpin.guardados.AbrirDePaso.conWifi(
+                            this@MarkdownEditorActivity,
+                            Compartible(paso.nombre.substringBeforeLast('.'), formatos = listOf(ExportarVisor.original(this@MarkdownEditorActivity, paso.ruta, paso.nombre))),
+                            paso
+                        )
+                    }
+                ) { compartiendoDePaso = false }
+              }
             }
         }
     }

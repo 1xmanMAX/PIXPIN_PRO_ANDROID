@@ -91,6 +91,9 @@ import java.io.File
 class ExcelActivity : ComponentActivity() {
     private var libro: LibroExcel? = null
 
+    /** Las señas del modo de paso, si se abrió de otra aplicación sin guardarlo. Ver [com.forge.pixpin.guardados.ModoDePaso]. */
+    private var estadoDePaso: com.forge.pixpin.guardados.AbrirDePaso.Estado? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -104,6 +107,8 @@ class ExcelActivity : ComponentActivity() {
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { ruta?.let { File(it).name }.orEmpty() }
         val mensaje = intent?.getStringExtra(EXTRA_MENSAJE)
         val activa = intent?.getStringExtra(EXTRA_ACTIVA)
+        // **De paso** (27-oct-2026): al cerrarse se lleva lo suyo.
+        estadoDePaso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
         setContent { PixPinTheme { Pantalla(ruta, tablas, activa, nombre, mensaje) } }
     }
 
@@ -355,7 +360,20 @@ class ExcelActivity : ComponentActivity() {
                 ),
                 modifier = Modifier.align(Alignment.TopCenter)
             )
-            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
+            // **Abrir con…, Guardar y Compartir**, solo de paso. Ver [com.forge.pixpin.ui.BarraDePaso].
+            com.forge.pixpin.ui.BarraDePaso(
+                estadoDePaso, aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo && !ocultarParaImprimir, Modifier.align(Alignment.TopCenter),
+                alCompartir = abierto?.let { l ->
+                    fun() {
+                        val hojas = l.libro.hojas.filter { it.visible && it.tipo == 0 }.map { it.nombre }
+                        exportando = ExportarExcel.compartible(this@ExcelActivity, ruta, nombre, hojas, { vista }, tablasVistas)
+                        toques++
+                    }
+                },
+                antesDeGuardar = { guardarTinta(); guardarMarcas() }
+            )
+            // De paso, con «Por Wi-Fi a mis aparatos». Ver [com.forge.pixpin.guardados.AbrirDePaso.conWifi].
+            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(remember(c) { com.forge.pixpin.guardados.AbrirDePaso.conWifi(this@ExcelActivity, c, estadoDePaso) }) { exportando = null } }
             // **El riel se va con la pastilla** (27-oct-2026): al mover la hoja, y vuelve al tocar. Ver [com.forge.pixpin.ui.RielALaVista].
             if (l != null && !marcosDoc.imprimiendo && !ocultarParaImprimir) com.forge.pixpin.ui.RielDelVisor(
                 visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarca),

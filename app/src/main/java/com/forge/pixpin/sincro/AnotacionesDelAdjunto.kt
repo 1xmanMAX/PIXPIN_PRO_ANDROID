@@ -294,6 +294,9 @@ object AnotacionesDelAdjunto {
      */
     fun uidDe(filesDir: File, ruta: String?): String? {
         if (ruta.isNullOrBlank()) return null
+        // **Un archivo abierto de paso** (27-oct-2026): lo anotado va con el código de su sesión, que
+        // no es de ningún mensaje y no viaja; «Guardar» lo pasa al del mensaje. Ver [com.forge.pixpin.guardados.ModoDePaso].
+        com.forge.pixpin.guardados.ModoDePaso.uidDeLaRuta(ruta)?.let { return it }
         conocidos[ruta]?.let { return it }
         // **El borrador de una versión** (27-oct-2026): la copia de un documento de otra persona que
         // se está anotando aún no es un mensaje, pero su tinta ya va con el código que tendrá. Ver

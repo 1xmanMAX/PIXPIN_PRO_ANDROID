@@ -79,7 +79,9 @@ class GuardarCompartidoActivity : ComponentActivity() {
             // siempre (lo pidió el usuario el 5-sep-2026).
             val proyectos = (application as? com.forge.pixpin.PixPinApp)?.proyectos?.proyectos?.value
                 .orEmpty().filterNot { it.archivado }
-            if (proyectos.isEmpty()) {
+            // **«Guardar en Mensajes guardados»** del menú corto de compartir (27-oct-2026): ya se
+            // eligió el sitio, no se vuelve a preguntar. Ver [AbrirConPixPinActivity].
+            if (proyectos.isEmpty() || intent?.getBooleanExtra(EXTRA_A_LA_GENERAL, false) == true) {
                 guardarEn(almacen, null, temporales, texto)
                 return@launch
             }
@@ -227,6 +229,11 @@ class GuardarCompartidoActivity : ComponentActivity() {
             else com.forge.pixpin.R.string.guardados_compartido_no,
             Toast.LENGTH_SHORT
         ).show()
+    }
+
+    companion object {
+        /** A Mensajes guardados sin preguntar a qué chat. */
+        const val EXTRA_A_LA_GENERAL = "a_la_general"
     }
 
     private fun Intent.streamUri(): Uri? =

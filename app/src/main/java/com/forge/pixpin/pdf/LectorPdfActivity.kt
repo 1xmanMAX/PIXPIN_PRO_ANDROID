@@ -106,6 +106,9 @@ import androidx.lifecycle.lifecycleScope
  */
 class LectorPdfActivity : ComponentActivity() {
 
+    /** Las señas del modo de paso, si se abrió de otra aplicación sin guardarlo. Ver [com.forge.pixpin.guardados.ModoDePaso]. */
+    private var estadoDePaso: com.forge.pixpin.guardados.AbrirDePaso.Estado? = null
+
     companion object {
         private const val EXTRA_RUTA = "ruta"
         private const val EXTRA_NOMBRE = "nombre"
@@ -147,6 +150,8 @@ class LectorPdfActivity : ComponentActivity() {
                 finish()
             }
         })
+        // **De paso** (27-oct-2026): abierto desde otra aplicación sin guardarlo; al cerrarse se lleva lo suyo.
+        estadoDePaso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty()
         // **En la multitarea, como una pestaña más** (19-sep-2026). Ver [com.forge.pixpin.ui.ConLaRueda].
         setContent {
@@ -958,6 +963,11 @@ class LectorPdfActivity : ComponentActivity() {
                     ).filterNotNull(),
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
+                // **Abrir con…, Guardar y Compartir**, solo de paso. Ver [com.forge.pixpin.ui.BarraDePaso].
+                com.forge.pixpin.ui.BarraDePaso(
+                    estadoDePaso, aLaVista, Modifier.align(Alignment.TopCenter),
+                    alCompartir = { capas.guardarTodo(); compartiendo = true }, antesDeGuardar = { capas.guardarTodo() }
+                )
             }
             if (anotando) {
                 val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
@@ -1057,7 +1067,8 @@ class LectorPdfActivity : ComponentActivity() {
                 val titulo = nombre.substringBeforeLast('.').ifBlank { "PDF" }
                 com.forge.pixpin.ui.HojaDeCompartir(
                     remember(ruta, titulo) {
-                        if (esOffice) formatosDeOffice(rutaPedida, nombre, titulo, { i -> capas.escenaDe(i) }, { espacios }, { marcas }, cuantas, dondeEstoy().first)
+                        // De paso, con «Por Wi-Fi a mis aparatos». Ver [com.forge.pixpin.guardados.AbrirDePaso.conWifi].
+                        com.forge.pixpin.guardados.AbrirDePaso.conWifi(this@LectorPdfActivity, if (esOffice) formatosDeOffice(rutaPedida, nombre, titulo, { i -> capas.escenaDe(i) }, { espacios }, { marcas }, cuantas, dondeEstoy().first)
                         else com.forge.pixpin.ui.Compartible(
                             titulo, paginas = com.forge.pixpin.ui.ExportarVisor.paginasDe(cuantas), marcadas = setOf("p${dondeEstoy().first}"), formatos = listOf(
                                 // **El PDF, con lo anotado** —o limpio, con el interruptor—. `ruta` es ya la
@@ -1077,7 +1088,7 @@ class LectorPdfActivity : ComponentActivity() {
                                 com.forge.pixpin.ui.ExportarVisor.wifi(this@LectorPdfActivity, rutaPedida, nombre)
                             ),
                             contenido = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.PDF
-                        )
+                        ), estadoDePaso)
                     }
                 ) { compartiendo = false }
             }

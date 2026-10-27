@@ -103,6 +103,9 @@ class PixPinApp : Application() {
         // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
         // vista. Ver [com.forge.pixpin.sincro.Presencia].
         com.forge.pixpin.sincro.Presencia.instalar(this)
+        // **Lo que dejaron los archivos abiertos de paso** (27-oct-2026): un cierre a la fuerza no
+        // borra la copia ni lo anotado sin guardar. Ver [com.forge.pixpin.guardados.ModoDePaso].
+        com.forge.pixpin.guardados.AbrirDePaso.limpiarAlArrancar(this)
         // **La tasa de refresco, en todas las ventanas y desde el primer momento.**
         //
         // Aquí y no en cada Activity porque son veinte y no tienen clase base común: de

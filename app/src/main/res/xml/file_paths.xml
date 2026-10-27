@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
     <cache-path name="share" path="share/" />
+    <!-- Lo abierto de paso, para «Abrir con…» otra aplicación. Ver guardados/ModoDePaso.kt. -->
+    <cache-path name="de-paso" path="de-paso/" />
     <files-path name="pins" path="pins/" />
     <!-- Los archivos del chat y de los proyectos, para abrirlos con otra aplicación. Ver ui/AbrirCon.kt. -->
     <files-path name="guardados" path="guardados/" />
