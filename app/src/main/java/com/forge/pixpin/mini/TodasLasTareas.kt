@@ -71,7 +71,13 @@ object TodasLasTareas {
         /** Cuándo se creó el mensaje: las listas más nuevas van primero. */
         val cuando: Long,
         /** Todas sus tareas, en el orden del documento. */
-        val filas: List<Fila>
+        val filas: List<Fila>,
+        /**
+         * **El aparato donde nació la lista** (27-oct-2026, [Mensaje.aparato]): en un chat
+         * compartido dice si la apuntó otra persona ([TareasCompartidas.autor]). null en las de
+         * antes de los códigos de aparato, que son mías.
+         */
+        val aparato: String? = null
     ) {
         val guardados: Boolean get() = proyecto == null
 
@@ -116,7 +122,7 @@ object TodasLasTareas {
     /** La lista de un mensaje, si es una lista de tareas. También vacía: es adonde mover. */
     fun listaDe(m: Mensaje, chat: String): Lista? =
         if (!esLista(m)) null
-        else Lista(m.proyecto, chat, m.id, nombreDeLista(m), m.cuando, filasDe(m.texto))
+        else Lista(m.proyecto, chat, m.id, nombreDeLista(m), m.cuando, filasDe(m.texto), m.aparato)
 
     /** Si una lista es el Inbox: la de «Mensajes guardados» que se llama así. */
     fun esInbox(l: Lista): Boolean = l.guardados && l.titulo.trim().equals(INBOX, ignoreCase = true)

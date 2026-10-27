@@ -14,4 +14,6 @@
     <color name="widget_dorado">#FFFFD27A</color>
     <color name="widget_sobre_dorado">#FF231A00</color>
     <color name="widget_casilla_vacia">#FF242C55</color>
+    <!-- El verde de chat compartido (EntrePersonas.VERDE_COMPARTIDO): el de su chapa en la lista de chats. -->
+    <color name="widget_verde_compartido">#FF2E9E62</color>
 </resources>

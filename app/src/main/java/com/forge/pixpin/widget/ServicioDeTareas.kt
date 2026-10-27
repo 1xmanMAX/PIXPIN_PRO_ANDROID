@@ -5,11 +5,13 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
+import android.view.View
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
 import com.forge.pixpin.guardados.MensajesStore
+import com.forge.pixpin.mini.TareasCompartidas
 import com.forge.pixpin.mini.TodasLasTareas
 import java.time.LocalDate
 
@@ -29,7 +31,13 @@ class ServicioDeTareas : RemoteViewsService() {
                 val app = context as? PixPinApp
                 val nombres = app?.proyectos?.proyectos?.value?.associate { it.id to it.nombre } ?: emptyMap()
                 val listas = TodasLasTareas.reunir(MensajesStore(context).leer(), nombres)
-                Triple(LogicaDeLosWidgets.filasDeTareas(listas, LocalDate.now()), LogicaDeLosWidgets.pendientes(listas), listas.isNotEmpty())
+                // Los chats compartidos, para el símbolo de sus filas (27-oct-2026): de la caché,
+                // que el widget se repinta a menudo; sin ninguno, ni se mira la identidad.
+                val compartidos = TareasCompartidas.EnCache.leer(context)
+                Triple(
+                    LogicaDeLosWidgets.filasDeTareas(listas, LocalDate.now(), compartidos = compartidos),
+                    LogicaDeLosWidgets.pendientes(listas), listas.isNotEmpty()
+                )
             }.onFailure { Log.w("PixPin", "widget de tareas: no se pudo leer el chat", it) }
                 .getOrDefault(Triple(emptyList(), 0, true))
             filas = nuevas
@@ -51,6 +59,17 @@ class ServicioDeTareas : RemoteViewsService() {
             val f = filas.getOrNull(position) ?: return v
             v.setTextViewText(R.id.widget_tarea_texto, f.texto)
             v.setTextViewText(R.id.widget_tarea_detalle, f.detalle)
+            // **De un chat compartido** (27-oct-2026): las dos personas en verde delante del
+            // detalle y, si la lista la apuntó otra persona, su inicial. Las filas se reciclan:
+            // se pone siempre, también el GONE.
+            v.setViewVisibility(R.id.widget_tarea_compartida, if (f.compartida) View.VISIBLE else View.GONE)
+            v.setContentDescription(
+                R.id.widget_tarea_compartida,
+                f.autor?.let { "De un chat compartido, apuntada por $it" } ?: "De un chat compartido"
+            )
+            val inicial = f.autor?.let { TareasCompartidas.inicial(it) }.orEmpty()
+            v.setTextViewText(R.id.widget_tarea_autor, inicial)
+            v.setViewVisibility(R.id.widget_tarea_autor, if (f.compartida && inicial.isNotEmpty()) View.VISIBLE else View.GONE)
             v.setContentDescription(R.id.widget_tarea_casilla, "Marcar «${f.texto}» como hecha")
             fun relleno(que: String) = Intent()
                 .putExtra(WidgetDeTareas.EXTRA_QUE, que)

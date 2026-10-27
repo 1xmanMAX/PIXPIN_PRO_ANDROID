@@ -3,7 +3,9 @@ package com.forge.pixpin.widget
 import com.forge.pixpin.capture.CaducidadDeCapturas
 import com.forge.pixpin.capture.GaleriaLogica
 import com.forge.pixpin.guardados.Mensaje
+import com.forge.pixpin.mini.TareasCompartidas
 import com.forge.pixpin.mini.TodasLasTareas
+import com.forge.pixpin.sincro.EnElChat
 import java.time.LocalDate
 import java.util.TimeZone
 
@@ -45,7 +47,14 @@ object LogicaDeLosWidgets {
         /** Lo que se lee: sin la fecha ni las imágenes, en una línea. */
         val texto: String,
         /** La línea pequeña de debajo: la lista (y su chat) y cuánto lleva. */
-        val detalle: String
+        val detalle: String,
+        /**
+         * **Si es de un chat compartido** (27-oct-2026): la fila lleva delante del detalle las dos
+         * personas en el verde de la chapa de la lista de chats ([TareasCompartidas]).
+         */
+        val compartida: Boolean = false,
+        /** Quien apuntó su lista si fue otra persona (su inicial va junto al símbolo); null si yo. */
+        val autor: String? = null
     ) {
         /** Lo que la distingue para el lanzador (`getItemId`): el mensaje, el sitio y el texto. */
         val clave: String get() = "$codigo/$indice/$crudo"
@@ -56,14 +65,28 @@ object LogicaDeLosWidgets {
      * listas como las ordena [TodasLasTareas.ORDEN_DE_LISTAS] (el Inbox primero) y, dentro de cada
      * una, lo pendiente como [TodasLasTareas.ORDEN_DE_PENDIENTE] (lo que más lleva esperando
      * arriba). Lo hecho no sale: el widget es para lo que queda por hacer.
+     *
+     * [compartidos]: los chats compartidos en los que estoy, por proyecto
+     * ([TareasCompartidas.EnCache]); marcan las filas de sus listas como compartidas.
      */
-    fun filasDeTareas(listas: List<TodasLasTareas.Lista>, hoy: LocalDate, max: Int = MAX_TAREAS): List<FilaDeTarea> {
+    fun filasDeTareas(
+        listas: List<TodasLasTareas.Lista>,
+        hoy: LocalDate,
+        max: Int = MAX_TAREAS,
+        compartidos: Map<String, EnElChat> = emptyMap()
+    ): List<FilaDeTarea> {
         val salida = ArrayList<FilaDeTarea>()
         for (l in listas.sortedWith(TodasLasTareas.ORDEN_DE_LISTAS)) {
             val pendientes = l.filas.filter { !it.hecha }.sortedWith(TodasLasTareas.ORDEN_DE_PENDIENTE)
+            if (pendientes.isEmpty()) continue
+            val compartida = TareasCompartidas.esCompartida(l, compartidos)
+            val autor = TareasCompartidas.autor(l, compartidos)
             for (f in pendientes) {
                 if (salida.size >= max) return salida
-                salida += FilaDeTarea(l.codigo, f.indice, f.crudo, textoDeFila(f.texto), detalleDeFila(l, f.creada, hoy, com.forge.pixpin.mini.Tareas.horaDe(f.crudo)))
+                salida += FilaDeTarea(
+                    l.codigo, f.indice, f.crudo, textoDeFila(f.texto),
+                    detalleDeFila(l, f.creada, hoy, com.forge.pixpin.mini.Tareas.horaDe(f.crudo)), compartida, autor
+                )
             }
         }
         return salida

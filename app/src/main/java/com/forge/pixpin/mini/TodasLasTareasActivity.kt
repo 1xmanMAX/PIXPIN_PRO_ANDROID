@@ -116,6 +116,14 @@ class TodasLasTareasActivity : ComponentActivity() {
     /** La vista con la que se pidió abrir ([abrir]), hasta que la pantalla la pone. */
     private var vistaPedida by mutableStateOf<VistaDeTareas.Vista?>(null)
 
+    /**
+     * **Los chats compartidos en los que estoy**, por proyecto (27-oct-2026): sus listas llevan las
+     * dos personas en verde en el encabezado, en la tarjeta que nombra su lista y en la chapita del
+     * horario, como en el widget ([TareasCompartidas]). Aquí y no en [Pantalla] para que lo lean
+     * [Encabezado] y [Tarjeta] sin pasarlo por todas partes.
+     */
+    private var compartidos by mutableStateOf<Map<String, com.forge.pixpin.sincro.EnElChat>>(emptyMap())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) vistaPedida = vistaDe(intent)
@@ -161,6 +169,12 @@ class TodasLasTareasActivity : ComponentActivity() {
             suspend fun leer() { listas = withContext(Dispatchers.IO) { TodasLasTareas.reunir(almacen.leer(), nombres) } }
             leer()
             MensajesStore.cambios.debounce(250).collect { leer() }
+        }
+
+        // Se releen cuando cambia la lista de compartidos (de la caché: sin ninguno, ni se mira la identidad).
+        val versionDeCompartidos by com.forge.pixpin.sincro.CompartidosEnDisco.version.collectAsState()
+        LaunchedEffect(versionDeCompartidos) {
+            compartidos = withContext(Dispatchers.IO) { TareasCompartidas.EnCache.leer(this@TodasLasTareasActivity) }
         }
 
         var consulta by remember { mutableStateOf("") }
@@ -315,7 +329,7 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
 
         // Las tareas pendientes con hora, para el horario: su chapita y de qué lista y tarea es cada una.
-        val conHora = remember(listas) { tareasConHora(listas.orEmpty()) }
+        val conHora = remember(listas, compartidos) { tareasConHora(listas.orEmpty()) }
         LaunchedEffect(irA, vista, modo) {
             val k = irA ?: return@LaunchedEffect
             val v = vista ?: return@LaunchedEffect
@@ -509,7 +523,9 @@ class TodasLasTareasActivity : ComponentActivity() {
                 val sin = Tareas.sinHora(f.texto)
                 val texto = TareaInteligente.marcas(sin).titulo.ifBlank { sin.trim() }
                 val cuando = hora.toEpochSecond(java.time.ZoneOffset.UTC) * 1000
-                tareas += com.forge.pixpin.horario.TareaConHora(texto, cuando, TodasLasTareas.COLORES_DE_GRUPO[colores[li]])
+                // De un chat compartido, con las dos personas delante (27-oct-2026): la chapita es solo texto.
+                val rotulo = TareasCompartidas.conSimbolo(texto, TareasCompartidas.esCompartida(l, compartidos))
+                tareas += com.forge.pixpin.horario.TareaConHora(rotulo, cuando, TodasLasTareas.COLORES_DE_GRUPO[colores[li]])
                 sitios += l to f
             }
         }
@@ -721,6 +737,7 @@ class TodasLasTareasActivity : ComponentActivity() {
             // Su color: una marca redonda delante del nombre, como en el PC.
             Box(Modifier.width(6.dp).height(18.dp).clip(RoundedCornerShape(3.dp)).background(lerp(color, Color.White, 0.25f)))
             Spacer(Modifier.width(8.dp))
+            MarcaDeCompartida(l)
             Text(
                 l.titulo.ifBlank { "Tareas" }, color = Cristal.tinta, fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
@@ -733,6 +750,26 @@ class TodasLasTareasActivity : ComponentActivity() {
             Spacer(Modifier.width(8.dp))
             Text(TodasLasTareas.pendientesDeGrupo(pendientes), color = Cristal.puesto, style = MaterialTheme.typography.labelMedium, maxLines = 1)
         }
+    }
+
+    /**
+     * **Las dos personas en verde** si la lista [l] es de un chat compartido (27-oct-2026), como
+     * delante del nombre en la lista de chats; detrás, la inicial de quien la apuntó si no fui yo.
+     * Nada si no es compartida.
+     */
+    @Composable
+    private fun MarcaDeCompartida(l: Lista, lado: androidx.compose.ui.unit.Dp = 16.dp) {
+        if (!TareasCompartidas.esCompartida(l, compartidos)) return
+        val verde = Color(com.forge.pixpin.sincro.EntrePersonas.VERDE_COMPARTIDO)
+        val autor = TareasCompartidas.autor(l, compartidos)
+        Icon(
+            Icons.Filled.Groups, contentDescription = autor?.let { "De un chat compartido, apuntada por $it" } ?: "De un chat compartido",
+            tint = verde, modifier = Modifier.size(lado)
+        )
+        autor?.let { TareasCompartidas.inicial(it) }?.takeIf { it.isNotEmpty() }?.let {
+            Text(it, color = verde, style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold, modifier = Modifier.padding(start = 2.dp))
+        }
+        Spacer(Modifier.width(5.dp))
     }
 
     @Composable
@@ -798,10 +835,14 @@ class TodasLasTareasActivity : ComponentActivity() {
                         style = MaterialTheme.typography.labelMedium, maxLines = 1
                     )
                 }
-                if (pie.isNotEmpty()) Text(
-                    pie, color = Cristal.tinta.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
-                )
+                if (pie.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Nombrando su lista (buscando), también si es de un chat compartido.
+                    if (conSuLista) MarcaDeCompartida(l, 12.dp)
+                    Text(
+                        pie, color = Cristal.tinta.copy(alpha = 0.6f), style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Más", tint = Cristal.tinta.copy(alpha = 0.7f)) }

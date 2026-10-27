@@ -46,14 +46,47 @@
                 android:textColor="@color/widget_tinta"
                 android:textSize="14sp" />
 
-            <TextView
-                android:id="@+id/widget_tarea_detalle"
+            <!--
+                El detalle, con delante (27-oct-2026) las dos personas en verde si la tarea es de un
+                chat compartido y la inicial de quien la apuntó si no fui yo. Ocultos si no.
+            -->
+            <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:ellipsize="end"
-                android:maxLines="1"
-                android:textColor="@color/widget_tinta_suave"
-                android:textSize="11sp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <ImageView
+                    android:id="@+id/widget_tarea_compartida"
+                    android:layout_width="14dp"
+                    android:layout_height="14dp"
+                    android:layout_marginEnd="3dp"
+                    android:contentDescription="De un chat compartido"
+                    android:src="@drawable/widget_compartida"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/widget_tarea_autor"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="4dp"
+                    android:importantForAccessibility="no"
+                    android:maxLines="1"
+                    android:textColor="@color/widget_verde_compartido"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:visibility="gone" />
+
+                <TextView
+                    android:id="@+id/widget_tarea_detalle"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:textColor="@color/widget_tinta_suave"
+                    android:textSize="11sp" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </FrameLayout>
