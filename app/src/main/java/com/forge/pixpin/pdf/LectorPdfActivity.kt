@@ -14,6 +14,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardDoubleArrowDown
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Slideshow
 import androidx.compose.material.icons.filled.Description
@@ -57,6 +58,7 @@ import androidx.compose.ui.layout.boundsInWindow
 import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.LocalDensity
 import com.forge.pixpin.motor.Lectura
+import com.forge.pixpin.integraciones.ProtocoloLecturaVeloz
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -128,6 +130,18 @@ class LectorPdfActivity : ComponentActivity() {
                     .putExtra(EXTRA_MENSAJE, mensaje)
             )
         }
+    }
+
+    /**
+     * **Cada vuelta a la pantalla** (27-oct-2026): al volver de Lectura Veloz el marcador verde puede
+     * haberse movido en segundo plano ([com.forge.pixpin.integraciones.LecturaVelozReceiver]); los
+     * marcadores se releen con cada una. La primera es la de abrir.
+     */
+    private var vueltas by androidx.compose.runtime.mutableIntStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        vueltas++
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -346,6 +360,39 @@ class LectorPdfActivity : ComponentActivity() {
             val base = pdf() ?: return@imagenes null
             com.forge.pixpin.ui.ExportarVisor.paginaConTinta(this, base, i, escenaDe(i))
         }
+
+    /**
+     * **A Lectura Veloz** (27-oct-2026, protocolo v1): desde el marcador verde si lo hay —su hoja y
+     * su altura— y si no desde [aqui] ([dondeEstoy]). El verde de vuelta va al archivo de marcadores
+     * de este documento: el del PDF, el de un Word o un PowerPoint (en fracciones) o, si no es del
+     * chat, las preferencias. Ver [com.forge.pixpin.integraciones.LecturaVeloz].
+     */
+    private fun abrirEnLecturaVeloz(
+        rutaPedida: String, nombre: String, cuantas: Int, marcas: List<com.forge.pixpin.motor.Marca>, aqui: Pair<Int, Double>,
+        baseSuelta: String?, archivoDeMarcas: java.io.File?, marcasDeOffice: java.io.File?, claveDeMarcas: String
+    ) {
+        val n = cuantas.coerceAtLeast(1)
+        val verde = marcas.firstOrNull { it.emoji == Lectura.EMOJI_DE_VOZ }
+        val pagina = (verde?.let { com.forge.pixpin.motor.Marcas.paginaDe(it) } ?: aqui.first).coerceIn(0, n - 1)
+        val frac = (verde?.let { com.forge.pixpin.motor.Marcas.altoEnLaPagina(it) } ?: aqui.second).toFloat()
+        val destino = when {
+            marcasDeOffice != null -> ProtocoloLecturaVeloz.Destino(ProtocoloLecturaVeloz.Destino.FRACCIONES_ARCHIVO, marcasDeOffice.absolutePath)
+            archivoDeMarcas != null -> ProtocoloLecturaVeloz.Destino(ProtocoloLecturaVeloz.Destino.HOJAS_ARCHIVO, archivoDeMarcas.absolutePath)
+            else -> ProtocoloLecturaVeloz.Destino(ProtocoloLecturaVeloz.Destino.HOJAS_PREFS, claveDeMarcas)
+        }
+        lifecycleScope.launch {
+            val (uid, t) = withContext(Dispatchers.IO) {
+                val uid = baseSuelta?.removePrefix("anot-")
+                    ?: com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(filesDir, rutaPedida)
+                    ?: com.forge.pixpin.integraciones.LecturaVeloz.codigoDeRuta(rutaPedida)
+                uid to com.forge.pixpin.integraciones.LecturaVeloz.cuando(this@LectorPdfActivity, uid, ProtocoloLecturaVeloz.TIPO_PDF, destino)
+            }
+            com.forge.pixpin.integraciones.LecturaVeloz.abrir(
+                this@LectorPdfActivity, rutaPedida, nombre.ifBlank { java.io.File(rutaPedida).name }, uid, ProtocoloLecturaVeloz.TIPO_PDF,
+                pagina, frac, ProtocoloLecturaVeloz.fraccionDelPdf(pagina, frac, n), n, t, destino
+            )
+        }
+    }
 
     @Composable
     private fun Lector(rutaPedida: String, nombre: String) {
@@ -585,6 +632,28 @@ class LectorPdfActivity : ComponentActivity() {
             }
             marcas = lista
             guardarLasMarcas()
+        }
+        // **Al volver a la pantalla, los marcadores otra vez** (27-oct-2026): Lectura Veloz mueve el
+        // verde en segundo plano y tiene que verse sin cerrar el lector. Ver [vueltas].
+        LaunchedEffect(vueltas) {
+            if (vueltas <= 1) return@LaunchedEffect
+            val deOffice = marcasDeOffice
+            if (deOffice != null) {
+                if (cuantas <= 0) return@LaunchedEffect
+                val leidas = withContext(Dispatchers.IO) { com.forge.pixpin.motor.Lectura.deTexto(com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(deOffice)) }
+                // Las del teléfono que nunca estuvieron en el archivo se quedan; las que estaban y ya no, se fueron.
+                val conocidas = (leidas + leidasDeOffice.orEmpty()).map { it.id }.toHashSet()
+                val llegaVerde = leidas.any { it.emoji == Lectura.EMOJI_DE_VOZ }
+                val propias = marcas.filter { m -> m.id !in conocidas && !(llegaVerde && m.emoji == Lectura.EMOJI_DE_VOZ) }
+                leidasDeOffice = leidas
+                marcas = com.forge.pixpin.motor.Marcas.enOrden(com.forge.pixpin.motor.Marcas.deFracciones(leidas, cuantas) + propias)
+            } else {
+                val texto = withContext(Dispatchers.IO) {
+                    archivoDeMarcas?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(it) } ?: prefsDeMarcas.getString(claveDeMarcas, null)
+                }
+                val nuevas = com.forge.pixpin.motor.Marcas.deTexto(texto)
+                if (nuevas != marcas) marcas = nuevas
+            }
         }
         /** Qué página se está mirando y por dónde va, para plantar ahí el marcador. */
         fun dondeEstoy(): Pair<Int, Double> {
@@ -938,6 +1007,10 @@ class LectorPdfActivity : ComponentActivity() {
                                     desdeHoja = verde?.let { com.forge.pixpin.motor.Marcas.paginaDe(it) + 1 } ?: 0
                                 )
                             }
+                        },
+                        // **Lectura veloz** (27-oct-2026): el documento a Lectura Veloz, desde el verde si lo hay.
+                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Bolt, "Lectura veloz") {
+                            abrirEnLecturaVeloz(rutaPedida, nombre, cuantas, marcas, dondeEstoy(), baseSuelta, archivoDeMarcas, marcasDeOffice, claveDeMarcas)
                         },
                         com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.KeyboardDoubleArrowDown, "Desplazar sola") {
                             autoDesplazando = true; autoEnMarcha = true

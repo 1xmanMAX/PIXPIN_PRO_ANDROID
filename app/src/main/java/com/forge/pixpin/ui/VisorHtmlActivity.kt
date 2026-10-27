@@ -57,6 +57,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.Print
 import androidx.compose.material.icons.filled.RecordVoiceOver
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
@@ -506,7 +507,9 @@ class VisorHtmlActivity : ComponentActivity() {
                 (0 until (hojas?.length() ?: 0)).firstOrNull { hojas!!.optInt(it) >= n }
             }
             hojaPedida = 0
-            val desde = deLaHoja ?: marcaDeVoz?.first?.takeIf { it in textos.indices } ?: json.optInt("desde", 0)
+            // Un verde que solo trae la fracción (el de Lectura Veloz, `-1:f`): el párrafo que cae ahí.
+            val delVerde = marcaDeVoz?.let { (p, f) -> if (p == com.forge.pixpin.motor.Lectura.SIN_PARRAFO) com.forge.pixpin.motor.Lectura.parrafoDeFraccion(donde, f) else p }
+            val desde = deLaHoja ?: delVerde?.takeIf { it in textos.indices } ?: json.optInt("desde", 0)
             val muestra = textos.asSequence().drop(desde).take(40).joinToString(" ").take(4000)
             val idioma = com.forge.pixpin.motor.VozAlta.idiomaParaLeer(muestra, json.optString("lang"), java.util.Locale.getDefault().toLanguageTag())
             if (lector.estado.value.listo) {
@@ -1146,6 +1149,36 @@ class VisorHtmlActivity : ComponentActivity() {
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
+    /**
+     * **Al volver, el verde otra vez** (27-oct-2026): Lectura Veloz lo mueve en segundo plano
+     * ([com.forge.pixpin.integraciones.LecturaVelozReceiver]) y tiene que verse sin reabrir.
+     */
+    override fun onResume() {
+        super.onResume()
+        if (esDocumento) leerLaMarcaDeVoz()
+    }
+
+    /**
+     * **A Lectura Veloz** (27-oct-2026, protocolo v1): el documento desde el verde si lo hay y si no
+     * desde lo que asoma arriba, en fracción del documento. El verde de vuelta va al de la voz.
+     * Ver [com.forge.pixpin.integraciones.LecturaVeloz].
+     */
+    private fun abrirEnLecturaVeloz() {
+        val doc = elDocumento ?: return
+        val ruta = doc.absolutePath
+        val fraccion = marcaDeVoz?.second ?: fraccionDeAhora()
+        val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { doc.name }
+        val destino = com.forge.pixpin.integraciones.ProtocoloLecturaVeloz.Destino(com.forge.pixpin.integraciones.ProtocoloLecturaVeloz.Destino.VOZ, ruta)
+        lifecycleScope.launch {
+            val (uid, t) = withContext(Dispatchers.IO) {
+                val uid = com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(filesDir, ruta)
+                    ?: com.forge.pixpin.integraciones.LecturaVeloz.codigoDeRuta(ruta)
+                uid to com.forge.pixpin.integraciones.LecturaVeloz.cuando(this@VisorHtmlActivity, uid, com.forge.pixpin.integraciones.ProtocoloLecturaVeloz.TIPO_TEXTO, destino)
+            }
+            com.forge.pixpin.integraciones.LecturaVeloz.abrir(this@VisorHtmlActivity, ruta, nombre, uid, com.forge.pixpin.integraciones.ProtocoloLecturaVeloz.TIPO_TEXTO, 0, 0f, fraccion, 0, t, destino)
+        }
+    }
+
     override fun onPause() {
         guardarLaCapa()
         if (esDocumento && altoDelDocumento() > 0f) {
@@ -1334,6 +1367,10 @@ class VisorHtmlActivity : ComponentActivity() {
                             // **Escuchar**: la voz de Google del teléfono lee desde lo que asoma arriba. Ver [empezarAEscuchar].
                             IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAEscuchar() }, modifier = Modifier.size(38.dp)) {
                                 Icon(Icons.Filled.RecordVoiceOver, contentDescription = "Escuchar", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                            }
+                            // **Lectura veloz** (27-oct-2026): el documento a Lectura Veloz, desde el verde. Ver [abrirEnLecturaVeloz].
+                            IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; abrirEnLecturaVeloz() }, modifier = Modifier.size(38.dp)) {
+                                Icon(Icons.Filled.Bolt, contentDescription = "Lectura veloz", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
                             // **Que suba sola**, a las palabras por minuto de cada uno. Ver [empezarAAutoDesplazar].
                             IconButton(onClick = { conLaLetra = false; poniendoMarcador = false; empezarAAutoDesplazar() }, modifier = Modifier.size(38.dp)) {

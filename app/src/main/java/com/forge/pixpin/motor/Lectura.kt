@@ -184,12 +184,32 @@ object Lectura {
 
     fun vozATexto(parrafo: Int, fraccion: Float) = "$parrafo:${fraccion.coerceIn(0f, 1f)}"
 
+    /**
+     * `párrafo:fracción`, o `-1:fracción` ([SIN_PARRAFO]): **el verde que llega de Lectura Veloz**
+     * (27-oct-2026), que sabe por qué palabra va pero no qué párrafos cuenta este visor. Con −1 manda
+     * la fracción del documento: el visor busca el párrafo que cae ahí ([parrafoDeFraccion]).
+     */
     fun vozDeTexto(texto: String?): Pair<Int, Float>? {
-        val p = texto?.split(':') ?: return null
+        val p = texto?.trim()?.split(':') ?: return null
         if (p.size != 2) return null
-        val parrafo = p[0].toIntOrNull()?.takeIf { it >= 0 } ?: return null
-        val f = p[1].toFloatOrNull() ?: return null
+        val parrafo = p[0].toIntOrNull()?.takeIf { it >= 0 || it == SIN_PARRAFO } ?: return null
+        val f = p[1].toFloatOrNull()?.takeIf { it.isFinite() } ?: return null
         return parrafo to f.coerceIn(0f, 1f)
+    }
+
+    /** El párrafo de un verde que solo dice la fracción del documento. Ver [vozDeTexto]. */
+    const val SIN_PARRAFO = -1
+
+    fun vozDeFraccion(fraccion: Float) = vozATexto(SIN_PARRAFO, fraccion.takeIf { it.isFinite() } ?: 0f)
+
+    /**
+     * **El párrafo que cae en [fraccion]**: el último que empieza en ella o antes. [donde] es dónde
+     * empieza cada párrafo (fracción del documento, en orden). −1 si no hay párrafos.
+     */
+    fun parrafoDeFraccion(donde: List<Float>, fraccion: Float): Int {
+        if (donde.isEmpty()) return -1
+        val i = donde.indexOfLast { it <= fraccion + 1e-4f }
+        return i.coerceAtLeast(0)
     }
 
     /** Los marcadores con el verde de la voz en su sitio: nunca más de un verde. */

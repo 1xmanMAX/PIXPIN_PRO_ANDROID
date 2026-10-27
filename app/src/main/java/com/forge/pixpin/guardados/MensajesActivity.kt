@@ -7891,7 +7891,8 @@ private const val ESCALA_COMPARTIDA = 2.0
 /** A qué escala se compone el sello de una cita. */
 private const val ESCALA_DEL_SELLO = 0.12
 
-private val ETIQUETAS = listOf("⭐", "✅", "⏳", "💡", "💰", "📍")
+/** ⚡: leído en Lectura Veloz (la pone sola [com.forge.pixpin.integraciones.LecturaVeloz] si no hay otra). */
+private val ETIQUETAS = listOf("⭐", "✅", "⏳", "💡", "💰", "📍", com.forge.pixpin.integraciones.LecturaVeloz.ETIQUETA)
 
 /** A qué escala se recompone una foto anotada al ampliarla con los dedos. */
 private const val ESCALA_DE_LA_FOTO_AMPLIADA = 2.0
