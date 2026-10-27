@@ -47,6 +47,10 @@ class Canal private constructor(
 
     class CodigoDistinto : IOException("El otro aparato tiene otro código de grupo")
 
+    /** Un tramo que no se descifra a mitad de conversación: repetido, fuera de orden o dañado. */
+    class TramoDanado : IOException("Llegó un trozo dañado o repetido: se corta la sincronización")
+
+
     fun enviar(tipo: Byte, datos: ByteArray, desde: Int = 0, largo: Int = datos.size) {
         val claro = ByteArray(largo + 1)
         claro[0] = tipo
@@ -67,11 +71,15 @@ class Canal private constructor(
         if (largo !in 17..TOPE_DE_MENSAJE) throw IOException("Tramo de $largo bytes")
         val cifrado = ByteArray(largo)
         din.readFully(cifrado)
+        val primero = cuentaEntrada == 0L
         val claro = try {
             descifrador.init(Cipher.DECRYPT_MODE, llaveEntrada, GCMParameterSpec(128, iv(cuentaEntrada++)))
             descifrador.doFinal(cifrado)
         } catch (e: AEADBadTagException) {
-            throw CodigoDistinto()
+            // **Solo el primer tramo dice «otro código»** (27-oct-2026). Uno que falla después —repetido,
+            // reordenado o dañado por el camino: cada tramo lleva su número dentro del cifrado— es
+            // una conexión rota, no un aparato de otro grupo, y así se dice.
+            if (primero) throw CodigoDistinto() else throw TramoDanado()
         }
         recibidos += claro.size - 1
         return claro[0] to claro.copyOfRange(1, claro.size)

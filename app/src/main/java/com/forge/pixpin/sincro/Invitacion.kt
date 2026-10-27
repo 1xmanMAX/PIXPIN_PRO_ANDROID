@@ -108,13 +108,9 @@ class VueltaConPersona(private val disco: Disco, private val miPuerto: Int = 0, 
             val chats = acceso.chats().filter { soloEstos == null || it in soloEstos }
             val nombres = sesion.catalogo().associate { it.id to it.nombre }
             val hecho = Sesion.Hecho()
-            for (chat in chats) {
-                estado("Juntando «${nombres[chat] ?: chat}» con ${sesion.otro.nombre}…")
-                val prep = sesion.preparar(chat)
-                sesion.aplicar(prep, hecho)
-                sesion.aplicarArchivos(sesion.prepararArchivos(prep), hecho)
-                sesion.cerrar(prep, ahora())
-            }
+            // Por prioridad y sin mirar lo que sigue igual en los dos (27-oct-2026): ver [Sesion.vuelta].
+            sesion.vuelta(chats, hecho, estado = { estado(it) }, contar = soloEstos == null)
+
             val bytes = sesion.enviados + sesion.recibidos
             sesion.adios()
             return Resultado(sesion.otro, sesion.puertoDelOtro, chats, hecho, bytes)

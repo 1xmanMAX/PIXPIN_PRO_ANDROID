@@ -139,7 +139,11 @@ class MensajesStore(private val context: Context) {
             apuntado = apuntado.copy(estadoDelTexto = TEXTO_LETRA)
         }
         val escrito = runCatching {
-            synchronized(CERROJO) { archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n") }
+            synchronized(CERROJO) {
+                archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n")
+                // Al diario de cambios: la sincronización sabrá que solo cambió este chat. Ver [com.forge.pixpin.sincro.Diario].
+                com.forge.pixpin.sincro.Diario.de(context.filesDir).mensaje(apuntado)
+            }
         }.isSuccess
         // Una lista de tareas nueva sale ya a los demás aparatos (tareas al instante).
         if (escrito && alInstante(apuntado)) {
@@ -355,7 +359,10 @@ class MensajesStore(private val context: Context) {
                 temporal.copyTo(archivo, overwrite = true)
                 temporal.delete()
             }
+            // Qué entró, cambió o se fue, al diario de cambios: la sincronización mira solo esos chats.
+            com.forge.pixpin.sincro.Diario.de(context.filesDir).mensajes(viejos, mensajes)
         }.isSuccess
+
         // **Tareas al instante**: lo tachado aquí sale ya a los demás aparatos. Solo desde aquí: la
         // sincronización escribe por `Disco`, así que lo que llega de otro aparato no rebota.
         if (escrito) {

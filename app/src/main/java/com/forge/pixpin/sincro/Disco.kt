@@ -107,6 +107,9 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     private val rutas = Rutas(filesDir)
     private val carpeta get() = File(filesDir, "sincro").apply { mkdirs() }
 
+    /** **El diario de cambios** de esta carpeta: ver [Diario]. Todo lo que se escribe aquí se apunta. */
+    val diario: Diario get() = Diario.de(filesDir)
+
     // ------------------------------------------------------------------ el chat
 
     private val archivoDelChat get() = File(filesDir, "guardados.jsonl")
@@ -119,10 +122,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         }
     }
 
-    private fun escribirMensajes(lista: List<Mensaje>) {
+    /** Reescribe el chat entero y apunta en el [diario] lo que cambió respecto a [antes]. */
+    private fun escribirMensajes(lista: List<Mensaje>, antes: List<Mensaje>) {
         val tmp = File(filesDir, "guardados.jsonl.sincro")
         tmp.writeText(lista.joinToString("") { JSON.encodeToString(Mensaje.serializer(), it) + "\n" })
         if (!tmp.renameTo(archivoDelChat)) { tmp.copyTo(archivoDelChat, overwrite = true); tmp.delete() }
+        diario.mensajes(antes, lista)
     }
 
     /**
@@ -165,7 +170,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             val hay = lista.mapTo(HashSet()) { it.id }
             val nuevos = extra.filter { it.id !in hay }
             if (nuevos.isEmpty()) return 0
-            escribirMensajes((lista + nuevos).sortedBy { it.cuando })
+            escribirMensajes((lista + nuevos).sortedBy { it.cuando }, lista)
             puestos = nuevos.size
         }
         alCambiar(Cambio.MENSAJES)
@@ -219,14 +224,14 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                     if (puesto != m) { nuevos[m.id] = puesto; cambio = true }
                 }
             }
-            if (cambio) escribirMensajes(lista.map { nuevos[it.id] ?: it })
+            if (cambio) escribirMensajes(lista.map { nuevos[it.id] ?: it }, leida)
             chatSellado = selloDe(archivoDelChat)
         }
         var proyectosSellado = ""
         val proyectosSellados = synchronized(PROYECTOS) {
             val lista = leerProyectos()
             val sellados = lista.map { Codigos.sellar(it) }
-            (sellados != lista).also { if (it) escribirProyectos(sellados) }
+            (sellados != lista).also { if (it) escribirProyectos(sellados, lista) }
                 .also { proyectosSellado = selloDe(archivoDeProyectos) }
         }
         selladoCon = "$aparato|$chatSellado|$proyectosSellado"
@@ -256,6 +261,8 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         val actual = identidad.leer()
         identidad.guardar(Identidad(yo = actual.yo.copy(letra = null, desde = 0)))
         File(carpeta, "base").deleteRecursively()
+        // Y hasta dónde quedó igual cada chat con cada uno: sin lo acordado, no vale nada.
+        diario.olvidarCursores()
         alCambiar(Cambio.IDENTIDAD)
     }
 
@@ -346,7 +353,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 }
             }
             for ((clave, m) in porClave) if (clave !in puestos) salida += m.copy(recuerdaEn = null)
-            escribirMensajes(sinRegistrosRepetidos(salida))
+            escribirMensajes(sinRegistrosRepetidos(salida), lista)
             val marcasViejas = marcas()
             val señasPuestas = llegan.mapNotNullTo(HashSet()) { senaDe(it) }
             val nuevas = marcasViejas.filterNot { it.chat == chat && ((it.uid != null && it.uid in porClave) || (it.uid == null && it.sena in señasPuestas)) } +
@@ -355,14 +362,16 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 }
             escribirMarcas(nuevas)
         }
+        val quitados = ArrayList<String>()
         for (ruta in adjuntosFuera) {
             val rel = rutas.relativa(ruta) ?: continue
-            if (rel.startsWith("guardados/") && rel !in noBorrar) File(filesDir, rel).delete()
+            if (rel.startsWith("guardados/") && rel !in noBorrar && File(filesDir, rel).delete()) quitados += rel
         }
         // Y lo anotado sobre ellos, que sin su mensaje ya no viaja ni se abre. Ver [AnotacionesDelAdjunto].
         for (uid in anotadosFuera) AnotacionesDelAdjunto.todoDe(filesDir, uid)
             .filter { f -> noBorrar.isEmpty() || rutas.relativa(f.absolutePath) !in noBorrar }
-            .forEach { it.delete() }
+            .forEach { f -> if (f.delete()) rutas.relativa(f.absolutePath)?.let { quitados += it } }
+        diario.archivos(quitados)
         alCambiar(Cambio.MENSAJES)
     }
 
@@ -390,6 +399,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         synchronized(LAPIDAS) {
             archivoDeLapidas.parentFile?.mkdirs()
             archivoDeLapidas.appendText(JSON.encodeToString(LapidaDeChat.serializer(), LapidaDeChat(chat, cuando, aparato)) + "\n")
+            diario.lapida(chat, Diario.ALTA)
         }
 
     /**
@@ -407,6 +417,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         val tmp = File(carpeta, "chatsborrados.jsonl.tmp")
         tmp.writeText(quedan.joinToString("") { JSON.encodeToString(LapidaDeChat.serializer(), it) + "\n" })
         if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
+        diario.lapida(chat, Diario.BAJA)
     }
 
     /**
@@ -423,7 +434,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         Copias(this).hacer(chat, motivo, cuando)
         val claves = mensajesPorClave(chat).keys.toList()
         if (claves.isNotEmpty()) aplicarMensajes(chat, emptyList(), claves)
-        synchronized(PROYECTOS) { escribirProyectos(leerProyectos().filter { it.id != chat }) }
+        synchronized(PROYECTOS) { val l = leerProyectos(); escribirProyectos(l.filter { it.id != chat }, l) }
         anotarLapida(chat, cuando, aparato)
         alCambiar(Cambio.PROYECTOS)
     }
@@ -438,6 +449,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         if (nuevas.isEmpty()) return
         synchronized(MARCAS) {
             archivoDeMarcas.appendText(nuevas.joinToString("") { JSON.encodeToString(Marca.serializer(), it) + "\n" })
+            diario.marcas(nuevas)
         }
     }
 
@@ -445,6 +457,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         val tmp = File(carpeta, "borrados.jsonl.tmp")
         tmp.writeText(lista.joinToString("") { JSON.encodeToString(Marca.serializer(), it) + "\n" })
         if (!tmp.renameTo(archivoDeMarcas)) { archivoDeMarcas.delete(); tmp.renameTo(archivoDeMarcas) }
+        diario.marcas(emptyList())
     }
 
     // ---------------------------------------------------------------- proyectos
@@ -471,7 +484,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         synchronized(PROYECTOS) {
             antes = leerProyectos()
             despues = Proyectos.actualizada(antes, p)
-            escribirProyectos(despues)
+            escribirProyectos(despues, antes)
         }
         AnotacionesDelAdjunto.borrarLoDeHojasQuitadas(filesDir, antes, despues)
         borrarFotosSobrantes(antes, despues)
@@ -487,15 +500,16 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     fun borrarFotosSobrantes(antes: List<Proyecto>, despues: List<Proyecto>) {
         for (r in com.forge.pixpin.guardados.FotoDelChat.sobrantes(antes, despues)) {
             val rel = rutas.relativa(r) ?: continue
-            if (permitida(rel)) runCatching { File(filesDir, rel).delete() }
+            if (permitida(rel) && runCatching { File(filesDir, rel).delete() }.getOrDefault(false)) diario.archivo(rel)
         }
     }
 
-    private fun escribirProyectos(lista: List<Proyecto>) {
+    private fun escribirProyectos(lista: List<Proyecto>, antes: List<Proyecto>) {
         archivoDeProyectos.parentFile?.mkdirs()
         val tmp = File(archivoDeProyectos.parentFile, "proyectos.json.sincro")
         tmp.writeText(Proyectos.json.encodeToString(lista))
         if (!tmp.renameTo(archivoDeProyectos)) { tmp.copyTo(archivoDeProyectos, overwrite = true); tmp.delete() }
+        diario.proyectos(antes, lista)
     }
 
     /**
@@ -530,14 +544,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 p.copy(pdfLimpio = limpioNuevo, pdfOrigen = adoptar(p.pdfOrigen, "doc", limpioNuevo))
             }
             if (movidos.isEmpty()) return 0
-            archivoDeProyectos.parentFile?.mkdirs()
-            val tmp = File(archivoDeProyectos.parentFile, "proyectos.json.sincro")
-            tmp.writeText(Proyectos.json.encodeToString(nuevos))
-            if (!tmp.renameTo(archivoDeProyectos)) { tmp.copyTo(archivoDeProyectos, overwrite = true); tmp.delete() }
+            escribirProyectos(nuevos, lista)
+            diario.archivos(movidos.values.mapNotNull { rutas.relativa(it) })
         }
         synchronized(Cerrojos.chat) {
             val lista = leerMensajes()
-            if (lista.any { it.ruta in movidos }) escribirMensajes(lista.map { m -> m.ruta?.let { movidos[it] }?.let { m.copy(ruta = it) } ?: m })
+            if (lista.any { it.ruta in movidos }) escribirMensajes(lista.map { m -> m.ruta?.let { movidos[it] }?.let { m.copy(ruta = it) } ?: m }, lista)
         }
         alCambiar(Cambio.PROYECTOS)
         alCambiar(Cambio.MENSAJES)
@@ -553,6 +565,59 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
      */
     fun alcance(chat: String): Map<String, String> =
         alcanceCon(chat, leerMensajes().filter { chatDe(it) == chat }, leerProyectos(), AnotacionesDelAdjunto.porUid(filesDir))
+            // Lo que es de cada chat, para el diario: un archivo cambiado dice así de qué chat es.
+            .also { diario.indexar(chat, it.keys) }
+
+    /**
+     * **De qué chats son estos archivos**, para los que el índice del [diario] no conoce (uno
+     * recién llegado): los chats cuyos mensajes o proyecto los nombran. No mira dentro de los
+     * lienzos —una foto nueva dentro de un lienzo llega con el lienzo, que sí está en el índice—.
+     * Lo que no nombra nadie no es de ningún chat.
+     */
+    fun chatsQueNombran(rels: Set<String>): Map<String, Set<String>> {
+        if (rels.isEmpty()) return emptyMap()
+        val salida = HashMap<String, MutableSet<String>>()
+        val anotado = AnotacionesDelAdjunto.porUid(filesDir)
+        for (m in leerMensajes()) for (r in referencias(m, anotado)) if (r in rels) salida.getOrPut(r) { HashSet() } += chatDe(m)
+        for (p in leerProyectos()) for (r in referencias(p)) if (r in rels) salida.getOrPut(r) { HashSet() } += p.id
+        return salida
+    }
+
+    /**
+     * **Los grupos de archivos de un chat**, para ordenarlos ([Prioridad]): lo de una carpeta del
+     * chat (una clase grabada: su voz, sus capturas y su vídeo) va junto, con la clave de la
+     * carpeta; lo de un mensaje suelto (su adjunto y lo anotado), con la del mensaje. Y si lo nombra
+     * una lista de tareas (o una tabla del chat). Ruta → (grupo, de tareas).
+     */
+    fun gruposDeArchivos(chat: String): Map<String, Pair<String, Boolean>> {
+        val mensajes = leerMensajes().filter { chatDe(it) == chat }
+        val anotado = AnotacionesDelAdjunto.porUid(filesDir)
+        val porId = mensajes.associateBy { it.id }
+        val grupoDe = HashMap<String, String>()
+        for (m in mensajes) {
+            val c = runCatching { com.forge.pixpin.guardados.CarpetaDePaginas.deMensaje(m) }.getOrNull() ?: continue
+            for (p in c.paginas) if (p.id in porId) grupoDe.putIfAbsent(p.id, "carpeta:${m.id}")
+        }
+        val salida = HashMap<String, Pair<String, Boolean>>()
+        for (m in mensajes) {
+            val tareas = runCatching { com.forge.pixpin.mini.TodasLasTareas.esLista(m) || com.forge.pixpin.guardados.TablasDelChat.esTabla(m) }.getOrDefault(false)
+            val grupo = grupoDe[m.id] ?: "mensaje:${m.id}"
+            for (r in runCatching { referencias(m, anotado) }.getOrDefault(emptySet())) {
+                val antes = salida[r]
+                salida[r] = (antes?.first ?: grupo) to (tareas || antes?.second == true)
+            }
+        }
+        return salida
+    }
+
+    /** Los chats que tienen alguna lista de tareas (o tabla del chat): van los primeros. */
+    fun chatsConTareas(): Set<String> = leerMensajes().filter {
+        runCatching { com.forge.pixpin.mini.TodasLasTareas.esLista(it) || com.forge.pixpin.guardados.TablasDelChat.esTabla(it) }.getOrDefault(false)
+    }.mapTo(HashSet()) { chatDe(it) }
+
+    /** La [Diario.Vista] de ahora, resolviendo con [chatsQueNombran]. */
+
+    fun vistaDelDiario(desde: Long = 0): Diario.Vista = diario.vista(desde) { chatsQueNombran(it) }
 
     /**
      * **Lo que no es de [permitidos]**: los archivos de todos los demás chats (la conversación general
@@ -805,31 +870,158 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
      * Escribe un archivo que llega: primero a un temporal, y se cambia al acabar. Si [llenar]
      * devuelve `false` (el otro dice que lo mandado no vale) o falla, el temporal se tira y el
      * archivo de antes se queda como estaba. Devuelve si se escribió.
+     *
+     * **Sin perder lo de antes ni descuadrar la conversación** (27-oct-2026):
+     *
+     * - Se renombra **encima** del de antes, de un paso. Antes se borraba primero y se renombraba
+     *   después: morir entre las dos cosas dejaba el lienzo sin archivo.
+     * - El temporal se baja a disco (`fsync`) antes de renombrar: un apagón no deja un archivo vacío
+     *   con el nombre bueno.
+     * - **Sin sitio** ([bytes] que no caben, o el disco que se llena a medias): lo que viene por el
+     *   cable se lee y se tira ([SalidaQueAguanta]) para que la conversación siga en su sitio, el
+     *   temporal se borra y se devuelve `false` (el que manda lo ve como «saltado»). [faltoEspacio]
+     *   lo dice.
      */
-    fun escribirArchivo(rel: String, llenar: (java.io.OutputStream) -> Boolean): Boolean {
+    fun escribirArchivo(rel: String, bytes: Long = -1, llenar: (java.io.OutputStream) -> Boolean): Boolean {
         require(permitida(rel)) { "Ruta no permitida: $rel" }
         val destino = File(filesDir, rel)
         destino.parentFile?.mkdirs()
         val tmp = File(destino.parentFile, destino.name + ".sincro")
+        if (bytes >= 0 && !cabe(destino.parentFile ?: filesDir, bytes)) {
+            faltoEspacio = true
+            llenar(java.io.OutputStream.nullOutputStream())
+            return false
+        }
         try {
-            val entero = tmp.outputStream().buffered().use(llenar)
+            val fos = java.io.FileOutputStream(tmp)
+            val aguanta = SalidaQueAguanta(java.io.BufferedOutputStream(fos, 1 shl 16))
+            val entero = try {
+                llenar(aguanta).also { aguanta.flush(); if (aguanta.fallo == null) runCatching { fos.fd.sync() } }
+            } finally {
+                aguanta.close()
+            }
+            if (aguanta.fallo != null) { tmp.delete(); faltoEspacio = true; return false }
             if (!entero) { tmp.delete(); return false }
             if (esTexto(rel)) {
                 val local = rutas.aLocal(tmp.readText())
                 if (rel.endsWith(".gz")) GZIPOutputStream(tmp.outputStream()).use { it.write(local.toByteArray()) }
                 else tmp.writeText(local)
             }
-            if (destino.exists()) destino.delete()
-            if (!tmp.renameTo(destino)) { tmp.copyTo(destino, overwrite = true); tmp.delete() }
+            ponerEnSuSitio(tmp, destino)
         } catch (e: Throwable) {
             tmp.delete()
             throw e
         }
+        alCambiado(rel)
+        return true
+    }
+
+    /** Renombra [tmp] encima de [destino], de un paso; si el sistema no deja, como antes. */
+    private fun ponerEnSuSitio(tmp: File, destino: File) {
+        if (tmp.renameTo(destino)) return
+        if (destino.exists()) destino.delete()
+        if (!tmp.renameTo(destino)) { tmp.copyTo(destino, overwrite = true); tmp.delete() }
+    }
+
+    private fun alCambiado(rel: String) {
+        diario.archivo(rel)
         alCambiar(Cambio.ARCHIVOS)
         // **La biblioteca de figuras que llega se vuelve a leer** (25-oct-2026, §8 del manual del PC
         // «sincronizar lo nuevo»): el lienzo abierto enseña al momento la figura guardada en el otro.
         if (esBibliotecaDeFiguras(rel)) com.forge.pixpin.motor.BibliotecaStore.alLlegar()
+    }
+
+    /** Si en la carpeta [dir] caben [bytes] más un margen. Sin saberlo (0), se intenta. */
+    internal fun cabe(dir: File, bytes: Long): Boolean {
+        val libre = espacioLibre?.invoke() ?: runCatching { dir.usableSpace }.getOrDefault(0L)
+        return libre == 0L || libre >= bytes + MARGEN_DE_ESPACIO
+    }
+
+    /** Para las pruebas: cuánto espacio libre fingir. */
+    internal var espacioLibre: (() -> Long)? = null
+
+    /** La última escritura que llegaba no cupo. Lo mira la vuelta para decirlo. */
+    @Volatile var faltoEspacio = false
+
+    // ------------------------------------------------------- lo que llega a medias
+
+    @Serializable
+    private data class Parcial(val resumen: String, val largo: Long, val cuando: Long = 0)
+
+    private fun parcial(rel: String) = File(filesDir, rel + PARCIAL)
+    private fun fichaDeParcial(rel: String) = File(filesDir, rel + PARCIAL + ".json")
+
+    /**
+     * **Cuánto hay ya de [rel] en la versión [resumen]** de [largo] bytes, de una vuelta que se cortó
+     * a medias (27-oct-2026: se cortaba a mitad del vídeo y la vuelta siguiente empezaba de cero).
+     * 0 si no hay nada de esa versión.
+     */
+    fun yaLlegado(rel: String, resumen: String, largo: Long): Long {
+        if (!permitida(rel)) return 0
+        val f = parcial(rel)
+        val ficha = runCatching { JSON.decodeFromString(Parcial.serializer(), fichaDeParcial(rel).readText()) }.getOrNull()
+        if (!f.isFile || ficha == null || ficha.resumen != resumen || ficha.largo != largo || f.length() > largo) return 0
+        return f.length()
+    }
+
+    /**
+     * **Escribe un archivo grande que puede llegar en varias vueltas.** Lo llegado se va guardando
+     * en `<rel>.parcial` (con su ficha: qué versión y cuánto mide); si la conexión se corta se
+     * queda ahí, y la vuelta siguiente pide solo lo que falta ([yaLlegado]). Al completarse se
+     * comprueba el resumen **del archivo entero** contra [resumen] antes de ponerlo en su sitio:
+     * dos trozos de versiones distintas no pasan nunca por bueno. [desde] es lo que ya había.
+     * Devuelve si quedó escrito; lanza si se cortó la conexión (lo llegado se conserva).
+     */
+    fun escribirReanudable(rel: String, resumen: String, largo: Long, desde: Long, llenar: (java.io.OutputStream) -> Boolean): Boolean {
+        require(permitida(rel) && !esTexto(rel)) { "Ruta no permitida: $rel" }
+        val destino = File(filesDir, rel)
+        destino.parentFile?.mkdirs()
+        val f = parcial(rel)
+        val ficha = fichaDeParcial(rel)
+        if (desde == 0L || yaLlegado(rel, resumen, largo) != desde) {
+            f.delete()
+            ficha.writeText(JSON.encodeToString(Parcial.serializer(), Parcial(resumen, largo, System.currentTimeMillis())))
+        }
+        if (!cabe(destino.parentFile ?: filesDir, largo - f.length())) {
+            faltoEspacio = true
+            llenar(java.io.OutputStream.nullOutputStream())
+            return false
+        }
+        val fos = java.io.FileOutputStream(f, true)
+        val aguanta = SalidaQueAguanta(java.io.BufferedOutputStream(fos, 1 shl 16))
+        val entero = try {
+            llenar(aguanta)
+        } finally {
+            // Lo llegado se queda en disco aunque se corte: es lo que la vuelta siguiente no pedirá.
+            aguanta.flush()
+            runCatching { fos.fd.sync() }
+            aguanta.close()
+        }
+        fun tirar(): Boolean { f.delete(); ficha.delete(); return false }
+        if (aguanta.fallo != null) { faltoEspacio = true; return tirar() }
+        if (!entero) return tirar()
+        if (f.length() != largo || f.inputStream().use { sha256De(it) } != resumen) return tirar()
+        ponerEnSuSitio(f, destino)
+        ficha.delete()
+        alCambiado(rel)
         return true
+    }
+
+    /**
+     * **Los restos de una vuelta que no acabó** (la aplicación muerta a mitad): los temporales
+     * `.sincro` se tiran siempre —con [Protocolo.ocupar] puesto no hay otra vuelta escribiéndolos—
+     * y lo llegado a medias ([escribirReanudable]) cuando tiene más de [DIAS_DE_PARCIAL] días.
+     * Devuelve cuántos tiró.
+     */
+    fun limpiarRestos(ahora: Long = System.currentTimeMillis()): Int {
+        var n = 0
+        for (r in CARPETAS.map { File(filesDir, it) }.filter { it.isDirectory }) r.walkTopDown().filter { it.isFile }.forEach { f ->
+            val viejo = ahora - f.lastModified() > DIAS_DE_PARCIAL * 24L * 3600_000
+            val tirar = f.name.endsWith(".sincro") || ((f.name.endsWith(PARCIAL) || f.name.endsWith("$PARCIAL.json")) && viejo)
+            if (tirar && f.delete()) n++
+        }
+        for (nombre in listOf("guardados.jsonl.sincro", "proyectos/proyectos.json.sincro")) if (File(filesDir, nombre).delete()) n++
+        return n
     }
 
     /**
@@ -838,7 +1030,7 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
      */
     fun permitida(rel: String): Boolean {
         if (rel.isBlank() || rel.startsWith("/") || rel.contains("..") || rel.contains('\\')) return false
-        if (rel.endsWith(".tmp") || rel.endsWith(".sincro")) return false
+        if (rel.endsWith(".tmp") || rel.endsWith(".sincro") || rel.endsWith(PARCIAL) || rel.endsWith("$PARCIAL.json")) return false
         if (rel == "proyectos/proyectos.json") return false
         return CARPETAS.any { rel.startsWith(it) }
     }
@@ -1033,7 +1225,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
          * [com.forge.pixpin.planos.LetrasQueViajan].
          */
         const val CARPETA_DE_LETRAS = "guardados/fuentes-shx/"
-        private val CARPETAS = listOf("guardados/", "pins/", "proyectos/", "tablas/", "croquis3d/", "notas/", "voz/")
+        internal val CARPETAS = listOf("guardados/", "pins/", "proyectos/", "tablas/", "croquis3d/", "notas/", "voz/")
+        /** Lo que llega a medias de un archivo grande: ver [escribirReanudable]. */
+        const val PARCIAL = ".parcial"
+        const val DIAS_DE_PARCIAL = 7
+        /** Lo que se deja libre siempre al recibir: un teléfono lleno del todo no arranca bien. */
+        const val MARGEN_DE_ESPACIO = 16L shl 20
 
         /**
          * **La biblioteca de figuras** ([com.forge.pixpin.motor.BibliotecaStore]; en el PC,
@@ -1073,6 +1270,19 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             }
         }
     }
+}
+
+/**
+ * **Una salida que no se cae** (27-oct-2026): escribe en [dentro] hasta el primer fallo (el disco
+ * lleno) y desde entonces tira lo que le llega sin lanzar. Así quien recibe sigue leyendo los
+ * trozos del cable hasta su cola y la conversación no se descuadra; después mira [fallo].
+ */
+internal class SalidaQueAguanta(private val dentro: java.io.OutputStream) : java.io.OutputStream() {
+    var fallo: java.io.IOException? = null; private set
+    override fun write(b: Int) { if (fallo == null) try { dentro.write(b) } catch (e: java.io.IOException) { fallo = e } }
+    override fun write(b: ByteArray, off: Int, len: Int) { if (fallo == null) try { dentro.write(b, off, len) } catch (e: java.io.IOException) { fallo = e } }
+    override fun flush() { if (fallo == null) try { dentro.flush() } catch (e: java.io.IOException) { fallo = e } }
+    override fun close() { try { dentro.close() } catch (e: java.io.IOException) { if (fallo == null) fallo = e } }
 }
 
 /**

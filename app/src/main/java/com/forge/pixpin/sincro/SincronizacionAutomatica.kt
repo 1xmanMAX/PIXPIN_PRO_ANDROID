@@ -43,12 +43,10 @@ class VueltaCallada(private val disco: Disco, private val miPuerto: Int = 0, pri
             // Lo elegido y lo nacido después de elegir (26-oct-2026): ver [Disco.elegidosAhora].
             val elegidos = disco.elegidosAhora(otro.id, candidatos) ?: candidatos.toSet()
             val hecho = Sesion.Hecho()
-            for (chat in candidatos.filter { it in elegidos && (soloEstos == null || it in soloEstos) }) {
-                val prep = sesion.preparar(chat)
-                sesion.aplicar(prep, hecho)
-                sesion.aplicarArchivos(sesion.prepararArchivos(prep), hecho)
-                sesion.cerrar(prep)
-            }
+            // Por prioridad: tareas, compartidos, lo ligero; los archivos de todos juntos y lo
+            // pesado al final. Lo quieto en los dos lados ni se mira ([Diario]).
+            sesion.vuelta(candidatos.filter { it in elegidos && (soloEstos == null || it in soloEstos) }, hecho, contar = soloEstos == null)
+
             if (soloEstos == null) {
                 sesion.galeria(hecho, ahora())
                 // Las listas de los chats compartidos, con mi otro aparato. Ver [Compartidos].
@@ -117,6 +115,50 @@ class RelojDeSincro {
         const val QUIETO = 30_000L
         const val PERIODO = 10 * 60_000L
         const val FALLOS_PARA_AVISAR = 3
+    }
+}
+
+/**
+ * **Cuándo volver a intentarlo con un aparato que falló** (27-oct-2026), pura para probarla sin red.
+ *
+ * Antes, una vuelta automática que fallaba —o que encontraba al otro ocupado— no se repetía hasta
+ * el siguiente [RelojDeSincro.PERIODO]: diez minutos. Y si los dos aparatos se llamaban a la vez,
+ * cada uno encontraba al otro ocupado ([Protocolo.OCUPADO]) y los dos esperaban esos diez minutos.
+ *
+ * Ahora: **ocupado** se reintenta enseguida, entre [OCUPADO_MIN] y [OCUPADO_MIN] + [OCUPADO_AZAR]
+ * (con azar, para que dos que chocaron no vuelvan a chocar al mismo compás); **un fallo** de
+ * verdad, con espera que se dobla —[BASE], el doble, el doble…— hasta [TOPE], con ±25 % de azar.
+ * Salir bien lo borra todo.
+ */
+class Reintentos(private val azar: () -> Double = { kotlin.random.Random.nextDouble() }) {
+    private val fallos = HashMap<String, Int>()
+    private val cuando = HashMap<String, Long>()
+
+    @Synchronized fun fallo(otro: String, ahora: Long, ocupado: Boolean): Long {
+        val espera = if (ocupado) OCUPADO_MIN + (azar() * OCUPADO_AZAR).toLong() else {
+            val n = (fallos[otro] ?: 0) + 1
+            fallos[otro] = n
+            val sinAzar = (BASE shl (n - 1).coerceAtMost(16)).coerceAtMost(TOPE)
+            (sinAzar * (0.75 + azar() * 0.5)).toLong()
+        }
+        cuando[otro] = ahora + espera
+        return espera
+    }
+
+    @Synchronized fun bien(otro: String) { fallos.remove(otro); cuando.remove(otro) }
+
+    /** Los de [presentes] a los que ya toca volver a llamar. */
+    @Synchronized fun tocan(ahora: Long, presentes: Collection<String>): Set<String> =
+        presentes.filterTo(LinkedHashSet()) { cuando[it]?.let { t -> ahora >= t } == true }
+
+    /** Fallos seguidos con [otro] (no cuenta «ocupado»). */
+    @Synchronized fun seguidos(otro: String): Int = fallos[otro] ?: 0
+
+    companion object {
+        const val BASE = 5_000L
+        const val TOPE = 5 * 60_000L
+        const val OCUPADO_MIN = 1_000L
+        const val OCUPADO_AZAR = 3_000L
     }
 }
 
@@ -195,14 +237,40 @@ object SincronizacionAutomatica {
     @Volatile private var hilo: Thread? = null
     @Volatile private var aLaVista = false
     private val fallos = HashMap<String, Int>()
+    private val reintentos = Reintentos()
+    /** Volvió la red: que se sondee ya, sin esperar al latido. */
+    @Volatile private var sondearYa = false
 
-    fun encendida(c: Context): Boolean = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("encendida", true)
+    /**
+     * **Encendida salvo que el usuario la apagara** (27-oct-2026: «que la sincronización sea
+     * automática por defecto para los dispositivos y para los chats compartidos»). Sin nada
+     * guardado —instalación nueva, aparato nuevo— está encendida, para los aparatos propios y para
+     * las personas de los chats compartidos ([conPersonas]); lo que el usuario apagó a mano en
+     * Sincronizar («Sincronizar sola») se respeta. Ver [encendidaSegun].
+     */
+    fun encendida(c: Context): Boolean {
+        val p = c.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        return encendidaSegun(if (p.contains("encendida")) p.getBoolean("encendida", true) else null)
+    }
+
+    /** Lo guardado por el usuario, o null si nunca tocó el interruptor: entonces, encendida. */
+    fun encendidaSegun(guardado: Boolean?): Boolean = guardado ?: true
 
     fun poner(c: Context, si: Boolean) {
         c.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean("encendida", si).apply()
     }
 
-    fun instalar(aplicacion: Application) { app = aplicacion }
+    fun instalar(aplicacion: Application) {
+        app = aplicacion
+        // **Al volver la red** (27-oct-2026): la Wi-Fi que se reconecta es justo cuando hay cosas
+        // pendientes con el otro; se sondea ya en vez de esperar al latido.
+        runCatching {
+            val cm = aplicacion.getSystemService(android.net.ConnectivityManager::class.java)
+            cm?.registerDefaultNetworkCallback(object : android.net.ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: android.net.Network) { sondearYa = true; despertar.release() }
+            })
+        }
+    }
 
     /** PixPin a la vista (lo dice [Presencia]). */
     fun alaVista(si: Boolean) {
@@ -246,9 +314,15 @@ object SincronizacionAutomatica {
                 val disco = Red.disco(app)
                 val id = disco.identidad.leer()
                 val ahora = System.currentTimeMillis()
+                if (sondearYa) { sondearYa = false; sondeado = 0L; sondeadas = 0L }
                 if (!id.enGrupo || !encendida(app)) {
                     cola.tomar()
                 } else {
+                    // **Los que fallaron y ya toca reintentar** ([Reintentos]), sin esperar al periodo.
+                    for (otroId in reintentos.tocan(ahora, presentes.keys)) {
+                        val (host, puerto) = dirs[otroId] ?: continue
+                        vuelta(disco, otroId, presentes[otroId]?.nombre ?: otroId, host, puerto)
+                    }
                     if (ahora - sondeado >= LATIDO * LATIDOS_POR_SONDEO) {
                         sondeado = ahora
                         dirs = disco.direcciones()
@@ -359,11 +433,14 @@ object SincronizacionAutomatica {
                 VueltaCallada(disco, Presencia.red.puerto).con(s.getInputStream(), s.getOutputStream())
             }
             fallos.remove(otroId)
+            reintentos.bien(otroId)
             VueltasEnMarcha.apuntar(true)
             if (r.trajoAlgo) decir("Sincronizado con ${r.nombre}: " + resumen(r.hecho))
+            if (r.hecho.sinEspacio) decir("No queda espacio en este aparato: algo de ${r.nombre} no se pudo recibir")
         } catch (e: Throwable) {
-            // Ocupado (otra vuelta en marcha) no es un fallo: se intenta en la próxima.
-            if (e.message == Protocolo.OCUPADO) return
+            // Ocupado (otra vuelta en marcha) no es un fallo: se reintenta enseguida, con azar.
+            if (e.message == Protocolo.OCUPADO) { reintentos.fallo(otroId, System.currentTimeMillis(), ocupado = true); return }
+            reintentos.fallo(otroId, System.currentTimeMillis(), ocupado = false)
             VueltasEnMarcha.apuntarSiFallo(e)
             val n = (fallos[otroId] ?: 0) + 1
             fallos[otroId] = n
@@ -385,8 +462,11 @@ object SincronizacionAutomatica {
         if (personas.isEmpty()) return
         val dirs = disco.direcciones()
         val presentes = personas.keys.filterTo(HashSet()) { p -> dirs[p]?.let { (h, puerto) -> Red.sondear(h, puerto) } == true }
-        val decision = reloj.toca(System.currentTimeMillis(), presentes, firma(disco.filesDir)) ?: return
-        for (otroId in decision.second) {
+        val decision = reloj.toca(System.currentTimeMillis(), presentes, firma(disco.filesDir))
+        // Con quien falló y ya toca reintentar, aunque el reloj no diga nada ([Reintentos]).
+        val otraVez = reintentos.tocan(System.currentTimeMillis(), presentes)
+        if (decision == null && otraVez.isEmpty()) return
+        for (otroId in (decision?.second.orEmpty() + otraVez)) {
             val (host, puerto) = dirs[otroId] ?: continue
             val nombre = personas[otroId]?.nombre ?: otroId
             try {
@@ -395,11 +475,14 @@ object SincronizacionAutomatica {
                 }
                 if (r.puerto > 0) disco.apuntarDireccion(otroId, host, r.puerto)
                 fallos.remove(otroId)
+                reintentos.bien(otroId)
                 VueltasEnMarcha.apuntar(true)
                 if (r.trajoAlgo) decir("Chat compartido con ${r.quien.nombre}: " + resumen(r.hecho))
             } catch (e: Throwable) {
-                if (e.message == Protocolo.OCUPADO) continue
+                if (e.message == Protocolo.OCUPADO) { reintentos.fallo(otroId, System.currentTimeMillis(), ocupado = true); continue }
+                reintentos.fallo(otroId, System.currentTimeMillis(), ocupado = false)
                 VueltasEnMarcha.apuntarSiFallo(e)
+
                 val n = (fallos[otroId] ?: 0) + 1
                 fallos[otroId] = n
                 if (n == RelojDeSincro.FALLOS_PARA_AVISAR) decir("No se pudo sincronizar solo con $nombre (${e.message ?: e.javaClass.simpleName})")
