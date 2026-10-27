@@ -893,7 +893,7 @@
     <string name="grafica_escala">Píxeles por unidad</string>
     <string name="grafica_insertar">Insertar</string>
     <string name="grafica_cancelar">Cancelar</string>
-    <string name="figuras_ayuda">Toca una y aparece en el centro de la vista.</string>
+    <string name="figuras_ayuda">Toca una para verla en grande; mantenla pulsada para ponerla ya en el centro de la vista.</string>
     <string name="figuras_de_fabrica">De fábrica</string>
     <string name="figuras_mias">Mías</string>
     <string name="figuras_guardar">Guardar la selección</string>

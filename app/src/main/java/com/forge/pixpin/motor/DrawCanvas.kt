@@ -1547,6 +1547,11 @@ fun DrawPreview(
     // pinta la propia escena —su papel— y por eso la tinta tiene que ir a juego; aquí no se
     // pinta papel ninguno: los dos sitios que enseñan esto, el pin y la galería de figuras,
     // ponen detrás un blanco fijo. Filtrando la tinta saldría blanco sobre blanco.
+    // **Siempre de día, sea cual sea el tema** (27-oct-2026): la escena va con su papel blanco de
+    // fábrica, y una plantilla de noche se ve con su paleta y no invertida, porque sus piezas se
+    // pintan como se diseñaron ([PapelDeLaHoja]). Las miniaturas oscuras que se veían en el panel
+    // eran las gemelas «(noche)» del catálogo, mezcladas con las de día: ver
+    // [FigurasDeSerie.segunElModo].
     val renderer = remember(imageProvider) { Renderer(imageProvider, DrawFonts.provider(context)) }
     Canvas(modifier) {
         val w = size.width.toDouble()

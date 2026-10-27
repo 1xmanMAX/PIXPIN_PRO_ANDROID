@@ -225,8 +225,29 @@ class Renderer(
         return Bounds(-vp.scrollX, -vp.scrollY, -vp.scrollX + ancho / zoom, -vp.scrollY + alto / zoom)
     }
 
-    /** Pasa un color por el filtro del modo noche. En modo día no toca nada. */
-    private fun tema(argb: Int): Int = DrawTheme.adaptar(argb, papelActual)
+    /**
+     * Pasa un color por el filtro del modo noche. En modo día no toca nada.
+     *
+     * **Contra el papel de la hoja, si la pieza es de una o va encima** (27-oct-2026): las piezas de
+     * una plantilla se pintan como se diseñaron y lo escrito encima se adapta a su página, no al
+     * lienzo. Antes, en el lienzo de noche, una hoja de día salía en negativo y una de noche del PC
+     * con el papel aclarado. Ver [PapelDeLaHoja].
+     */
+    private fun tema(argb: Int): Int = PapelDeLaHoja.tinta(hojas, piezaActual, argb, papelActual)
+
+    /** Las hojas de la escena que se está pintando, hechas una vez por cambio. Ver [PapelDeLaHoja]. */
+    private var hojas: PapelDeLaHoja.Mapa = PapelDeLaHoja.Mapa.VACIO
+    private var hojasDe: List<Element>? = null
+
+    /** La pieza que se está pintando ahora, para [tema]; null fuera de las piezas (la rejilla, los ejes). */
+    private var piezaActual: String? = null
+
+    /** De qué depende la tinta de [piezaActual] además de su color: para tirar [tonos] cuando cambia. */
+    private fun contextoDeTinta(): Long {
+        val id = piezaActual ?: return papelActual.toLong()
+        if (id in hojas.comoSeDiseno) return 1L shl 40
+        return (hojas.papelDe[id] ?: papelActual).toLong()
+    }
 
     /** La nube, los sectores, las marcas de ángulo y el degradado del PC. Ver [PintorDeLaminas]. */
     private val laminas = PintorDeLaminas({ tema(it) }, { e, a -> strokePaint(e, a) })
@@ -545,6 +566,10 @@ class Renderer(
     ) {
         escalaActual = scene.escala
         papelActual = DrawTheme.colorDe(scene.backgroundColor)
+        if (scene.elements !== hojasDe) {
+            hojas = PapelDeLaHoja.de(scene.elements)
+            hojasDe = scene.elements
+        }
         // La llave de paso de las luces, para todo este pintado. Ver [LucesDelDibujo].
         lasLuces = scene.luces.cuanto
         zoomActual = scene.viewport.zoom.coerceAtLeast(0.0001)
@@ -1043,6 +1068,18 @@ class Renderer(
 
     /** Pinta un elemento suelto, en coordenadas de escena. */
     fun renderElement(canvas: Canvas, element: Element) {
+        // Su tinta, según sea de una hoja o vaya encima (ver [tema]). Se anida: el mosaico pinta
+        // lo de debajo desde dentro de su propio pintado.
+        val antes = piezaActual
+        piezaActual = element.id
+        try {
+            renderElementConSuTinta(canvas, element)
+        } finally {
+            piezaActual = antes
+        }
+    }
+
+    private fun renderElementConSuTinta(canvas: Canvas, element: Element) {
         if (element.isDeleted) return
 
         val c = getElementAbsoluteCoords(element)
@@ -1768,12 +1805,17 @@ class Renderer(
      */
     private var tonoBase: String? = null
     private var tonoAlfa: Int = -1
+    private var tonoContexto: Long = -1L
     private val tonos = HashMap<Long, Int>()
 
     private fun tonoDeCara(base: String, claridad: Double, alpha: Int): Int {
-        if (base != tonoBase || alpha != tonoAlfa) {
+        // El papel contra el que se adapta también cuenta: dos cajas del mismo color, una
+        // dentro de una hoja y otra suelta, no se pintan igual. Ver [PapelDeLaHoja].
+        val contexto = contextoDeTinta()
+        if (base != tonoBase || alpha != tonoAlfa || contexto != tonoContexto) {
             tonoBase = base
             tonoAlfa = alpha
+            tonoContexto = contexto
             tonos.clear()
         }
         val clave = Math.round(claridad * 10000)

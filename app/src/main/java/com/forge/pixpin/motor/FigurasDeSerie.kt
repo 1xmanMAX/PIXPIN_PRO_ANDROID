@@ -166,4 +166,72 @@ object FigurasDeSerie {
         val orden = CATEGORIAS + grupos.keys.filter { it !in CATEGORIAS }
         return orden.mapNotNull { c -> grupos[c]?.let { c to it } }
     }
+
+    // ------------------------------------------------------------ el día y la noche
+
+    /** El final del id de la gemela de noche, como `noche::SUFIJO_NOCHE` del PC (`serie-cronograma-noche`). */
+    const val SUFIJO_NOCHE = "-noche"
+
+    /** El final del nombre de la gemela de noche («Planificación · Cronograma (noche)»). */
+    const val MARCA_NOCHE = " (noche)"
+
+    /**
+     * **Si es la gemela de noche de otra.** Por el id en las de serie —«Mesita de noche redonda» es
+     * un mueble, no una plantilla de noche— y por el final del nombre en las demás (una propia que
+     * alguien guardó así).
+     */
+    fun esDeNoche(f: FiguraGuardada): Boolean =
+        if (esDeSerie(f)) f.id.endsWith(SUFIJO_NOCHE) else f.nombre.endsWith(MARCA_NOCHE)
+
+    /**
+     * **Lo que enseña el panel en cada modo** (27-oct-2026, el usuario: «en la zona de figuras las
+     * figuras se ven en modo noche por defecto; no debe ser así», y pidió un interruptor de día y
+     * noche).
+     *
+     * El catálogo del PC trae cada plantilla de página dos veces —la de día y su gemela «(noche)»,
+     * `figuras_de_serie/noche.rs`— y el panel las enseñaba todas: en Planificación, Académico,
+     * Creativo y Diario la mitad de las miniaturas eran hojas azul noche, y buscando «diario» salían
+     * las dos. Ahora:
+     *
+     * - **De día** ([noche] false), sin ninguna gemela de noche: lo de siempre.
+     * - **De noche**, cada una que tiene gemela se cambia **en su sitio** por la gemela; las que no
+     *   la tienen (los símbolos, los muebles, las básicas) siguen como son, que no tienen versión
+     *   oscura y hacen falta igual.
+     *
+     * Una gemela de noche sin su de día (no pasa en el catálogo) sale solo de noche.
+     */
+    fun segunElModo(lista: List<FiguraGuardada>, noche: Boolean): List<FiguraGuardada> {
+        val (deNoche, deDia) = lista.partition(::esDeNoche)
+        if (!noche) return deDia
+        val porId = deNoche.associateBy { it.id }
+        val porNombre = deNoche.associateBy { it.nombre }
+        val usadas = HashSet<String>()
+        val cambiadas = deDia.map { f ->
+            val g = porId[f.id + SUFIJO_NOCHE] ?: porNombre[f.nombre + MARCA_NOCHE]
+            if (g != null) { usadas += g.id; g } else f
+        }
+        return cambiadas + deNoche.filter { it.id !in usadas }
+    }
+
+    /** La gemela de noche de [f] en [lista], o null si no tiene (o si [f] ya es de noche). */
+    fun gemelaDeNoche(f: FiguraGuardada, lista: List<FiguraGuardada>): FiguraGuardada? {
+        if (esDeNoche(f)) return null
+        return lista.firstOrNull { it.id == f.id + SUFIJO_NOCHE }
+            ?: lista.firstOrNull { it.nombre == f.nombre + MARCA_NOCHE && esDeNoche(it) }
+    }
+
+    /**
+     * **Buscar en el panel**: entre las del modo puesto ([segunElModo]), todas las palabras en el
+     * nombre o la categoría, sin tildes ni mayúsculas (`visibles` de la ventana de figuras del PC).
+     */
+    fun buscar(lista: List<FiguraGuardada>, consulta: String): List<FiguraGuardada> {
+        val palabras = plegar(consulta).split(' ').filter { it.isNotBlank() }
+        if (palabras.isEmpty()) return lista
+        return lista.filter { f -> plegar(f.nombre).let { n -> palabras.all { n.contains(it) } } }
+    }
+
+    /** Sin tildes ni mayúsculas. */
+    private fun plegar(s: String): String =
+        java.text.Normalizer.normalize(s.lowercase(), java.text.Normalizer.Form.NFD)
+            .replace(Regex("\\p{Mn}+"), "")
 }

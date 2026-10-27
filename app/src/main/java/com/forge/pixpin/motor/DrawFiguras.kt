@@ -3,6 +3,7 @@ package com.forge.pixpin.motor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -36,6 +37,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign as ComposeTextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -74,13 +78,33 @@ fun PanelDeFiguras(
     deSerie: List<FiguraGuardada> = emptyList(),
     /**
      * **Para adjuntar al chat** (25-oct-2026, como el PC: «adjuntar figura abre la ventana de
-     * figuras, selecciono, aparece el botón de adjuntar»). Con él, tocar una casilla la marca y
-     * abajo sale «Adjuntar»; guardar, pegar y la gráfica, que son del lienzo, no salen.
+     * figuras, selecciono, aparece el botón de adjuntar»). Con él, lo que hace «Usar» es adjuntar;
+     * guardar, pegar y la gráfica, que son del lienzo, no salen.
      */
     onAdjuntar: ((FiguraGuardada) -> Unit)? = null
 ) {
-    var marcada by remember { mutableStateOf<FiguraGuardada?>(null) }
-    val alTocar: (FiguraGuardada) -> Unit = if (onAdjuntar != null) { f -> marcada = f } else onInsertar
+    val context = androidx.compose.ui.platform.LocalContext.current
+    /**
+     * **Usarla**: lo que el panel se abrió para hacer.
+     *
+     * **Tocar abre la vista rápida y mantener pulsada la usa ya** (27-oct-2026, el usuario: «al
+     * tocar una figura, verla en grande antes de ponerla»). La miniatura de una hoja no deja ver
+     * sus casillas; la vista sí ([VistaPreviaDeFiguraUi]). Y quien ya sabe cuál quiere no paga
+     * el paso de más: la pulsación larga es el camino corto de antes.
+     */
+    val usar: (FiguraGuardada) -> Unit = onAdjuntar ?: onInsertar
+    var viendo by remember { mutableStateOf<FiguraGuardada?>(null) }
+    /**
+     * **Día o noche, recordado** (27-oct-2026). De día no sale ninguna gemela «(noche)»; de noche
+     * cada plantilla que la tiene sale con ella, en su sitio. Ver [FigurasDeSerie.segunElModo]. Se
+     * guarda en una preferencia de este aparato, que no viaja: es cómo se mira, no qué hay.
+     */
+    val prefs = remember { context.getSharedPreferences(PREFS_DEL_PANEL, android.content.Context.MODE_PRIVATE) }
+    var noche by remember { mutableStateOf(prefs.getBoolean(CLAVE_NOCHE, false)) }
+    val ponerNoche: (Boolean) -> Unit = { n ->
+        noche = n
+        prefs.edit().putBoolean(CLAVE_NOCHE, n).apply()
+    }
     /**
      * El nombre a medio escribir, o null si no se está guardando nada.
      *
@@ -89,19 +113,20 @@ fun PanelDeFiguras(
      */
     var nombre: String? by remember { mutableStateOf(null) }
 
-    val propias = figuras.filter { it.propia }
-    val fabrica = figuras.filter { !it.propia }
+    val propias = remember(figuras, noche) { FigurasDeSerie.segunElModo(figuras.filter { it.propia }, noche) }
+    val fabrica = remember(figuras, noche) { FigurasDeSerie.segunElModo(figuras.filter { !it.propia }, noche) }
+    val deSerieDelModo = remember(deSerie, noche) { FigurasDeSerie.segunElModo(deSerie, noche) }
     // **Por categorías, como el menú de figuras del PC** (25-oct-2026): «Mías» y «Básicas» primero,
     // luego las 35 de serie. Con 627 figuras la lista de antes, todo seguido, no servía.
-    val grupos = remember(deSerie) { FigurasDeSerie.porCategoria(deSerie) }
+    val grupos = remember(deSerieDelModo) { FigurasDeSerie.porCategoria(deSerieDelModo) }
     val pestanas = remember(grupos, propias.isEmpty()) {
         listOfNotNull("Mías".takeIf { propias.isNotEmpty() }, "Básicas") + grupos.map { it.first }
     }
     var pestana by remember { mutableStateOf(if (propias.isNotEmpty()) "Mías" else "Básicas") }
     var buscando by remember { mutableStateOf("") }
-    val visibles: List<FiguraGuardada> = remember(pestana, buscando, figuras, grupos) {
-        val q = buscando.trim().lowercase()
-        if (q.isNotEmpty()) (propias + fabrica + deSerie).filter { it.nombre.lowercase().contains(q) }
+    val visibles: List<FiguraGuardada> = remember(pestana, buscando, propias, fabrica, grupos) {
+        // Buscando, entre las del modo puesto: de noche, «diario» da la de noche y no las dos.
+        if (buscando.isNotBlank()) FigurasDeSerie.buscar(propias + fabrica + deSerieDelModo, buscando)
         else when (pestana) {
             "Mías" -> propias
             "Básicas" -> fabrica
@@ -117,12 +142,14 @@ fun PanelDeFiguras(
                     style = MaterialTheme.typography.titleSmall,
                     modifier = Modifier.weight(1f)
                 )
+                InterruptorDiaNoche(noche, ponerNoche)
                 IconButton(onClick = onCerrar) {
                     Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_close))
                 }
             }
             Text(
-                stringResource(R.string.figuras_ayuda),
+                if (onAdjuntar != null) "Toca una para verla en grande; mantenla pulsada para adjuntarla ya."
+                else stringResource(R.string.figuras_ayuda),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -161,86 +188,93 @@ fun PanelDeFiguras(
                 }
                 items(visibles.size, key = { visibles[it].id }) { i ->
                     val f = visibles[i]
-                    Casilla(f, alTocar, if (f.propia) onQuitar else null, marcada = marcada?.id == f.id)
-                }
-            }
-            if (onAdjuntar != null) {
-                val m = marcada
-                androidx.compose.material3.Button(
-                    onClick = { m?.let(onAdjuntar) }, enabled = m != null,
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-                ) {
-                    Text(if (m == null) "Elige una figura" else "Adjuntar «${FigurasDeSerie.nombreCorto(m.nombre)}»", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                return@Column
-            }
-
-            if (nombre != null) {
-                // Al aceptar se cierra el campo: guardar dos veces seguidas la
-                // misma selección deja dos figuras iguales y nadie lo quiere.
-                Row(
-                    Modifier.fillMaxWidth().padding(top = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    OutlinedTextField(
-                        value = nombre.orEmpty(),
-                        onValueChange = { nombre = it },
-                        singleLine = true,
-                        label = { Text(stringResource(R.string.figuras_nombre)) },
-                        modifier = Modifier.weight(1f)
+                    Casilla(
+                        f, onInsertar = { viendo = it }, onQuitar = if (f.propia) onQuitar else null,
+                        onLargo = usar
                     )
-                    TextButton(onClick = {
-                        onGuardarSeleccion(nombre.orEmpty())
-                        nombre = null
-                    }) {
-                        Text(stringResource(R.string.action_done))
+                }
+            }
+            viendo?.let { f ->
+                VistaPreviaDeFiguraUi(
+                    figura = f,
+                    rotuloDeUsar = if (onAdjuntar != null) "Adjuntar" else "Usar",
+                    onUsar = {
+                        viendo = null
+                        usar(f)
+                    },
+                    onCerrar = { viendo = null }
+                )
+            }
+            // Guardar, pegar y la gráfica son del lienzo: adjuntando no salen. Con un `if` y no
+            // con un `return@Column`, que sale de una función en línea y a R8 no le gusta.
+            if (onAdjuntar == null) {
+                if (nombre != null) {
+                    // Al aceptar se cierra el campo: guardar dos veces seguidas la
+                    // misma selección deja dos figuras iguales y nadie lo quiere.
+                    Row(
+                        Modifier.fillMaxWidth().padding(top = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = nombre.orEmpty(),
+                            onValueChange = { nombre = it },
+                            singleLine = true,
+                            label = { Text(stringResource(R.string.figuras_nombre)) },
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = {
+                            onGuardarSeleccion(nombre.orEmpty())
+                            nombre = null
+                        }) {
+                            Text(stringResource(R.string.action_done))
+                        }
                     }
                 }
-            }
 
-            Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
-                TextButton(
-                    onClick = { nombre = "" },
-                    enabled = puedeGuardar && nombre == null
-                ) {
-                    Icon(Icons.Filled.Save, contentDescription = null, Modifier.size(16.dp))
+                Row(Modifier.fillMaxWidth().padding(top = 4.dp)) {
+                    TextButton(
+                        onClick = { nombre = "" },
+                        enabled = puedeGuardar && nombre == null
+                    ) {
+                        Icon(Icons.Filled.Save, contentDescription = null, Modifier.size(16.dp))
+                        Text(
+                            stringResource(R.string.figuras_guardar),
+                            modifier = Modifier.padding(start = 4.dp)
+                        )
+                    }
+                }
+                if (!puedeGuardar) {
                     Text(
-                        stringResource(R.string.figuras_guardar),
+                        stringResource(R.string.figuras_guardar_ayuda),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+
+                TextButton(onClick = onPegarTabla) {
+                    Icon(Icons.Filled.ContentPaste, contentDescription = null, Modifier.size(16.dp))
+                    Text(
+                        stringResource(R.string.tabla_pegada_abrir),
                         modifier = Modifier.padding(start = 4.dp)
                     )
                 }
-            }
-            if (!puedeGuardar) {
-                Text(
-                    stringResource(R.string.figuras_guardar_ayuda),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-
-            TextButton(onClick = onPegarTabla) {
-                Icon(Icons.Filled.ContentPaste, contentDescription = null, Modifier.size(16.dp))
-                Text(
-                    stringResource(R.string.tabla_pegada_abrir),
-                    modifier = Modifier.padding(start = 4.dp)
-                )
-            }
-            // **El texto copiado en cualquier sitio**, como un texto del dibujo con la letra del
-            // panel: el «Pegar» del menú del lienzo del PC.
-            TextButton(onClick = onPegarTexto) {
-                Icon(Icons.Filled.ContentPaste, contentDescription = null, Modifier.size(16.dp))
-                Text(
-                    stringResource(R.string.texto_pegado_abrir),
-                    modifier = Modifier.padding(start = 4.dp)
-                )
-            }
-            // **La gráfica de una función**, escrita con su fórmula y sus límites.
-            TextButton(onClick = onGrafica) {
-                Text("ƒ(x)", style = MaterialTheme.typography.labelLarge)
-                Text(
-                    stringResource(R.string.grafica_abrir),
-                    modifier = Modifier.padding(start = 6.dp)
-                )
+                // **El texto copiado en cualquier sitio**, como un texto del dibujo con la letra del
+                // panel: el «Pegar» del menú del lienzo del PC.
+                TextButton(onClick = onPegarTexto) {
+                    Icon(Icons.Filled.ContentPaste, contentDescription = null, Modifier.size(16.dp))
+                    Text(
+                        stringResource(R.string.texto_pegado_abrir),
+                        modifier = Modifier.padding(start = 4.dp)
+                    )
+                }
+                // **La gráfica de una función**, escrita con su fórmula y sus límites.
+                TextButton(onClick = onGrafica) {
+                    Text("ƒ(x)", style = MaterialTheme.typography.labelLarge)
+                    Text(
+                        stringResource(R.string.grafica_abrir),
+                        modifier = Modifier.padding(start = 6.dp)
+                    )
+                }
             }
         }
     }
@@ -534,7 +568,9 @@ private fun Casilla(
     onInsertar: (FiguraGuardada) -> Unit,
     onQuitar: ((FiguraGuardada) -> Unit)?,
     modifier: Modifier = Modifier,
-    marcada: Boolean = false
+    marcada: Boolean = false,
+    /** Mantener pulsada: el camino corto, usarla sin verla. */
+    onLargo: ((FiguraGuardada) -> Unit)? = null
 ) {
     Column(
         modifier.padding(vertical = 4.dp),
@@ -544,13 +580,19 @@ private fun Casilla(
             Box(
                 Modifier
                     .size(LADO_DE_LA_CASILLA)
-                    .background(Color.White, RoundedCornerShape(10.dp))
+                    // **Blanco fijo, y la de noche sobre su gris** (27-oct-2026): la miniatura no
+                    // sigue el tema de la aplicación ni el papel del lienzo. La hoja de noche trae
+                    // su propio papel; el gris de detrás es para que no quede un marco blanco.
+                    .background(if (FigurasDeSerie.esDeNoche(figura)) FONDO_DE_LA_DE_NOCHE else Color.White, RoundedCornerShape(10.dp))
                     .border(
                         if (marcada) 3.dp else 1.dp,
                         if (marcada) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
                         RoundedCornerShape(10.dp)
                     )
-                    .clickable { onInsertar(figura) }
+                    .combinedClickable(
+                        onClick = { onInsertar(figura) },
+                        onLongClick = onLargo?.let { l -> { l(figura) } }
+                    )
                     .padding(6.dp)
             ) {
                 // La figura de verdad, encuadrada por el propio renderizador.
@@ -588,3 +630,46 @@ private fun Casilla(
  * desplazar más, que es barato — la lista es perezosa.
  */
 private val LADO_DE_LA_CASILLA = 120.dp
+
+/** Detrás de la miniatura de una de noche: el gris neutro de su zona de notas (`noche.rs` del PC). */
+private val FONDO_DE_LA_DE_NOCHE = Color(0xFF2A2D35)
+
+private const val PREFS_DEL_PANEL = "panel_de_figuras"
+private const val CLAVE_NOCHE = "noche"
+
+/**
+ * **El interruptor de día y noche** del panel: un sol y una luna, el puesto marcado. Dos botones y
+ * no un `Switch` porque se lee de un vistazo cuál de los dos está, sin saber hacia qué lado es
+ * «encendido».
+ */
+@Composable
+private fun InterruptorDiaNoche(noche: Boolean, onCambio: (Boolean) -> Unit) {
+    Row(
+        Modifier
+            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
+            .padding(2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        for ((esNoche, icono, dice) in listOf(Triple(false, "☀", "Figuras de día"), Triple(true, "☾", "Figuras de noche"))) {
+            val puesto = esNoche == noche
+            Box(
+                Modifier
+                    .size(32.dp)
+                    .background(
+                        if (puesto) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
+                        RoundedCornerShape(50)
+                    )
+                    .clickable(onClickLabel = dice) { onCambio(esNoche) }
+                    .semantics { contentDescription = dice; selected = puesto },
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    icono,
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (puesto) MaterialTheme.colorScheme.onSecondaryContainer
+                    else MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
