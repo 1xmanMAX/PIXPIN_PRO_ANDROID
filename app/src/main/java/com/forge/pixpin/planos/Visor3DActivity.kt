@@ -615,6 +615,9 @@ class Visor3DActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize(),
                         imageProvider = { f -> c.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
                         dark = !claro,
+                        // Lo anotado sobre un marcador va con el motor del plano en el PC
+                        // (`motor_de_marcador`): su papel y su regla. Ver [TintaDelPlano].
+                        papelDelAnfitrion = TintaDelPlano.papel(claro),
                         vistaFija = true,
                         cambios = tickDeTinta,
                         onChange = { trazando -> if (!trazando) tickDeTinta++ }
@@ -643,7 +646,8 @@ class Visor3DActivity : ComponentActivity() {
                     val pintorDeTinta = remember(claro) {
                         com.forge.pixpin.motor.Renderer(
                             { f -> c.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
-                            com.forge.pixpin.motor.DrawFonts.provider(this@Visor3DActivity), dark = !claro
+                            com.forge.pixpin.motor.DrawFonts.provider(this@Visor3DActivity), dark = !claro,
+                            papelDelAnfitrion = TintaDelPlano.papel(claro)
                         )
                     }
                     Canvas(Modifier.fillMaxSize()) {

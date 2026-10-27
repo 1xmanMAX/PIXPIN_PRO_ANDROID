@@ -219,6 +219,14 @@ object DrawTheme {
         return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 0.5
     }
 
+    /** Lo mismo con el papel en entero (`es_de_noche` del PC, que lo recibe así). */
+    fun esDeNoche(papel: Int): Boolean {
+        val r = ((papel shr 16) and 0xFF) / 255.0
+        val g = ((papel shr 8) and 0xFF) / 255.0
+        val b = (papel and 0xFF) / 255.0
+        return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 0.5
+    }
+
     /**
      * Los papeles que se ofrecen, del más blanco al negro.
      *

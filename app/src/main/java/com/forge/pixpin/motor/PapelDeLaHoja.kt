@@ -180,4 +180,14 @@ object PapelDeLaHoja {
         id in mapa.comoSeDiseno -> argb
         else -> DrawTheme.adaptar(argb, mapa.papelDe[id] ?: papelDelLienzo)
     }
+
+    /**
+     * **La tinta como la pinta el PC sobre un anfitrión con su propio papel** (el plano): sobre
+     * papel de día, cada color tal cual, también el blanco; sobre papel de noche, como [tinta]
+     * contra ese papel. Es `dibujo::tema::tinta` del PC, que solo adapta con papel de noche
+     * fijado (`con_papel`, `es_de_noche`) y deja la tinta como se eligió sobre el claro
+     * (27-oct-2026, la tinta blanca de un plano anotado de noche en el PC llegaba negra).
+     */
+    fun tintaSoloDeNoche(mapa: Mapa, id: String?, argb: Int, papel: Int): Int =
+        if (DrawTheme.esDeNoche(papel)) tinta(mapa, id, argb, papel) else argb
 }

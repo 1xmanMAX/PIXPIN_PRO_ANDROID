@@ -122,7 +122,21 @@ class Renderer(
      * Exportando, esas medidas se toman en píxeles de escena tal cual, y las que
      * son puro andamio —la cruz de una guía, el eje— no se dibujan.
      */
-    private val paraExportar: Boolean = false
+    private val paraExportar: Boolean = false,
+    /**
+     * **El papel de quien hospeda la capa**, si no es el de la escena: el del plano (claro u
+     * oscuro), que es lo que hay de verdad debajo de lo anotado.
+     *
+     * **Con él, la tinta va como en el PC** (27-oct-2026, el usuario: «cuando anoto un plano de
+     * AutoCAD en la computadora en modo noche, la tinta es blanca; al sincronizar llega negra al
+     * teléfono»). La capa del plano no trae papel (`appState`): se leía el blanco de serie y contra
+     * él se adaptaba todo, así que el blanco, que es un gris, se daba la vuelta a negro también de
+     * noche, encima del plano oscuro. El PC (`plano_cad::anotar::papel` y `dibujo::tema::con_papel`)
+     * adapta **contra el papel del plano y solo si es de noche**; de día pinta cada color tal cual.
+     * Aquí, igual: ver [PapelDeLaHoja.tintaSoloDeNoche]. A null, lo de siempre: el papel de la
+     * escena y la regla del lienzo.
+     */
+    private val papelDelAnfitrion: Int? = null
 ) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
@@ -233,7 +247,9 @@ class Renderer(
      * lienzo. Antes, en el lienzo de noche, una hoja de día salía en negativo y una de noche del PC
      * con el papel aclarado. Ver [PapelDeLaHoja].
      */
-    private fun tema(argb: Int): Int = PapelDeLaHoja.tinta(hojas, piezaActual, argb, papelActual)
+    private fun tema(argb: Int): Int =
+        if (papelDelAnfitrion != null) PapelDeLaHoja.tintaSoloDeNoche(hojas, piezaActual, argb, papelDelAnfitrion)
+        else PapelDeLaHoja.tinta(hojas, piezaActual, argb, papelActual)
 
     /** Las hojas de la escena que se está pintando, hechas una vez por cambio. Ver [PapelDeLaHoja]. */
     private var hojas: PapelDeLaHoja.Mapa = PapelDeLaHoja.Mapa.VACIO
@@ -253,7 +269,7 @@ class Renderer(
     private val laminas = PintorDeLaminas({ tema(it) }, { e, a -> strokePaint(e, a) })
 
     /** El papel de la escena que se está pintando: contra él se adapta cada tinta. Ver [DrawTheme.adaptar]. */
-    private var papelActual: Int = if (dark) 0xFF121212.toInt() else 0xFFFFFFFF.toInt()
+    private var papelActual: Int = papelDelAnfitrion ?: if (dark) 0xFF121212.toInt() else 0xFFFFFFFF.toInt()
 
     /**
      * Caché de geometría rugosa, por elemento.
@@ -565,7 +581,7 @@ class Renderer(
         canvas: Canvas, scene: Scene, screenWidth: Double, screenHeight: Double
     ) {
         escalaActual = scene.escala
-        papelActual = DrawTheme.colorDe(scene.backgroundColor)
+        papelActual = papelDelAnfitrion ?: DrawTheme.colorDe(scene.backgroundColor)
         if (scene.elements !== hojasDe) {
             hojas = PapelDeLaHoja.de(scene.elements)
             hojasDe = scene.elements

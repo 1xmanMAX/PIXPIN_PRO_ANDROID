@@ -91,7 +91,9 @@ object ExportarPlano {
         val enc = p.encaje
         val pintor = com.forge.pixpin.motor.Renderer(
             { f -> e.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
-            com.forge.pixpin.motor.DrawFonts.provider(c.applicationContext), dark = false
+            com.forge.pixpin.motor.DrawFonts.provider(c.applicationContext), dark = false,
+            // En papel blanco, la tinta tal cual, como al imprimir en el PC. Ver [TintaDelPlano].
+            papelDelAnfitrion = 0xFFFFFFFF.toInt()
         )
         return { lienzo, x0, y1, s, w, h ->
             pintor.renderScene(

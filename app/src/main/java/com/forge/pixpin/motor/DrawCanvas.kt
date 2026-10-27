@@ -81,6 +81,12 @@ fun DrawCanvas(
     /** Modo noche: filtro de pintado, no cambia el dibujo. Ver [DrawTheme]. */
     dark: Boolean = false,
     /**
+     * **El papel de quien hospeda el dibujo**, si no es el de la escena (el del plano): la tinta se
+     * pinta contra él y solo se adapta si es de noche, como en el PC. Ver `Renderer.papelDelAnfitrion`
+     * (27-oct-2026).
+     */
+    papelDelAnfitrion: Int? = null,
+    /**
      * Toque con dos dedos, sin arrastrar.
      *
      * Dos dedos ya estaban cogidos para encuadrar, pero **solo cuando se
@@ -350,7 +356,7 @@ fun DrawCanvas(
     val renderer =
         remember(
             imageProvider, dark, backdrop, mosaico, laminaFina, planoVectorial, papelALaVista,
-            cuadricula
+            cuadricula, papelDelAnfitrion
         ) {
             // **Va por nombre y no por orden**: este constructor tiene ya ocho parámetros del
             // mismo tipo nullable y colocarlos de memoria es la forma de que el papel acabe
@@ -364,7 +370,8 @@ fun DrawCanvas(
                 laminaFina = laminaFina,
                 planoVectorial = planoVectorial,
                 papelALaVista = papelALaVista,
-                cuadricula = cuadricula
+                cuadricula = cuadricula,
+                papelDelAnfitrion = papelDelAnfitrion
             )
         }
 

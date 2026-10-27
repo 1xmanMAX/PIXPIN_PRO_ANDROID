@@ -126,3 +126,8 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [~] 39. Lectura Veloz no abría el archivo. → Causa: Lectura Veloz pedía su comando nativo como
       `plugin:lv-tts|copyUri` y Tauri 2 lo rechaza por permisos (solo deja `copy_uri`); arreglado en
       Lectura Veloz 0.3.1 (en su `main`). PixPin ahora dice el motivo y lo apunta (`PixPinLecturaVeloz`).
+
+## Tanda del 27-oct (3)
+
+- [~] 40. Tinta blanca del plano (PC, modo noche) llega negra al teléfono.
+      → Causa: la capa del plano no trae papel y el teléfono adaptaba la tinta contra el blanco de serie (el blanco, un gris, se daba la vuelta a negro); ahora se pinta contra el papel del plano y solo se adapta de noche, como el PC (`TintaDelPlano`). Falta verlo en el teléfono.

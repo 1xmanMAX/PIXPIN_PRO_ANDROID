@@ -247,7 +247,9 @@ class PlanoActivity : ComponentActivity() {
                 pintoresDelHilo.getOrPut(!claro) {
                     com.forge.pixpin.motor.Renderer(
                         { f -> escena.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
-                        com.forge.pixpin.motor.DrawFonts.provider(applicationContext), dark = !claro
+                        com.forge.pixpin.motor.DrawFonts.provider(applicationContext), dark = !claro,
+                        // Contra el papel del plano, y solo de noche, como el PC. Ver [TintaDelPlano].
+                        papelDelAnfitrion = TintaDelPlano.papel(claro)
                     )
                 }.renderScene(lienzo, loQueSeVe.copy(viewport = vistaDeLaCapa(cc, w, h)), w.toDouble(), h.toDouble())
             }
@@ -330,7 +332,10 @@ class PlanoActivity : ComponentActivity() {
     private fun pintorDeLaCapa(oscuro: Boolean) = pintoresDeLaCapa.getOrPut(oscuro) {
         com.forge.pixpin.motor.Renderer(
             { f -> capa?.scene?.files?.get(f)?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
-            com.forge.pixpin.motor.DrawFonts.provider(this), dark = oscuro
+            com.forge.pixpin.motor.DrawFonts.provider(this), dark = oscuro,
+            // **En papel, la tinta tal cual** como al imprimir en el PC (su papel blanco no es de
+            // noche): ver [TintaDelPlano].
+            papelDelAnfitrion = if (oscuro) TintaDelPlano.PAPEL_OSCURO else 0xFFFFFFFF.toInt()
         )
     }
 
@@ -673,6 +678,8 @@ class PlanoActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize().graphicsLayer { alpha = if (dibujoOculto) 0f else 1f },
                         imageProvider = { f -> laCapa.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
                         dark = !claro,
+                        // Anotando, la misma tinta que con el editor guardado: contra el plano, como el PC.
+                        papelDelAnfitrion = TintaDelPlano.papel(claro),
                         onChange = { trazando -> if (!trazando) { tickDeAnotar++; cambiosEnLaCapa++ } },
                         modoLapiz = conLapiz,
                         onLapizDetectado = { vioLapiz = true; if (lapizAutomatico) conLapiz = true }
