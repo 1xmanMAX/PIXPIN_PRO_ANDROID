@@ -67,4 +67,14 @@ class VolverTest {
         // Solo un lienzo en su tarea (`DrawEditorActivity`) no es la tarea de la aplicación.
         assertTrue(Volver.conLaListaDebajo(false, listOf(com.forge.pixpin.motor.DrawEditorActivity::class.java.name, null)))
     }
+
+    @Test
+    fun `lo abierto desde la busqueda de la lista vuelve a la lista`() {
+        // 27-oct-2026: un PDF abierto directamente desde la búsqueda. La marca no es un chat.
+        assertEquals(Destino.ALaLista, Volver.adonde(esRaiz = true, desdeChat = Volver.DESDE_LA_LISTA, desdeProyecto = null, desdeDentro = true))
+        // Ni aunque traiga el proyecto de su hoja: se vino de la lista, no de ese chat.
+        assertEquals(Destino.ALaLista, Volver.adonde(esRaiz = true, desdeChat = Volver.DESDE_LA_LISTA, desdeProyecto = "a", desdeDentro = true))
+        // Apilado encima de la lista, `finish()` ya deja en ella.
+        assertEquals(Destino.Quedarse, Volver.adonde(esRaiz = false, desdeChat = Volver.DESDE_LA_LISTA, desdeProyecto = null, desdeDentro = true))
+    }
 }

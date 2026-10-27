@@ -146,6 +146,20 @@ class MainActivity : ComponentActivity() {
     }
 
     /**
+     * **Lo que se abre desde la lista sabe que viene de la lista** (27-oct-2026), como lo que se abre
+     * desde un chat sabe de qué chat (`MensajesActivity.startActivity`). Sobre todo para la búsqueda,
+     * que abre lo encontrado directamente en su visor: el lector y los editores viven en su propia
+     * tarea y, al cerrarse, sin marca dejaban en el escritorio; con ella vuelven aquí, a los
+     * resultados. Ver [Volver.DESDE_LA_LISTA]. Solo a lo nuestro: a otra aplicación no le dice nada.
+     */
+    override fun startActivity(intent: Intent, options: Bundle?) {
+        if (intent.component?.packageName == packageName && intent.component?.className != javaClass.name &&
+            !intent.hasExtra(EXTRA_DESDE_CHAT)
+        ) intent.putExtra(EXTRA_DESDE_CHAT, Volver.DESDE_LA_LISTA)
+        super.startActivity(intent, options)
+    }
+
+    /**
      * **Un proyecto pedido es su chat** (26-oct-2026): se abre encima de la lista, en esta misma
      * tarea, para que atrás vuelva a la lista. Si ya no existe (borrado en otro aparato), se queda
      * la lista. Se quita del intento para que girar la pantalla no lo vuelva a abrir.

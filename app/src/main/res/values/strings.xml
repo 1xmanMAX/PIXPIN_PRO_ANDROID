@@ -1129,5 +1129,8 @@
     </plurals>
     <string name="chat_buscar_ver_mas">Ver %d más</string>
     <string name="chat_buscar_nada">Nada con eso</string>
+    <!-- Abrir lo encontrado o ir a su mensaje (27-oct-2026). -->
+    <string name="chat_buscar_ir_al_mensaje">Ir al mensaje</string>
+    <string name="chat_buscar_en">en %s</string>
     <string name="sincronizar_boton">Sincronizar</string>
 </resources>
