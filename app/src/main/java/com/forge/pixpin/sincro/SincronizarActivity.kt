@@ -516,31 +516,23 @@ class SincronizarActivity : ComponentActivity() {
                 val ids = candidatos.filter { it !in borrados }
 
                 val empezo = System.currentTimeMillis()
-                for (chat in ids.filter { it in elegidos }) {
-                    val nombreDelChat = filas.first { it.id == chat }.nombre
-                    fase = Fase.Trabajando("${rotulo}Comparando «$nombreDelChat» con $nombre…")
-                    val prep = sesion.preparar(chat)
-                    // **Sin preguntas ni maestro** (15-sep-2026): lo cambiado en los dos se
-                    // junta. Ver [Fusion].
-                    fase = Fase.Trabajando("${rotulo}Juntando «$nombreDelChat»…")
-                    sesion.aplicar(prep, hecho)
-                    val archivos = sesion.prepararArchivos(prep)
-                    val total = archivos.bytes
-                    var hechos = 0L
+                // **Sin preguntas ni maestro** (15-sep-2026): lo cambiado en los dos se junta. Ver
+                // [Fusion]. **Por prioridad** (27-oct-2026): las tareas y los chats compartidos
+                // primero, los archivos de todos juntos y lo pesado al final; lo que sigue igual en
+                // los dos ni se mira. Ver [Sesion.vuelta].
+                run {
                     var ultimo = 0L
                     val t0 = System.currentTimeMillis()
-                    sesion.aplicarArchivos(archivos, hecho) { n ->
-                        hechos += n
+                    sesion.vuelta(ids.filter { it in elegidos }, hecho, estado = { fase = Fase.Trabajando(rotulo + it) }, avance = { hechos, total ->
                         val ahora = System.currentTimeMillis()
                         if (ahora - ultimo > 150) {
                             ultimo = ahora
                             val seg = (ahora - t0).coerceAtLeast(1) / 1000.0
-                            fase = Fase.Trabajando("${rotulo}Pasando archivos de «$nombreDelChat»", hechos, total, tamanoLegible((hechos / seg).toLong()) + "/s")
+                            fase = Fase.Trabajando("${rotulo}Pasando archivos con $nombre", hechos, total, tamanoLegible((hechos / seg).toLong()) + "/s")
                         }
-                    }
-                    fase = Fase.Trabajando("${rotulo}Terminando «$nombreDelChat»…")
-                    sesion.cerrar(prep)
+                    })
                 }
+
                 // **La galería de capturas**, con sus fechas de irse (8-oct-2026). Si el otro no
                 // sabe de galerías (el PC de hoy), no pasa nada.
                 fase = Fase.Trabajando("${rotulo}Juntando la galería con $nombre…")

@@ -69,7 +69,7 @@ class ProyectosRepository(context: Context) {
         )
         val todosAntes = _proyectos.value
         _proyectos.value = Proyectos.actualizada(_proyectos.value, sellado)
-        escribir()
+        escribir(todosAntes)
         // Una hoja quitada se lleva lo suyo (los comentarios de una hoja nota, su tinta…).
         runCatching { com.forge.pixpin.sincro.AnotacionesDelAdjunto.borrarLoDeHojasQuitadas(app.filesDir, todosAntes, _proyectos.value) }
         // Y una foto del chat cambiada, su imagen vieja. Ver [com.forge.pixpin.guardados.FotoDelChat.sobrantes].
@@ -97,8 +97,9 @@ class ProyectosRepository(context: Context) {
         runCatching { com.forge.pixpin.sincro.Disco(app.filesDir).borrarChat(id, "Antes de borrar el proyecto") }
         // Su logo, que es solo de este aparato, se va con él. Ver [com.forge.pixpin.guardados.LogoDelProyecto].
         com.forge.pixpin.guardados.LogoDelProyecto.quitar(app, id)
-        _proyectos.value = _proyectos.value.filter { it.id != id }
-        escribir()
+        val antes = _proyectos.value
+        _proyectos.value = antes.filter { it.id != id }
+        escribir(antes)
     }
 
     fun porId(id: String?): Proyecto? =
@@ -234,12 +235,23 @@ class ProyectosRepository(context: Context) {
         return hoja
     }
 
-    private fun escribir() {
+    /**
+     * **De un paso y al diario** (27-oct-2026): se escribe a un temporal y se renombra encima —antes
+     * se escribía encima tal cual y morir a mitad dejaba `proyectos.json` cortado, que se leía como
+     * «no hay proyectos»—, y lo que cambió respecto a [antes] va al diario de cambios de la
+     * sincronización ([com.forge.pixpin.sincro.Diario]).
+     */
+    private fun escribir(antes: List<Proyecto>) {
         runCatching {
             archivo.parentFile?.mkdirs()
-            archivo.writeText(json.encodeToString(_proyectos.value))
+            val lista = _proyectos.value
+            val tmp = File(carpeta, "proyectos.json.tmp")
+            tmp.writeText(json.encodeToString(lista))
+            if (!tmp.renameTo(archivo)) { tmp.copyTo(archivo, overwrite = true); tmp.delete() }
+            com.forge.pixpin.sincro.Diario.de(app.filesDir).proyectos(antes, lista)
         }
     }
+
 
     private fun leer(): List<Proyecto> = runCatching {
         if (!archivo.exists()) emptyList()

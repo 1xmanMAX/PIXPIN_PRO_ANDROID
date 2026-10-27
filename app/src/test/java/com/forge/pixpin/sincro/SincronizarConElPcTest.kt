@@ -93,12 +93,10 @@ class SincronizarConElPcTest {
             try {
                 if (!unirme) {
                     val chats = (movil.chats().map { it.id } + sesion.catalogo().map { it.id }).distinct()
-                    for (chat in chats) {
-                        val prep = sesion.preparar(chat)
-                        sesion.aplicar(prep, hecho)
-                        sesion.aplicarArchivos(sesion.prepararArchivos(prep), hecho)
-                        sesion.cerrar(prep)
-                    }
+                    // Como la sincronización de verdad (27-oct-2026): por prioridad, los archivos de
+                    // todos los chats mezclados, y lo quieto en los dos ni se mira. El PC contesta
+                    // cada petición por su lado: esto prueba que el orden nuevo no le molesta.
+                    sesion.vuelta(chats, hecho)
                     // Como la pantalla: la galería detrás. El PC sabe de galerías desde c493abb
                     // (`atender_con_galeria`); uno de antes contestaría «No sé qué es» (eso lo
                     // prueba `GaleriaQueViajaTest`).
@@ -138,7 +136,30 @@ class SincronizarConElPcTest {
     }
 
     @Test
+    fun `con el PC - el saludo con capacidades no le molesta y la segunda vuelta no mira nada`() {
+        desdeElMovil(unirme = true)
+        val primera = desdeElMovil()
+        assertTrue("algo llegó del PC", primera.traidos > 0)
+        // El PC no lleva diario ni sabe de capacidades: se salta lo quieto por su inventario.
+        val segunda = desdeElMovil()
+        assertEquals(0, segunda.traidos + segunda.enviados + segunda.fusionados + segunda.archivos)
+        val chats = movil.chats().size
+        assertEquals("todos quietos: $chats chats", chats, segunda.quietos)
+        // Algo nuevo en el PC (una clase grabada) se ve en su inventario y llega.
+        orden("clase", pc.path, "Tema nuevo del PC", "1")
+        val tercera = desdeElMovil()
+        assertTrue("la clase llegó", tercera.traidos > 0)
+        assertTrue(movil.leerProyectos().any { it.nombre == "Tema nuevo del PC" })
+        assertTrue(movil.leerMensajes().any { it.nombre == "Clase 25-oct.m4a" })
+        assertTrue("lo demás, quieto", tercera.quietos >= 1)
+        // Y el PC, al dirigir él, sigue entendiendo al móvil de siempre.
+        desdeElPc()
+        sinRepetidos()
+    }
+
+    @Test
     fun `lo del PC llega entero al movil, una sola vez`() {
+
         desdeElMovil(unirme = true)
         desdeElMovil()
         val ms = movil.leerMensajes()

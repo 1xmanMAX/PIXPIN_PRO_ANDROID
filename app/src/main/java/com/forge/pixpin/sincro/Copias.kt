@@ -63,9 +63,43 @@ class Copias(private val disco: Disco) {
      * Guarda cómo está [chat] ahora. Devuelve la copia, o null si no había nada o si es igual que la
      * última (entonces la última ya sirve).
      */
-    fun hacer(chat: String, motivo: String, ahora: Long = System.currentTimeMillis()): Copia? = synchronized(CERROJO) {
-        runCatching { hacerYa(chat, motivo, ahora) }.getOrNull()
+    fun hacer(
+        chat: String, motivo: String, ahora: Long = System.currentTimeMillis(),
+        /**
+         * **Mirando el [Diario] primero** (27-oct-2026): si el chat no se ha tocado desde la última
+         * vez que se miró aquí, la última copia sigue valiendo y no se relee nada (antes se leía el
+         * chat y se resumían todos sus archivos para acabar viendo que era igual). Solo desde la
+         * sincronización, que ha barrido el diario justo antes ([Diario.barrer]).
+         */
+        conDiario: Boolean = false
+    ): Copia? = synchronized(CERROJO) {
+        if (conDiario && Diario.activo && sigueIgual(chat)) return@synchronized null
+        val n = runCatching { disco.diario.ultimo() }.getOrNull()
+        val r = runCatching { hacerYa(chat, motivo, ahora) }
+        if (r.isSuccess && n != null) apuntarMirado(chat, n)
+        r.getOrNull()
     }
+
+    private val archivoDeMirados get() = File(raiz, "diario.tsv")
+
+    /** El chat no ha cambiado desde que se miró aquí por última vez. */
+    private fun sigueIgual(chat: String): Boolean = runCatching {
+        val l = archivoDeMirados.readLines().lastOrNull { it.substringBefore('\t') == chat } ?: return false
+        val p = l.split('\t')
+        val v = disco.vistaDelDiario()
+        val n = p[2].toLong()
+        p[1] == v.libro && n >= v.piso && n <= v.ultimo && !v.cambio(chat, n)
+    }.getOrDefault(false)
+
+    private fun apuntarMirado(chat: String, n: Long) = runCatching {
+        val libro = disco.vistaDelDiario().libro
+        raiz.mkdirs()
+        val otras = if (archivoDeMirados.isFile) archivoDeMirados.readLines().filter { it.isNotBlank() && it.substringBefore('\t') != chat } else emptyList()
+        val tmp = File(raiz, "diario.tsv.tmp")
+        tmp.writeText((otras + "$chat\t$libro\t$n").joinToString("\n") + "\n")
+        if (!tmp.renameTo(archivoDeMirados)) { archivoDeMirados.delete(); tmp.renameTo(archivoDeMirados) }
+    }
+
 
     private fun hacerYa(chat: String, motivo: String, ahora: Long, ademas: Collection<String> = emptyList()): Copia? {
         val p = disco.leerProyectos().firstOrNull { it.id == chat }
