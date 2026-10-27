@@ -73,6 +73,16 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [ ] 26. Símbolo de «compartido» en el widget de tareas (y en Tarjetas, Kanban, Horario) para las
       tareas de chats compartidos.
 
+### Cuadernos, compartir y música
+- [ ] 27. Cuadernos (carpeta de páginas): reordenar arrastrando (mantener y jalar arriba/abajo)
+      desde el asa del lateral, en vez de tocar las flechas una a una.
+- [ ] 28. Compartir igual en toda la app: siempre las mismas opciones (imagen, PDF, HTML, PixPin,
+      etc. según lo que se comparte), claras.
+- [ ] 29. Música: guardar canciones con su letra adjunta para cantarlas cuando se quiera
+      (sincronizable con el PC; guía para Windows).
+- [ ] 30. Todo audio (música, notas de voz, grabaciones) se puede escuchar por el altavoz de
+      llamadas (el del oído), además del altavoz normal y los audífonos.
+
 ## Pendiente de respuesta del usuario
 
 - Whisper «tiny» (actual) o «base» como el PC (161 MB de descarga).
