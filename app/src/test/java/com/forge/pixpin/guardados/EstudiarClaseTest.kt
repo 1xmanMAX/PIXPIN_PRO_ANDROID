@@ -165,4 +165,49 @@ class EstudiarClaseTest {
         // Caso negativo: una nota de voz suelta no es una clase.
         assertNull(EstudiarClase.notaDe(suelta, todos))
     }
+
+    @Test
+    fun `las miniaturas tienen el alto fijo y el ancho de su proporcion`() {
+        fun m(w: Int, h: Int) = EstudiarClase.medidaDeMiniatura(w, h, 52f, 26f, 96f)
+        // A×A, cuadrada; 16:9, más ancha con el mismo alto.
+        assertEquals(52f to 52f, m(1000, 1000))
+        val (ancho169, alto169) = m(1920, 1080)
+        assertEquals(92.44f, ancho169, 0.01f)
+        assertEquals(52f, alto169, 0.001f)
+        // Muy ancha: topa con el máximo y baja de alto para no deformarse.
+        assertEquals(96f to 32f, m(3000, 1000))
+        // Muy alta (un teléfono de pie): el ancho mínimo, el alto en su tope.
+        assertEquals(26f to 52f, m(1080, 2400))
+        // Caso negativo: sin medidas aún, cuadrada; nunca medidas negativas.
+        assertEquals(52f to 52f, m(0, 0))
+        assertEquals(0f to 0f, EstudiarClase.medidaDeMiniatura(10, 10, -3f, 26f, 96f))
+    }
+
+    @Test
+    fun `el reparto de la pantalla de pie tumbada y entera`() {
+        // De pie con texto: la imagen casi la mitad; sin texto, todo lo que quede.
+        val dePie = EstudiarClase.reparto(400f, 800f, false, textoEnVertical = true, textoEnApaisada = false, hayCapturas = true)
+        assertEquals(EstudiarClase.Forma.VERTICAL, dePie.forma)
+        assertTrue(dePie.conTexto && dePie.conTira)
+        assertEquals(384f, dePie.altoImagen!!, 0.001f)
+        val sinTexto = EstudiarClase.reparto(400f, 800f, false, textoEnVertical = false, textoEnApaisada = true, hayCapturas = true)
+        assertFalse(sinTexto.conTexto)
+        assertNull(sinTexto.altoImagen)
+        // Un teléfono bajito: al texto le quedan sus líneas mínimas.
+        val bajito = EstudiarClase.reparto(360f, 500f, false, textoEnVertical = true, textoEnApaisada = false, hayCapturas = true)
+        assertEquals(218f, bajito.altoImagen!!, 0.001f)
+        // Tumbada: el texto es el suyo (empieza escondido) y, si se pide, una columna al lado.
+        val tumbada = EstudiarClase.reparto(800f, 400f, false, textoEnVertical = true, textoEnApaisada = false, hayCapturas = true)
+        assertEquals(EstudiarClase.Forma.APAISADA, tumbada.forma)
+        assertFalse(tumbada.conTexto)
+        assertEquals(0f, tumbada.anchoTexto, 0f)
+        val conTexto = EstudiarClase.reparto(800f, 400f, false, textoEnVertical = false, textoEnApaisada = true, hayCapturas = true)
+        assertEquals(256f, conTexto.anchoTexto, 0.001f)
+        assertNull(conTexto.altoImagen)
+        // Caso negativo: a pantalla entera no hay ni texto ni tira, y sin capturas no hay tira.
+        val entera = EstudiarClase.reparto(400f, 800f, true, textoEnVertical = true, textoEnApaisada = true, hayCapturas = true)
+        assertEquals(EstudiarClase.Forma.ENTERA, entera.forma)
+        assertFalse(entera.conTexto || entera.conTira)
+        assertFalse(EstudiarClase.reparto(400f, 800f, false, true, false, hayCapturas = false).conTira)
+    }
 }
