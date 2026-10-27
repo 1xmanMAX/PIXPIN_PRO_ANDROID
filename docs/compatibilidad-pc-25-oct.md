@@ -210,3 +210,28 @@ PDF); en la ficha del chat, las carpetas en «Archivos».
   `ConfiguracionActivity`, con el engranaje de la lista. Ningún dato ni la sincronización cambian.
 - **Atrás**: lienzo o visor → el chat de donde se abrió → la lista de chats → salir (`Volver.kt`).
   Antes los editores cerraban hacia Proyectos, que borraba el chat de la pila, y atrás salía.
+
+## v0.146.0: la tanda del 27-oct (27-oct)
+
+Todo lo nuevo es compatible con el PC actual (`origin/main` ae96b89e): las 12 pruebas contra el PC
+simulado pasan. Lo que el PC tendría que adoptar para ir a la par está en estas guías:
+
+- **Sincronización** más rápida y fiable: diario de cambios, orden por prioridades, reanudar
+  ficheros grandes, automática por defecto. El PC no anuncia `capacidades`, así que con él se usa el
+  protocolo de siempre. Ver `docs/guia-sincronizacion-para-windows.md` y
+  `docs/sincronizacion-por-diario.md`.
+- **Versiones vinculadas en chats compartidos**: campos opcionales `versionDe` y `versionN` (el PC
+  los guarda en `resto`). Ver `docs/versiones-en-chats-compartidos.md`.
+- **Música con letra**: un `VOZ` con `estadoDelTexto:"letra"` y la letra en `transcripcion`, como
+  ya hace el PC; la letra con tiempos en `[m:ss]`. Ver `docs/musica-con-letra.md`.
+- **Lectura Veloz**: la posición vuelve al marcador de voz de siempre (`anot-<uid>.voz`, y el 🟢 del
+  PDF en `.marcas`); nada nuevo viaja. Lo que el PC necesita para `pixpinmax://lectura-veloz` está
+  en `docs/integracion-lectura-veloz.md`.
+- **Figuras**: modo día por defecto, interruptor ☀/☾ entre las gemelas «(noche)» y vista previa. El
+  catálogo no cambia (`FigurasDeSerie.VERSION = 7`). En el lienzo oscuro, una hoja de figura se pinta
+  con sus colores; el PC aún adapta todo contra el papel del lienzo.
+- **Solo del teléfono**, sin efecto en lo que viaja: pantalla de sincronizar, chat (unirse con el
+  «+», ficha sin Proyectos, abrir en el último mensaje y «↓», cabecera, adjuntar como el PC), búsqueda
+  global, Estudiar la clase, el riel que se esconde con las barras, notas Markdown como los visores,
+  hoja de compartir única, reordenar páginas arrastrando, auricular de llamadas, abrir archivos de
+  fuera sin guardarlos, la chapa «compartido» en las tareas y Whisper «base» por defecto.
