@@ -35,7 +35,6 @@ import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.IosShare
 import androidx.compose.material.icons.filled.PlayCircle
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -79,7 +78,6 @@ import com.forge.pixpin.motor.DrawExport
 import com.forge.pixpin.motor.ExcalidrawStore
 import com.forge.pixpin.motor.HojaDePlantilla
 import com.forge.pixpin.pin.ImageStore
-import com.forge.pixpin.ui.CompartirNativo
 import com.forge.pixpin.ui.theme.PixPinTheme
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -271,20 +269,15 @@ class CarpetaActivity : ComponentActivity() {
                                         }.getOrNull()
                                     }
                                 }
-                            }) { Icon(Icons.Filled.IosShare, "Compartir la grabación") }
+                            }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, "Compartir la grabación") }
                         } else IconButton(enabled = !trabajando && paginas.isNotEmpty(), onClick = {
-                            trabajando = true
-                            Toast.makeText(this@CarpetaActivity, "Exportando el PDF…", Toast.LENGTH_SHORT).show()
-                            alcance.launch {
-                                val pdf = withContext(Dispatchers.IO) {
-                                    runCatching { CarpetaEnPdf.escribir(this@CarpetaActivity, nombre, paginas.map { it.first }) }
-                                        .onFailure { android.util.Log.e("PixPinCarpeta", "pdf", it) }.getOrNull()
-                                }
-                                trabajando = false
-                                if (pdf == null) Toast.makeText(this@CarpetaActivity, "No se pudo exportar: no hay ninguna página con algo dentro", Toast.LENGTH_LONG).show()
-                                else CompartirNativo.archivo(this@CarpetaActivity, pdf, "application/pdf", pdf.name)
-                            }
-                        }) { Icon(Icons.Filled.IosShare, "Exportar PDF") }
+                            // **La hoja de compartir de toda la aplicación** (27-oct-2026): el PDF con las
+                            // páginas que se marquen, o una en imagen. Antes, el PDF entero sin preguntar.
+                            compartiendo = CarpetaEnPdf.compartible(
+                                this@CarpetaActivity, nombre,
+                                paginas.map { (m, p) -> m to p.titulo.ifBlank { m.nombre.ifBlank { CarpetasDelChat.PAGINA } } }
+                            )
+                        }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, "Compartir la carpeta") }
                     }
                 )
             },

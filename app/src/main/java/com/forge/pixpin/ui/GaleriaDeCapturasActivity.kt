@@ -568,8 +568,22 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
         avisar(if (lista.size == 1) "Copiada al portapapeles" else "${lista.size} copiadas")
     }
 
-    private fun compartir(c: Captura) {
-        startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType(c.mime).putExtra(Intent.EXTRA_STREAM, c.uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), null))
+    /**
+     * **La hoja de compartir de toda la aplicación** (27-oct-2026), no el selector de Android: una
+     * captura sale en PNG, JPG, PDF, página web, `.pixpin`, tal cual o por Wi-Fi, como cualquier
+     * imagen de PixPin. Vive en la galería del teléfono: se copia antes a `cache/share`.
+     */
+    private fun compartir(c: Captura) = lifecycleScope.launch {
+        val copia = withContext(Dispatchers.IO) {
+            runCatching {
+                val limpio = c.nombre.replace(Regex("""[^\p{L}\p{N} ()._-]"""), "_").takeLast(80).ifBlank { "captura.${c.extension}" }
+                java.io.File(java.io.File(cacheDir, "share").apply { mkdirs() }, limpio).also { f ->
+                    contentResolver.openInputStream(c.uri)?.use { i -> f.outputStream().use { o -> i.copyTo(o) } } ?: error("sin datos")
+                }
+            }.getOrNull()
+        }
+        if (copia != null) CompartirArchivoActivity.abrir(this@GaleriaDeCapturasActivity, copia, c.nombre)
+        else startActivity(Intent.createChooser(Intent(Intent.ACTION_SEND).setType(c.mime).putExtra(Intent.EXTRA_STREAM, c.uri).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION), null))
     }
 
     /**

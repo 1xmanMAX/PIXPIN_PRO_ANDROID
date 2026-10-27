@@ -20,8 +20,21 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.filled.Article
+import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.IosShare
+import androidx.compose.material.icons.filled.Language
+import androidx.compose.material.icons.filled.Photo
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Polyline
+import androidx.compose.material.icons.filled.School
+import androidx.compose.material.icons.filled.TableChart
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
@@ -73,14 +86,27 @@ import kotlinx.coroutines.withContext
  *
  * Qué formatos hay y cómo se genera cada uno lo decide quien la abre (ver [Compartible] y
  * [CompartirPaginas]); la hoja no sabe de lienzos ni de proyectos.
+ *
+ * **El orden, el nombre y el icono de cada formato, en cambio, los pone la hoja** (27-oct-2026: «en
+ * todo compartir de toda la aplicación siempre tienen que estar las mismas opciones que en las
+ * demás… de forma entendible siempre»). Salen por su id con [FormatosDeCompartir]: la imagen, el
+ * PDF, la página web, Word, Markdown, el texto, el `.pixpin`, el original, Anki y la Wi-Fi, siempre
+ * en ese orden y con el mismo nombre y dibujo, vengan de donde vengan; y con [contenido], solo los
+ * que tienen sentido para eso. El formato elegido al abrir sigue siendo el primero que dio quien la
+ * abre: lo que más se comparte desde ahí.
  */
 class Compartible(
     val titulo: String,
     val paginas: List<Pagina> = emptyList(),
     val formatos: List<Formato>,
     /** Las marcadas al abrir; por omisión, todas. */
-    val marcadas: Set<String>? = null
+    val marcadas: Set<String>? = null,
+    /** Qué es, para enseñar solo sus formatos ([FormatosDeCompartir.TABLA]). Null: todos los que se den. */
+    val contenido: FormatosDeCompartir.Contenido? = null
 ) {
+    /** Lo mismo, diciendo qué es. */
+    fun como(contenido: FormatosDeCompartir.Contenido): Compartible = Compartible(titulo, paginas, formatos, marcadas, contenido)
+
     data class Pagina(
         val clave: String,
         val nombre: String,
@@ -128,20 +154,47 @@ class Compartible(
 /** El icono de compartir de toda la aplicación: el cuadro con la flecha hacia arriba. */
 val IconoDeCompartir: ImageVector get() = Icons.Filled.IosShare
 
+/**
+ * **El dibujo de cada formato, el mismo en toda la aplicación.** Lo propio de un contenido
+ * ([FormatosDeCompartir.Clase.OTRO]) trae el suyo.
+ */
+fun iconoDeFormato(f: Compartible.Formato): ImageVector = when (FormatosDeCompartir.claseDe(f.id)) {
+    FormatosDeCompartir.Clase.PNG -> Icons.Filled.Image
+    FormatosDeCompartir.Clase.JPG -> Icons.Filled.Photo
+    FormatosDeCompartir.Clase.SVG -> Icons.Filled.Polyline
+    FormatosDeCompartir.Clase.PDF -> Icons.Filled.PictureAsPdf
+    FormatosDeCompartir.Clase.WEB -> Icons.Filled.Language
+    FormatosDeCompartir.Clase.WORD -> Icons.Filled.Article
+    FormatosDeCompartir.Clase.MARKDOWN -> Icons.AutoMirrored.Filled.Notes
+    FormatosDeCompartir.Clase.TEXTO -> Icons.Filled.TextFields
+    FormatosDeCompartir.Clase.CSV -> Icons.Filled.TableChart
+    FormatosDeCompartir.Clase.PIXPIN -> Icons.Filled.FolderZip
+    FormatosDeCompartir.Clase.ORIGINAL -> Icons.Filled.InsertDriveFile
+    FormatosDeCompartir.Clase.ANKI -> Icons.Filled.School
+    FormatosDeCompartir.Clase.WIFI -> Icons.Filled.Wifi
+    FormatosDeCompartir.Clase.OTRO -> f.icono
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HojaDeCompartir(c: Compartible, alCerrar: () -> Unit) {
     val contexto = LocalContext.current
     val alcance = rememberCoroutineScope()
     val estado = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    var formatoId by remember(c) { mutableStateOf(c.formatos.firstOrNull { it.generar != null }?.id ?: c.formatos.firstOrNull()?.id) }
+    // **En el orden de toda la aplicación** y solo lo que tiene sentido para lo que es. Ver [FormatosDeCompartir].
+    // Un id una sola vez: es la clave de su botón en la fila.
+    val ordenados = remember(c) { FormatosDeCompartir.visibles(c.contenido, c.formatos.distinctBy { it.id }) { it.id } }
+    // Al abrir, el primero que puso quien la abre (lo que más se comparte desde ahí), no el primero de la fila.
+    var formatoId by remember(c) {
+        mutableStateOf(c.formatos.firstOrNull { it.generar != null && it in ordenados }?.id ?: ordenados.firstOrNull()?.id)
+    }
     var marcadas by remember(c) { mutableStateOf(c.marcadas ?: c.paginas.map { it.clave }.toSet()) }
     var viendoAjustes by remember { mutableStateOf(false) }
 
-    val formato = c.formatos.firstOrNull { it.id == formatoId }
+    val formato = ordenados.firstOrNull { it.id == formatoId }
     val hayPaginas = c.paginas.size > 1
     // **Con más de una página marcada, los de una sola desaparecen.**
-    val visibles = c.formatos.filter { f -> !(f.paginas == Compartible.UNA && marcadas.size > 1 && formatoId != f.id) }
+    val visibles = ordenados.filter { f -> !(f.paginas == Compartible.UNA && marcadas.size > 1 && formatoId != f.id) }
     // Lo elegido, en el orden de la lista, y solo lo que el formato admite.
     val elegidas = c.paginas.map { it.clave }.filter { it in marcadas && (formato?.admite?.invoke(it) != false) }
 
@@ -205,9 +258,9 @@ fun HojaDeCompartir(c: Compartible, alCerrar: () -> Unit) {
                                 .then(if (elegido) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(f.icono, contentDescription = null, tint = if (elegido) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer)
+                            Icon(iconoDeFormato(f), contentDescription = null, tint = if (elegido) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onPrimaryContainer)
                         }
-                        Text(f.nombre, fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.padding(top = 6.dp),
+                        Text(FormatosDeCompartir.rotulo(f.id, f.nombre), fontSize = 11.sp, textAlign = TextAlign.Center, maxLines = 2, modifier = Modifier.padding(top = 6.dp),
                             fontWeight = if (elegido) FontWeight.SemiBold else FontWeight.Normal)
                     }
                 }
@@ -260,7 +313,7 @@ fun HojaDeCompartir(c: Compartible, alCerrar: () -> Unit) {
                             Column(Modifier.weight(1f).padding(vertical = 6.dp)) {
                                 Text(p.nombre, maxLines = 1, overflow = TextOverflow.Ellipsis,
                                     color = if (vale) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-                                val detalle = if (vale) p.detalle else "No se puede como ${formato.nombre.lowercase()}"
+                                val detalle = if (vale) p.detalle else "No se puede como ${FormatosDeCompartir.rotulo(formato.id, formato.nombre)}"
                                 if (detalle.isNotBlank()) Text(detalle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                             }
                         }

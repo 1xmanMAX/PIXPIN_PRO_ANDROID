@@ -139,7 +139,7 @@ object ExportarPdfAnotado {
     fun formato(c: Context, ruta: String, titulo: String, paginas: Int, escenaDe: (Int) -> Scene?): Compartible.Formato {
         val interruptor = Compartible.Interruptor("Texto buscable", "Hojas en líneas y con su texto; quitado, como imagen")
         return Compartible.Formato(
-            "web-pdf-anotado", Icons.Filled.Language, "Página web (hojas)", Compartible.NINGUNA,
+            "web-pdf-anotado", Icons.Filled.Language, "Página web por hojas", Compartible.NINGUNA,
             interruptor = interruptor,
             generar = {
                 val funciones = (c.applicationContext as? com.forge.pixpin.PixPinApp)?.settings?.settings?.first()?.funcionesWeb

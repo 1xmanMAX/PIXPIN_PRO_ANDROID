@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.TextFields
 import com.forge.pixpin.guardados.Clase
 import com.forge.pixpin.ui.Compartible
 import com.forge.pixpin.ui.ExportarVisor
+import com.forge.pixpin.ui.FormatosDeCompartir
 import java.io.File
 
 /**
@@ -99,7 +100,7 @@ object ExportarLeccion {
                 Compartible.Salida(destino, "text/markdown", "Con sus títulos y negritas")
             }))
         }
-        return Compartible(nombre, paginas, formatos)
+        return Compartible(nombre, paginas, formatos, contenido = FormatosDeCompartir.Contenido.LECCION)
     }
 
     /** El PDF: el resumen como texto de verdad y una hoja por foto. */

@@ -9,6 +9,7 @@ import com.forge.pixpin.motor.ExportarHtml
 import com.forge.pixpin.motor.ImportarHojas
 import com.forge.pixpin.ui.Compartible
 import com.forge.pixpin.ui.ExportarVisor
+import com.forge.pixpin.ui.FormatosDeCompartir
 import java.io.File
 
 /**
@@ -74,8 +75,9 @@ object ExportarExcel {
             if (ruta != null) {
                 add(ExportarVisor.original(c, ruta, nombre))
                 add(ExportarVisor.pixpin(c, ruta, nombre))
+                add(ExportarVisor.wifi(c, ruta, nombre))
             }
         }
-        return Compartible(titulo, paginas, formatos)
+        return Compartible(titulo, paginas, formatos, contenido = FormatosDeCompartir.Contenido.HOJA_DE_CALCULO)
     }
 }

@@ -786,6 +786,13 @@
             android:windowSoftInputMode="adjustResize"
             android:theme="@style/Theme.PixPin" />
 
+        <!-- La hoja de compartir de un archivo desde un pin o una captura, que no tienen pantalla. Ver CompartirArchivoActivity. -->
+        <activity
+            android:name=".ui.CompartirArchivoActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@style/Theme.PixPin.Hoja" />
         <!-- Compartir una página como archivo o como enlace. Ver CompartirEnlaceActivity. -->
         <activity
             android:name=".ui.CompartirEnlaceActivity"

@@ -86,6 +86,7 @@ import com.forge.pixpin.R
 import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -191,6 +192,9 @@ class EstudiarClaseActivity : ComponentActivity() {
         val oscuroAhora = MaterialTheme.colorScheme.background.luminance() < 0.5f
         var seguir by remember { mutableStateOf(true) }
         var poniendo by remember { mutableStateOf<Long?>(null) }
+        // **Compartir la clase** (27-oct-2026): la misma hoja que en el chat y en su carpeta. Ver [ExportarGrabacion].
+        var compartiendo by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
+        val alcance = androidx.compose.runtime.rememberCoroutineScope()
         val irA: (Long) -> Unit = { ms -> m?.let { irA(it, ms) } }
 
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
@@ -201,6 +205,16 @@ class EstudiarClaseActivity : ComponentActivity() {
                         Text(getString(R.string.estudiar_titulo), fontWeight = FontWeight.Bold, maxLines = 1)
                         if (titulo.isNotBlank()) Text(titulo, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
                     }
+                    IconButton(enabled = m != null, onClick = {
+                        val nota = m ?: return@IconButton
+                        alcance.launch {
+                            compartiendo = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                                runCatching { val todos = almacen.leer(); ExportarGrabacion.compartible(this@EstudiarClaseActivity, ExportarGrabacion.notaDe(nota, todos) ?: nota, todos) }
+                                    .onFailure { android.util.Log.e("PixPinCompartir", "estudiar", it) }.getOrNull()
+                            }
+                        }
+                    }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, getString(R.string.guardados_compartir)) }
+                    compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
                     IconButton(onClick = { alCambiarTema(!oscuroAhora) }) {
                         Icon(if (oscuroAhora) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuroAhora) "Claro" else "Oscuro")
                     }

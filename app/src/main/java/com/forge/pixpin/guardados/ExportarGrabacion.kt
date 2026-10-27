@@ -18,6 +18,7 @@ import com.forge.pixpin.motor.PdfUnion
 import com.forge.pixpin.motormd.ExportarDocx
 import com.forge.pixpin.ui.Compartible
 import com.forge.pixpin.ui.ExportarVisor
+import com.forge.pixpin.ui.FormatosDeCompartir
 import java.io.ByteArrayOutputStream
 import java.io.File
 import java.util.Calendar
@@ -125,8 +126,16 @@ object ExportarGrabacion {
                 Compartible.Salida(destino("$base (Anki).zip").also { it.writeBytes(zip) }, "application/zip", "Una tarjeta por captura: en Anki, Archivo → Importar")
             }))
             addAll(extras)
+            // **Su `.pixpin`, el audio tal cual y la Wi-Fi** (27-oct-2026), como cualquier otra cosa de la
+            // aplicación y venga de donde venga (el chat, su carpeta, Estudiar la clase). Lo que ya
+            // trae quien la abre ([extras]) manda.
+            voz.ruta?.takeIf { File(it).isFile }?.let { ruta ->
+                val n = voz.nombre.ifBlank { File(ruta).name }
+                listOf(ExportarVisor.pixpin(c, ruta, n), ExportarVisor.original(c, ruta, n, "La grabación tal cual"), ExportarVisor.wifi(c, ruta, n))
+                    .filter { propio -> extras.none { it.id == propio.id } }
+            }?.let(::addAll)
         }
-        return Compartible(titulo, formatos = formatos)
+        return Compartible(titulo, formatos = formatos, contenido = FormatosDeCompartir.Contenido.GRABACION)
     }
 
     /** El Markdown con cada captura por su nombre (`captura-01-0m05s.png`) y de qué fichero es cada nombre. */

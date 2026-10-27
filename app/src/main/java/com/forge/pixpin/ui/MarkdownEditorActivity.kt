@@ -57,6 +57,7 @@ import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.AssistChip
+import androidx.compose.material.icons.filled.Article
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.AddComment
@@ -186,8 +187,9 @@ class MarkdownEditorActivity : ComponentActivity() {
                     idDeLaNota = id,
                     proyectoDeLaNota = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
                         ?: (application as? PixPinApp)?.proyectos?.proyectos?.value?.firstOrNull { p -> p.hojas.any { it.id == id } }?.id,
-                    masAcciones = listOf("Exportar a Word" to { texto -> exportarAWord(texto) })
+                    masAcciones = listOf("Compartir…" to { texto -> abrirCompartir(texto) })
                 )
+                compartiendo.value?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo.value = null } }
             }
         }
     }
@@ -201,66 +203,56 @@ class MarkdownEditorActivity : ComponentActivity() {
      * entrado. Sin esto, abrir una nota desde el proyecto y guardarla escribía
      * en el almacén del pin y el proyecto seguía enseñando lo de antes.
      */
-    /** El `.docx` ya hecho, esperando a que se elija dónde guardarlo. */
-    private var docxPendiente: ByteArray? = null
-
-    private val guardarDocx = registerForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.CreateDocument(
-            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-        )
-    ) { uri ->
-        val datos = docxPendiente
-        docxPendiente = null
-        if (uri == null || datos == null) return@registerForActivityResult
-        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val bien = runCatching { contentResolver.openOutputStream(uri)?.use { it.write(datos) } != null }.getOrDefault(false)
-            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                Toast.makeText(this@MarkdownEditorActivity, if (bien) "Guardado como Word" else "No se pudo guardar", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
+    /** Lo que se está compartiendo de la nota: la hoja de toda la aplicación. Ver [abrirCompartir]. */
+    private val compartiendo = androidx.compose.runtime.mutableStateOf<com.forge.pixpin.ui.Compartible?>(null)
 
     /**
-     * **Exportar a Word** (como el PC, 1-oct-2026): con lo escrito aunque no se haya guardado, sus
-     * fotos y sus comentarios. Las fotos que Word no lee (WebP, HEIC) se pasan a PNG.
+     * **Compartir la nota, en la hoja de toda la aplicación** (27-oct-2026). Antes aquí solo había
+     * «Exportar a Word» (como el PC, 1-oct-2026), que pedía dónde guardar el `.docx`; ahora es la
+     * misma hoja que en el chat: PDF, página web, Word, Markdown, texto y `.pixpin`. El Word sigue
+     * siendo el de entonces: con lo escrito aunque no se haya guardado, sus fotos y sus comentarios.
      */
-    private fun exportarAWord(texto: String) {
+    private fun abrirCompartir(texto: String) {
         val id = intent.getStringExtra(EXTRA_ID).orEmpty()
         lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            val comentarios = runCatching { ComentariosDeNota.de(this@MarkdownEditorActivity, id)?.leer() }.getOrNull()
-            val titulo = com.forge.pixpin.motormd.ExportarDocx.tituloDe(texto)
-            val datos = runCatching {
-                com.forge.pixpin.motormd.ExportarDocx.exportar(
-                    com.forge.pixpin.motormd.ExportarDocx.Nota(
-                        markdown = texto, titulo = titulo, comentarios = comentarios,
-                        imagen = { ruta -> fotoParaWord(ruta) },
-                        autor = runCatching { com.forge.pixpin.sincro.IdentidadEnDisco(filesDir).leer().yo.nombre }.getOrNull().orEmpty()
-                    )
+            val c = runCatching {
+                val titulo = com.forge.pixpin.motormd.ExportarDocx.tituloDe(texto)
+                val suelta = com.forge.pixpin.motor.Proyecto(
+                    id = "suelto-nota-${id.ifBlank { "nota" }}", nombre = titulo, tocado = System.currentTimeMillis(),
+                    hojas = listOf(com.forge.pixpin.motor.Hoja(id = id.ifBlank { "nota" }, nombre = titulo, nota = texto))
                 )
-            }.getOrNull()
+                val base = com.forge.pixpin.ui.CompartirPaginas.de(
+                    this@MarkdownEditorActivity, titulo, listOf(suelta to null), editable = suelta,
+                    contenido = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.NOTA
+                )
+                val word = com.forge.pixpin.ui.Compartible.Formato(
+                    "word", Icons.Filled.Article, "Word", com.forge.pixpin.ui.Compartible.NINGUNA,
+                    generar = {
+                        val comentarios = runCatching { ComentariosDeNota.de(this@MarkdownEditorActivity, id)?.leer() }.getOrNull()
+                        val datos = com.forge.pixpin.motormd.ExportarDocx.exportar(
+                            com.forge.pixpin.motormd.ExportarDocx.Nota(
+                                markdown = texto, titulo = titulo, comentarios = comentarios,
+                                imagen = { ruta -> com.forge.pixpin.ui.CompartirPaginas.fotoParaWord(this@MarkdownEditorActivity, ruta) },
+                                autor = runCatching { com.forge.pixpin.sincro.IdentidadEnDisco(filesDir).leer().yo.nombre }.getOrNull().orEmpty()
+                            )
+                        )
+                        val destino = java.io.File(java.io.File(cacheDir, "share").apply { mkdirs() }, com.forge.pixpin.motormd.ExportarDocx.nombreDeArchivo(titulo))
+                        destino.writeBytes(datos)
+                        com.forge.pixpin.ui.Compartible.Salida(
+                            destino, "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            if (comentarios?.comentarios.isNullOrEmpty()) "Con sus títulos, listas y fotos" else "Con sus fotos y sus comentarios"
+                        )
+                    }
+                )
+                com.forge.pixpin.ui.Compartible(
+                    base.titulo, base.paginas, base.formatos.map { if (it.id == "word") word else it }, base.marcadas, base.contenido
+                )
+            }.onFailure { android.util.Log.e("PixPinCompartir", "nota", it) }.getOrNull()
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
-                if (datos == null) {
-                    Toast.makeText(this@MarkdownEditorActivity, "No se pudo exportar", Toast.LENGTH_SHORT).show()
-                } else {
-                    docxPendiente = datos
-                    guardarDocx.launch(com.forge.pixpin.motormd.ExportarDocx.nombreDeArchivo(titulo))
-                }
+                if (c == null) Toast.makeText(this@MarkdownEditorActivity, "No se pudo preparar", Toast.LENGTH_SHORT).show()
+                else compartiendo.value = c
             }
         }
-    }
-
-    /** Los bytes de una foto de la nota en un formato que Word entienda. */
-    private fun fotoParaWord(ruta: String): ByteArray? {
-        val f = when {
-            ruta.startsWith("pixpin:files/") -> java.io.File(filesDir, ruta.removePrefix("pixpin:files/"))
-            ruta.startsWith("file://") -> java.io.File(android.net.Uri.parse(ruta).path ?: return null)
-            else -> java.io.File(ruta)
-        }
-        if (!f.isFile) return null
-        val bytes = f.readBytes()
-        if (com.forge.pixpin.motormd.ExportarDocx.formatoDe(bytes) != null) return bytes
-        val mapa = android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return null
-        return java.io.ByteArrayOutputStream().also { mapa.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
     }
 
     /** Nombre y peso de la nota, y de su proyecto si lo tiene. */

@@ -670,7 +670,8 @@ private fun EditorDeTabla(
                     com.forge.pixpin.ui.Compartible.Formato("csv", Icons.Filled.TableChart, "CSV (Excel)", F.NINGUNA, generar = {
                         archivoDeLaTabla(contexto, foto, false)?.let { com.forge.pixpin.ui.Compartible.Salida(it, "text/csv", "Los valores, para Excel o Sheets") }
                     })
-                )
+                ),
+                contenido = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.TABLA
             )
         }
         com.forge.pixpin.ui.HojaDeCompartir(c) { hojaDeCompartir = false }

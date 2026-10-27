@@ -1391,8 +1391,12 @@ class VisorHtmlActivity : ComponentActivity() {
                                                 original.copyTo(destino, overwrite = true)
                                                 Compartible.Salida(destino, android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(destino.extension.lowercase()) ?: "application/octet-stream", "Tal cual, sin cambiar nada")
                                             }
-                                        )
-                                    )
+                                        ),
+                                        // Su `.pixpin` y la Wi-Fi, como en el resto de visores (27-oct-2026).
+                                        ExportarVisor.pixpin(this@VisorHtmlActivity, original.absolutePath, suNombre),
+                                        ExportarVisor.wifi(this@VisorHtmlActivity, original.absolutePath, suNombre)
+                                    ),
+                                    contenido = FormatosDeCompartir.Contenido.DOCUMENTO
                                 )
                             }
                         ) { compartiendo = false }
@@ -2226,7 +2230,7 @@ class VisorHtmlActivity : ComponentActivity() {
         val suya = original.extension.lowercase().ifBlank { nombre.substringAfterLast('.', "").lowercase() }
         val esPagina = suya.isBlank() || esHtml("x.$suya")
         lifecycleScope.launch {
-            val uri = withContext(Dispatchers.IO) {
+            val destino = withContext(Dispatchers.IO) {
                 runCatching {
                     val conExtension = when {
                         esPagina -> if (esHtml(nombre)) nombre else "$nombre.html"
@@ -2234,24 +2238,13 @@ class VisorHtmlActivity : ComponentActivity() {
                         else -> "$nombre.$suya"
                     }
                     val limpio = conExtension.replace(Regex("""[^\p{L}\p{N} ._-]"""), "_").takeLast(80)
-                    val destino = File(File(cacheDir, "share").apply { mkdirs() }, limpio)
-                    original.copyTo(destino, overwrite = true)
-                    FileProvider.getUriForFile(this@VisorHtmlActivity, "$packageName.fileprovider", destino)
+                    File(File(cacheDir, "share").apply { mkdirs() }, limpio).also { original.copyTo(it, overwrite = true) }
                 }.getOrNull()
             }
-            val salio = uri != null && runCatching {
-                startActivity(
-                    Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = if (esPagina) "text/html"
-                            else android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(suya) ?: "*/*"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        },
-                        null
-                    )
-                )
-            }.isSuccess
+            // **La hoja de compartir de toda la aplicación** (27-oct-2026), no el selector de Android:
+            // lo que guarda la página también sale en imagen, .pixpin, tal cual o por Wi-Fi.
+            val salio = destino != null
+            if (destino != null) CompartirArchivoActivity.abrir(this@VisorHtmlActivity, destino)
             if (!salio) Toast.makeText(this@VisorHtmlActivity, getString(R.string.visor_html_no_compartir), Toast.LENGTH_SHORT).show()
         }
     }
