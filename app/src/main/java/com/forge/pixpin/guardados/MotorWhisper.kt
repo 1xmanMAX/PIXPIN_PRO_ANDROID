@@ -23,7 +23,7 @@ import java.net.URL
  * **Tres tamaños** ([MODELOS]): `tiny` (104 MB, rápido, se equivoca bastante), `base`
  * (161 MB, el punto medio) y `small` (375 MB, el más fino y el más lento). El usuario
  * probó el `tiny` (6-sep-2026) y no era «el mejor» como esperaba: es el más pequeño que
- * existe.
+ * existe. Desde el 27-oct-2026 el de por defecto es `base`, el mismo que usa el PC.
  *
  * **El idioma se le dice**, no se le deja adivinar: con 99 idiomas y un modelo pequeño,
  * adivinaba lenguas que nada tenían que ver. Con un segundo idioma puesto, se le deja
@@ -48,7 +48,7 @@ object MotorWhisper {
 
     /** Los modelos que se pueden bajar, con su peso en MB. */
     val MODELOS = linkedMapOf("tiny" to 104, "base" to 161, "small" to 375)
-    const val MODELO_POR_DEFECTO = "tiny"
+    const val MODELO_POR_DEFECTO = "base"
     const val PAGINA_DE_MODELOS = "https://github.com/k2-fsa/sherpa-onnx/releases/tag/asr-models"
     private const val MINIMO_PARA_ADIVINAR_SEGUNDOS = 3
 
@@ -58,7 +58,7 @@ object MotorWhisper {
     @Volatile private var reconocedor: OfflineRecognizer? = null
     @Volatile private var modeloCargado: String? = null
 
-    /** El modelo elegido en Ajustes («tiny» si no hay o no es uno de los tres). */
+    /** El modelo elegido en Ajustes («base», como el PC, si no hay o no es uno de los tres). */
     fun modelo(context: Context): String =
         (context.applicationContext as? com.forge.pixpin.PixPinApp)?.ajustes?.modeloWhisper?.takeIf { it in MODELOS } ?: MODELO_POR_DEFECTO
 

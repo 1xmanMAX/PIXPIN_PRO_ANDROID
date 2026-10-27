@@ -205,7 +205,7 @@ data class Settings(
     val segundoIdiomaDeVoz: String = "",
 
     /** Qué tamaño de Whisper: «tiny» (104 MB), «base» (161 MB) o «small» (375 MB). */
-    val modeloWhisper: String = "tiny",
+    val modeloWhisper: String = "base",
 
     /**
      * **Quién contesta en el asistente** (`[asistente] motor` del PC): `claude` o `deepseek`, con
@@ -555,7 +555,7 @@ class SettingsRepository(private val context: Context) {
             motorDeVoz = prefs[Keys.MOTOR_DE_VOZ] ?: MOTOR_POR_DEFECTO,
             idiomaDeVoz = prefs[Keys.IDIOMA_DE_VOZ] ?: "",
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
-            modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "tiny",
+            modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "base",
             asistenteMotor = prefs[Keys.ASISTENTE_MOTOR] ?: "",
             asistentePensar = prefs[Keys.ASISTENTE_PENSAR] ?: "",
             asistenteDocumentosNube = prefs[Keys.ASISTENTE_DOCUMENTOS_NUBE] ?: "",

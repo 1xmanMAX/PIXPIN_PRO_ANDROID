@@ -97,6 +97,5 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
         proyecto / Wi‑Fi» para los formatos conocidos (se abren directo en este modo); solo para
         formatos desconocidos, varios archivos o texto, un menú corto con lo esencial.
 
-## Pendiente de respuesta del usuario
-
-- Whisper «tiny» (actual) o «base» como el PC (161 MB de descarga).
+### Voz
+- [~] 32. Whisper «base» por defecto, como el PC (161 MB de descarga; respuesta del usuario del 27-oct).
