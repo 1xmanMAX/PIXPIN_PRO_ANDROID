@@ -853,13 +853,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     ))
                 },
                 text = {
+                    // Con el motivo de verdad debajo, si se sabe: un próximo informe dice qué falló.
+                    val motivo = if (que == LecturaVeloz.AlAbrir.NO_SE_PUEDE) LecturaVelozEnElTelefono.ultimoMotivo else null
                     Text(getString(
                         when (que) {
                             LecturaVeloz.AlAbrir.FALTA_LA_APP -> com.forge.pixpin.R.string.guardados_lectura_veloz_falta
                             LecturaVeloz.AlAbrir.APP_ANTIGUA -> com.forge.pixpin.R.string.guardados_lectura_veloz_antigua
                             else -> com.forge.pixpin.R.string.guardados_lectura_veloz_no_se_puede
                         }
-                    ))
+                    ) + (motivo?.let { "\n\n$it" } ?: ""))
                 },
                 confirmButton = {
                     androidx.compose.material3.TextButton(onClick = cerrar) { Text(getString(android.R.string.ok)) }

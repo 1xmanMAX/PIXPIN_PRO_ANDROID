@@ -137,4 +137,44 @@ class LecturaVelozEnElTelefonoTest {
         assertEquals(1000L, u.t)
         assertEquals(1000L, LecturaVeloz.horaDeLaMarca(2.5, 1000L, u))
     }
+
+    // ---- La ida: que el archivo que se da tenga content:// (file_paths.xml) ----
+    // Robolectric no carga el FileProvider del manifiesto (getUriForFile falla siempre aquí), así que
+    // se mira lo mismo que mira él: que la carpeta del archivo esté declarada en `file_paths.xml`.
+    // Si no, `getUriForFile` lanza y PixPin copia a `cache/share/` (AbrirCon.uriDe).
+
+    private fun cubierto(archivo: File): Boolean {
+        val xml = File("src/main/res/xml/file_paths.xml").readText()
+        val raiz = mapOf("files-path" to c.filesDir, "cache-path" to c.cacheDir)
+        return Regex("""<(files-path|cache-path)\s+name="[^"]+"\s+path="([^"]*)"""").findAll(xml).any { m ->
+            val dir = File(raiz.getValue(m.groupValues[1]), m.groupValues[2]).canonicalPath
+            archivo.canonicalPath.startsWith(dir.trimEnd('/') + "/")
+        }
+    }
+
+    @Test
+    fun `un adjunto del chat esta en una carpeta que da content uri`() {
+        val f = File(c.filesDir, "guardados/Capítulo 3.md").apply { parentFile!!.mkdirs(); writeText("# Hola\n\nUn texto.") }
+        val d = LecturaVelozEnElTelefono.deArchivo(c, f, "Capítulo 3", uid = doc)!!
+        assertEquals("Capítulo 3.md", d.nombre)
+        assertTrue(cubierto(d.archivo))
+    }
+
+    @Test
+    fun `una nota va como md por la cache compartida`() {
+        val d = LecturaVelozEnElTelefono.deNota(c, doc, "Mi nota: ¿qué?", "Uno dos tres.\n\nCuatro cinco.")!!
+        assertTrue(d.nombre.endsWith(".md"))
+        assertTrue(d.archivo.isFile)
+        assertTrue(d.archivo.path.contains("share/lectura-veloz/$doc/"))
+        assertTrue(cubierto(d.archivo))
+        assertFalse(cubierto(File(c.filesDir, "otra-cosa/x.md")))
+    }
+
+    @Test
+    fun `el aviso corto lleva el motivo`() {
+        assertEquals(
+            "Este documento no se puede leer en Lectura Veloz: algo",
+            LecturaVelozEnElTelefono.avisoCorto(LecturaVeloz.AlAbrir.NO_SE_PUEDE, "algo")
+        )
+    }
 }

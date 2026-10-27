@@ -116,3 +116,9 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [x] 36. Completar la integración según el manual de Android que deje Lectura Veloz. Se revisa su
       repo cada 30 min hasta que aparezcan el manual y el código; luego se deja de revisar.
       → Hecho con su código (commit cf7474f); el contrato real está en `docs/integracion-lectura-veloz.md`. Ya no hace falta revisar su repo.
+
+## Tanda del 27-oct (2)
+
+- [~] 39. Lectura Veloz no abría el archivo. → Causa: Lectura Veloz pedía su comando nativo como
+      `plugin:lv-tts|copyUri` y Tauri 2 lo rechaza por permisos (solo deja `copy_uri`); arreglado en
+      Lectura Veloz 0.3.1 (rama `pixpin-android-fix`). PixPin ahora dice el motivo y lo apunta (`PixPinLecturaVeloz`).
