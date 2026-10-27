@@ -1423,8 +1423,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 val fila = filaDe(tramos, llegada)
                 if (fila >= 0) {
                     // Recién abierto no hay de dónde se vino: «↓» lleva al final, no a la fila 0.
-                    volverA = if (yaAbajo) lista.firstVisibleItemIndex else null
-                    yaAbajo = true
+                    volverA = if (colocado) lista.firstVisibleItemIndex else null
+                    colocado = true
                     runCatching { lista.animateScrollToItem(fila) }
                     // **El destello al llegar.**
                     //
