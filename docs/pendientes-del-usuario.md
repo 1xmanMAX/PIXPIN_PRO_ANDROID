@@ -91,6 +91,11 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
         arriba día/noche y las funciones de cada formato; editar y compartir como siempre.
       - Solo en este modo, dos botones nuevos: «Abrir en otra app» y «Guardar» (en Mensajes
         guardados o en un chat), sin preguntar cada vez al salir.
+      - «Abrir con…» bien visible, para pasar rápido a una app especializada.
+      - Botón «Compartir» ahí mismo: todos los formatos de PixPin y «Por Wi‑Fi a mis aparatos».
+      - Compartir a PixPin desde otra app: sin el menú de «a un proyecto / abrir en PixPin / nuevo
+        proyecto / Wi‑Fi» para los formatos conocidos (se abren directo en este modo); solo para
+        formatos desconocidos, varios archivos o texto, un menú corto con lo esencial.
 
 ## Pendiente de respuesta del usuario
 
