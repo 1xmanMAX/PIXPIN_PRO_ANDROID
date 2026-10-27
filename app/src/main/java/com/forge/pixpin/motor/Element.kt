@@ -2,6 +2,7 @@ package com.forge.pixpin.motor
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.element
 
 /**
  * Punto en coordenadas de **escena** (no de pantalla ni de bitmap).
@@ -34,18 +35,7 @@ object PtSerializer : kotlinx.serialization.KSerializer<Pt> {
 
     override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Pt {
         val json = decoder as? kotlinx.serialization.json.JsonDecoder
-            ?: return decoder.decodeStructure(descriptor) {
-                var x = 0.0; var y = 0.0
-                while (true) {
-                    when (val i = decodeElementIndex(descriptor)) {
-                        0 -> x = decodeDoubleElement(descriptor, 0)
-                        1 -> y = decodeDoubleElement(descriptor, 1)
-                        kotlinx.serialization.encoding.CompositeDecoder.DECODE_DONE -> break
-                        else -> error("Pt: campo $i")
-                    }
-                }
-                Pt(x, y)
-            }
+            ?: throw kotlinx.serialization.SerializationException("Pt: solo se lee de JSON")
         val num = { e: kotlinx.serialization.json.JsonElement? ->
             (e as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
         }
