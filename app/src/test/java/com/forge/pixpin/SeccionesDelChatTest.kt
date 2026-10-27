@@ -88,24 +88,32 @@ class SeccionesDelChatTest {
 
     // ---- La ficha del chat (25-oct-2026, PC `8c92ba4`, `99f918a`, `2439c5c`). ----
 
+    /**
+     * **Las pestañas de la ficha, sin «Proyectos»** (27-oct-2026): repetía la lista de chats. Fotos
+     * delante, y «Todo» y el buzón no están.
+     */
     @Test
-    fun `la de proyectos no se queda ningun mensaje`() {
-        // Como `la_de_proyectos_no_se_queda_ningun_mensaje` del PC: ni una nota, ni un proyecto
-        // adjunto, ni lo del buzón se cuelan en ella.
-        val l = listOf(
-            msg("n", Clase.NOTA, texto = "hola", fijado = true),
-            msg("p", Clase.PROYECTO, "otro"),
-            msg("b", Clase.IMAGEN, "x.png", buzon = true)
+    fun `las pestanas de la ficha son las de los mensajes sin proyectos`() {
+        assertEquals(
+            listOf(Seccion.FOTOS, Seccion.VIDEOS, Seccion.ARCHIVOS, Seccion.ENLACES, Seccion.VOZ, Seccion.DIBUJOS, Seccion.FIJADOS),
+            SeccionesDelChat.DE_LA_FICHA
         )
-        assertTrue(deSeccion(l, Seccion.PROYECTOS).isEmpty())
-        assertTrue(SeccionesDelChat.cosasDe(l, Seccion.PROYECTOS).isEmpty())
-        assertFalse(SeccionesDelChat.esCuadricula(Seccion.PROYECTOS))
-        // Es la primera de la ficha, y «Todo» y el buzón no están en ella.
-        assertEquals(Seccion.PROYECTOS, SeccionesDelChat.DE_LA_FICHA.first())
+        assertFalse(Seccion.entries.any { it.name == "PROYECTOS" })
         assertFalse(Seccion.TODO in SeccionesDelChat.DE_LA_FICHA)
         assertFalse(Seccion.BUZON in SeccionesDelChat.DE_LA_FICHA)
-        // Caso de control: los mismos mensajes sí salen en «Todo».
-        assertEquals(2, deSeccion(l, Seccion.TODO).size)
+    }
+
+    /** **Dónde se abre**: en «Fotos» si hay; si no, en la primera con algo; vacío, en «Fotos». */
+    @Test
+    fun `la ficha se abre en fotos o en la primera pestana con algo`() {
+        assertEquals(Seccion.FOTOS, SeccionesDelChat.dondeSeAbre(mapOf(Seccion.FOTOS to 3, Seccion.ARCHIVOS to 9)))
+        assertEquals(Seccion.ARCHIVOS, SeccionesDelChat.dondeSeAbre(mapOf(Seccion.FOTOS to 0, Seccion.ARCHIVOS to 2, Seccion.VOZ to 1)))
+        // Caso negativo: un chat sin nada no se abre en una pestaña cualquiera.
+        assertEquals(Seccion.FOTOS, SeccionesDelChat.dondeSeAbre(emptyMap()))
+        // Con los mensajes de verdad: solo un enlace.
+        val l = listOf(msg("n", Clase.NOTA, texto = "mira https://pixpin.app"))
+        val cuentas = SeccionesDelChat.DE_LA_FICHA.associateWith { SeccionesDelChat.cosasDe(l, it).size }
+        assertEquals(Seccion.ENLACES, SeccionesDelChat.dondeSeAbre(cuentas))
     }
 
     @Test
@@ -168,36 +176,6 @@ class SeccionesDelChatTest {
         assertEquals(listOf("oct2", "oct1"), meses[0].cosas.map { it.first })
         assertEquals(listOf("sep2", "sep1"), meses[1].cosas.map { it.first })
         assertTrue(SeccionesDelChat.porMeses(emptyList<Long>(), zona) { it }.isEmpty())
-    }
-
-    @Test
-    fun `los proyectos de la ficha se filtran por nombre con su negrita`() {
-        val charlas = listOf(
-            Conversacion(null, "Mensajes guardados", null, 3),
-            Conversacion("asis", "Asistente", null, 0),
-            Conversacion("r", "Reforma del Baño", null, 7),
-            Conversacion("SIN", "Asistente", null, 0)
-        )
-        assertEquals(listOf(null, "asis", "r"), SeccionesDelChat.proyectosDeLaFicha(charlas, null, "SIN").map { it.proyecto })
-        // Sin tildes ni mayúsculas, y la negrita en su sitio del nombre de verdad.
-        assertEquals(listOf("r"), SeccionesDelChat.proyectosDeLaFicha(charlas, "bano", "SIN").map { it.proyecto })
-        assertEquals(12..15, SeccionesDelChat.tramoBuscado("Reforma del Baño", "BAÑO"))
-        // Casos negativos: nada que buscar, o no está.
-        assertEquals(null, SeccionesDelChat.tramoBuscado("Reforma", " "))
-        assertEquals(null, SeccionesDelChat.tramoBuscado("Reforma", "cocina"))
-        assertTrue(SeccionesDelChat.proyectosDeLaFicha(charlas, "cocina", "SIN").isEmpty())
-    }
-
-    @Test
-    fun `las hojas de cada chat son sus lienzos y paginas fuera del buzon`() {
-        val l = listOf(
-            msg("d1", Clase.DIBUJO).copy(proyecto = "r"),
-            msg("p1", Clase.PAGINA, "plano.pdf").copy(proyecto = "r"),
-            msg("d2", Clase.DIBUJO, buzon = true).copy(proyecto = "r"),
-            msg("n", Clase.NOTA, texto = "x").copy(proyecto = "r"),
-            msg("g", Clase.DIBUJO)
-        )
-        assertEquals(mapOf("r" to 2, null to 1), SeccionesDelChat.hojasPorChat(l))
     }
 
     @Test

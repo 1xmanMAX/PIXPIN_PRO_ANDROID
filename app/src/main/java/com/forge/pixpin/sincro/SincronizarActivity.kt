@@ -671,6 +671,23 @@ class SincronizarActivity : ComponentActivity() {
             Titulo("Tus aparatos")
             if (identidad.enGrupo) ConGrupo(identidad) else SinGrupo()
 
+            // **Chats compartidos** (27-oct-2026, como la portada de Sincronizar del PC,
+            // `cc-portada-*`): la segunda puerta para unirse al chat de otra persona, además del «+»
+            // de la lista de chats. Compartir uno se hace desde el chat (Personas).
+            Titulo("Chats compartidos")
+            Caja {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "El chat de un proyecto que llevas con otra persona: solo ve ese chat. Para compartir uno, " +
+                            "mantén pulsado el chat en la lista → Personas.",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    TextButton(onClick = { ChatCompartidoActivity.entrar(this@SincronizarActivity) }) { Text("Unirse") }
+                }
+            }
+
             // **La papelera, a mano y sin pasar por un proyecto** (21-sep-2026): se abría desde el
             // menú de un proyecto, y si lo borrado eran todos no quedaba por dónde entrar.
             Titulo("Papelera")

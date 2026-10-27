@@ -41,15 +41,25 @@ object SeccionesDelChat {
     // ---- La ficha del chat (25-oct-2026, PC `8c92ba4`, `99f918a` y `2439c5c`). Ver [FichaDelChat]. ----
 
     /**
-     * **Las pestañas de la ficha, en su orden**: «Proyectos» delante —es donde se abre, como el PC—
-     * y luego las de los mensajes. «Todo» no va: en el teléfono la ficha tapa el chat entero, y
-     * «todo» es el propio chat, a un toque de cerrarla. El buzón tampoco: tiene su ficha en la
-     * cabecera y su aviso de que caduca.
+     * **Las pestañas de la ficha, en su orden**: las de los mensajes. «Todo» no va: en el teléfono
+     * la ficha tapa el chat entero, y «todo» es el propio chat, a un toque de cerrarla. El buzón
+     * tampoco: tiene su ficha en la cabecera y su aviso de que caduca.
+     *
+     * **Sin «Proyectos» delante** (27-oct-2026, pedido del usuario): la lista de chats que había
+     * aquí repetía la de la pantalla principal. Las carpetas de páginas siguen en «Archivos».
      */
     val DE_LA_FICHA = listOf(
-        Seccion.PROYECTOS, Seccion.FOTOS, Seccion.VIDEOS, Seccion.ARCHIVOS,
+        Seccion.FOTOS, Seccion.VIDEOS, Seccion.ARCHIVOS,
         Seccion.ENLACES, Seccion.VOZ, Seccion.DIBUJOS, Seccion.FIJADOS
     )
+
+    /**
+     * **Dónde se abre la ficha** (27-oct-2026): en «Fotos», como Telegram, o, si no hay ninguna, en
+     * la primera pestaña que tenga algo; con el chat vacío, en «Fotos», que dice que no hay. Así no
+     * se abre en una pestaña vacía teniendo archivos o enlaces al lado. [cuentas]: lo de cada una.
+     */
+    fun dondeSeAbre(cuentas: Map<Seccion, Int>): Seccion =
+        DE_LA_FICHA.firstOrNull { (cuentas[it] ?: 0) > 0 } ?: Seccion.FOTOS
 
     /** Las que se ven como cuadrícula de miniaturas; las demás, como filas. */
     fun esCuadricula(s: Seccion) = s == Seccion.FOTOS || s == Seccion.VIDEOS || s == Seccion.DIBUJOS
@@ -99,10 +109,8 @@ object SeccionesDelChat {
      * **Las cosas de una pestaña de la ficha**, en el orden del chat (el más viejo primero; la
      * ficha las enseña por meses con lo nuevo arriba, ver [porMeses]). En «Fotos» entran las fotos
      * de las notas ricas, cada una como la suya; en las demás, los mensajes de [deSeccion].
-     * «Proyectos» no tiene ninguna.
      */
     fun cosasDe(mensajes: List<Mensaje>, seccion: Seccion): List<Cosa> {
-        if (seccion == Seccion.PROYECTOS) return emptyList()
         if (seccion != Seccion.FOTOS) return deSeccion(mensajes, seccion).map { Cosa(it.id) }
         val enOrden = mensajes.filter { !it.enBuzon }.sortedBy { it.cuando }
         val fotos = deSeccion(mensajes, Seccion.FOTOS).mapTo(HashSet()) { it.id }
@@ -145,43 +153,5 @@ object SeccionesDelChat {
         }
         actual?.let { salida += Mes(it.first, it.second, lista) }
         return salida
-    }
-
-    /**
-     * **Cuántas hojas tiene cada chat** (los lienzos y las páginas, lo de su «Galería» en el PC),
-     * para la fila de cada proyecto en la pestaña «Proyectos». Lo del buzón no cuenta.
-     */
-    fun hojasPorChat(mensajes: List<Mensaje>): Map<String?, Int> {
-        val cuentas = HashMap<String?, Int>()
-        for (m in mensajes) {
-            if (m.enBuzon || (m.clase != Clase.DIBUJO && m.clase != Clase.PAGINA)) continue
-            cuentas[m.proyecto] = (cuentas[m.proyecto] ?: 0) + 1
-        }
-        return cuentas
-    }
-
-    /**
-     * **Los chats de la pestaña «Proyectos»**, en el orden de la lista de chats, filtrados por
-     * nombre con la lupa de la ficha (sin mayúsculas ni tildes, como [buscar]). Uno que aún no
-     * existe (el «Asistente» sin crear, [sinCrear]) no sale: aquí se pasa de uno a otro.
-     */
-    fun proyectosDeLaFicha(charlas: List<Conversacion>, consulta: String?, sinCrear: String? = null): List<Conversacion> {
-        val q = sinAcentos(consulta.orEmpty().trim())
-        return charlas.filter { it.proyecto == null || it.proyecto != sinCrear }
-            .filter { q.isEmpty() || sinAcentos(it.nombre).contains(q) }
-    }
-
-    /**
-     * **Lo buscado dentro de un nombre**, para ponerlo en negrita (como el PC): sus posiciones en
-     * el nombre tal cual, buscando sin tildes ni mayúsculas. Null si no está o no se busca nada.
-     * [sinAcentos] cambia letra por letra, así que las posiciones valen en el original.
-     */
-    fun tramoBuscado(nombre: String, consulta: String?): IntRange? {
-        val q = sinAcentos(consulta.orEmpty().trim())
-        if (q.isEmpty()) return null
-        val plano = sinAcentos(nombre)
-        if (plano.length != nombre.length) return null
-        val i = plano.indexOf(q).takeIf { it >= 0 } ?: return null
-        return i until i + q.length
     }
 }

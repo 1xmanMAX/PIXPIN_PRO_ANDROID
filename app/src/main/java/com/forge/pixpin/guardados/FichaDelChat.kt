@@ -79,9 +79,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -100,21 +98,20 @@ import java.text.DateFormatSymbols
 
 /**
  * **La ficha del chat, como el panel de medios de Telegram** (25-oct-2026, la isla del PC de
- * `99f918a` y `2439c5c`). Sale al tocar el nombre del chat, que es lo que hace Telegram, y se abre
- * en **«Proyectos»** (el usuario, en el PC: «quiero que esta zona de proyectos se mueva al menú que
- * se abre al darle click en la parte de arriba del chat»): cada chat en su fila, en el orden de la
- * lista de chats, con su avatar, su nombre, cuántas hojas tiene, su última línea y cuándo se tocó.
- * El de este chat va marcado («Este chat») y tocarlo lleva a sus dibujos; tocar otro cambia de
- * chat aquí mismo, como la lista de chats del menú.
+ * `99f918a` y `2439c5c`). Sale al tocar el nombre del chat, que es lo que hace Telegram.
  *
- * Las demás pestañas son las del PC: la rejilla de **Fotos** (con las fotos de las notas ricas,
+ * **Sin la pestaña «Proyectos»** (27-oct-2026, pedido del usuario): la ficha se abría en una lista
+ * de todos los chats para pasar de uno a otro, que repetía la lista de chats (la pantalla principal
+ * desde v0.145.0). Ahora se abre en **Fotos**, o en la primera pestaña con algo
+ * ([SeccionesDelChat.dondeSeAbre]).
+ *
+ * Las pestañas son las del PC: la rejilla de **Fotos** (con las fotos de las notas ricas,
  * cada una en el sitio de su nota, `8c92ba4`), **Vídeos** (con su triángulo y lo que duran) y
  * **Dibujos**, de borde a borde con 2 dp entre miniaturas y de tres a cinco columnas según el
  * ancho; y las filas de **Archivos** (la chapa de color de su extensión, el nombre cortado con «…»
  * y «peso · fecha»), **Enlaces** (la letra de su sitio, el sitio, la dirección y lo que decía el
  * mensaje), **Voz** (suena sin salir de la ficha) y **Fijados**. Todo va **por meses, lo más nuevo
- * arriba**, y cada pestaña vacía dice lo suyo. La lupa filtra la pestaña que se ve; en «Proyectos»,
- * por nombre, con lo buscado en negrita.
+ * arriba**, y cada pestaña vacía dice lo suyo. La lupa filtra la pestaña que se ve.
  *
  * Tocar una miniatura la abre en grande sobre fondo oscuro, y se pasa de una a otra deslizando:
  * arriba, volver, el nombre con «3 de 24 · fecha», «Ver en el chat» y «Abrir». La que se ve se
@@ -135,22 +132,18 @@ fun FichaDelChat(
     chatDe: String?,
     /** Los mensajes de este chat. */
     mensajes: List<Mensaje>,
-    /** Los chats, en el orden de la lista de chats. Ver [conversaciones]. */
-    charlas: List<Conversacion>,
-    /** Las hojas de cada chat. Ver [SeccionesDelChat.hojasPorChat]. */
-    hojas: Map<String?, Int>,
-    /** El id del chat que aún no existe (el «Asistente» sin crear): no sale. */
-    sinCrear: String?,
-    resumenDe: (Mensaje) -> String,
     fechaDe: (Long) -> String,
     onCerrar: () -> Unit,
-    onIrAlChat: (Conversacion) -> Unit,
     onVerEnElChat: (String) -> Unit,
     onAbrir: (Mensaje) -> Unit,
     onAbrirFichero: (File) -> Unit,
     onAbrirEnlace: (String) -> Unit
 ) {
-    var seccion by remember { mutableStateOf(Seccion.PROYECTOS) }
+    val cuentas = remember(mensajes) {
+        SeccionesDelChat.DE_LA_FICHA.associateWith { s -> SeccionesDelChat.cosasDe(mensajes, s).size }
+    }
+    // Se decide al abrir y no se mueve: si llega una foto mientras se mira «Archivos», se sigue ahí.
+    var seccion by remember { mutableStateOf(SeccionesDelChat.dondeSeAbre(cuentas)) }
     var consulta by remember { mutableStateOf<String?>(null) }
     var abierta by remember { mutableStateOf<SeccionesDelChat.Cosa?>(null) }
     // **La hoja de la foto del chat**, tocando el avatar de arriba (25-oct-2026, la isla del PC). Ver [HojaDeLaFotoDelChat].
@@ -161,12 +154,6 @@ fun FichaDelChat(
     val cosas = remember(mensajes, seccion, consulta) {
         val filtrados = if (consulta.isNullOrBlank()) mensajes else buscar(mensajes, consulta.orEmpty())
         SeccionesDelChat.cosasDe(filtrados, seccion).asReversed()
-    }
-    val cuentas = remember(mensajes) {
-        SeccionesDelChat.DE_LA_FICHA.associateWith { s ->
-            if (s == Seccion.PROYECTOS) SeccionesDelChat.proyectosDeLaFicha(charlas, null, sinCrear).size
-            else SeccionesDelChat.cosasDe(mensajes, s).size
-        }
     }
     // La previa, por id: si lo abierto ya no está, a la rejilla.
     val enLaPrevia = SeccionesDelChat.reubicar(cosas, abierta)
@@ -190,12 +177,6 @@ fun FichaDelChat(
                 HorizontalDivider()
                 Box(Modifier.fillMaxSize()) {
                     when {
-                        seccion == Seccion.PROYECTOS -> Proyectos(
-                            charlas, hojas, chatDe, sinCrear, consulta, resumenDe, fechaDe,
-                            onIrAlChat = onIrAlChat,
-                            // El de este chat no sale: lleva a sus hojas, lo que enseñaba su tarjeta.
-                            onEste = { seccion = Seccion.DIBUJOS }
-                        )
                         cosas.isEmpty() -> Vacia(seccion)
                         SeccionesDelChat.esCuadricula(seccion) -> Rejilla(cosas, porId) { abierta = it }
                         else -> Filas(seccion, cosas, porId, fechaDe, onAbrir, onAbrirEnlace, onVerEnElChat)
@@ -329,7 +310,6 @@ fun rotuloDe(s: Seccion): Int = when (s) {
     Seccion.DIBUJOS -> R.string.guardados_dibujos
     Seccion.FIJADOS -> R.string.guardados_fijados
     Seccion.BUZON -> R.string.guardados_buzon
-    Seccion.PROYECTOS -> R.string.guardados_proyectos
 }
 
 private fun vaciaDe(s: Seccion): Pair<Int, ImageVector> = when (s) {
@@ -340,7 +320,6 @@ private fun vaciaDe(s: Seccion): Pair<Int, ImageVector> = when (s) {
     Seccion.VOZ -> R.string.ficha_vacia_voz to Icons.Filled.Mic
     Seccion.DIBUJOS -> R.string.ficha_vacia_dibujos to Icons.Filled.Brush
     Seccion.FIJADOS -> R.string.ficha_vacia_fijados to Icons.Filled.PushPin
-    Seccion.PROYECTOS -> R.string.ficha_vacia_proyectos to Icons.Filled.Folder
     else -> R.string.guardados_seccion_vacia to Icons.Filled.BookmarkBorder
 }
 
@@ -377,88 +356,10 @@ private fun RotuloDelMes(anio: Int, mes: Int) {
     )
 }
 
-// ---- La pestaña «Proyectos» ----
-
-@Composable
-private fun Proyectos(
-    charlas: List<Conversacion>,
-    hojas: Map<String?, Int>,
-    chatDe: String?,
-    sinCrear: String?,
-    consulta: String?,
-    resumenDe: (Mensaje) -> String,
-    fechaDe: (Long) -> String,
-    onIrAlChat: (Conversacion) -> Unit,
-    onEste: () -> Unit
-) {
-    val filas = remember(charlas, consulta, sinCrear) { SeccionesDelChat.proyectosDeLaFicha(charlas, consulta, sinCrear) }
-    if (filas.isEmpty()) Vacia(Seccion.PROYECTOS) else LazyColumn(Modifier.fillMaxSize()) {
-        items(filas, key = { it.proyecto ?: "general" }) { c ->
-            val esEste = c.proyecto == chatDe
-            Row(
-                Modifier.fillMaxWidth()
-                    .background(if (esEste) MaterialTheme.colorScheme.primary.copy(alpha = 0.06f) else Color.Transparent)
-                    .clickable { if (esEste) onEste() else onIrAlChat(c) }
-                    .padding(horizontal = 16.dp, vertical = 10.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                AvatarDelChat(c)
-                Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            conLoBuscado(c.nombre, consulta), fontSize = 16.sp, fontWeight = FontWeight.Medium,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f)
-                        )
-                        c.ultimo?.let {
-                            Text(fechaDe(it.cuando), fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(start = 8.dp))
-                        }
-                    }
-                    // Debajo: «Este chat · 12 hojas · lo último que se dijo».
-                    val partes = buildList {
-                        if (esEste) add(stringResource(R.string.ficha_este_chat))
-                        val n = hojas[c.proyecto] ?: 0
-                        if (n > 0) add(pluralStringResource(R.plurals.ficha_hojas, n, n))
-                        c.ultimo?.let { resumenDe(it).lineSequence().firstOrNull { l -> l.isNotBlank() }?.trim() }
-                            ?.takeIf { it.isNotEmpty() }?.let { add(it) }
-                    }
-                    if (partes.isNotEmpty()) Text(
-                        partes.joinToString(" · "), fontSize = 13.sp,
-                        color = if (esEste) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun AvatarDelChat(c: Conversacion) {
-    CirculoDelChat(c.proyecto, c.nombre, 46.dp, MaterialTheme.colorScheme.primaryContainer) {
-        if (c.proyecto == null) Icon(Icons.Filled.BookmarkBorder, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
-        // Sin foto, las iniciales, como el PC.
-        else Text(
-            iniciales(c.nombre), fontSize = 17.sp, fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onPrimaryContainer
-        )
-    }
-}
-
 /** Las dos primeras iniciales de un nombre («Reforma del baño» → «RD»). */
 internal fun iniciales(nombre: String): String =
     nombre.split(Regex("\\s+")).filter { it.isNotBlank() && it.first().isLetterOrDigit() }
         .take(2).joinToString("") { it.first().uppercase() }.ifEmpty { nombre.trim().take(1).uppercase().ifEmpty { "·" } }
-
-/** El nombre con lo buscado en negrita. Ver [SeccionesDelChat.tramoBuscado]. */
-private fun conLoBuscado(nombre: String, consulta: String?): AnnotatedString {
-    val t = SeccionesDelChat.tramoBuscado(nombre, consulta) ?: return AnnotatedString(nombre)
-    return buildAnnotatedString {
-        append(nombre.substring(0, t.first))
-        withStyle(SpanStyle(fontWeight = FontWeight.ExtraBold)) { append(nombre.substring(t.first, t.last + 1)) }
-        append(nombre.substring(t.last + 1))
-    }
-}
 
 // ---- La rejilla: Fotos, Vídeos y Dibujos ----
 

@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
+import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -82,13 +83,21 @@ internal fun ChapaDeCompartido(aro: Color, modifier: Modifier = Modifier, lado: 
 
 /**
  * **El «+» de los chats: normal o compartido**, cada fila con su explicación de una línea (las
- * mismas que el PC, `chat-nuevo-*`).
+ * mismas que el PC, `chat-nuevo-*`), y unirse a uno compartido con su código.
  */
 @Composable
-internal fun MenuDeChatNuevo(abierto: Boolean, alCerrar: () -> Unit, alElegir: (compartido: Boolean) -> Unit) {
+internal fun MenuDeChatNuevo(
+    abierto: Boolean, alCerrar: () -> Unit, alUnirse: () -> Unit, alElegir: (compartido: Boolean) -> Unit
+) {
     DropdownMenu(expanded = abierto, onDismissRequest = alCerrar) {
         FilaDeChatNuevo(Icons.Filled.ChatBubbleOutline, "Chat normal", "Solo tú y tus aparatos") { alCerrar(); alElegir(false) }
         FilaDeChatNuevo(Icons.Filled.Groups, "Chat compartido", "Con otras personas, cada una en su lado") { alCerrar(); alElegir(true) }
+        // **Unirse al de otro** (27-oct-2026): se podía crear un chat compartido pero no entrar en
+        // uno; la puerta estaba en el ⋮ de «Mensajes guardados» y nadie la encontraba. Aquí, junto a
+        // crearlo, como el menú del «+» del PC (`cc-menu-entrar`).
+        FilaDeChatNuevo(Icons.Filled.GroupAdd, com.forge.pixpin.sincro.Invitacion.UNIRSE, com.forge.pixpin.sincro.Invitacion.UNIRSE_DETALLE) {
+            alCerrar(); alUnirse()
+        }
     }
 }
 

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -351,6 +352,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     override fun finish() {
         if (isTaskRoot) com.forge.pixpin.Volver.aLaLista(this)
         super.finish()
+    }
+
+    /** Dónde se quedó el chat [clave] la última vez, o nada. Ver [PosicionDelChat]. */
+    private fun posicionGuardada(clave: String): PosicionDelChat.Guardada? = runCatching {
+        PosicionDelChat.deTexto(getSharedPreferences(PREFS_POSICIONES, MODE_PRIVATE).getString(clave, null))
+    }.getOrNull()
+
+    private fun guardarPosicion(clave: String, g: PosicionDelChat.Guardada) {
+        runCatching { getSharedPreferences(PREFS_POSICIONES, MODE_PRIVATE).edit().putString(clave, PosicionDelChat.aTexto(g)).apply() }
     }
 
     /** El mensaje al que saltar al entrar, si lo pidió un enlace. */
@@ -1097,16 +1107,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         com.forge.pixpin.asistente.TarjetaDelAsistente(
                             Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 6.dp)
                         )
-                        val deSistema = remember(mensajes, chatDe) { mensajes.filter { it.proyecto == chatDe && com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema(it) } }
-                        com.forge.pixpin.asistente.FranjaDeSistema(deSistema, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA)) { m ->
-                            lifecycleScope.launch(Dispatchers.IO) {
-                                // Una letra se va con su archivo (si no, el plano la vuelve a poner).
-                                if (m.id.startsWith(com.forge.pixpin.planos.LetrasQueViajan.PREFIJO_ID))
-                                    com.forge.pixpin.planos.LetrasQueViajan.quitarUna(com.forge.pixpin.sincro.Red.disco(this@MensajesActivity), System.currentTimeMillis(), m.id)
-                                else almacen.cambiar { todos -> todos.filterNot { it.id == m.id } }
-                                withContext(Dispatchers.Main) { refrescar() }
-                            }
-                        }
+                        // **Sin la franja de los mensajes de sistema** (27-oct-2026, pedido del usuario): las
+                        // letras de los planos, las figuras (`auto-figuras`), las automatizaciones y demás
+                        // `auto-*` salían en una franja encima de «Conversación nueva» que, al tocarla, se
+                        // abría tapando el chat. Siguen guardados y viajando igual; solo no se enseñan
+                        // aquí (ni como burbujas: ver [com.forge.pixpin.asistente.ChatDelAsistente.esDeSistema]).
                         com.forge.pixpin.asistente.RecetasDelAsistente(Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 4.dp)) { pedido ->
                             val nota = Mensaje(id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.NOTA, texto = pedido, proyecto = chatDe)
                             almacen.anadir(nota)
@@ -1250,25 +1255,122 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // cabecera y el pie flotan encima, que es lo que se pidió («el chat va por
                     // detrás»). Los huecos se los pone la propia lista, midiendo a los dos.
             ) {
-            // **Se abre por el final.**
+            // **Se abre por el final, o donde se dejó** (27-oct-2026). Ver [PosicionDelChat].
             //
-            // La conversación va del más viejo al más nuevo, así que abrir por arriba
-            // dejaba mirando lo de hace tres meses: había que desplazarse hasta abajo
-            // cada vez para ver lo que uno acababa de mandar. Se arranca en la última
-            // fila, que es donde está lo de hoy.
-            val lista = rememberLazyListState(
-                initialFirstVisibleItemIndex = (visibles.size + tramos.size - 1)
-                    .coerceAtLeast(0)
-            )
-            // **Y cuando los mensajes llegan después, también.** Se leen del disco fuera del hilo
-            // de la pantalla, así que al montarse la lista aún estaba vacía: el índice inicial era
-            // el 0 y el chat abría por el primer mensaje (lo reportó el usuario el 13-sep-2026).
-            // La primera vez que hay algo, se baja al último, sin animación.
-            var yaAbajo by remember { mutableStateOf(false) }
-            androidx.compose.runtime.LaunchedEffect(visibles.isNotEmpty()) {
-                if (yaAbajo || visibles.isEmpty()) return@LaunchedEffect
-                yaAbajo = true
-                runCatching { lista.scrollToItem((visibles.size + tramos.size - 1).coerceAtLeast(0)) }
+            // La conversación va del más viejo al más nuevo, así que abrir por arriba dejaba
+            // mirando lo de hace tres meses. Antes se bajaba una vez a la **fila** del último
+            // mensaje —que es poner su principio arriba: de una respuesta larga del asistente
+            // solo se veía la primera línea, «me aparece arriba»— y nadie volvía a bajar al
+            // crecer el pie o la respuesta. Ahora se baja al borde de abajo del último y, si al
+            // salir se había dejado subido, se vuelve a ese mensaje y a ese punto.
+            //
+            // Un estado por chat: al cambiar de chat aquí mismo, el nuevo empieza de cero y se
+            // coloca solo. Guardable, para que girar el teléfono no lo recoloque.
+            val claveDelChat = chatDe ?: com.forge.pixpin.sincro.Disco.GENERAL
+            val lista = androidx.compose.runtime.saveable.rememberSaveable(
+                claveDelChat, saver = androidx.compose.foundation.lazy.LazyListState.Saver
+            ) { androidx.compose.foundation.lazy.LazyListState() }
+            var colocado by androidx.compose.runtime.saveable.rememberSaveable(claveDelChat) { mutableStateOf(false) }
+            // Si se estaba abajo: lo que decide si algo nuevo arrastra la lista con él.
+            var pegadoAbajo by androidx.compose.runtime.saveable.rememberSaveable(claveDelChat) { mutableStateOf(true) }
+            // El último mensaje que llegó a verse, para la chapa del botón de bajar.
+            val leidoHasta = androidx.compose.runtime.saveable.rememberSaveable(claveDelChat) { mutableStateOf<String?>(null) }
+            val idsVisibles = remember(visibles) { visibles.map { it.id } }
+            val indiceDeVisibles = remember(idsVisibles) { HashMap<String, Int>(idsVisibles.size * 2).also { m -> idsVisibles.forEachIndexed { i, id -> m[id] = i } } }
+            val ultimaFila = (visibles.size + tramos.size - 1).coerceAtLeast(0)
+            val visiblesAhora by androidx.compose.runtime.rememberUpdatedState(idsVisibles)
+            val tramosAhora by androidx.compose.runtime.rememberUpdatedState(tramos)
+            val filtrado by androidx.compose.runtime.rememberUpdatedState(seccion != Seccion.TODO || consulta != null || porEtiqueta != null)
+            // **Colocarse al abrir y seguir abajo después**, en un solo sitio para que no se pisen.
+            androidx.compose.runtime.LaunchedEffect(lista) {
+                if (!colocado) {
+                    androidx.compose.runtime.snapshotFlow { visiblesAhora.isNotEmpty() }.first { it }
+                    val ids = visiblesAhora
+                    // Con un salto pedido (un enlace, «Ver en el chat», el buscador) manda el salto.
+                    val conSalto = irA != null || irAlMensajePedido != null
+                    val destino = if (conSalto || filtrado) PosicionDelChat.AlAbrir.Abajo
+                        else PosicionDelChat.alAbrir(posicionGuardada(claveDelChat), ids)
+                    val guardada = if (filtrado) null else posicionGuardada(claveDelChat)
+                    runCatching {
+                        when (destino) {
+                            is PosicionDelChat.AlAbrir.En -> {
+                                val fila = filaDe(tramosAhora, destino.id)
+                                if (fila >= 0) lista.scrollToItem(fila, destino.desplazamiento)
+                                pegadoAbajo = false
+                            }
+                            PosicionDelChat.AlAbrir.Abajo -> if (!conSalto) {
+                                lista.scrollToItem((ids.size + tramosAhora.size - 1).coerceAtLeast(0), ABAJO_DEL_TODO)
+                                pegadoAbajo = true
+                            }
+                        }
+                    }
+                    // Lo que no se vio la otra vez sigue sin verse; abriendo abajo, ya está visto.
+                    leidoHasta.value = if (destino is PosicionDelChat.AlAbrir.En)
+                        guardada?.leidoHasta?.takeIf { it in ids } ?: destino.id
+                    else ids.lastOrNull()
+                    colocado = true
+                }
+                var antes: PosicionDelChat.Foto? = null
+                androidx.compose.runtime.snapshotFlow {
+                    val info = lista.layoutInfo
+                    val ultima = info.visibleItemsInfo.lastOrNull()?.takeIf { it.index == info.totalItemsCount - 1 }
+                    PosicionDelChat.Foto(
+                        filas = info.totalItemsCount,
+                        ultima = ultima?.key ?: antes?.ultima.takeIf { antes?.filas == info.totalItemsCount },
+                        altoDeLaUltima = ultima?.size ?: -1,
+                        pie = info.afterContentPadding,
+                        abajo = !lista.canScrollForward
+                    )
+                }.collect { ahora ->
+                    when (PosicionDelChat.queHacer(antes, ahora, pegadoAbajo)) {
+                        PosicionDelChat.Accion.BAJAR -> if (irA == null) runCatching {
+                            lista.scrollToItem((ahora.filas - 1).coerceAtLeast(0), ABAJO_DEL_TODO)
+                        }
+                        PosicionDelChat.Accion.APUNTAR -> pegadoAbajo = ahora.abajo
+                        PosicionDelChat.Accion.NADA -> {}
+                    }
+                    antes = ahora
+                }
+            }
+            // **Lo visto**: el último mensaje en pantalla, si va más abajo que lo apuntado.
+            androidx.compose.runtime.LaunchedEffect(lista, indiceDeVisibles) {
+                androidx.compose.runtime.snapshotFlow {
+                    lista.layoutInfo.visibleItemsInfo.lastOrNull { (it.key as? String)?.let(indiceDeVisibles::containsKey) == true }?.key as? String
+                }.collect { ultimoEnPantalla ->
+                    if (colocado && ultimoEnPantalla != null) {
+                        leidoHasta.value = PosicionDelChat.masAvanzado(indiceDeVisibles, leidoHasta.value, ultimoEnPantalla)
+                    }
+                }
+            }
+            // **Se apunta al salir** (a otra pantalla, a otro chat o fuera): el primer mensaje que se
+            // ve y cuánto de él asoma, o nada si se estaba abajo. Con un filtro puesto no: lo que se
+            // ve no es el chat. Va con su propio estado ([lista], [leidoHasta]) y no con el del chat
+            // que venga después.
+            val ciclo = androidx.compose.ui.platform.LocalLifecycleOwner.current
+            androidx.compose.runtime.DisposableEffect(lista, ciclo) {
+                val apuntar = {
+                    if (colocado && !filtrado) {
+                        val info = lista.layoutInfo
+                        val primero = info.visibleItemsInfo.firstOrNull { (it.key as? String)?.startsWith("dia-") == false }
+                        val abajo = !lista.canScrollForward
+                        if (info.totalItemsCount > 0) guardarPosicion(
+                            claveDelChat,
+                            PosicionDelChat.Guardada(
+                                arriba = if (abajo) null else primero?.key as? String,
+                                desplazamiento = if (abajo || primero == null) 0 else (-primero.offset).coerceAtLeast(0),
+                                leidoHasta = leidoHasta.value
+                            )
+                        )
+                    }
+                }
+                val observador = androidx.lifecycle.LifecycleEventObserver { _, e ->
+                    if (e == androidx.lifecycle.Lifecycle.Event.ON_PAUSE) apuntar()
+                }
+                ciclo.lifecycle.addObserver(observador)
+                onDispose {
+                    ciclo.lifecycle.removeObserver(observador)
+                    apuntar()
+                }
             }
             // Y al mandar algo nuevo, baja hasta ello. Sin esto, lo que acabas de
             // escribir aparece fuera de la vista y parece que no se ha mandado.
@@ -1285,6 +1387,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // era tocar y que no ocurriera nada, que es de las peores cosas que
                 // puede hacer un botón. Ahora se quita el filtro y se cambia de sección,
                 // y el salto se hace en la pasada siguiente, cuando la lista ya lo tiene.
+                // **Con los mensajes aún sin leer del disco, se espera** (27-oct-2026): un salto pedido
+                // al abrir (el buscador de la lista, un enlace) llegaba con la lista vacía, no
+                // encontraba el mensaje y se tiraba. Al cargar cambian los tramos y esto se repite.
+                if (cargando) return@LaunchedEffect
                 val elCitado = mensajes.firstOrNull { it.id == destino }
                 if (elCitado == null) {
                     irA = null
@@ -1337,8 +1443,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             // resultado, y el destello se gastaba en una burbuja que no estabas viendo.
             androidx.compose.runtime.LaunchedEffect(loMandado) {
                 if (loMandado == null || visibles.isEmpty()) return@LaunchedEffect
+                pegadoAbajo = true
                 runCatching {
-                    lista.animateScrollToItem((visibles.size + tramos.size - 1).coerceAtLeast(0))
+                    lista.animateScrollToItem(ultimaFila)
+                    // Y al borde de abajo, no al principio de lo mandado (ver [PosicionDelChat]).
+                    lista.scrollToItem(ultimaFila, ABAJO_DEL_TODO)
                 }
             }
             // **Lo que mide la cabecera flotante**, para que la lista le deje sitio.
@@ -1536,65 +1645,81 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     cuandoDeLaFila(tramos, lista.firstVisibleItemIndex)
                 }
             }
-            // **El botón de bajar al final.**
+            // **El botón de bajar al final, como el de Telegram** (27-oct-2026).
             //
-            // Sale al **subir cien puntos** y se va al bajar otros cien, no según lo cerca
-            // que se esté del final: es lo que hace Telegram (`ChatActivity.java:6714` y
-            // `:6847-6866`) y la diferencia importa. Con «aparece si no estás abajo» el
-            // botón parpadea con cada empujoncito del dedo; con la cuenta acumulada hay
-            // que moverse de verdad para que aparezca, y de verdad para que se vaya.
-            val alturaDeGatillo = with(densidadDePantalla) { SUBIDA_PARA_EL_BOTON.toPx() }
-            var subido by remember { mutableFloatStateOf(0f) }
-            var botonALaVista by remember { mutableStateOf(false) }
-            androidx.compose.runtime.LaunchedEffect(lista) {
-                var anterior = 0
-                androidx.compose.runtime.snapshotFlow {
-                    lista.firstVisibleItemIndex * 1000 - lista.firstVisibleItemScrollOffset
-                }.collect { ahora ->
-                    val delta = (ahora - anterior).toFloat()
-                    anterior = ahora
-                    if (delta < 0 && !botonALaVista) {
-                        subido += -delta
-                        if (subido > alturaDeGatillo) { botonALaVista = true; subido = 0f }
-                    } else if (delta > 0 && botonALaVista) {
-                        subido += delta
-                        if (subido > alturaDeGatillo) { botonALaVista = false; subido = 0f }
+            // Sale cuando se está lejos del final —más de cien puntos por encima del borde de abajo
+            // del último mensaje— y no por lo que se haya subido con el dedo, como antes: abriendo
+            // un chat donde se dejó (subido), el botón tiene que estar ya, sin haber tocado nada. Los
+            // cien puntos siguen siendo los de Telegram (`ChatActivity.java:6714`): un empujoncito
+            // del dedo no lo hace parpadear. Lleva encima cuántos mensajes hay sin ver por debajo.
+            //
+            // **Y encima del pie, no detrás**: iba a 12 puntos del borde de la pantalla, que es
+            // donde flota la caja de escribir, y quedaba tapado por ella.
+            val umbralDelBoton = with(densidadDePantalla) { SUBIDA_PARA_EL_BOTON.toPx() }
+            val lejosDelFinal by remember(lista) {
+                androidx.compose.runtime.derivedStateOf {
+                    if (!lista.canScrollForward) false
+                    else {
+                        val info = lista.layoutInfo
+                        val ultima = info.visibleItemsInfo.lastOrNull()
+                        ultima == null || ultima.index < info.totalItemsCount - 1 ||
+                            ultima.offset + ultima.size - (info.viewportEndOffset - info.afterContentPadding) > umbralDelBoton
                     }
                 }
             }
+            val cuantosSinLeer = remember(idsVisibles, leidoHasta.value) { PosicionDelChat.sinLeer(idsVisibles, leidoHasta.value) }
             // Se esconde además mientras se elige o se graba, como Telegram
             // (`updatePagedownButtonVisibility`, `:16906-16933`): ahí estorba a lo que
             // se está haciendo y encima se solapa con lo que sale por debajo.
             androidx.compose.animation.AnimatedVisibility(
-                visible = botonALaVista && !seleccionando && !grabando,
+                visible = lejosDelFinal && !seleccionando && !grabando,
                 enter = androidx.compose.animation.fadeIn() +
                     androidx.compose.animation.scaleIn(initialScale = 0.7f),
                 exit = androidx.compose.animation.fadeOut() +
                     androidx.compose.animation.scaleOut(targetScale = 0.7f),
-                modifier = Modifier.align(Alignment.BottomEnd).padding(12.dp)
+                modifier = Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = altoDelPie + 12.dp)
             ) {
-                androidx.compose.material3.SmallFloatingActionButton(
-                    onClick = {
-                        val vuelta = volverA
-                        volverA = null
-                        alcanceDeLaLista.launch {
-                            runCatching {
-                                lista.animateScrollToItem(
-                                    vuelta ?: (visibles.size + tramos.size - 1)
-                                        .coerceAtLeast(0)
-                                )
+                Box(contentAlignment = Alignment.TopCenter) {
+                    androidx.compose.material3.SmallFloatingActionButton(
+                        onClick = {
+                            val vuelta = volverA
+                            volverA = null
+                            alcanceDeLaLista.launch {
+                                runCatching {
+                                    if (vuelta != null) lista.animateScrollToItem(vuelta)
+                                    else {
+                                        pegadoAbajo = true
+                                        lista.animateScrollToItem(ultimaFila)
+                                        lista.scrollToItem(ultimaFila, ABAJO_DEL_TODO)
+                                    }
+                                }
                             }
-                        }
-                    }
-                ) {
-                    Icon(
-                        if (volverA != null) Icons.AutoMirrored.Filled.Reply
-                        else Icons.Filled.KeyboardArrowDown,
-                        contentDescription = getString(
-                            if (volverA != null) com.forge.pixpin.R.string.guardados_volver_al_salto
-                            else com.forge.pixpin.R.string.guardados_al_final
+                        },
+                        modifier = Modifier.padding(top = if (cuantosSinLeer > 0 && volverA == null) 10.dp else 0.dp)
+                    ) {
+                        Icon(
+                            if (volverA != null) Icons.AutoMirrored.Filled.Reply
+                            else Icons.Filled.KeyboardArrowDown,
+                            contentDescription = getString(
+                                if (volverA != null) com.forge.pixpin.R.string.guardados_volver_al_salto
+                                else com.forge.pixpin.R.string.guardados_al_final
+                            )
                         )
-                    )
+                    }
+                    // La chapa de lo no visto, arriba del botón como en Telegram.
+                    if (cuantosSinLeer > 0 && volverA == null) Box(
+                        Modifier
+                            .defaultMinSize(minWidth = 22.dp, minHeight = 22.dp)
+                            .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(11.dp))
+                            .padding(horizontal = 6.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            if (cuantosSinLeer > 999) "999+" else cuantosSinLeer.toString(),
+                            color = MaterialTheme.colorScheme.onPrimary, fontSize = 12.sp,
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        )
+                    }
                 }
             }
 
@@ -2615,17 +2740,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
 
         if (fichaAbierta) {
-            // Todos, también los archivados: como la lista de chats desde que no hay pantalla de
-            // Proyectos que los guarde al fondo (26-oct-2026).
-            val charlasDeLaFicha = remember(mensajes, proyectos, chatDelAsistente) {
-                conversaciones(
-                    mensajes,
-                    proyectos.associate { it.id to it.nombre },
-                    getString(com.forge.pixpin.R.string.guardados_titulo),
-                    chatDelAsistente ?: com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR
-                )
-            }
-            val hojas = remember(sinLecciones) { SeccionesDelChat.hojasPorChat(sinLecciones) }
             val deLaFicha = remember(deEsteChat) { deEsteChat.filter { !it.enBuzon } }
             FichaDelChat(
                 nombre = nombreDelChat.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) },
@@ -2634,26 +2748,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 ),
                 chatDe = chatDe,
                 mensajes = deLaFicha,
-                charlas = charlasDeLaFicha,
-                hojas = hojas,
-                sinCrear = com.forge.pixpin.asistente.ChatDelAsistente.SIN_CREAR,
-                resumenDe = { resumen(it) },
                 fechaDe = { fechaDe(it) },
                 onCerrar = { fichaAbierta = false },
-                // Otro chat: se cambia aquí mismo, por el mismo camino que la lista de chats.
-                onIrAlChat = { charla ->
-                    fichaAbierta = false
-                    if (charla.proyecto != null) {
-                        chatDe = charla.proyecto
-                        nombreDelChat = charla.nombre
-                        vineDeLaGeneral = true
-                    } else {
-                        chatDe = null
-                        nombreDelChat = ""
-                        vineDeLaGeneral = false
-                    }
-                    seccion = Seccion.TODO
-                },
                 // «Ver en el chat»: salir a propósito, a ese mensaje.
                 onVerEnElChat = { id ->
                     fichaAbierta = false
@@ -3072,8 +3168,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // **El buzón solo sale si hay algo dentro.** Una bandeja vacía siempre a la
         // vista enseña a no mirarla, y cuando por fin tenga algo ya nadie la mira.
         val secciones = remember(hayBuzon) {
-            // «Proyectos» es de la ficha del chat, no filtra la conversación. Ver [FichaDelChat].
-            Seccion.entries.filter { it != Seccion.PROYECTOS && (hayBuzon || it != Seccion.BUZON) }
+            Seccion.entries.filter { hayBuzon || it != Seccion.BUZON }
         }
         androidx.compose.foundation.lazy.LazyRow(
             Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 4.dp),
@@ -7744,7 +7839,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             Seccion.DIBUJOS -> com.forge.pixpin.R.string.guardados_dibujos
             Seccion.FIJADOS -> com.forge.pixpin.R.string.guardados_fijados
             Seccion.BUZON -> com.forge.pixpin.R.string.guardados_buzon
-            Seccion.PROYECTOS -> com.forge.pixpin.R.string.guardados_proyectos
         }
     )
 
@@ -8077,6 +8171,16 @@ private const val ESPERA_DE_LA_FECHA = 500L
 
 /** Cuánto hay que subir para que salga el botón de bajar, y cuánto bajar para que se vaya. */
 private val SUBIDA_PARA_EL_BOTON = 100.dp
+
+/**
+ * **El final del todo**: el desplazamiento que se le pide a la última fila para que su borde de abajo
+ * quede abajo (la lista lo recorta a lo que haya). Diez millones de píxeles: más que cualquier
+ * mensaje y lejos de desbordar un `Int` en las cuentas de la lista. Ver [PosicionDelChat].
+ */
+private const val ABAJO_DEL_TODO = 10_000_000
+
+/** Las preferencias donde cada chat apunta dónde se quedó. Ver [PosicionDelChat]. */
+private const val PREFS_POSICIONES = "posicion_de_los_chats"
 
 /** Los colores del estado de una transcripción: salió, con huecos, no se pudo. */
 private val VERDE_DEL_TEXTO = androidx.compose.ui.graphics.Color(0xFF43A047)

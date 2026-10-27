@@ -360,39 +360,3 @@ fun RecetasDelAsistente(modifier: Modifier = Modifier, alMandar: (String) -> Uni
         }
     }
 }
-
-/**
- * **Los mensajes de sistema, plegados en una franja** (lo del PC del 14-oct): las letras de los
- * planos, las figuras y las automatizaciones (`auto-*`) siguen en el chat y viajan, pero no son
- * burbujas. Una línea discreta los cuenta y, al tocarla, los lista; quitar una letra borra su
- * mensaje, como antes la burbuja.
- */
-@Composable
-fun FranjaDeSistema(deSistema: List<com.forge.pixpin.guardados.Mensaje>, modifier: Modifier = Modifier, alQuitar: (com.forge.pixpin.guardados.Mensaje) -> Unit) {
-    if (deSistema.isEmpty()) return
-    var abierta by remember { mutableStateOf(false) }
-    val letras = deSistema.filter { it.id.startsWith("auto-letra-") }
-    val partes = buildList {
-        if (letras.isNotEmpty()) add("Letras de planos: ${letras.size}")
-        if (deSistema.any { it.id == FigurasQueViajan.ID }) add("Figuras")
-        if (deSistema.any { it.id == com.forge.pixpin.ia.Automatizaciones.ID_MENSAJE }) add("Automatizaciones")
-        val otros = deSistema.count { !it.id.startsWith("auto-letra-") && it.id != FigurasQueViajan.ID && it.id != com.forge.pixpin.ia.Automatizaciones.ID_MENSAJE }
-        if (otros > 0) add("Otros: $otros")
-    }
-    Column(modifier.fillMaxWidth()) {
-        Text(
-            (if (abierta) "▾ " else "▸ ") + partes.joinToString(" · "), fontSize = 12.sp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable { abierta = !abierta }.padding(vertical = 4.dp)
-        )
-        if (abierta) for (m in deSistema) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-            val que = when {
-                m.id.startsWith("auto-letra-") -> "Letra «${m.nombre}»: la usan los planos"
-                m.id == FigurasQueViajan.ID -> "Figuras guardadas: se usan desde el menú de figuras"
-                m.id == com.forge.pixpin.ia.Automatizaciones.ID_MENSAJE -> "Automatizaciones y recetas del asistente"
-                else -> m.nombre.ifBlank { m.id }
-            }
-            Text(que, fontSize = 12.sp, modifier = Modifier.weight(1f))
-            if (m.id.startsWith("auto-letra-")) TextButton(onClick = { alQuitar(m) }) { Text("Quitar", fontSize = 12.sp) }
-        }
-    }
-}

@@ -408,12 +408,11 @@ data class TurnoDeVoz(val quien: String, val desdeMs: Int, val hastaMs: Int)
  * Las secciones de la cabecera, en su orden. **Vídeos** y **Enlaces** (25-oct-2026, como el
  * `Seccion` del PC): ver [SeccionesDelChat].
  *
- * **Proyectos** (25-oct-2026, como `Seccion::Proyectos` del PC, `2439c5c`) es la primera pestaña
- * de la ficha del chat ([FichaDelChat]): lista los chats para pasar de uno a otro. No es de
- * mensajes —ninguno es de ella, ver [deSeccion]— ni se guarda ni viaja, y no sale en las fichas
- * de la cabecera, que filtran la conversación.
+ * **Sin «Proyectos»** (27-oct-2026): fue la primera pestaña de la ficha del chat, con la lista de
+ * chats para pasar de uno a otro; el usuario la quitó porque repetía la lista de chats, que desde
+ * v0.145.0 es la pantalla principal. Era solo de la pantalla: ni se guardaba ni viajaba.
  */
-enum class Seccion { TODO, FOTOS, VIDEOS, ARCHIVOS, ENLACES, VOZ, DIBUJOS, FIJADOS, BUZON, PROYECTOS }
+enum class Seccion { TODO, FOTOS, VIDEOS, ARCHIVOS, ENLACES, VOZ, DIBUJOS, FIJADOS, BUZON }
 
 /**
  * Qué clases entran en cada sección.
@@ -434,7 +433,6 @@ fun clasesDe(seccion: Seccion): Set<Clase> = when (seccion) {
     Seccion.DIBUJOS -> setOf(Clase.DIBUJO)
     Seccion.FIJADOS -> Clase.entries.toSet()
     Seccion.BUZON -> Clase.entries.toSet()
-    Seccion.PROYECTOS -> emptySet()
 }
 
 /**
