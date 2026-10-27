@@ -67,8 +67,13 @@ class SincronizarConElPcTest {
         responde = ProcessBuilder(programa, "responder", pc.path, archivoDelPuerto.path).redirectErrorStream(true)
             .redirectOutput(File(raiz, "pc.log")).start()
         val hasta = System.currentTimeMillis() + 10_000
-        while (!archivoDelPuerto.isFile && System.currentTimeMillis() < hasta) Thread.sleep(50)
-        puerto = archivoDelPuerto.readText().trim().toInt()
+        // El archivo aparece antes de tener el número dentro: se espera a que lo tenga.
+        var leido: Int? = null
+        while (leido == null && System.currentTimeMillis() < hasta) {
+            leido = archivoDelPuerto.takeIf { it.isFile }?.readText()?.trim()?.toIntOrNull()
+            if (leido == null) Thread.sleep(50)
+        }
+        puerto = leido ?: error("El PC simulado no dijo su puerto: " + File(raiz, "pc.log").takeIf { it.isFile }?.readText().orEmpty())
     }
 
     @After
