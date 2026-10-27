@@ -192,6 +192,22 @@ object Lectura {
         return parrafo to f.coerceIn(0f, 1f)
     }
 
+    /**
+     * **Por qué párrafo se sigue** (27-oct-2026, como `parrafo_de_la_marca` del PC): el del número
+     * si su fracción cae cerca de la apuntada (el mismo documento contado igual); si no, el que
+     * empieza más cerca de esa fracción (contado por otro aparato, o puesto desde Lectura Veloz,
+     * que solo sabe la fracción). [fracciones] es dónde empieza cada párrafo, en orden. Null, sin párrafos.
+     */
+    fun parrafoDeLaMarca(fracciones: List<Float>, marca: Pair<Int, Float>): Int? {
+        if (fracciones.isEmpty()) return null
+        val (p, f) = marca
+        fracciones.getOrNull(p)?.let { propia -> if (kotlin.math.abs(propia - f) <= 0.02f) return p }
+        var i = 0
+        while (i < fracciones.size && fracciones[i] < f) i++
+        return listOfNotNull((i - 1).takeIf { it >= 0 }, i.takeIf { it < fracciones.size })
+            .minByOrNull { kotlin.math.abs(fracciones[it] - f) }
+    }
+
     /** Los marcadores con el verde de la voz en su sitio: nunca más de un verde. */
     fun conMarcaDeVoz(lista: List<Marcador>, fraccion: Float?): List<Marcador> =
         (lista.filter { it.emoji != EMOJI_DE_VOZ } + listOfNotNull(fraccion?.let { Marcador(-1L, it.coerceIn(0f, 1f), EMOJI_DE_VOZ) }))

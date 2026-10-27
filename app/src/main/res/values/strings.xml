@@ -362,6 +362,15 @@
     <string name="guardados_escaner_escanear_otra_vez">Escanear otra vez</string>
     <string name="guardados_escaner_abrir">Abrir el escáner</string>
     <string name="guardados_escaner_editado">Escaneo actualizado</string>
+    <!-- «Lectura veloz»: el documento en la app «Lectura Veloz», desde el marcador verde (27-oct-2026). -->
+    <string name="guardados_lectura_veloz">Lectura veloz</string>
+    <string name="guardados_lectura_veloz_chapa">Lectura veloz · %1$d %%</string>
+    <string name="guardados_lectura_veloz_falta_titulo">Falta «Lectura Veloz»</string>
+    <string name="guardados_lectura_veloz_falta">Para leer este documento a toda velocidad hace falta instalar la aplicación «Lectura Veloz». Cuando esté instalada, esta opción la abrirá con el documento ya cargado y desde tu marcador verde.</string>
+    <string name="guardados_lectura_veloz_antigua_titulo">Pon al día «Lectura Veloz»</string>
+    <string name="guardados_lectura_veloz_antigua">Tu versión de «Lectura Veloz» todavía no sabe abrir documentos de PixPin. Actualízala y vuelve a probar.</string>
+    <string name="guardados_lectura_veloz_no_se_puede">Este documento no se puede leer en «Lectura Veloz».</string>
+    <string name="guardados_lectura_veloz_abrir">Abrir Lectura Veloz</string>
     <string name="guardados_escaner_editado_nuevo">El mensaje ya no estaba: el escaneo editado entra como uno nuevo</string>
     <string name="guardados_escaner_editado_error">No se pudo leer el escaneo editado; el archivo de antes sigue igual</string>
     <plurals name="guardados_escaner_error">

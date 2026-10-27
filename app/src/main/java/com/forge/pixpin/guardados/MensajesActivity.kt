@@ -39,6 +39,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lightbulb
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.NoteAdd
@@ -241,6 +242,20 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * la pantalla lo recoge y abre el escáner. Ver [EscanerProMax.peticionDeEdicion].
      */
     private var escaneoPorEditar by mutableStateOf<Mensaje?>(null)
+    /**
+     * Por qué no se pudo abrir un documento en «Lectura Veloz» (el nombre de un
+     * [LecturaVeloz.AlAbrir]), para su cuadro; null, nada que decir. Ver [abrirEnLecturaVeloz].
+     */
+    private var lecturaVelozNoPudo by mutableStateOf<String?>(null)
+
+    /**
+     * **«Lectura veloz»** (27-oct-2026, lo pidió el usuario): el documento del mensaje en la app
+     * «Lectura Veloz», ya cargado y desde el marcador verde de la voz; lo que se lea allí mueve el
+     * verde. Como el escáner: sin la app, un cuadro que lo dice. Ver [LecturaVeloz].
+     */
+    private fun abrirEnLecturaVeloz(m: Mensaje) {
+        LecturaVelozEnElTelefono.abrir(this, { LecturaVelozEnElTelefono.deMensaje(this, m) }) { que -> lecturaVelozNoPudo = que.name }
+    }
     /** El mensaje que se va a meter en una nota (como «Insertar en una nota» del PC). */
     private var insertandoEnNota by mutableStateOf<Mensaje?>(null)
     private var nombreDelChat by mutableStateOf("")
@@ -819,6 +834,43 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     androidx.compose.material3.TextButton(onClick = { faltaElEscaner = false }) {
                         Text(getString(android.R.string.ok))
                     }
+                }
+            )
+        }
+
+        // Por qué no se abrió en «Lectura Veloz»: falta, es antigua, o el documento no se puede. Ver [abrirEnLecturaVeloz].
+        lecturaVelozNoPudo?.let { cual ->
+            val que = runCatching { LecturaVeloz.AlAbrir.valueOf(cual) }.getOrDefault(LecturaVeloz.AlAbrir.NO_SE_PUEDE)
+            val cerrar = { lecturaVelozNoPudo = null }
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = cerrar,
+                icon = { Icon(Icons.Filled.Speed, contentDescription = null) },
+                title = {
+                    Text(getString(
+                        if (que == LecturaVeloz.AlAbrir.APP_ANTIGUA) com.forge.pixpin.R.string.guardados_lectura_veloz_antigua_titulo
+                        else if (que == LecturaVeloz.AlAbrir.FALTA_LA_APP) com.forge.pixpin.R.string.guardados_lectura_veloz_falta_titulo
+                        else com.forge.pixpin.R.string.guardados_lectura_veloz
+                    ))
+                },
+                text = {
+                    Text(getString(
+                        when (que) {
+                            LecturaVeloz.AlAbrir.FALTA_LA_APP -> com.forge.pixpin.R.string.guardados_lectura_veloz_falta
+                            LecturaVeloz.AlAbrir.APP_ANTIGUA -> com.forge.pixpin.R.string.guardados_lectura_veloz_antigua
+                            else -> com.forge.pixpin.R.string.guardados_lectura_veloz_no_se_puede
+                        }
+                    ))
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(onClick = cerrar) { Text(getString(android.R.string.ok)) }
+                },
+                dismissButton = {
+                    // Una versión antigua se puede abrir igual, para ponerla al día desde ella.
+                    val abrir = if (que == LecturaVeloz.AlAbrir.APP_ANTIGUA) packageManager.getLaunchIntentForPackage(LecturaVeloz.PAQUETE) else null
+                    if (abrir != null) androidx.compose.material3.TextButton(onClick = {
+                        cerrar()
+                        runCatching { startActivity(abrir) }
+                    }) { Text(getString(com.forge.pixpin.R.string.guardados_lectura_veloz_abrir)) }
                 }
             )
         }
@@ -3325,6 +3377,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         menuAbierto = false; escaneoPorEditar = m
                     }
                 }
+                // **Lectura veloz** (27-oct-2026): un PDF, un Word, un libro, una página o un texto, en
+                // la app de lectura rápida, desde el marcador verde. Ver [abrirEnLecturaVeloz].
+                if (LecturaVelozEnElTelefono.sePuede(m)) {
+                    DelMenu(com.forge.pixpin.R.string.guardados_lectura_veloz, Icons.Filled.Speed) {
+                        menuAbierto = false; abrirEnLecturaVeloz(m)
+                    }
+                }
                 DelMenu(com.forge.pixpin.R.string.guardados_responder,
                         Icons.AutoMirrored.Filled.Reply) {
                     menuAbierto = false; acciones.responder()
@@ -5695,6 +5754,34 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
     }
 
+    /**
+     * **La chapa «Lectura veloz · 47 %»** (27-oct-2026, lo pidió el usuario): dice, sin llamar la
+     * atención, que el documento se está leyendo en «Lectura Veloz» y por dónde va allí (lo último que
+     * mandó, guardado en el teléfono). Tocándola se sigue leyendo allí. Como la de «Escaneado», más
+     * apagada. Se mira otra vez cada vez que llega un punto ([LecturaVelozEnElTelefono.cambios]).
+     */
+    @Composable
+    private fun ChapaDeLecturaVeloz(m: Mensaje, modifier: Modifier = Modifier) {
+        val cambios by LecturaVelozEnElTelefono.cambios.collectAsState()
+        val porcentaje = remember(m.id, m.uid, cambios) { LecturaVelozEnElTelefono.porcentaje(this, com.forge.pixpin.sincro.Codigos.unico(m)) }
+        if (porcentaje != null) {
+            val texto = getString(com.forge.pixpin.R.string.guardados_lectura_veloz_chapa, porcentaje)
+            val tinta = MaterialTheme.colorScheme.onSurfaceVariant
+            Row(
+                modifier
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f))
+                    .clickable(onClickLabel = getString(com.forge.pixpin.R.string.guardados_lectura_veloz)) { abrirEnLecturaVeloz(m) }
+                    .semantics { contentDescription = texto }
+                    .padding(start = 7.dp, end = 8.dp, top = 2.dp, bottom = 2.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Speed, contentDescription = null, tint = tinta, modifier = Modifier.size(12.dp))
+                Text(texto, fontSize = 11.sp, color = tinta, maxLines = 1, modifier = Modifier.padding(start = 4.dp))
+            }
+        }
+    }
+
     @Composable
     private fun FilaDeArchivo(m: Mensaje) {
         // **El botón redondo de 44 puntos** (`ChatMessageCell.java:13996`). No es
@@ -5765,6 +5852,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 }
                 // La chapa de lo escaneado, que también lleva al escáner. Ver [ChapaDeEscaneado].
                 if (EscanerProMax.esEscaneo(m)) ChapaDeEscaneado(m, Modifier.padding(top = 4.dp))
+                // Y la de Lectura Veloz, si se está leyendo allí. Ver [ChapaDeLecturaVeloz].
+                if (LecturaVelozEnElTelefono.sePuede(m)) ChapaDeLecturaVeloz(m, Modifier.padding(top = 4.dp))
             }
             // **Y el atajo para sacarlo a la pantalla**, al lado, como el de pasar a texto
             // en una nota de voz. Lo pidió el usuario el 8-sep-2026: sacar un PDF a un pin
