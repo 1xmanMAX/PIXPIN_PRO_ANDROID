@@ -63,6 +63,12 @@ import androidx.compose.ui.unit.sp
  * segundo me mande a imprimir los marcos, o si no, el documento entero»): con marcos puestos salen
  * las dos opciones; sin ninguno, el documento entero directamente. Así no hace falta otro botón de
  * imprimir en la barra de arriba.
+ *
+ * **Se va con las barras** (27-oct-2026, el usuario: «al mover el contenido se esconden la barra de
+ * arriba y la de abajo, pero la lateral no»): cada visor le pasa en [visible] su mismo «a la vista»
+ * ([RielALaVista.visible]), y con él se funden también los puntos de los marcadores, que antes se
+ * quedaban sueltos en el canto. [alUsar] avisa de cada toque en el riel para que el visor reinicie
+ * la cuenta que esconde las barras: si no, se iba bajo el dedo de quien estaba por tocarlo.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -85,7 +91,9 @@ fun RielDelVisor(
     /** Imprimir el documento entero. */
     imprimirTodo: (() -> Unit)? = null,
     /** Los botones propios del formato, debajo de los tres y tras una raya. */
-    extras: (@Composable () -> Unit)? = null
+    extras: (@Composable () -> Unit)? = null,
+    /** Cada toque en el riel (un botón o un marcador): el visor vuelve a contar para esconder las barras. */
+    alUsar: () -> Unit = {}
 ) {
     var eligiendoQueImprimir by remember { mutableStateOf(false) }
     var globo by remember { mutableStateOf<String?>(null) }
@@ -109,8 +117,9 @@ fun RielDelVisor(
                     fun Boton(icono: ImageVector, nombre: String, puesto: Boolean, alMantener: (() -> Unit)? = null, al: () -> Unit) =
                         BotonDelRiel(icono, nombre, puesto, alMantener = {
                             vibrar.performHapticFeedback(HapticFeedbackType.LongPress)
+                            alUsar()
                             if (alMantener != null) alMantener() else globo = nombre
-                        }, al = al)
+                        }, al = { alUsar(); al() })
                     if (onMarcador != null) Boton(Icons.Filled.BookmarkAdd, "Marcador", poniendoMarca, al = onMarcador)
                     if (onLapiz != null) Boton(Icons.Filled.Edit, rotuloDelLapiz, anotando, al = onLapiz)
                     if (onMarco != null) Box {
@@ -141,9 +150,12 @@ fun RielDelVisor(
                 }
             }
         }
-        if (marcas > 0) {
-            Spacer(Modifier.height(10.dp))
-            RielDeMarcas(marcas, emojiDe, Modifier, alElegirMarca)
+        // Los puntos de los marcadores, con el riel: se van y vuelven con él.
+        if (marcas > 0) AnimatedVisibility(visible, enter = fadeIn(), exit = fadeOut()) {
+            Column(horizontalAlignment = Alignment.End) {
+                Spacer(Modifier.height(10.dp))
+                RielDeMarcas(marcas, emojiDe, Modifier) { i -> alUsar(); alElegirMarca(i) }
+            }
         }
     }
 }

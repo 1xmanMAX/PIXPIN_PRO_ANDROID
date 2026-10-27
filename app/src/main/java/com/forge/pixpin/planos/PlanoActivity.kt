@@ -883,7 +883,11 @@ class PlanoActivity : ComponentActivity() {
                 }
             }
             // **El riel de la derecha** (24-oct-2026): marcador, lápiz y marcos, como en todos los visores.
+            // **Y se va con la pastilla** (27-oct-2026): al mover el plano, y vuelve al tocar; acotando se queda.
+            // Ver [com.forge.pixpin.ui.RielALaVista].
             if (listo) com.forge.pixpin.ui.RielDelVisor(
+                visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcando, poniendoMarca, otraHerramienta = acotando),
+                alUsar = { toques++ },
                 poniendoMarca = poniendoMarca, anotando = anotando, marcando = marcando,
                 onMarcador = { if (anotando) dejarDeAnotar(); marcando = false; poniendoMarca = !poniendoMarca },
                 onLapiz = { if (anotando) dejarDeAnotar() else { poniendoMarca = false; empezarAAnotar() } },

@@ -41,6 +41,9 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,8 +72,12 @@ private val FONDO_DE_PASTILLA = Color(0x8C14182B)
 private val AZUL = Color(0xFF8AB4F8)
 private val AMBAR = Color(0xFFFFC440)
 
-/** Un botón de la pastilla: su icono, lo que dice a quien no ve y qué hace. */
-class BotonDeLector(val icono: ImageVector, val descripcion: String, val alTocar: () -> Unit)
+/**
+ * Un botón de la pastilla: su icono, lo que dice a quien no ve y qué hace. [insignia], si no es cero,
+ * es el numerito encima (27-oct-2026: los comentarios abiertos de una nota, que en su barra de antes
+ * se veían así).
+ */
+class BotonDeLector(val icono: ImageVector, val descripcion: String, val insignia: Int = 0, val alTocar: () -> Unit)
 
 /**
  * **La pastilla de arriba**: el nombre del documento y los botones. Siempre semitransparente;
@@ -88,7 +95,14 @@ fun PastillaDeLector(
      * **El archivo, para su icono** (25-oct-2026, el usuario: «arriba debería aparecer el icono del
      * formato, un cuadradito de su color con PDF, XLS, DOCX…»): el de [IconoDeArchivo], delante del nombre.
      */
-    archivo: String? = null
+    archivo: String? = null,
+    /**
+     * **Los tres puntos** (27-oct-2026, la nota con la pastilla de los visores): lo de vez en cuando,
+     * en un menú que cuelga del último botón. Recibe con qué cerrarlo. Null, sin ⋮.
+     */
+    menu: (@Composable ColumnScope.(cerrar: () -> Unit) -> Unit)? = null,
+    /** El menú se abre o se cierra: con él abierto el visor no debe esconder la pastilla. */
+    alCambiarElMenu: (Boolean) -> Unit = {}
 ) {
     AnimatedVisibility(
         visible = visible, enter = fadeIn(), exit = fadeOut(),
@@ -109,7 +123,18 @@ fun PastillaDeLector(
             if (botones.isEmpty()) Spacer(Modifier.size(width = 10.dp, height = 1.dp))
             for (b in botones) {
                 IconButton(onClick = b.alTocar, modifier = Modifier.size(38.dp)) {
-                    Icon(b.icono, contentDescription = b.descripcion, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                    if (b.insignia > 0) androidx.compose.material3.BadgedBox(badge = { androidx.compose.material3.Badge { Text("${b.insignia}") } }) {
+                        Icon(b.icono, contentDescription = b.descripcion, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                    } else Icon(b.icono, contentDescription = b.descripcion, tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                }
+            }
+            if (menu != null) Box {
+                var abierto by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                IconButton(onClick = { abierto = true; alCambiarElMenu(true) }, modifier = Modifier.size(38.dp)) {
+                    Icon(Icons.Filled.MoreVert, contentDescription = "Más", tint = Color.White.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                }
+                androidx.compose.material3.DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false; alCambiarElMenu(false) }) {
+                    menu { abierto = false; alCambiarElMenu(false) }
                 }
             }
         }

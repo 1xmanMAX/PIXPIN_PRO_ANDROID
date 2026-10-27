@@ -1013,8 +1013,11 @@ class LectorPdfActivity : ComponentActivity() {
             )
             // **El riel de la derecha** (24-oct-2026, como el PC): marcador, lápiz y marco, y debajo
             // los marcadores. Anotando se queda, con el lápiz encendido: tocarlo deja de anotar.
+            // **Y se va con la pastilla** (27-oct-2026): al mover la hoja, y vuelve al tocar. Ver [com.forge.pixpin.ui.RielALaVista].
             if (cuantas > 0 && aSolas == null && !marcosDoc.imprimiendo) {
                 com.forge.pixpin.ui.RielDelVisor(
+                    visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarca),
+                    alUsar = { toques++ },
                     poniendoMarca = poniendoMarca, anotando = anotando, marcando = marcosDoc.activo,
                     onMarcador = { if (anotando) dejarDeAnotar(); marcosDoc.activo = false; poniendoMarca = !poniendoMarca },
                     onLapiz = { if (anotando) dejarDeAnotar() else { marcosDoc.activo = false; poniendoMarca = false; anotando = true } },

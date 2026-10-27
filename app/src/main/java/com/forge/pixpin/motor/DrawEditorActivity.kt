@@ -1,5 +1,6 @@
 package com.forge.pixpin.motor
 
+import com.forge.pixpin.ui.toqueOMovida
 import com.forge.pixpin.ui.theme.bajarSiTocaLaCamara
 import com.forge.pixpin.ui.theme.apartarDeLaCamara
 import com.forge.pixpin.ui.theme.esquivarLaCamara
@@ -1611,6 +1612,11 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                     // Lo que mide de verdad este lienzo en su columna: es con lo que se encuadra.
                     .onSizeChanged { medidaDelLienzo = it }
                     .onGloballyPositioned { origenDelLienzo = it.positionInWindow() }
+                    // Mirando: mover esconde el nombre y el riel, y un toque los saca. Solo mira, no consume.
+                    .toqueOMovida(
+                        alTocar = { if (modoVista) mirandoALaVista = true },
+                        alMover = { if (modoVista) mirandoALaVista = false }
+                    )
                     .drawWithContent {
                         drawContent()
                         val v = controller.scene.viewport
@@ -1802,6 +1808,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 // marcador, lápiz —mirar o editar— y marco, y debajo los marcadores.
                 @Suppress("UNUSED_EXPRESSION") tick
                 if (!soloElDibujo) com.forge.pixpin.ui.RielDelVisor(
+                    visible = !modoVista || com.forge.pixpin.ui.RielALaVista.visible(mirandoALaVista, anotando = false, marcando = false, poniendoMarca = poniendoMarca),
+                    alUsar = { mirandoALaVista = true },
                     poniendoMarca = poniendoMarca,
                     anotando = !modoVista,
                     marcando = !modoVista && controller.tool == Tool.FRAME,
@@ -1891,16 +1899,22 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             // **El modo visualización**: solo su barra. Ver [BarraDeVista].
             if (modoVista && !soloElDibujo && !presentando) {
                 @Suppress("UNUSED_EXPRESSION") tick
-                BarraDeVista(
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        // Mirando, la barra de arriba es esta: es la que tiene que apartar la
-                        // tira. Ver [hayBarraArriba].
-                        .onSizeChanged { altoDeLaBarraDeArriba = it.height }
-                        .statusBarsPadding()
-                        .padding(top = 10.dp, start = 8.dp, end = 8.dp)
-                        .bajarSiTocaLaCamara()
-                )
+                // Se funde con el riel al mover el dibujo y vuelve al tocarlo. Ver [mirandoALaVista].
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = mirandoALaVista,
+                    enter = androidx.compose.animation.fadeIn(), exit = androidx.compose.animation.fadeOut(),
+                    modifier = Modifier.align(Alignment.TopCenter)
+                ) {
+                    BarraDeVista(
+                        Modifier
+                            // Mirando, la barra de arriba es esta: es la que tiene que apartar la
+                            // tira. Ver [hayBarraArriba].
+                            .onSizeChanged { altoDeLaBarraDeArriba = it.height }
+                            .statusBarsPadding()
+                            .padding(top = 10.dp, start = 8.dp, end = 8.dp)
+                            .bajarSiTocaLaCamara()
+                    )
+                }
             }
             if (!soloElDibujo && !mandoAbierto && !presentando && !modoVista) {
                 // **Con algo elegido, solo una bolita en la esquina** (14-sep-2026). El mando
@@ -5579,12 +5593,19 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
     /** Mirando: sin la barra de herramientas, solo mover, imprimir, presentar y editar. */
     private var modoVista by mutableStateOf(false)
     private var herramientaAntesDeVer: Tool? = null
+    /**
+     * **Mirando, el nombre y el riel se van al mover el dibujo y vuelven al tocarlo** (27-oct-2026, el
+     * usuario: «al mover el contenido el riel tiene que esconderse con las barras»), como en todos los
+     * visores. Editando no cuenta: las herramientas no se esconden. Ver [com.forge.pixpin.ui.RielALaVista].
+     */
+    private var mirandoALaVista by mutableStateOf(true)
     /** La herramienta de antes de coger el marco del riel, para devolverla al soltarlo. */
     private var herramientaAntesDelMarco: Tool? = null
 
     private fun entrarEnVista() {
         if (!modoVista) herramientaAntesDeVer = controller.tool.takeIf { it != Tool.HAND }
         modoVista = true
+        mirandoALaVista = true
         controller.setSelection(emptySet())
         controller.selectTool(Tool.HAND)
         repartirElModoVista()
