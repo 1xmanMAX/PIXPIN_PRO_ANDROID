@@ -1,86 +1,153 @@
-# PixPin ↔ Lectura Veloz en Android: lo que PixPin necesita
+# PixPin ↔ Lectura Veloz
 
-Propuesta del 27-oct-2026 para el repositorio `1xmanMAX/Speed-Reading-Tool`. El manual que ya
-existe (`docs/PIXPIN.md`) cubre solo el atajo de Windows con el portapapeles. Lo que pidió el
-usuario para el teléfono es otra cosa, y funciona como **Escáner Pro Max**
-(`guardados/EscanerProMax.kt`): un botón en PixPin abre la otra app directamente en el punto
-justo, sin exportar nada.
+Integración hecha el 27-oct-2026 en los dos lados. El contrato lo define el código de Lectura
+Veloz (repo `1xmanMAX/Speed-Reading-Tool`, commit `cf7474f`):
 
-Cuando Lectura Veloz publique su manual de Android, ese manual manda. Este documento dice qué
-necesita PixPin para que la integración quede completa.
+- `web/js/app.js`, «Integración con PixPin Pro»: `pixpinParams`, `pixpinBytes`, `wordForPixpin`,
+  `pixpinPosition`, `syncPixpin`, `openFromPixpin`.
+- `src-tauri/src/lib.rs`: `deliver_pixpin` (el enlace de ida) y `pixpin_sync` (la vuelta en escritorio).
+- `src-tauri/plugins/tauri-plugin-lv-tts/android/.../TtsPlugin.kt`: `copyUri` (copia el
+  `content://` de PixPin) y `notifyPixpin` (la vuelta en Android).
+- `src-tauri/tauri.conf.json`: enlace `lecturaveloz://` con host `pixpin`.
 
-## Lo que verá el usuario
+En PixPin: `guardados/LecturaVeloz.kt` (lo que no necesita Android: enlace, conversiones,
+validación, quién gana) y `guardados/LecturaVelozEnElTelefono.kt` (abrir, el receptor, dónde se
+guarda). Pruebas: `LecturaVelozTest` y `LecturaVelozEnElTelefonoTest`.
 
-1. **«Lectura veloz».** En el visor de PDF, Word, EPUB, HTML, Markdown y notas, y en el menú del
-   mensaje, aparece la opción «Lectura veloz». Al tocarla, Lectura Veloz se abre con ese
-   documento ya cargado y arranca **en el marcador de lectura en voz alta de PixPin**.
-2. **El marcador va y vuelve.** Mientras se lee en Lectura Veloz, el punto se manda de vuelta a
-   PixPin de forma continua (cada frase, o cada pocos segundos). Al volver a PixPin, el marcador
-   de voz ya está donde se quedó. Al revés pasa lo mismo: si después se lee en voz alta en
-   PixPin y se abre otra vez Lectura Veloz, arranca en el punto nuevo.
-3. **Discreto.** El documento muestra una chapa pequeña «Leyendo en Lectura veloz · 42 %», como
-   la de «Escaneado», y la ficha del chat puede tener una lista «Leyendo».
+Funciona como **Escáner Pro Max** (`guardados/EscanerProMax.kt`): un botón en PixPin abre la otra
+app directamente, sin exportar nada a mano.
 
-## El marcador de PixPin
+## Lo que ve el usuario
 
-- PixPin guarda el punto de lectura en voz alta como `"<párrafo>:<fracción>"`, por ejemplo
-  `"37:0.42"`: el párrafo 37 del texto de lectura, al 42 % de ese párrafo. Ver
-  `motor/Lectura.kt` (`vozATexto`/`vozDeTexto`).
-- Se guarda junto al archivo (`anotaciones/<base>.voz`) y se sincroniza con el PC y los demás
-  aparatos.
-- Para no depender de cómo cada app parte el texto, PixPin manda **el texto ya partido en
-  párrafos** (los mismos que usa su lector en voz alta) y el punto como índice de párrafo más
-  desplazamiento en caracteres. Lectura Veloz solo tiene que convertir ese punto a su índice de
-  palabra.
+1. **«Lectura veloz»**, una opción discreta:
+   - en el menú del mensaje (mantener pulsado) de un archivo que Lectura Veloz lee (PDF, Word,
+     EPUB, HTML, Markdown, TXT, ODT, RTF, FB2, MOBI, PowerPoint, Excel, CSV);
+   - en el engranaje del visor de PDF y Office (apartado «Lectura»);
+   - en el engranaje del lector de Word, libros y PDF como texto (apartado «Lectura»);
+   - en el ⋮ de la nota en Markdown.
 
-## Contrato propuesto (Android)
+   Al tocarla, Lectura Veloz se abre **con el documento ya cargado** (el archivo original; ella lo
+   lee) y **en el marcador verde de la voz** de PixPin. Si la app no está instalada, el chat
+   enseña un cuadro como el del escáner («Falta «Lectura Veloz»»); los visores, un aviso corto. Si
+   está pero es de antes de esta integración, se pide ponerla al día.
+2. **El marcador va y vuelve, solo.** Mientras se lee en Lectura Veloz, ella manda su punto cada
+   15 s como mucho (y siempre al pausar, cerrar o abrir); PixPin mueve su marcador verde. Al
+   volver a un visor abierto, el verde ya está ahí (se vuelve a leer al volver al frente). Gana
+   siempre **la posición más reciente**: si después se escucha en PixPin y se abre otra vez
+   Lectura Veloz, ella salta a ese punto nuevo.
+3. **Una chapa discreta**: «Lectura veloz · 47 %» debajo del nombre del archivo en la burbuja
+   (gris, más pequeña que «Escaneado»; tocarla sigue leyendo allí), y el porcentaje a la derecha
+   de la opción en el engranaje o en el ⋮. El porcentaje es lo último que mandó Lectura Veloz.
 
-### PixPin → Lectura Veloz: abrir y leer
+Solo para **adjuntos del chat y notas**: su código único es el que reconoce PixPin cuando vuelve
+el punto. Un PDF de un proyecto o un archivo abierto de paso no la llevan.
+
+## Ida: PixPin abre Lectura Veloz
 
 ```
-Intent("com.lecturaveloz.action.READ")
+Intent(ACTION_VIEW, Uri.parse(
+  "lecturaveloz://pixpin/abrir?doc=<código>&nombre=<nombre.ext>&uri=<content://…>&tipo=pdf|texto" +
+  "&pagina=<0..>&frac=<0..1>&fraccion=<0..1>&paginas=<n>&t=<ms>"))
   .setPackage("com.lecturaveloz.app")
-  .setDataAndType(content://…/documento.txt, "text/plain")   // FileProvider de PixPin, FLAG_GRANT_READ_URI_PERMISSION
-  .putExtra("com.lecturaveloz.extra.TITLE", "Capítulo 3.pdf")
-  .putExtra("com.lecturaveloz.extra.DOCUMENT_ID", "<uid del mensaje en PixPin>")   // estable entre aparatos
-  .putExtra("com.lecturaveloz.extra.PARAGRAPH", 37)
-  .putExtra("com.lecturaveloz.extra.CHAR_OFFSET", 512)       // dentro del párrafo
-  .putExtra("com.lecturaveloz.extra.CALLER_LABEL", "PixPin")
-  .putExtra("com.lecturaveloz.extra.CALLBACK", "com.forge.pixpin.action.POSICION_DE_LECTURA")
+  .addFlags(FLAG_GRANT_READ_URI_PERMISSION)
+  .setClipData(ClipData.newRawUri(nombre, uri))
+// y además: grantUriPermission("com.lecturaveloz.app", uri, FLAG_GRANT_READ_URI_PERMISSION)
 ```
 
-- **El archivo** es texto plano en UTF‑8, con los párrafos separados por una línea en blanco.
-  PixPin ya sabe sacar el texto de PDF, Word, EPUB, HTML y Markdown, así que Lectura Veloz no
-  tiene que leer esos formatos.
-- **Equivalente por enlace** (Tauri deep-link, sin Kotlin propio):
-  `lecturaveloz://open?uri=<content-uri>&id=<uid>&p=37&c=512&title=…&caller=pixpin`. Para eso
-  hay que añadir el host `open` en `plugins.deep-link.mobile`.
+| Parámetro | Qué es |
+|---|---|
+| `doc` | `Codigos.unico(mensaje)` (10 signos, el mismo en todos los aparatos); en una nota, el de su hoja o su mensaje. Ella deduplica por él: un documento, un libro. |
+| `nombre` | El nombre del mensaje **con la extensión del archivo de verdad** (`LecturaVeloz.nombreConExtension`): su importador elige el formato por ella. |
+| `uri` | `content://com.forge.pixpin.fileprovider/…` del archivo original (`AbrirCon.uriDe`; `files/guardados/` está en `file_paths.xml`). Una nota se escribe antes como `.md` en `cache/share/lectura-veloz/<código>/`. Ella lo copia con `openInputStream` (`copyUri`): va dentro del enlace y no en los datos del intent, así que el permiso se da con `grantUriPermission` además del `ClipData`. |
+| `tipo` | `pdf` para un PDF, `texto` para todo lo demás. |
+| `pagina`, `frac` | Hoja (desde 0) y por dónde va en ella (0..1). Solo cuentan en un PDF. |
+| `fraccion` | Fracción del documento (0..1). Ella la usa si no sabe de hojas. |
+| `paginas` | Hojas del PDF (0 si no lo es). |
+| `t` | Hora (ms) del marcador de PixPin que se manda; 0 si no hay. |
 
-### Lectura Veloz → PixPin: el punto, continuamente
+Todos los números se encajan (hojas ≥ 0, fracciones de 0 a 1, sin NaN) y se escriben con punto
+decimal. Los textos van con `%20`, nunca con `+`.
+
+Ella importa el archivo la primera vez y, las siguientes, reabre el mismo libro. Solo salta al
+punto de PixPin si es nuevo o si `t` es más reciente que su propio progreso; si no, sigue donde iba
+y devuelve su punto enseguida.
+
+**PixPin detecta la app** con `<queries>`: `<package android:name="com.lecturaveloz.app"/>` y un
+`<intent>` `VIEW` con `scheme="lecturaveloz"`. «Sabe abrir» = el enlace
+`lecturaveloz://pixpin/abrir` resuelve en ese paquete; «instalada» = eso o que tenga icono.
+
+## Vuelta: Lectura Veloz manda su punto (Android)
 
 ```
-Intent("com.forge.pixpin.action.POSICION_DE_LECTURA")
-  .setPackage("com.forge.pixpin")
-  .putExtra("com.lecturaveloz.extra.DOCUMENT_ID", "<el mismo uid>")
-  .putExtra("com.lecturaveloz.extra.PARAGRAPH", 41)
-  .putExtra("com.lecturaveloz.extra.CHAR_OFFSET", 0)
-  .putExtra("com.lecturaveloz.extra.PERCENT", 47)            // para la chapa
-  .putExtra("com.lecturaveloz.extra.STATE", "reading")       // reading | paused | finished | closed
+Intent("com.forge.pixpin.LECTURA_VELOZ").setPackage("com.forge.pixpin")
+  extras: doc (String), tipo ("pdf"|"texto"), pagina (Int), frac (Float), fraccion (Float),
+          t (Long, ms), palabra (Int), total (Int)
 ```
 
-- Se manda como **broadcast explícito** (`sendBroadcast`), a lo sumo una vez por frase o cada 2 s,
-  y siempre al pausar o cerrar.
-- **Equivalente por enlace:**
-  `pixpin://lectura?id=<uid>&p=41&c=0&pct=47&estado=reading`. PixPin registrará el esquema
-  `pixpin` si Lectura Veloz prefiere enlaces.
-- PixPin guarda ese punto como su marcador de voz. Se sincroniza como cualquier anotación, así
-  que también llega al PC.
+Lo recibe `LecturaVelozReceiver` (exportado, con esa acción en el manifiesto). Comprueba todo:
 
-## Lo que hace PixPin (pendiente de confirmar con el manual de Lectura Veloz)
+- `doc` de 1 a 80 letras/cifras ASCII, `-` o `_`; sin `t` > 0, nada. Un `doc` que PixPin no le
+  dio (ni está en el chat) se ignora.
+- Las fracciones se encajan de 0 a 1 (NaN → 0), la hoja ≥ 0, y una hora del futuro se queda en «ahora».
+- **Gana lo más reciente**: un aviso con `t` igual o más viejo que el último que mandó ella se
+  ignora; uno más viejo que el marcador de PixPin (la voz lo movió después) solo actualiza la
+  chapa; si no, se escribe el marcador.
 
-- Botón «Lectura veloz» en los visores y en el menú del mensaje. Si la app no está instalada, un
-  aviso con su enlace, como con el escáner.
-- Recibir el punto de vuelta (receptor y esquema `pixpin://lectura`), validar que el `uid`
-  exista, y guardar `párrafo:fracción`.
-- La chapa «Leyendo en Lectura veloz · N %» en la burbuja y en el visor, que se va al terminar.
-- Pruebas JVM de la petición, de la conversión punto ↔ `párrafo:fracción`, y de la respuesta.
+## El marcador de PixPin, sin formato nuevo
+
+Se escribe donde PixPin ya guarda el marcador verde de la voz, así que viaja a los demás aparatos y
+al PC tal cual:
+
+- `pins/draw/anot-<uid>.voz` (Word, libro, HTML, Markdown, texto): `párrafo:fracción`.
+- Un PDF: `anot-<uid>-texto.voz` (el de escucharlo como texto) **y** el 🟢 de
+  `anot-<uid>.marcas` (el del lector de hojas, `y` = hoja + fracción de la hoja), que es desde
+  donde empieza «Escuchar este PDF».
+
+**Conversión** (`LecturaVeloz.vozALv` / `lvAVoz`, `marcaALv` / `lvAMarca`). El visor guarda en el
+teléfono, cada vez que numera los párrafos para la voz, cuántas palabras tiene cada uno, dónde
+empieza (la fracción del alto con que se apunta el verde) y de qué hoja es
+(`files/lectura-veloz/<base>.mapa`, no viaja). Con ese mapa:
+
+- PixPin → LV: `fraccion` = palabras antes del párrafo / palabras del documento (como cuenta ella);
+  en un PDF, `pagina` = la hoja del párrafo y `frac` = su parte dentro de esa hoja.
+- LV → PixPin: el párrafo en que cae su palabra (en un PDF, por hoja y parte de la hoja) y la
+  fracción donde empieza, igual que lo apunta la voz.
+
+Sin mapa (el documento nunca se abrió en el visor de este teléfono) se pasa por la fracción:
+PixPin escribe `0:<fracción>`, y el visor —como ya hacía el PC, `parrafo_de_la_marca`— busca el
+párrafo que empieza más cerca de esa fracción cuando el número no casa. Ahora el visor de Android
+también lo hace (`Lectura.parrafoDeLaMarca`). Una versión vieja de PixPin en otro aparato empezaría
+ese caso por el primer párrafo, pero el verde se dibuja en su sitio.
+
+**La hora del marcador**: el `.voz` no lleva hora y no se le añade (el PC lo lee). PixPin guarda en
+el teléfono (preferencias `lectura_veloz`, por código) lo último que mandó Lectura Veloz: su punto
+exacto, su hora y lo que escribió con él. Si el verde sigue siendo ese, su hora es la de Lectura
+Veloz y al reabrirla se le manda su propio punto (sin la ida y vuelta por párrafos); si no, la hora
+es la de modificación del `.voz` (lo movió la voz o llegó sincronizando) o, para el 🟢 de un PDF, su
+id (la hora en que se puso). No hay campos nuevos que se sincronicen.
+
+## Lo que haría falta en el PC (Windows)
+
+Lectura Veloz de escritorio ya manda su punto con un enlace (`pixpin_sync` en `lib.rs`), cada 60 s
+como mucho y al pausar o cerrar:
+
+```
+pixpinmax://lectura-veloz?v=1&doc=<código>&tipo=pdf|texto&pagina=<n>&frac=<0..1>&fraccion=<0..1>&t=<ms>&ruta=<ruta del archivo>
+```
+
+Y espera que PixPin la abra con `lecturaveloz://pixpin/abrir?…&ruta=<ruta absoluta>` (en vez de
+`uri`): ella autoriza leer solo ese archivo (`deliver_pixpin`). Para el PC queda:
+
+1. Registrar el esquema `pixpinmax://` (si no lo está) y atender el host `lectura-veloz` sin
+   pasar al frente: mismas comprobaciones y la misma regla de «gana lo más reciente» que aquí.
+2. La opción «Lectura veloz» en sus visores y en el menú del mensaje, con `ruta=` y el mismo `doc`
+   (`Codigos.unico`), así que un libro abierto desde el PC y desde el teléfono es el mismo código.
+3. Escribir el mismo `anot-<uid>.voz` (y el 🟢 de un PDF), con su propio mapa de párrafos o por la
+   fracción (`parrafo_de_la_marca` ya lo resuelve al leer).
+
+## Lo que no se pudo comprobar sin aparato
+
+Con las dos apps instaladas en un teléfono: que el permiso del `content://` le llega a Lectura
+Veloz y lo copia; que el enlace abre su actividad (Tauri) también si ya estaba abierta; que el
+aviso de vuelta llega con PixPin cerrado (receptor del manifiesto con `setPackage`); y que el
+porcentaje y el verde se ven al volver.

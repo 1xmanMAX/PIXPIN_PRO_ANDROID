@@ -101,12 +101,15 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [~] 32. Whisper «base» por defecto, como el PC (161 MB de descarga; respuesta del usuario del 27-oct).
 
 ### Lectura Veloz (repo `1xmanMAX/Speed-Reading-Tool`)
-- [ ] 33. Opción «Lectura veloz» en los visores (PDF, Word, EPUB, HTML, Markdown…): abre la app
+- [~] 33. Opción «Lectura veloz» en los visores (PDF, Word, EPUB, HTML, Markdown…): abre la app
       directo con el archivo cargado, sin exportar, como «Escanear» abre el escáner.
-- [ ] 34. El marcador de lectura en voz alta se comparte en los dos sentidos y de forma continua:
+      → Hecho (27-oct): menú del mensaje, engranaje de los visores y ⋮ de la nota; falta probarlo con las dos apps instaladas.
+- [~] 34. El marcador de lectura en voz alta se comparte en los dos sentidos y de forma continua:
       Lectura Veloz arranca en el punto de PixPin y, mientras lee, PixPin va actualizando su marcador.
-- [ ] 35. Mención discreta de que el archivo se está leyendo («Leyendo en Lectura veloz · N %»),
+      → Hecho: su aviso mueve el `.voz` de siempre (y el 🟢 de un PDF); gana el más reciente. Falta en el PC (`pixpinmax://lectura-veloz`).
+- [~] 35. Mención discreta de que el archivo se está leyendo («Leyendo en Lectura veloz · N %»),
       como la chapa «Escaneado»; quizá una lista «Leyendo».
-- [ ] 36. Completar la integración según el manual de Android que deje Lectura Veloz. Se revisa su
+      → Hecho: chapa «Lectura veloz · N %» en la burbuja y el % junto a la opción del visor; sin lista «Leyendo».
+- [~] 36. Completar la integración según el manual de Android que deje Lectura Veloz. Se revisa su
       repo cada 30 min hasta que aparezcan el manual y el código; luego se deja de revisar.
-      Propuesta de PixPin: `docs/integracion-lectura-veloz.md`.
+      → Hecho con su código (commit cf7474f); el contrato real está en `docs/integracion-lectura-veloz.md`. Ya no hace falta revisar su repo.

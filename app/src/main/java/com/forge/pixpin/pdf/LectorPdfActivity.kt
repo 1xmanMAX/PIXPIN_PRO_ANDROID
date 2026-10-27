@@ -133,6 +133,14 @@ class LectorPdfActivity : ComponentActivity() {
         }
     }
 
+    /** Cuántas veces ha vuelto al frente: al volver de Lectura Veloz se miran otra vez el 🟢 y su chapa. */
+    private var vueltas by androidx.compose.runtime.mutableIntStateOf(0)
+
+    override fun onResume() {
+        super.onResume()
+        vueltas++
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         // **Sin la barra de estado.** Un plano se mira a pantalla completa: la hora y la
@@ -181,7 +189,10 @@ class LectorPdfActivity : ComponentActivity() {
         conVoz: Boolean = true,
         onPresentar: (() -> Unit)? = null,
         onImprimir: (() -> Unit)? = null,
-        onCopiarHoja: (() -> Unit)? = null
+        onCopiarHoja: (() -> Unit)? = null,
+        /** «Lectura veloz» (null, no se puede) y por dónde va allí, para la chapa. */
+        onLecturaVeloz: (() -> Unit)? = null,
+        porcentajeEnLecturaVeloz: Int? = null
     ) {
         val prefs = remember { getSharedPreferences("lectura", MODE_PRIVATE) }
         com.forge.pixpin.ui.EngranajeDeLector(onCerrar) {
@@ -195,6 +206,7 @@ class LectorPdfActivity : ComponentActivity() {
             if (PUEDE_INVERTIR) com.forge.pixpin.ui.InterruptorDeLector("Invertir colores", "Hojas oscuras para leer de noche; los colores conservan su tono", invertido, onInvertido)
             com.forge.pixpin.ui.InterruptorDeLector("Espacio a la izquierda", "Papel en blanco para anotar", izquierda) { onIzquierda() }
             com.forge.pixpin.ui.InterruptorDeLector("Espacio a la derecha", null, derecha) { onDerecha() }
+            onLecturaVeloz?.let { com.forge.pixpin.ui.FilaDeLector("Lectura veloz", porcentajeEnLecturaVeloz?.let { p -> "$p %" }, it) }
 
             if (conVoz) {
                 com.forge.pixpin.ui.ApartadoDeLector("Voz")
@@ -592,6 +604,32 @@ class LectorPdfActivity : ComponentActivity() {
             }
             marcas = lista
             guardarLasMarcas()
+        }
+        // **Lectura veloz** (27-oct-2026, lo pidió el usuario): el documento en la app «Lectura Veloz»,
+        // desde el 🟢; mientras se lee allí, el 🟢 se mueve solo. Al volver se lee otra vez, y la
+        // chapa del engranaje dice por dónde va allí. Solo un adjunto del chat: su código es el que
+        // reconoce al volver. Ver [com.forge.pixpin.guardados.LecturaVeloz].
+        var codigoParaLecturaVeloz by remember(rutaPedida) { mutableStateOf<String?>(null) }
+        var porcentajeEnLecturaVeloz by remember(rutaPedida) { mutableStateOf<Int?>(null) }
+        LaunchedEffect(rutaPedida, vueltas) {
+            val codigo = withContext(Dispatchers.IO) { capas.codigo?.takeIf { com.forge.pixpin.guardados.LecturaVeloz.admite(nombre, rutaPedida) } }
+            codigoParaLecturaVeloz = codigo
+            if (codigo == null) return@LaunchedEffect
+            porcentajeEnLecturaVeloz = withContext(Dispatchers.IO) { com.forge.pixpin.guardados.LecturaVelozEnElTelefono.porcentaje(this@LectorPdfActivity, codigo) }
+            val archivo = archivoDeMarcas
+            if (vueltas > 1 && !esOffice && archivo != null) {
+                val leidas = withContext(Dispatchers.IO) { com.forge.pixpin.motor.Marcas.deTexto(com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(archivo)) }
+                if (leidas != marcas) marcas = leidas
+            }
+        }
+        fun abrirEnLecturaVeloz() {
+            val codigo = codigoParaLecturaVeloz ?: return
+            val hojas = if (esOffice) 0 else cuantas.coerceAtLeast(0)
+            com.forge.pixpin.guardados.LecturaVelozEnElTelefono.abrir(this@LectorPdfActivity, {
+                com.forge.pixpin.guardados.LecturaVelozEnElTelefono.deArchivo(
+                    this@LectorPdfActivity, java.io.File(rutaPedida), nombre.ifBlank { java.io.File(rutaPedida).name }, codigo, hojas
+                )
+            }) { que -> android.widget.Toast.makeText(this@LectorPdfActivity, com.forge.pixpin.guardados.LecturaVelozEnElTelefono.avisoCorto(que), android.widget.Toast.LENGTH_LONG).show() }
         }
         /** Qué página se está mirando y por dónde va, para plantar ahí el marcador. */
         fun dondeEstoy(): Pair<Int, Double> {
@@ -1115,6 +1153,8 @@ class LectorPdfActivity : ComponentActivity() {
                 comoTextoRotulo = if (!esOffice) "Ver como texto" to "como un Word" else if (esPresentacion) null else "Modo lectura" to "El Word como texto, con su letra y su voz",
                 conVoz = !(esOffice && esPresentacion),
                 onPresentar = if (esOffice && esPresentacion) ({ conElEngranaje = false; presentando = dondeEstoy().first }) else null,
+                onLecturaVeloz = if (codigoParaLecturaVeloz == null) null else ({ conElEngranaje = false; abrirEnLecturaVeloz() }),
+                porcentajeEnLecturaVeloz = porcentajeEnLecturaVeloz,
                 // Imprimir: mantener el marco del riel (25-oct-2026).
                 onImprimir = null,
                 onCopiarHoja = if (esOffice) ({
@@ -1477,6 +1517,8 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
     private val huella = rutaPedida.hashCode().toUInt().toString(16)
     /** El código del mensaje del chat que lleva este PDF, o null si no es un adjunto. No cambia nunca. */
     private val uid: String? by lazy { com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(actividad.filesDir, rutaPedida) }
+    /** El mismo código, para Lectura Veloz. Toca disco la primera vez. */
+    val codigo: String? get() = uid
     private val abiertas = HashMap<Int, com.forge.pixpin.motor.DrawController>()
     private val sucias = HashSet<Int>()
     private var ultimaTocada = -1

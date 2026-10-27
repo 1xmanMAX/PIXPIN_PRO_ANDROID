@@ -190,7 +190,12 @@ class MarkdownEditorActivity : ComponentActivity() {
                     idDeLaNota = id,
                     proyectoDeLaNota = intent.getStringExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO)
                         ?: (application as? PixPinApp)?.proyectos?.proyectos?.value?.firstOrNull { p -> p.hojas.any { it.id == id } }?.id,
-                    masAcciones = listOf("Compartir…" to { texto -> abrirCompartir(texto) })
+                    masAcciones = listOfNotNull(
+                        "Compartir…" to { texto: String -> abrirCompartir(texto) },
+                        // **Lectura veloz** (27-oct-2026): la nota en la app de lectura rápida; con su porcentaje si ya se leyó allí.
+                        if (codigoDeLaNota.value == null) null
+                        else (listOfNotNull("Lectura veloz", porcentajeEnLecturaVeloz.value?.let { "$it %" }).joinToString(" · ")) to { texto: String -> abrirEnLecturaVeloz(texto) }
+                    )
                 )
                 compartiendo.value?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo.value = null } }
                 // **Abrir con…, Guardar y Compartir**, solo de paso. Ver [BarraDePaso].
@@ -219,6 +224,36 @@ class MarkdownEditorActivity : ComponentActivity() {
      * entrado. Sin esto, abrir una nota desde el proyecto y guardarla escribía
      * en el almacén del pin y el proyecto seguía enseñando lo de antes.
      */
+    /**
+     * **Lectura veloz** (27-oct-2026, lo pidió el usuario): la nota, como `.md`, en la app «Lectura
+     * Veloz». Su punto vuelve al `anot-<uid>.voz` de la nota. Ver [com.forge.pixpin.guardados.LecturaVeloz].
+     * [codigoDeLaNota] es el código único de la nota (null: no es de un chat ni de un proyecto).
+     */
+    private val codigoDeLaNota = androidx.compose.runtime.mutableStateOf<String?>(null)
+    private val porcentajeEnLecturaVeloz = androidx.compose.runtime.mutableStateOf<Int?>(null)
+
+    override fun onResume() {
+        super.onResume()
+        val id = intent.getStringExtra(EXTRA_ID).orEmpty()
+        lifecycleScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val codigo = runCatching { ComentariosDeNota.uidDeLaNota(this@MarkdownEditorActivity, id) }.getOrNull()
+                ?.takeIf { com.forge.pixpin.guardados.LecturaVeloz.docValido(it) }
+            val pct = codigo?.let { com.forge.pixpin.guardados.LecturaVelozEnElTelefono.porcentaje(this@MarkdownEditorActivity, it) }
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                codigoDeLaNota.value = codigo
+                porcentajeEnLecturaVeloz.value = pct
+            }
+        }
+    }
+
+    private fun abrirEnLecturaVeloz(texto: String) {
+        val codigo = codigoDeLaNota.value ?: return
+        val titulo = com.forge.pixpin.motormd.ExportarDocx.tituloDe(texto)
+        com.forge.pixpin.guardados.LecturaVelozEnElTelefono.abrir(this, {
+            com.forge.pixpin.guardados.LecturaVelozEnElTelefono.deNota(this, codigo, titulo, texto)
+        }) { que -> Toast.makeText(this, com.forge.pixpin.guardados.LecturaVelozEnElTelefono.avisoCorto(que), Toast.LENGTH_LONG).show() }
+    }
+
     /** Lo que se está compartiendo de la nota: la hoja de toda la aplicación. Ver [abrirCompartir]. */
     private val compartiendo = androidx.compose.runtime.mutableStateOf<com.forge.pixpin.ui.Compartible?>(null)
 

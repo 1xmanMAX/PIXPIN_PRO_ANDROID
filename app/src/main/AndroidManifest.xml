@@ -69,6 +69,13 @@
         <package android:name="com.scannerpromax" />
         <!-- «Enviar a Anki»: sin esto, en Android 11+ AnkiDroid no se ve y siempre saldría el fichero. -->
         <package android:name="com.ichi2.anki" />
+        <!-- «Lectura veloz» en los visores y en el menú del mensaje: la app de lectura rápida del
+             usuario y su enlace `lecturaveloz://pixpin/abrir`. Ver guardados/LecturaVeloz.kt. -->
+        <package android:name="com.lecturaveloz.app" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="lecturaveloz" />
+        </intent>
         <intent>
             <action android:name="com.scannerpromax.action.SCAN" />
         </intent>
@@ -715,6 +722,16 @@
             </intent-filter>
         </service>
 
+        <!-- El punto de lectura que devuelve «Lectura Veloz» mientras se lee: mueve el marcador
+             verde de la voz. Exportado porque lo manda otra app; lo que no se reconoce se tira.
+             Ver guardados/LecturaVelozEnElTelefono.kt. -->
+        <receiver
+            android:name=".guardados.LecturaVelozReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.forge.pixpin.LECTURA_VELOZ" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:name=".pin.BootReceiver"
             android:exported="true">

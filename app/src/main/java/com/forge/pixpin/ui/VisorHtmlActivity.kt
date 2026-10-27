@@ -446,6 +446,62 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun leerLaMarcaDeVoz() {
         marcaDeVoz = com.forge.pixpin.motor.Lectura.vozDeTexto(ExportarDocumentoAnotado.vozDe(this, claveDelDocumento))
     }
+
+    // ---- **Lectura veloz** (27-oct-2026, lo pidió el usuario): este documento en la app «Lectura
+    // Veloz», desde el marcador verde. Ver [com.forge.pixpin.guardados.LecturaVeloz]. ----
+
+    /** Lo que lleva la chapa del engranaje: por dónde va en Lectura Veloz, o null si nunca se leyó allí. */
+    private var porcentajeEnLecturaVeloz by mutableStateOf<Int?>(null)
+
+    /** Solo un adjunto del chat: su código es el que reconoce Lectura Veloz al devolver el punto. */
+    private val paraLecturaVeloz: Boolean
+        get() = esDocumento && baseDelMensaje != null && com.forge.pixpin.guardados.LecturaVeloz.admite(elDocumento?.name)
+
+    private fun mirarLecturaVeloz() {
+        val doc = elDocumento?.takeIf { paraLecturaVeloz } ?: return
+        lifecycleScope.launch {
+            porcentajeEnLecturaVeloz = withContext(Dispatchers.IO) {
+                com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(filesDir, doc.absolutePath)
+                    ?.let { com.forge.pixpin.guardados.LecturaVelozEnElTelefono.porcentaje(this@VisorHtmlActivity, it) }
+            }
+        }
+    }
+
+    /**
+     * **Los párrafos de la voz, contados**, para pasar del verde a Lectura Veloz y volver
+     * ([com.forge.pixpin.guardados.LecturaVeloz.Mapa]). Se guardan cada vez que se numeran.
+     */
+    private fun guardarElMapa(json: org.json.JSONObject) {
+        val base = baseDelMensaje ?: return
+        val t = json.optJSONArray("t") ?: return
+        val f = json.optJSONArray("f")
+        val h = json.optJSONArray("h")
+        val textos = (0 until t.length()).map { t.optString(it) }
+        val mapa = com.forge.pixpin.guardados.LecturaVeloz.Mapa.deParrafos(
+            textos,
+            textos.indices.map { (f?.optDouble(it, 0.0) ?: 0.0).toFloat() },
+            textos.indices.map { h?.optInt(it, 0) ?: 0 }
+        ) ?: return
+        lifecycleScope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.guardados.LecturaVelozEnElTelefono.guardarMapa(this@VisorHtmlActivity, base, mapa) } }
+    }
+
+    /** «Lectura veloz»: se cuentan los párrafos (para convertir el verde) y se abre allí. */
+    private fun abrirEnLecturaVeloz() {
+        val doc = elDocumento ?: return
+        val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { doc.name }
+        val seguir = {
+            com.forge.pixpin.guardados.LecturaVelozEnElTelefono.abrir(this, {
+                com.forge.pixpin.guardados.LecturaVelozEnElTelefono.deArchivo(this, doc, nombre)
+            }) { que -> Toast.makeText(this, com.forge.pixpin.guardados.LecturaVelozEnElTelefono.avisoCorto(que), Toast.LENGTH_LONG).show() }
+        }
+        val vista = web
+        if (vista == null) { seguir(); return }
+        vista.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) { crudo ->
+            runCatching { guardarElMapa(org.json.JSONObject(org.json.JSONTokener(crudo).nextValue() as String)) }
+            // El mapa se escribe en otro hilo: se le da un momento antes de leerlo para el enlace.
+            vista.postDelayed({ seguir() }, 150)
+        }
+    }
     /** Voces en línea de Google (mejores, pero el texto sale del teléfono); se recuerda. */
     private var vocesEnLinea by mutableStateOf(false)
 
@@ -499,6 +555,7 @@ class VisorHtmlActivity : ComponentActivity() {
             }
             val fr = json!!.optJSONArray("f")
             val donde = (0 until (fr?.length() ?: 0)).map { fr!!.optDouble(it, 0.0).toFloat() }
+            guardarElMapa(json)
             // **Se sigue por el marcador verde**, donde se dejó de escuchar; si no hay, por lo que asoma arriba.
             // Abierto desde el PDF de hojas con su verde puesto: desde el primer párrafo de esa hoja.
             val hojas = json.optJSONArray("h")
@@ -506,7 +563,10 @@ class VisorHtmlActivity : ComponentActivity() {
                 (0 until (hojas?.length() ?: 0)).firstOrNull { hojas!!.optInt(it) >= n }
             }
             hojaPedida = 0
-            val desde = deLaHoja ?: marcaDeVoz?.first?.takeIf { it in textos.indices } ?: json.optInt("desde", 0)
+            // El párrafo del verde; si no casa con su fracción (lo contó otro aparato, o lo puso
+            // Lectura Veloz, que solo sabe la fracción), el que empieza más cerca de ella. Como el PC.
+            val delVerde = marcaDeVoz?.let { v -> com.forge.pixpin.motor.Lectura.parrafoDeLaMarca(donde, v) ?: v.first }
+            val desde = deLaHoja ?: delVerde?.takeIf { it in textos.indices } ?: json.optInt("desde", 0)
             val muestra = textos.asSequence().drop(desde).take(40).joinToString(" ").take(4000)
             val idioma = com.forge.pixpin.motor.VozAlta.idiomaParaLeer(muestra, json.optString("lang"), java.util.Locale.getDefault().toLanguageTag())
             if (lector.estado.value.listo) {
@@ -1074,6 +1134,7 @@ class VisorHtmlActivity : ComponentActivity() {
             val json = runCatching { org.json.JSONObject(org.json.JSONTokener(crudo).nextValue() as String) }.getOrNull() ?: return@evaluateJavascript
             val cuantos = json.optJSONArray("t")?.length() ?: 0
             if (cuantos == 0) { Toast.makeText(this, "Este documento no tiene texto que leer", Toast.LENGTH_SHORT).show(); return@evaluateJavascript }
+            guardarElMapa(json)
             val desde = json.optInt("desde", 0).coerceIn(0, cuantos - 1)
             val f = json.optJSONArray("f")?.optDouble(desde, -1.0)?.toFloat()?.takeIf { it >= 0f } ?: fraccionDeAhora()
             ExportarDocumentoAnotado.ponerVoz(this, claveDelDocumento, com.forge.pixpin.motor.Lectura.vozATexto(desde, f))
@@ -1149,6 +1210,15 @@ class VisorHtmlActivity : ComponentActivity() {
         // **De paso** (27-oct-2026): abierto desde otra aplicación sin guardarlo. Ver [com.forge.pixpin.guardados.ModoDePaso].
         estadoDePaso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
+    }
+
+    /** Al volver (de Lectura Veloz, o con otro verde que llegó sincronizando), el verde de ahora. */
+    override fun onResume() {
+        super.onResume()
+        if (esDocumento && elOriginal != null) {
+            leerLaMarcaDeVoz()
+            mirarLecturaVeloz()
+        }
     }
 
     override fun onPause() {
@@ -1795,6 +1865,8 @@ class VisorHtmlActivity : ComponentActivity() {
                     androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
                     MasMenosDeLector("Derecha", pasosDe(espacioDer), topeDePasos(), { anadirEspacio(izquierda = false, mas = false) }) { anadirEspacio(izquierda = false) }
                 }
+                // **Lectura veloz**: en la app de lectura rápida, desde el verde; a la derecha, por dónde va allí.
+                if (paraLecturaVeloz) FilaDeLector("Lectura veloz", porcentajeEnLecturaVeloz?.let { "$it %" }) { onCerrar(); abrirEnLecturaVeloz() }
 
                 // ---- Voz ----
                 ApartadoDeLector("Voz")
