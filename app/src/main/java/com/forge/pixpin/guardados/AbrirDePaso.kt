@@ -143,7 +143,11 @@ object AbrirDePaso {
         val ruta = e.ruta
         val nombre = e.nombre
         val mensaje = e.guardado
-        val visor = ModoDePaso.visorPara(nombre, e.mime)
+        // Sin extensión ni tipo que diga nada, se mira dentro: un texto sin nombre se ve como texto.
+        val visor = ModoDePaso.visorPara(nombre, e.mime).let { v ->
+            if (v != Visor.NINGUNO) v
+            else withContext(Dispatchers.IO) { ModoDePaso.visorPara(nombre, e.mime, cabezaDe(ruta)) }
+        }
         // Unos puntos de Civil 3D (un .txt, .csv o .xml) van al visor 3D, como en el chat.
         val deCivil = (visor == Visor.TEXTO || visor == Visor.HOJA || visor == Visor.NINGUNO) &&
             withContext(Dispatchers.IO) { runCatching { com.forge.pixpin.planos.LectorDePlanos.esDeCivil(ruta, nombre) }.getOrDefault(false) }
@@ -182,9 +186,13 @@ object AbrirDePaso {
             Visor.PLANO -> a.conPaso(e) { com.forge.pixpin.planos.PlanoActivity.abrir(a, ruta, nombre); true }
             Visor.MODELO_3D -> a.conPaso(e) { com.forge.pixpin.planos.Visor3DActivity.abrir(a, ruta, nombre); true }
             Visor.VIDEO -> a.conPaso(e) { com.forge.pixpin.guardados.VisorDeVideoActivity.abrir(a, ruta, nombre); true }
-            Visor.MARKDOWN, Visor.TEXTO -> {
-                val texto = withContext(Dispatchers.IO) { runCatching { File(ruta).readText() }.getOrNull() } ?: return false
-                a.conPaso(e) { com.forge.pixpin.ui.MarkdownEditorActivity.abrir(a, idDeLaNota(e), texto); true }
+            // **Un `.md` o un texto, por su ruta** (27-oct-2026). Iba con el texto entero dentro del
+            // intento, y un archivo de unos cientos de KB pasaba del límite de Android para un intento
+            // (`TransactionTooLargeException`): `startActivity` fallaba callado, esta pantalla se
+            // cerraba y no se abría nada. Ahora el editor lee el archivo él mismo, y el texto llano
+            // se ve tal cual, sin pasar por el Markdown. Ver [FormatosDeTexto].
+            Visor.MARKDOWN, Visor.TEXTO -> a.conPaso(e) {
+                com.forge.pixpin.ui.MarkdownEditorActivity.abrirArchivo(a, ruta, nombre, idDeLaNota(e), llano = visor == Visor.TEXTO)
             }
             // **Una foto, en el lienzo**, como en el chat: se anota encima. De paso, en un dibujo de
             // la sesión ([ModoDePaso.dibujoDeLaFoto]); guardada, en el de su mensaje.
@@ -207,6 +215,16 @@ object AbrirDePaso {
      */
     private fun carpetaDeLaVista(c: Context, e: Estado): File =
         e.guardado?.let { File(File(c.cacheDir, "visor-paso-guardado"), it.take(36)) } ?: carpetaDe(c, e.sesion)
+
+    /** Los primeros bytes de [ruta], para mirar qué es lo que llega sin extensión. */
+    private fun cabezaDe(ruta: String): ByteArray? = runCatching {
+        File(ruta).inputStream().use { entra ->
+            val b = ByteArray(8192)
+            var n = 0
+            while (n < b.size) { val r = entra.read(b, n, b.size - n); if (r < 0) break; n += r }
+            b.copyOf(n)
+        }
+    }.getOrNull()
 
     /** La nota con que el editor de Markdown abre un `.md` de paso (o el del mensaje, ya guardado). */
     fun idDeLaNota(e: Estado) = e.guardado?.let { "md-$it" } ?: "md-${e.uid}"

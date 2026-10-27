@@ -52,8 +52,12 @@ object ModoDePaso {
         MODELO_3D,
         IMAGEN,
         VIDEO,
+        /** Un `.md` o un `.markdown`, compuesto. Ver [FormatosDeTexto]. */
         MARKDOWN,
-        /** Un `.txt`: si es de puntos de Civil 3D, al visor 3D; si no, como texto. */
+        /**
+         * Texto llano —`.txt`, `.log`, `.ini`, `.cfg`, `.srt`, `.vtt`, lo del PC—, tal cual. Un `.txt`
+         * de puntos de Civil 3D va al visor 3D. Ver [FormatosDeTexto].
+         */
         TEXTO,
         /** Ninguno de PixPin: se ofrece abrirlo con otra aplicación o guardarlo. */
         NINGUNO
@@ -78,8 +82,11 @@ object ModoDePaso {
             "application/pdf" -> "pdf"
             "application/epub+zip" -> "epub"
             "text/html", "application/xhtml+xml" -> "html"
-            "text/markdown", "text/x-markdown" -> "md"
+            "text/markdown", "text/x-markdown", "text/x-web-markdown" -> "md"
             "text/plain" -> "txt"
+            "text/x-log" -> "log"
+            "text/vtt" -> "vtt"
+            "application/x-subrip", "text/x-subrip", "application/x-srt" -> "srt"
             "text/csv", "text/comma-separated-values" -> "csv"
             "application/vnd.openxmlformats-officedocument.wordprocessingml.document" -> "docx"
             "application/vnd.openxmlformats-officedocument.presentationml.presentation" -> "pptx"
@@ -111,8 +118,13 @@ object ModoDePaso {
      * tipo que dice un explorador es a menudo `octet-stream`); sin ella, el tipo. Es la misma tabla
      * que sigue el chat al tocar un adjunto (`MensajesActivity.abrir`), sin lo que solo tiene
      * sentido dentro de él (una lección, un proyecto).
+     *
+     * **Los de texto, como en el PC** (27-oct-2026, ver [FormatosDeTexto]): `md` y `markdown` al
+     * Markdown; `txt`, `log`, `ini`, `cfg`, `srt` y `vtt`, como texto llano. Y lo que llega **sin
+     * extensión** —un explorador que solo dice `application/octet-stream`, o un `README`— se mira
+     * por dentro si se tienen sus primeros bytes ([cabeza]): si es texto, se ve como texto.
      */
-    fun visorPara(nombre: String?, mime: String?): Visor {
+    fun visorPara(nombre: String?, mime: String?, cabeza: ByteArray? = null): Visor {
         val ext = extensionDe(nombre, mime)
         val m = mime.orEmpty().lowercase()
         return when {
@@ -124,13 +136,17 @@ object ModoDePaso {
             ext in DE_HOJA -> Visor.HOJA
             ext == "dwg" || ext == "dxf" -> Visor.PLANO
             ext == "ifc" || ext == "rvt" -> Visor.MODELO_3D
-            ext in setOf("md", "markdown") -> Visor.MARKDOWN
-            ext == "txt" -> Visor.TEXTO
+            ext in FormatosDeTexto.DE_MARKDOWN -> Visor.MARKDOWN
+            ext in FormatosDeTexto.LLANAS -> Visor.TEXTO
             ext in DE_IMAGEN -> Visor.IMAGEN
             ext in DE_VIDEO -> Visor.VIDEO
             // Sin extensión conocida, el tipo genérico: una foto o un vídeo que el explorador no nombra.
             ext.isEmpty() && m.startsWith("image/") -> Visor.IMAGEN
             ext.isEmpty() && m.startsWith("video/") -> Visor.VIDEO
+            // Un tipo de texto que no se conoce (`text/x-algo`): texto llano.
+            ext.isEmpty() && m.startsWith("text/") -> Visor.TEXTO
+            // Sin extensión ni tipo útil: lo que hay dentro.
+            ext.isEmpty() && cabeza != null && FormatosDeTexto.pareceTexto(cabeza) -> Visor.TEXTO
             else -> Visor.NINGUNO
         }
     }

@@ -225,12 +225,33 @@ object AbrirMensaje {
                         // cómo y, si no se deja leer, lo manda a otra aplicación. Ver [com.forge.pixpin.excel.EntradaDeHojas].
                         com.forge.pixpin.excel.EntradaDeHojas.esHojaDeCalculo(m.nombre, ruta) ->
                             com.forge.pixpin.excel.ExcelActivity.abrir(this, ruta, m.nombre.ifBlank { File(ruta).name }, mensaje = m.id)
+                        // **Un `.md`, un `.txt`, un `.log`… se lee aquí dentro** (27-oct-2026, el usuario: «no
+                        // puedo abrir archivos Markdown»). No tenían rama y caían en `abrirFuera`: a otra
+                        // aplicación, y casi ningún teléfono trae una para Markdown. Ahora, como en el PC, al
+                        // editor de notas: el Markdown compuesto y lo demás tal cual, con la pastilla y el riel
+                        // (marcador, lápiz, marcos) sobre la nota `md-<mensaje>`, que es con la que viaja lo
+                        // anotado. Solo para mirar: lo escrito no tendría adónde volver sin cambiar el
+                        // archivo del mensaje. Un `.txt` de puntos de Civil 3D ya se fue arriba, al visor 3D.
+                        // Ver [FormatosDeTexto].
+                        FormatosDeTexto.delMensaje(m.nombre, ruta) != null ->
+                            com.forge.pixpin.ui.MarkdownEditorActivity.abrirArchivo(
+                                this, ruta, m.nombre.ifBlank { File(ruta).name }, idDeLaNota(m),
+                                llano = FormatosDeTexto.delMensaje(m.nombre, ruta) == FormatosDeTexto.Como.LLANO,
+                                soloLeer = true
+                            ).let { abierto -> if (!abierto) abrirFuera(ruta) }
                         else -> abrirFuera(ruta)
                     }
                 }
             }
         }
     }
+
+    /**
+     * **La nota con que se abre un adjunto de texto** en el editor: `md-<mensaje>`, la misma que usa
+     * lo abierto de paso ya guardado ([AbrirDePaso.idDeLaNota]). Con ella el editor encuentra el
+     * código del mensaje ([com.forge.pixpin.ui.ComentariosDeNota.uidDeLaNota]) y lo anotado viaja.
+     */
+    fun idDeLaNota(m: Mensaje) = "md-${m.id}"
 
     /** Un APK se instala; lo demás, con la aplicación que se elija. Ver [com.forge.pixpin.ui.AbrirCon]. */
     private fun ComponentActivity.abrirFuera(ruta: String) {

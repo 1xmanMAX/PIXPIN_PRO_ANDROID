@@ -589,7 +589,17 @@
                 <data android:pathPattern=".*\\.dxf" />
                 <data android:pathPattern=".*\\.DXF" />
                 <data android:pathPattern=".*\\.epub" />
+                <!-- Los de texto, como en el PC (27-oct-2026): ver guardados/FormatosDeTexto. -->
                 <data android:pathPattern=".*\\.md" />
+                <data android:pathPattern=".*\\.MD" />
+                <data android:pathPattern=".*\\.markdown" />
+                <data android:pathPattern=".*\\.txt" />
+                <data android:pathPattern=".*\\.TXT" />
+                <data android:pathPattern=".*\\.log" />
+                <data android:pathPattern=".*\\.ini" />
+                <data android:pathPattern=".*\\.cfg" />
+                <data android:pathPattern=".*\\.srt" />
+                <data android:pathPattern=".*\\.vtt" />
             </intent-filter>
             <intent-filter android:label="@string/app_name">
                 <action android:name="android.intent.action.VIEW" />
@@ -611,6 +621,14 @@
                 <data android:mimeType="text/markdown" />
                 <data android:mimeType="text/x-markdown" />
                 <data android:mimeType="text/plain" />
+                <!-- **Markdown y texto, lo diga como lo diga el explorador** (27-oct-2026): un `.md` llega
+                     como `text/markdown`, `text/x-markdown`, `text/plain` o `application/octet-stream`, y
+                     un `content://` casi nunca acaba en su extensión (los pathPattern no sirven ahí). Se
+                     acepta el tipo genérico y se decide por el nombre que da el proveedor
+                     (OpenableColumns.DISPLAY_NAME) o, sin él, por lo que hay dentro. Ver ModoDePaso.visorPara. -->
+                <data android:mimeType="text/*" />
+                <data android:mimeType="application/octet-stream" />
+                <data android:mimeType="application/x-subrip" />
                 <!-- Planos DWG/DXF: cada visor los anuncia con un alias distinto (ver data/TiposDeArchivo). -->
                 <data android:mimeType="image/vnd.dwg" />
                 <data android:mimeType="application/acad" />

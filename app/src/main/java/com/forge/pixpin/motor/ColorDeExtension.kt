@@ -45,7 +45,7 @@ object ColorDeExtension {
         poner(VIDEO, "mp4", "mov", "avi", "mkv", "webm", "3gp", "m4v", "wmv", "flv")
         poner(COMPRIMIDO, "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "zst")
         poner(CODIGO, "html", "htm", "css", "js", "ts", "json", "xml", "kt", "kts", "java", "py", "c", "h", "cpp", "hpp", "cs", "rs", "go", "sh", "sql", "yml", "yaml", "tex", "m", "ipynb")
-        poner(TEXTO, "txt", "md", "log", "ini", "cfg", "srt", "vtt")
+        poner(TEXTO, "txt", "md", "markdown", "log", "ini", "cfg", "srt", "vtt")
         poner(LIBRO, "epub", "mobi", "azw", "azw3", "fb2", "djvu", "cbz", "cbr")
         poner(APLICACION, "apk", "aab", "xapk", "apks", "exe", "msi", "dmg", "deb", "appimage")
         poner(PIXPIN, "pixpin", "excalidraw")

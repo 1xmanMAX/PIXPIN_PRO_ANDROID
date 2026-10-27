@@ -603,7 +603,7 @@ private fun Filas(
  */
 internal fun colorDeExtension(ext: String): Long = when (ext.lowercase()) {
     "pdf" -> 0xFFE5534B
-    "doc", "docx", "odt", "rtf", "txt", "md", "epub" -> 0xFF3B82F6
+    "doc", "docx", "odt", "rtf", "txt", "md", "markdown", "log", "ini", "cfg", "srt", "vtt", "epub" -> 0xFF3B82F6
     "xls", "xlsx", "ods", "csv" -> 0xFF22A06B
     "ppt", "pptx", "odp", "key" -> 0xFFF08C2E
     in SeccionesDelChat.EXTENSIONES_DE_VIDEO -> 0xFF8B5CF6

@@ -116,3 +116,10 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [x] 36. Completar la integración según el manual de Android que deje Lectura Veloz. Se revisa su
       repo cada 30 min hasta que aparezcan el manual y el código; luego se deja de revisar.
       → Hecho con su código (commit cf7474f); el contrato real está en `docs/integracion-lectura-veloz.md`. Ya no hace falta revisar su repo.
+
+## Tanda del 27-oct (2)
+
+- [~] 37. Abrir archivos Markdown.
+      → Hecho, falta probar en el teléfono: un `.md` del chat iba a otra app (no tenía rama); ahora abre en la nota, y de fuera se lee por su ruta (el texto entero en el intento no cabía).
+- [~] 38. Formatos de texto como el PC (txt, …): `md`, `markdown` (compuestos) y `txt`, `log`, `ini`, `cfg`, `srt`, `vtt` (tal cual).
+      → Hecho, falta probar en el teléfono: la lista del visor y la familia «Texto» del PC; desde el chat (solo mirar y anotar) y desde fuera (de paso).

@@ -154,7 +154,6 @@ class MarkdownEditorActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         val id = intent.getStringExtra(EXTRA_ID).orEmpty()
-        val inicial = intent.getStringExtra(EXTRA_TEXTO).orEmpty()
         val desde = intent.getIntExtra(EXTRA_DESDE, -1)
         // Leerlo toca disco (el chat): fuera del hilo que pinta, y el editor lo recibe al llegar.
         val comentariosDeLaNota = androidx.compose.runtime.mutableStateOf<ComentariosDeNota?>(null)
@@ -165,12 +164,40 @@ class MarkdownEditorActivity : ComponentActivity() {
 
         // **Un .md o un .txt abierto de paso** (27-oct-2026, desde otra aplicación sin guardarlo). Ver [com.forge.pixpin.guardados.ModoDePaso].
         val paso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
+        // **Un archivo, por su ruta** (27-oct-2026): un `.md` o un texto del chat o de paso. El texto
+        // no viaja en el intento —uno grande no cabe y Android no abría nada—: se lee aquí, fuera del
+        // hilo que pinta, y la pantalla sale al tenerlo. Ver [abrirArchivo].
+        val ruta = intent.getStringExtra(EXTRA_RUTA) ?: paso?.ruta?.takeIf { !intent.hasExtra(EXTRA_TEXTO) }
+        if (ruta == null) mostrar(id, intent.getStringExtra(EXTRA_TEXTO).orEmpty(), desde, comentariosDeLaNota, paso)
+        else lifecycleScope.launch {
+            val texto = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                runCatching { com.forge.pixpin.guardados.FormatosDeTexto.leer(java.io.File(ruta).readBytes()) }.getOrNull()
+            }
+            if (texto == null) {
+                Toast.makeText(this@MarkdownEditorActivity, "No se pudo leer el archivo", Toast.LENGTH_SHORT).show()
+                finish()
+            } else mostrar(id, texto, desde, comentariosDeLaNota, paso)
+        }
+    }
+
+    /** La pantalla, con lo que ya se tiene: [inicial] es el texto, venga del intento o del archivo. */
+    private fun mostrar(
+        id: String, inicial: String, desde: Int,
+        comentariosDeLaNota: androidx.compose.runtime.MutableState<ComentariosDeNota?>,
+        paso: com.forge.pixpin.guardados.AbrirDePaso.Estado?
+    ) {
+        val llano = intent.getBooleanExtra(EXTRA_LLANO, false)
+        val soloLeer = intent.getBooleanExtra(EXTRA_SOLO_LEER, false)
+        val archivo = intent.getStringExtra(EXTRA_NOMBRE)?.takeIf { it.isNotBlank() } ?: paso?.nombre
         setContent {
             PixPinTheme {
               Box(Modifier.fillMaxSize()) {
                 Pantalla(
                     inicial = inicial,
                     desde = desde,
+                    llano = llano,
+                    soloLeer = soloLeer,
+                    archivo = archivo,
                     onGuardar = { texto ->
                         if (id.isNotEmpty()) TextoStore.guardar(id, texto)
                         guardarEnSuProyecto(id, texto)
@@ -349,6 +376,40 @@ class MarkdownEditorActivity : ComponentActivity() {
         private const val EXTRA_DESDE = "md_desde"
         /** El mensaje de audio cuya letra o texto se está escribiendo; lo guardado vuelve a él. */
         private const val EXTRA_MENSAJE = "md_mensaje"
+        /** El archivo que se abre: el editor lo lee él mismo. Ver [abrirArchivo]. */
+        internal const val EXTRA_RUTA = "md_ruta"
+        /** Cómo se llama el archivo (el del mensaje o el que dijo la otra aplicación). */
+        internal const val EXTRA_NOMBRE = "md_nombre"
+        /** Texto llano: se ve tal cual, sin el Markdown. Ver [com.forge.pixpin.guardados.FormatosDeTexto]. */
+        internal const val EXTRA_LLANO = "md_llano"
+        /** Solo para mirar: sin «Escribir». */
+        internal const val EXTRA_SOLO_LEER = "md_solo_leer"
+
+        /**
+         * **Abre un archivo de texto** —un `.md`, un `.txt`, un `.log`…— por su [ruta] (27-oct-2026).
+         * El editor lo lee él mismo: el texto no va en el intento, que tiene un límite (unos cientos
+         * de KB) y, pasado, `startActivity` fallaba sin decir nada. [llano]: se ve tal cual, sin
+         * Markdown. [soloLeer]: sin «Escribir» (un adjunto del chat: lo escrito no tendría adónde
+         * volver). [id] es la nota con que se anota y se comenta (`md-<mensaje>` desde el chat; ver
+         * [ComentariosDeNota.uidDeLaNota]). Devuelve si se pudo abrir.
+         */
+        fun abrirArchivo(
+            context: Context, ruta: String, nombre: String, id: String,
+            llano: Boolean = false, soloLeer: Boolean = false
+        ): Boolean = runCatching { context.startActivity(intentoDeArchivo(context, ruta, nombre, id, llano, soloLeer)) }.isSuccess
+
+        /** El intento de [abrirArchivo], sin lanzarlo (para probarlo). */
+        internal fun intentoDeArchivo(
+            context: Context, ruta: String, nombre: String, id: String, llano: Boolean, soloLeer: Boolean
+        ): Intent = Intent(context, MarkdownEditorActivity::class.java)
+            // Cada nota en su tarea. Ver el manifiesto.
+            .setData(android.net.Uri.parse("pixpin://nota/" + android.net.Uri.encode(id.ifBlank { "archivo-" + ruta.hashCode() })))
+            .putExtra(EXTRA_ID, id)
+            .putExtra(EXTRA_RUTA, ruta)
+            .putExtra(EXTRA_NOMBRE, nombre)
+            .putExtra(EXTRA_LLANO, llano)
+            .putExtra(EXTRA_SOLO_LEER, soloLeer)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
 
         /**
          * Abre la nota [id] con [texto], opcionalmente por la letra [desde].
@@ -392,6 +453,15 @@ private fun Pantalla(
     onGuardar: (String) -> Unit,
     onDescartar: () -> Unit,
     desde: Int = -1,
+    /**
+     * **Texto llano** (27-oct-2026, un `.txt`, un `.log`…, como el PC): se ve y se escribe tal cual,
+     * renglón a renglón, sin componer el Markdown. Ver [com.forge.pixpin.guardados.FormatosDeTexto].
+     */
+    llano: Boolean = false,
+    /** Solo para mirar (un adjunto del chat): sin «Escribir». */
+    soloLeer: Boolean = false,
+    /** El archivo que se ve, si es uno: su nombre va en la pastilla, con su icono. Null: una nota. */
+    archivo: String? = null,
     /** Qué archivo es esta nota y cuánto pesa, con su proyecto. Ver [com.forge.pixpin.motor.Detalle]. */
     detalle: (String) -> List<Pair<String, String>> = { emptyList() },
     /** Los comentarios de esta nota, si tiene código con el que viajar. Ver [ComentariosDeNota]. */
@@ -457,7 +527,7 @@ private fun Pantalla(
     val contextoDeLaNota = remember { IncrustadosDeLaNota(contextoDelEditor) }
     // **Las páginas vivas al día** al abrir la nota: las hojas que cambiaron se repintan.
     var repintadas by remember { mutableIntStateOf(0) }
-    LaunchedEffect(Unit) {
+    if (!llano) LaunchedEffect(Unit) {
         val n = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching { PaginasVivas.ponerAlDia(contextoDelEditor, inicial) }.getOrDefault(0)
         }
@@ -731,8 +801,10 @@ private fun Pantalla(
 
     // El título de la barra es el de la nota, si lo tiene: se mira solo la
     // primera línea, que es barato y es donde va un título.
-    val titulo = remember(valor.text) {
-        valor.text.lineSequence().firstOrNull()?.trim()
+    // Un archivo se llama como el archivo (sin la extensión, que ya dice su icono).
+    val titulo = remember(valor.text, archivo) {
+        if (archivo != null) archivo.substringBeforeLast('.').ifBlank { archivo }
+        else valor.text.lineSequence().firstOrNull()?.trim()
             ?.takeIf { it.startsWith("#") }
             ?.trimStart('#')?.trim()
             ?.takeIf { it.isNotEmpty() }
@@ -767,9 +839,27 @@ private fun Pantalla(
                 if (viendo && valor.text.isBlank()) {
                     // Una nota vacía se abre mirando, así que invita a escribir.
                     Text(
-                        "Nota vacía. Toca para escribir.",
+                        if (soloLeer) "Archivo vacío." else "Nota vacía. Toca para escribir.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth().clickable { viendo = false }.padding(vertical = 24.dp)
+                        modifier = Modifier.fillMaxWidth().then(if (soloLeer) Modifier else Modifier.clickable { viendo = false }).padding(vertical = 24.dp)
+                    )
+                } else if (llano && viendo) {
+                    // **Texto llano, tal cual** (27-oct-2026, el `html::llano` del PC): cada renglón
+                    // donde está y sin Markdown —un `#` es un `#`—, con la letra y el tamaño de la vista.
+                    // Los finales de línea de Windows (`\r\n`) se ven como uno, igual que en el PC.
+                    Text(
+                        remember(valor.text) { valor.text.replace("\r\n", "\n").replace('\r', '\n') },
+                        style = TextStyle(fontFamily = letraDeLaNota, fontSize = vista.tamano.sp, color = MaterialTheme.colorScheme.onSurface),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else if (llano) {
+                    // Escribiendo texto llano: un campo de texto sin más, sin bloques ni comandos.
+                    BasicTextField(
+                        value = valor,
+                        onValueChange = { cambia(it) },
+                        textStyle = TextStyle(fontFamily = letraDeLaNota, fontSize = vista.tamano.sp, color = MaterialTheme.colorScheme.onSurface),
+                        cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth()
                     )
                 } else if (viendo) {
                     val bloques = remember(valor.text) { Markdown.parse(valor.text) }
@@ -916,10 +1006,11 @@ private fun Pantalla(
             PastillaDeLector(
                 visible = barras && !anotandoLaNota && !marcosDeLaNota.activo && !marcosDeLaNota.imprimiendo,
                 nombre = titulo,
-                archivo = "nota.md",
+                archivo = archivo ?: "nota.md",
                 botones = if (viendo) listOfNotNull(
                     // **Escribir el texto** (el `EDIT_NOTE` del PC): el lápiz del riel es para anotar.
-                    BotonDeLector(Icons.Filled.EditNote, "Escribir") {
+                    // Un adjunto del chat se mira y se anota, pero no se escribe ([soloLeer]).
+                    if (soloLeer) null else BotonDeLector(Icons.Filled.EditNote, "Escribir") {
                         dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = false; viendo = false
                     },
                     botonDeComentarios,
@@ -964,7 +1055,8 @@ private fun Pantalla(
             )
             }
 
-            if (!viendo) run {
+            // Texto llano: ni bloques, ni comandos, ni estilos; el teclado y ya.
+            if (!viendo && !llano) run {
                 // La lista de comandos va **encima** de la barra y por delante
                 // del teclado: es lo que estás mirando mientras tecleas.
                 val sugerencias = remember(consulta) {
