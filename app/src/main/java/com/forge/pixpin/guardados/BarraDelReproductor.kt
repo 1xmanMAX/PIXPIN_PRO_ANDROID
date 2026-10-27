@@ -37,7 +37,7 @@ import com.forge.pixpin.pin.duracionLegible
  * **La barra de lo que suena**, como la de Telegram encima de la conversación.
  *
  * Título, atrás diez segundos, play/pausa, adelante diez, la velocidad (que va rotando al
- * tocarla) y cerrar; debajo, la barra de progreso que se puede arrastrar y los tiempos.
+ * tocarla), por dónde suena (altavoz o auricular de llamadas, 27-oct-2026) y cerrar; debajo, la barra de progreso que se puede arrastrar y los tiempos.
  * No se pinta nada si no hay nada cargado. Ver [Reproductor].
  *
  * [alTocarElTitulo]: qué hacer al tocar el nombre —abrir la letra o el texto, si lo hay—.
@@ -88,6 +88,8 @@ fun BarraDelReproductor(modifier: Modifier = Modifier, alTocarElTitulo: (() -> U
                 TextButton(onClick = { Reproductor.otraVelocidad() }, modifier = Modifier.size(width = 48.dp, height = 36.dp)) {
                     Text(velocidadLegible(estado.velocidad), fontSize = 12.sp)
                 }
+                // **Altavoz o auricular de llamadas** (27-oct-2026). Ver [com.forge.pixpin.audio.SalidaDeAudio].
+                com.forge.pixpin.audio.BotonDeSalida(tamano = 34.dp)
                 IconButton(onClick = { Reproductor.parar() }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Filled.Close, contentDescription = "Cerrar", modifier = Modifier.size(18.dp))
                 }

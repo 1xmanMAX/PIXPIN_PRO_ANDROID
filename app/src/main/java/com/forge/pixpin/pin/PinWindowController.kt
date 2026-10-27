@@ -4554,6 +4554,8 @@ class PinWindowController(
                     tint = MaterialTheme.colorScheme.primary
                 )
             }
+            // Altavoz o auricular de llamadas (27-oct-2026). Ver [com.forge.pixpin.audio.SalidaDeAudio].
+            com.forge.pixpin.audio.BotonDeSalida()
             Column(Modifier.padding(start = 4.dp)) {
                 Text(duracionLegible(duracion), fontSize = 15.sp)
                 // La hora puesta se ve **sin abrir nada**: un recordatorio que no dice
@@ -4626,8 +4628,11 @@ class PinWindowController(
             android.media.MediaPlayer().apply {
                 setDataSource(ruta)
                 setOnCompletionListener { pararLaNota() }
+                // Por el altavoz o el auricular de llamadas (27-oct-2026): ver [com.forge.pixpin.audio.SalidaDeAudio].
+                val oido = com.forge.pixpin.audio.SalidaDeAudio.preparar(context, this)
                 prepare()
                 start()
+                com.forge.pixpin.audio.SalidaDeAudio.sonando(context, this, oido)
             }
         }.getOrNull()
         // Lo grabado bajito, más alto (24-oct-2026): ver `RealceAlOir`.

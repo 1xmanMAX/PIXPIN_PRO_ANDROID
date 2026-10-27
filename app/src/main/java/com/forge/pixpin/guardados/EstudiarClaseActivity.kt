@@ -348,6 +348,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                 Box(Modifier.size(40.dp).clip(CircleShape).clickable { Reproductor.otraVelocidad() }, contentAlignment = Alignment.Center) {
                     Text(estado.velocidad.toString().removeSuffix(".0") + "×", fontSize = 13.sp)
                 }
+                com.forge.pixpin.audio.BotonDeSalida(tamano = 40.dp)
                 Box(Modifier.weight(1f))
                 IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Filled.BookmarkAdd, getString(R.string.estudiar_marcador))
@@ -386,6 +387,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                     Box(Modifier.size(40.dp).clip(CircleShape).clickable { Reproductor.otraVelocidad() }, contentAlignment = Alignment.Center) {
                         Text(estado.velocidad.toString().removeSuffix(".0") + "×", fontSize = 13.sp)
                     }
+                    // Altavoz o auricular de llamadas (27-oct-2026). Ver [com.forge.pixpin.audio.SalidaDeAudio].
+                    com.forge.pixpin.audio.BotonDeSalida(tamano = 40.dp)
                     IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.BookmarkAdd, getString(R.string.estudiar_marcador))
                     }

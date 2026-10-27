@@ -52,6 +52,7 @@ import androidx.compose.material.icons.filled.AttachFile
 import androidx.compose.material.icons.filled.LibraryAdd
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Lyrics
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.animation.animateContentSize
@@ -2358,6 +2359,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         eligiendoQue = false
                         eligiendoProyecto = false
                     }
+                    // **Una canción con su letra, para cantarla** (27-oct-2026). Ver [CancionNuevaActivity].
+                    BotonDeAdjuntar(
+                        Icons.Filled.MusicNote,
+                        com.forge.pixpin.R.string.guardados_adj_musica,
+                        ancho = anchoDelBoton
+                    ) {
+                        eligiendoQue = false
+                        CancionNuevaActivity.abrir(this@MensajesActivity, chatDe)
+                    }
                     // **Una conversación por turnos**, con un micrófono por persona y la
                     // transcripción con nombres. Ver [ConversacionActivity].
                     BotonDeAdjuntar(
@@ -3952,7 +3962,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         // había señalado en ella. Se enseña la hoja con lo dibujado
                         // encima, y tocarla abre el editor donde se anotó.
                         Clase.PAGINA -> MiniaturaDePagina(m, recarga, ampliada)
-                        Clase.VOZ -> FilaDeVoz(m) { menuAbierto = true }
+                        // **Una canción, como tarjeta de música** (27-oct-2026). Ver [TarjetaDeMusica].
+                        Clase.VOZ -> if (m.esMusica) TarjetaDeMusica(m) { menuAbierto = true } else FilaDeVoz(m) { menuAbierto = true }
                         Clase.MINIAPP -> FilaDeMiniApp(m) { nuevo ->
                             acciones.cambiarTexto(nuevo)
                         }

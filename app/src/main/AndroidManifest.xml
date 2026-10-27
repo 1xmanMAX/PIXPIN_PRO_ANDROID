@@ -741,6 +741,16 @@
             android:name=".guardados.BibliotecaDeAudioActivity"
             android:exported="false"
             android:theme="@style/Theme.PixPin" />
+        <!-- Música con su letra (27-oct-2026): el karaoke y añadir una canción. Ver guardados/MusicaActivity. -->
+        <activity
+            android:name=".guardados.MusicaActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPin" />
+        <activity
+            android:name=".guardados.CancionNuevaActivity"
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
         <!-- Copias de seguridad de los proyectos y lienzos sin proyecto. Ver sincro/CopiasActivity. -->
         <activity
             android:name=".sincro.CopiasActivity"

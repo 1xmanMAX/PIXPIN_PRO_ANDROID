@@ -177,7 +177,11 @@ class PronunciarActivity : ComponentActivity() {
             soltarReproductor()
             reproductor = runCatching {
                 MediaPlayer().apply {
-                    setDataSource(f.absolutePath); prepare(); start()
+                    // Por el altavoz o el auricular de llamadas (27-oct-2026): ver [com.forge.pixpin.audio.SalidaDeAudio].
+                    setDataSource(f.absolutePath)
+                    val oido = com.forge.pixpin.audio.SalidaDeAudio.preparar(this@PronunciarActivity, this)
+                    prepare(); start()
+                    com.forge.pixpin.audio.SalidaDeAudio.sonando(this@PronunciarActivity, this, oido)
                     setOnCompletionListener { soltarReproductor() }
                 }
             }.getOrNull()
@@ -241,6 +245,8 @@ class PronunciarActivity : ComponentActivity() {
                         IconButton(onClick = { if (tamano > 14) tamano -= 2 }) { Icon(Icons.Filled.TextDecrease, contentDescription = null) }
                         IconButton(onClick = { if (tamano < 44) tamano += 2 }) { Icon(Icons.Filled.TextIncrease, contentDescription = null) }
                     }
+                    // Oírse por el altavoz o por el auricular de llamadas (27-oct-2026). Ver [com.forge.pixpin.audio.SalidaDeAudio].
+                    com.forge.pixpin.audio.BotonDeSalida(tamano = 48.dp)
                     IconButton(onClick = { eligiendo = true }) { Icon(Icons.Filled.Description, contentDescription = getString(R.string.pronunciar_guia)) }
                 }
                 // **El idioma que se practica**: manda en la transcripción de lo que se guarde.

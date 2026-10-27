@@ -143,7 +143,15 @@ fun AdjuntosDeLaLeccion(
     fun tocar(m: Mensaje) {
         RealceAlOir.soltar(reproductor[0]); runCatching { reproductor[0]?.release() }; reproductor[0] = null
         if (sonando == m.id) { sonando = null; return }
-        val p = runCatching { MediaPlayer().apply { setDataSource(m.ruta); prepare(); start() } }.getOrNull() ?: return
+        // Por el altavoz o el auricular de llamadas (27-oct-2026): ver [com.forge.pixpin.audio.SalidaDeAudio].
+        val p = runCatching {
+            MediaPlayer().apply {
+                setDataSource(m.ruta)
+                val oido = com.forge.pixpin.audio.SalidaDeAudio.preparar(contexto, this)
+                prepare(); start()
+                com.forge.pixpin.audio.SalidaDeAudio.sonando(contexto, this, oido)
+            }
+        }.getOrNull() ?: return
         p.setOnCompletionListener { sonando = null }
         // Lo grabado bajito, más alto (24-oct-2026): ver [RealceAlOir].
         m.ruta?.let { RealceAlOir.enganchar(p, it) }
@@ -189,6 +197,8 @@ fun AdjuntosDeLaLeccion(
                         Icon(if (sonando == m.id) Icons.Filled.Stop else Icons.Filled.PlayArrow, "Escuchar")
                         Spacer(Modifier.width(6.dp))
                         Text(duracionLegible(m.duracionMs))
+                        // Altavoz o auricular de llamadas (27-oct-2026), a mano mientras suena.
+                        if (sonando == m.id) com.forge.pixpin.audio.BotonDeSalida(Modifier.padding(start = 4.dp))
                     }
                 } else Miniatura(m.ruta) {
                     // Las que ya están en el chat se abren con su visor; las nuevas, aún no.
