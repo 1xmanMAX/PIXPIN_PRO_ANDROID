@@ -36,7 +36,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -82,6 +81,9 @@ import kotlinx.coroutines.withTimeoutOrNull
  * Se escanea el QR o se escribe el código de seis cifras; se ve qué llega y se acepta o no. De lo
  * que **ya se tiene con los mismos tres códigos** ([Codigos]) se elige, cosa por cosa, si ponerlo al
  * día o crearlo como nuevo (15-sep-2026).
+ *
+ * **Solo lo que se usa** (27-oct-2026, pedido por el usuario): fuera los párrafos que explicaban
+ * la Wi-Fi y cada opción; quedan el código o el QR, la oferta, el avance y el resultado.
  */
 class RecibirActivity : ComponentActivity() {
 
@@ -281,18 +283,7 @@ class RecibirActivity : ComponentActivity() {
                 if (laIzquierda) dejarDeEsperar() else esperarAQueMeManden()
             }
         )
-        Spacer(Modifier.height(16.dp))
-        Caja {
-            Row(verticalAlignment = Alignment.Top) {
-                Icon(Icons.Filled.Wifi, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(10.dp))
-                Text(
-                    if (escaneando) "Tienes que estar en la misma Wi-Fi que quien envía (o conectado a su zona Wi-Fi)."
-                    else "Quien te envía pasa su cámara por este código. Tenéis que estar en la misma Wi-Fi.",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-            }
-        }
+        // **Sin la caja de explicación** (27-oct-2026, pedido por el usuario): solo lo que se usa.
         Spacer(Modifier.height(16.dp))
         if (escaneando) Escaneando() else MiCodigo()
     }
@@ -358,10 +349,7 @@ class RecibirActivity : ComponentActivity() {
         Row(verticalAlignment = Alignment.CenterVertically) {
             CircularProgressIndicator(Modifier.size(14.dp), strokeWidth = 2.dp)
             Spacer(Modifier.width(8.dp))
-            Text(
-                "Esperando a que te envíen. En el otro aparato: Enviar → «Escanear a quien recibe».",
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text("Esperando…", style = MaterialTheme.typography.bodySmall)
         }
     }
 
@@ -401,21 +389,10 @@ class RecibirActivity : ComponentActivity() {
                                 Eleccion("Actualizar el que tengo", !nuevo, Modifier.weight(1f)) { comoNuevo[el.identidad] = false }
                                 Eleccion("Crear como nuevo", nuevo, Modifier.weight(1f)) { comoNuevo[el.identidad] = true }
                             }
-                            Text(
-                                if (nuevo) "Entra aparte, con códigos nuevos: desde ahora es otra cosa." else "Se escribe encima de lo tuyo. Lo de antes queda en «Copias de seguridad».",
-                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
                     }
                 }
             }
-        }
-        if (e.sustituye.isEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            Text(
-                "Nada de esto coincide con lo que tienes: entra como nuevo, sin tocar nada tuyo.",
-                style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
         }
         Spacer(Modifier.height(20.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
