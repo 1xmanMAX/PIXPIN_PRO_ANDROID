@@ -32,8 +32,10 @@ import java.util.UUID
 
 /**
  * **Adjuntar una figura al chat** (25-oct-2026, como el PC `adjuntar_figura`): se elige **viéndola**
- * en el mismo panel de figuras del lienzo ([PanelDeFiguras] con su botón «Adjuntar»), con las 627
- * de serie del PC, las básicas y las mías. Lo que entra en el chat es **un lienzo nuevo con la
+ * en el mismo panel de figuras del lienzo ([PanelDeFiguras]), con las 627 de serie del PC, las
+ * básicas y las mías. Tocar una la abre en grande con «Adjuntar» y «Cerrar» (27-oct-2026, la vista
+ * rápida, [com.forge.pixpin.motor.VistaPreviaDeFiguraUi]); mantenerla pulsada la adjunta ya. El
+ * interruptor de día y noche del panel vale aquí igual. Lo que entra en el chat es **un lienzo nuevo con la
  * figura dentro**, con su nombre (sin la categoría): un `DIBUJO` de siempre, que viaja como todos.
  */
 object AdjuntarFigura {
