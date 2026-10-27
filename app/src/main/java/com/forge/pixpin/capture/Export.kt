@@ -66,22 +66,28 @@ object Export {
         return true
     }
 
-    /** Escribe la imagen temporal (E/S: fuera del hilo de UI) y devuelve su Uri. */
-    fun prepareShare(context: Context, bitmap: Bitmap): Uri? = writeShareFile(context, bitmap)
+    /**
+     * Escribe la imagen temporal (E/S: fuera del hilo de UI) y devuelve el archivo, para la hoja de
+     * compartir de toda la aplicación ([com.forge.pixpin.ui.CompartirArchivoActivity], 27-oct-2026):
+     * allí se elige PNG, JPG, PDF, página web, `.pixpin` o Wi-Fi, como con cualquier otra imagen.
+     */
+    fun prepareShare(context: Context, bitmap: Bitmap): File? = runCatching { escribirParaCompartir(context, bitmap) }.getOrNull()
 
-    fun share(context: Context, uri: Uri) {
-        com.forge.pixpin.ui.CompartirNativo.uris(context, listOf(uri), formatoElegido(context).mime, "Captura")
+    fun share(context: Context, archivo: File) {
+        com.forge.pixpin.ui.CompartirArchivoActivity.abrir(context, archivo, "Captura.${archivo.extension}")
     }
 
-    private fun writeShareFile(context: Context, bitmap: Bitmap): Uri? {
-        return runCatching {
-            val dir = File(context.cacheDir, "share").apply { mkdirs() }
-            val elegido = formatoElegido(context)
-            val file = File(dir, "pixpin_${System.currentTimeMillis()}.${elegido.extension}")
-            FileOutputStream(file).use { bitmap.compress(elegido.compresor, 100, it) }
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-        }.getOrNull()
+    private fun escribirParaCompartir(context: Context, bitmap: Bitmap): File {
+        val dir = File(context.cacheDir, "share").apply { mkdirs() }
+        val elegido = formatoElegido(context)
+        val file = File(dir, "pixpin_${System.currentTimeMillis()}.${elegido.extension}")
+        FileOutputStream(file).use { bitmap.compress(elegido.compresor, 100, it) }
+        return file
     }
+
+    private fun writeShareFile(context: Context, bitmap: Bitmap): Uri? = runCatching {
+        FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", escribirParaCompartir(context, bitmap))
+    }.getOrNull()
 
     // ---------------------------------------------------------------------
     // El formato de la imagen

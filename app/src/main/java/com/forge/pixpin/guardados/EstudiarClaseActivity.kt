@@ -105,6 +105,7 @@ import com.forge.pixpin.R
 import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import com.forge.pixpin.ui.theme.PixPinTheme
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -225,6 +226,9 @@ class EstudiarClaseActivity : ComponentActivity() {
         var anotando by remember { mutableStateOf<Mensaje?>(null) }
         val oscuroAhora = MaterialTheme.colorScheme.background.luminance() < 0.5f
         var poniendo by remember { mutableStateOf<Long?>(null) }
+        // **Compartir la clase** (27-oct-2026): la misma hoja que en el chat y en su carpeta. Ver [ExportarGrabacion].
+        var compartiendo by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
+        val alcance = androidx.compose.runtime.rememberCoroutineScope()
         val irA: (Long) -> Unit = { ms -> m?.let { irA(it, ms) } }
         // Lo que se elige se guarda al girar el teléfono: girar rehace la actividad.
         var seguir by rememberSaveable { mutableStateOf(true) }
@@ -539,11 +543,19 @@ class EstudiarClaseActivity : ComponentActivity() {
                     }
                 }
                 // Claro u oscuro, como los visores.
+                // Y compartir la clase (27-oct-2026): la misma hoja que en el chat y en su carpeta. Ver [ExportarGrabacion].
                 AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
-                    BotonDeCristal(
-                        if (oscuroAhora) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuroAhora) "Claro" else "Oscuro",
-                        Modifier.padding(6.dp)
-                    ) { alCambiarTema(!oscuroAhora) }
+                    Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        if (m != null) BotonDeCristal(com.forge.pixpin.ui.IconoDeCompartir, getString(R.string.guardados_compartir)) {
+                            alcance.launch {
+                                compartiendo = withContext(Dispatchers.IO) {
+                                    runCatching { val todos = almacen.leer(); ExportarGrabacion.compartible(this@EstudiarClaseActivity, ExportarGrabacion.notaDe(m, todos) ?: m, todos) }
+                                        .onFailure { android.util.Log.e("PixPinCompartir", "estudiar", it) }.getOrNull()
+                                }
+                            }
+                        }
+                        BotonDeCristal(if (oscuroAhora) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuroAhora) "Claro" else "Oscuro") { alCambiarTema(!oscuroAhora) }
+                    }
                 }
                 if (m == null || m.ruta == null || !File(m.ruta).exists()) Text(
                     getString(R.string.estudiar_sin_sonido), color = Color.White, fontSize = 12.sp,
@@ -635,6 +647,7 @@ class EstudiarClaseActivity : ComponentActivity() {
         }
         poniendo?.let { ms -> DialogoDelMarcador(ms, onCancelar = { poniendo = null }) { nota -> poniendo = null; poner(id, ms, nota) } }
         anotando?.let { f -> AnotarCaptura(f, oscuroAhora) { anotando = null } }
+        compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
     }
 
     /** Un botón redondo en el cristal de los visores, para lo que va encima de la imagen. */

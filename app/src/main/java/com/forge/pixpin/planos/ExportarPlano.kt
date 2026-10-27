@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.PictureAsPdf
 import com.forge.pixpin.motor.Scene
 import com.forge.pixpin.ui.Compartible
 import com.forge.pixpin.ui.ExportarVisor
+import com.forge.pixpin.ui.FormatosDeCompartir
 import java.io.File
 
 /**
@@ -71,8 +72,9 @@ object ExportarPlano {
             if (p.nombre.lowercase().endsWith(".dwg")) add(Compartible.Formato("dxf", Icons.Filled.Architecture, "DXF", Compartible.NINGUNA, generar = { dxf(c, p) }))
             add(ExportarVisor.original(c, p.archivo.absolutePath, p.nombre, "El plano tal cual, sin cotas ni lo anotado"))
             add(ExportarVisor.pixpin(c, p.archivo.absolutePath, p.nombre))
+            add(ExportarVisor.wifi(c, p.archivo.absolutePath, p.nombre))
         }
-        return Compartible(p.titulo, paginas, formatos, alAbrir)
+        return Compartible(p.titulo, paginas, formatos, alAbrir, FormatosDeCompartir.Contenido.PLANO)
     }
 
     private fun nombreDeHoja(p: Plano, clave: String?): String = marcoDe(p, clave)?.let { " - hoja ${p.marcos.indexOf(it) + 1}" } ?: ""

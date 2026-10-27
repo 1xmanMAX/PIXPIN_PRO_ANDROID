@@ -11,6 +11,7 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Photo
+import androidx.compose.material.icons.filled.Wifi
 import com.forge.pixpin.motor.ExportarProyecto
 import com.forge.pixpin.motor.PaquetePixpin
 import com.forge.pixpin.motor.PdfDoc
@@ -149,11 +150,17 @@ object ExportarVisor {
         return Compartible.Salida(destino, if (jpg) "image/jpeg" else "image/png", resumen)
     }
 
-    /** PNG y JPG de lo que dé [foto] (con las páginas que admita: [paginas], como en [Compartible.Formato]). */
-    fun imagenes(c: Context, titulo: (List<String>) -> String, paginas: Int = Compartible.NINGUNA, foto: suspend (List<String>) -> Bitmap?): List<Compartible.Formato> =
+    /**
+     * PNG y JPG de lo que dé [foto] (con las páginas que admita: [paginas] y [admite], como en
+     * [Compartible.Formato]).
+     */
+    fun imagenes(
+        c: Context, titulo: (List<String>) -> String, paginas: Int = Compartible.NINGUNA,
+        admite: (String) -> Boolean = { true }, foto: suspend (List<String>) -> Bitmap?
+    ): List<Compartible.Formato> =
         listOf(false, true).map { jpg ->
             Compartible.Formato(
-                if (jpg) "jpg" else "png", if (jpg) Icons.Filled.Photo else Icons.Filled.Image, if (jpg) "JPG" else "PNG", paginas,
+                if (jpg) "jpg" else "png", if (jpg) Icons.Filled.Photo else Icons.Filled.Image, if (jpg) "JPG" else "PNG", paginas, admite,
                 generar = { claves -> foto(claves)?.let { guardarImagen(c, it, titulo(claves), jpg) } }
             )
         }
@@ -241,6 +248,45 @@ object ExportarVisor {
         val mapa = Bitmap.createBitmap(v.width, v.height, Bitmap.Config.ARGB_8888)
         Canvas(mapa).also { it.drawColor(fondo); v.draw(it) }
         mapa
+    }
+
+    /**
+     * **«Por Wi-Fi a mis aparatos»** con el archivo de [ruta] tal cual (27-oct-2026: en todas las
+     * hojas, no solo en la del chat). [c] tiene que poder abrir pantallas: la de enviar.
+     */
+    fun wifi(c: Context, ruta: String, nombre: String?): Compartible.Formato =
+        Compartible.Formato("wifi", Icons.Filled.Wifi, "Enviar por Wi-Fi", Compartible.NINGUNA, accion = {
+            com.forge.pixpin.sincro.EnviarActivity.enviarArchivo(c, ruta, nombre)
+        })
+
+    /** Si [nombre] es una imagen que se puede abrir y volver a guardar en otro formato. */
+    fun esImagen(nombre: String): Boolean = nombre.substringAfterLast('.', "").lowercase() in setOf("png", "jpg", "jpeg", "webp", "gif", "bmp", "heic", "heif")
+
+    /**
+     * **La hoja de un archivo suelto**: una captura de la galería, un pin, lo recién capturado
+     * (27-oct-2026). Lo mismo que en cualquier otro sitio para lo que es: una imagen, en PNG, JPG,
+     * PDF y página web ([deLaVista]); un PDF, cada hoja en imagen y su página web; y siempre su
+     * `.pixpin`, el original y la Wi-Fi. Antes, en esos sitios, compartir mandaba el archivo y nada más.
+     */
+    fun deArchivo(c: Context, ruta: String, nombre: String = File(ruta).name, detalle: String = "Tal cual, sin cambiar nada"): Compartible {
+        val titulo = nombre.substringBeforeLast('.').ifBlank { "Archivo" }
+        val esPdf = nombre.endsWith(".pdf", ignoreCase = true)
+        val cuantas = if (esPdf) runCatching { PdfDoc.pageCount(ruta) }.getOrDefault(0) else 0
+        val propios = when {
+            esImagen(nombre) -> deLaVista(c, titulo) { com.forge.pixpin.pin.ImageStore.cargarNitida(ruta) }
+            esPdf && cuantas > 0 -> imagenes(c, { claves -> "$titulo - hoja ${(paginaDeClave(claves.firstOrNull()) ?: 0) + 1}" }, Compartible.UNA) { claves ->
+                paginaDeClave(claves.firstOrNull())?.let { paginaConTinta(c, ruta, it, null) }
+            } + ExportarPdfAnotado.formato(c, ruta, titulo, cuantas) { null }
+            else -> emptyList()
+        }
+        val formatos = propios + listOf(pixpin(c, ruta, nombre), original(c, ruta, nombre, detalle), wifi(c, ruta, nombre))
+        val contenido = when {
+            esImagen(nombre) -> FormatosDeCompartir.Contenido.IMAGEN
+            esPdf -> FormatosDeCompartir.Contenido.PDF
+            else -> FormatosDeCompartir.Contenido.ARCHIVO
+        }
+        // Con una sola hoja también van sus páginas (no se ven: no hay qué elegir), para que la imagen sepa cuál.
+        return Compartible(titulo, if (cuantas > 0) paginasDe(cuantas) else emptyList(), formatos, if (cuantas > 0) setOf("p0") else null, contenido)
     }
 
     /** Las páginas de un documento de [cuantas] hojas, para elegir cuál va en imagen. */

@@ -333,7 +333,9 @@ class LectorPdfActivity : ComponentActivity() {
                         }
                     }
                 )
-            ) + imagenesDeHojas(titulo, pdf, escenaDe) + com.forge.pixpin.ui.ExportarVisor.pixpin(c, ruta, nombre)
+            ) + imagenesDeHojas(titulo, pdf, escenaDe) + com.forge.pixpin.ui.ExportarVisor.pixpin(c, ruta, nombre) +
+                com.forge.pixpin.ui.ExportarVisor.wifi(c, ruta, nombre),
+            contenido = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.DOCUMENTO
         )
     }
 
@@ -1064,12 +1066,14 @@ class LectorPdfActivity : ComponentActivity() {
                                 com.forge.pixpin.ui.ExportarPdfAnotado.formato(this@LectorPdfActivity, ruta, titulo, cuantas) { i -> capas.escenaDe(i) },
                                 // **Y como texto**: el PDF pasado a un documento que se reflowea, con lo
                                 // anotado leyéndolo como texto. Ver [com.forge.pixpin.motor.PdfAHtml].
-                                com.forge.pixpin.ui.ExportarDocumentoAnotado.formato(this@LectorPdfActivity, java.io.File(rutaPedida), nombre, rotulo = "Página web (texto)")
+                                com.forge.pixpin.ui.ExportarDocumentoAnotado.formato(this@LectorPdfActivity, java.io.File(rutaPedida), nombre, rotulo = "Página web en texto")
                             ) + imagenesDeHojas(titulo, { ruta }, { i -> capas.escenaDe(i) }) + listOf(
                                 // El original y su .pixpin, los de todos los visores (14-oct-2026). Ver [com.forge.pixpin.ui.ExportarVisor].
                                 com.forge.pixpin.ui.ExportarVisor.original(this@LectorPdfActivity, rutaPedida, nombre, "El documento tal cual, sin lo anotado"),
-                                com.forge.pixpin.ui.ExportarVisor.pixpin(this@LectorPdfActivity, rutaPedida, nombre)
-                            )
+                                com.forge.pixpin.ui.ExportarVisor.pixpin(this@LectorPdfActivity, rutaPedida, nombre),
+                                com.forge.pixpin.ui.ExportarVisor.wifi(this@LectorPdfActivity, rutaPedida, nombre)
+                            ),
+                            contenido = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.PDF
                         )
                     }
                 ) { compartiendo = false }

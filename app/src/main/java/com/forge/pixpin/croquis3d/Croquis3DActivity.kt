@@ -2198,7 +2198,8 @@ class Croquis3DActivity : ComponentActivity() {
                     paquete()?.let { com.forge.pixpin.ui.Compartible.Salida(it, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, ".pixpin: se sigue editando en otro PixPin") }
                 },
                 com.forge.pixpin.ui.ExportarVisor.original(this, Croquis3DAlmacen.ruta(this, id), "$id.croquis.gz", "Su archivo .croquis.gz tal cual")
-            )
+            ),
+            contenido = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.CROQUIS_3D
         )
     }
 
@@ -2251,31 +2252,6 @@ class Croquis3DActivity : ComponentActivity() {
         return zip
     }
 
-    /** El croquis como `.pixpin`: un proyecto de una hoja con él dentro. Ver [PaquetePixpin]. */
-    private fun exportarElPaquete() {
-        Croquis3DAlmacen.guardar(this, elCroquis, controlador.croquis)
-        val ahora = System.currentTimeMillis()
-        val suelto = com.forge.pixpin.motor.Proyecto(
-            id = "suelto-$elCroquis", nombre = elCroquis, tocado = ahora,
-            hojas = listOf(com.forge.pixpin.motor.Hoja(id = "hoja-$elCroquis", nombre = elCroquis, croquis = elCroquis)),
-            croquis = listOf(elCroquis)
-        )
-        val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
-        val archivo = com.forge.pixpin.motor.PaquetePixpin.escribir(
-            this, suelto,
-            java.io.File(carpeta, "$elCroquis.${com.forge.pixpin.motor.PaquetePixpin.EXTENSION}"),
-            croquisDe = { id -> Croquis3DAlmacen.jsonDe(this, id) }
-        )
-        if (archivo == null) {
-            Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
-            return
-        }
-        // **Cualquier archivo se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
-        com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(
-            this, archivo, elCroquis, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE
-        )
-    }
-
     /** Dónde está el lienzo dentro de la ventana, para la portada de la página exportada. */
     private var rectDelLienzo: androidx.compose.ui.geometry.Rect? = null
 
@@ -2302,74 +2278,6 @@ class Croquis3DActivity : ComponentActivity() {
                 luego("data:image/jpeg;base64," + android.util.Base64.encodeToString(salida.toByteArray(), android.util.Base64.NO_WRAP))
             }, android.os.Handler(android.os.Looper.getMainLooper()))
         }.onFailure { luego(null) }
-    }
-
-    private fun exportarLaPagina() {
-        portadaDelLienzo { portada -> exportarLaPaginaCon(portada) }
-    }
-
-    private fun exportarLaPaginaCon(portada: String?) {
-        // Las imágenes puestas en el espacio viajan dentro del archivo: sin eso, el croquis
-        // exportado sale sin sus texturas. Ver [ExportarCroquisHtml.datos].
-        val html = ExportarCroquisHtml.pagina(
-            controlador.croquis, controlador.camara, elCroquis, ::imagenIncrustada, elPapelDeAhora, portada,
-            malla = AlmacenDeMallas::malla
-        )
-        if (html == null) {
-            Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
-            return
-        }
-        runCatching {
-            val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
-            val archivo = java.io.File(carpeta, "$elCroquis.html").also { it.writeText(html) }
-            // **La página web se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
-            com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(this, archivo, elCroquis, ExportarCroquisHtml.MIME_TYPE)
-            Toast.makeText(
-                this,
-                getString(R.string.croquis_pagina_exportada, html.length / 1024),
-                Toast.LENGTH_SHORT
-            ).show()
-        }.onFailure {
-            Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    /**
-     * Escribe el OBJ y su MTL en la carpeta que publica el `FileProvider` y los ofrece
-     * juntos: el MTL es lo que lleva los colores, y sin él muchos visores abren el modelo
-     * en gris.
-     */
-    private fun exportarElModelo() {
-        val salida = ExportarObj.escribir(controlador.croquis, elCroquis, AlmacenDeMallas::malla)
-        if (salida == null) {
-            Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
-            return
-        }
-        runCatching {
-            val carpeta = java.io.File(cacheDir, "share").apply { mkdirs() }
-            val obj = java.io.File(carpeta, "$elCroquis.obj").also { it.writeText(salida.obj) }
-            val mtl = java.io.File(carpeta, "$elCroquis.mtl").also { it.writeText(salida.mtl) }
-            val uris = arrayListOf(obj, mtl).map {
-                androidx.core.content.FileProvider.getUriForFile(this, "$packageName.fileprovider", it)
-            }
-            startActivity(
-                android.content.Intent.createChooser(
-                    android.content.Intent(android.content.Intent.ACTION_SEND_MULTIPLE).apply {
-                        type = "application/octet-stream"
-                        putParcelableArrayListExtra(android.content.Intent.EXTRA_STREAM, ArrayList(uris))
-                        addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    },
-                    getString(R.string.croquis_exportar_modelo)
-                )
-            )
-            Toast.makeText(
-                this,
-                getString(R.string.croquis_modelo_exportado, salida.vertices, salida.caras),
-                Toast.LENGTH_SHORT
-            ).show()
-        }.onFailure {
-            Toast.makeText(this, R.string.croquis_nada_que_exportar, Toast.LENGTH_SHORT).show()
-        }
     }
 
     /** El filete que separa dos tandas de una fila. El de pie, no el de la barra. */

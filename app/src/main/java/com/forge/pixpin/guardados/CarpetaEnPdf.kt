@@ -10,6 +10,7 @@ import android.graphics.pdf.PdfDocument
 import android.text.Layout
 import android.text.StaticLayout
 import android.text.TextPaint
+import androidx.compose.material.icons.filled.PictureAsPdf
 import com.forge.pixpin.motor.DrawFonts
 import com.forge.pixpin.motor.ExcalidrawStore
 import com.forge.pixpin.motor.ExportarProyecto
@@ -74,6 +75,41 @@ object CarpetaEnPdf {
         } finally {
             documento.close()
         }
+    }
+
+    /**
+     * **La carpeta en la hoja de compartir de toda la aplicación** (27-oct-2026). Antes su botón
+     * mandaba el PDF entero al panel del teléfono, sin elegir páginas ni formato. Ahora: el PDF con
+     * las páginas que se marquen y cada página en imagen (PNG o JPG), hecha con este mismo PDF para
+     * que se vea igual. [paginas] es cada mensaje con su título, en orden.
+     */
+    fun compartible(context: Context, nombre: String, paginas: List<Pair<Mensaje, String>>): com.forge.pixpin.ui.Compartible {
+        val porId = paginas.associate { (m, _) -> m.id to m }
+        val titulo = nombre.ifBlank { "Carpeta" }
+        val formatos = buildList {
+            addAll(com.forge.pixpin.ui.ExportarVisor.imagenes(
+                context, { claves -> "$titulo - " + (paginas.firstOrNull { it.first.id == claves.firstOrNull() }?.second ?: "página") },
+                com.forge.pixpin.ui.Compartible.UNA
+            ) { claves ->
+                val m = claves.firstOrNull()?.let { porId[it] } ?: return@imagenes null
+                // Su primera hoja, del PDF de ella sola: lo mismo que sale en el PDF de la carpeta.
+                val pdf = escribir(context, "$titulo (imagen)", listOf(m)) ?: return@imagenes null
+                try { PdfDoc.render(pdf.path, 0, ANCHO_DE_PAGINA) } finally { pdf.delete() }
+            })
+            add(com.forge.pixpin.ui.Compartible.Formato(
+                "pdf", androidx.compose.material.icons.Icons.Filled.PictureAsPdf, "PDF", com.forge.pixpin.ui.Compartible.VARIAS,
+                generar = { claves ->
+                    val elegidas = claves.mapNotNull { porId[it] }
+                    escribir(context, nombre, elegidas)?.let {
+                        com.forge.pixpin.ui.Compartible.Salida(it, "application/pdf", "${elegidas.size} ${if (elegidas.size == 1) "página" else "páginas"}")
+                    }
+                }
+            ))
+        }
+        return com.forge.pixpin.ui.Compartible(
+            titulo, paginas.map { (m, t) -> com.forge.pixpin.ui.Compartible.Pagina(m.id, t) }, formatos,
+            contenido = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.CARPETA
+        )
     }
 
     private suspend fun pagina(

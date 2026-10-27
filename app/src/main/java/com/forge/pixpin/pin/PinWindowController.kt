@@ -3259,10 +3259,10 @@ class PinWindowController(
      */
     private fun compartirElPdf() {
         val path = pin.value.filePath ?: return
-        val uri = runCatching {
-            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", File(path))
-        }.getOrNull() ?: return
-        runCatching { com.forge.pixpin.ui.CompartirNativo.uris(context, listOf(uri), "application/pdf", File(path).name) }
+        // **En la hoja de compartir de toda la aplicación** (27-oct-2026): el PDF tal cual, cada hoja en
+        // imagen, su página web, su `.pixpin` o por Wi-Fi. El pin no tiene pantalla donde subirla:
+        // la sube [com.forge.pixpin.ui.CompartirArchivoActivity].
+        com.forge.pixpin.ui.CompartirArchivoActivity.abrir(context, File(path), File(path).name, "El PDF con lo anotado dentro")
     }
 
     private fun openFile(s: PinState) {

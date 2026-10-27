@@ -569,7 +569,12 @@ class Visor3DActivity : ComponentActivity() {
                             val titulo = nombre.substringBeforeLast('.').ifBlank { "Modelo" }
                             exportando = com.forge.pixpin.ui.Compartible(
                                 titulo, formatos = com.forge.pixpin.ui.ExportarVisor.deLaVista(this@Visor3DActivity, titulo) { vista?.let { com.forge.pixpin.ui.ExportarVisor.fotoDeLaTarjeta(it) } } +
-                                    listOf(com.forge.pixpin.ui.ExportarVisor.original(this@Visor3DActivity, original.absolutePath, nombre), com.forge.pixpin.ui.ExportarVisor.pixpin(this@Visor3DActivity, original.absolutePath, nombre))
+                                    listOf(
+                                        com.forge.pixpin.ui.ExportarVisor.original(this@Visor3DActivity, original.absolutePath, nombre),
+                                        com.forge.pixpin.ui.ExportarVisor.pixpin(this@Visor3DActivity, original.absolutePath, nombre),
+                                        com.forge.pixpin.ui.ExportarVisor.wifi(this@Visor3DActivity, original.absolutePath, nombre)
+                                    ),
+                                contenido = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.MODELO_3D
                             )
                             toques++
                         }, modifier = Modifier.size(38.dp)) {

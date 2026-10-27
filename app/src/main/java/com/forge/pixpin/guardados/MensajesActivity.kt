@@ -708,6 +708,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // El mensaje al que se le está poniendo hora. Ver [DialogoDeRecordatorio].
         var recordando by remember { mutableStateOf<Mensaje?>(null) }
         var compartiendo by remember { mutableStateOf<Mensaje?>(null) }
+        // **Lo marcado, en la misma hoja** (27-oct-2026). Ver [compartibleDeVarios].
+        var compartiendoVarios by remember { mutableStateOf<List<Mensaje>?>(null) }
         recordando?.let { cual ->
             // En una nota de voz es una **llamada secreta**: se elige también quién «llama».
             val esLlamada = cual.clase == Clase.VOZ
@@ -727,29 +729,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 onCerrar = { recordando = null },
                 quienLlama = if (esLlamada) quien else null,
                 onQuienLlama = { quien = it }
-            )
-        }
-        // El documento del que se va a hacer página web, mientras se elige qué lleva.
-        var pidiendoWebPara by remember { mutableStateOf<Mensaje?>(null) }
-        pidiendoWebPara?.let { cual ->
-            val app = application as? PixPinApp
-            val ajustesWeb by (app?.settings?.settings ?: kotlinx.coroutines.flow.flowOf(null)).collectAsState(initial = app?.ajustes)
-            val marcadas = ajustesWeb?.funcionesWeb ?: com.forge.pixpin.motor.ExportarHtml.Opciones.NOMBRES.toSet()
-            com.forge.pixpin.motor.DialogoDeFuncionesWeb(
-                marcadas = marcadas,
-                onCambio = { clave, puesta ->
-                    val ahora = com.forge.pixpin.motor.ExportarHtml.conGrupo(marcadas, clave, puesta)
-                    lifecycleScope.launch { app?.settings?.setFuncionesWeb(ahora) }
-                },
-                onCompartir = {
-                    pidiendoWebPara = null
-                    compartirComoWeb(cual, com.forge.pixpin.motor.ExportarHtml.Opciones.de(marcadas), com.forge.pixpin.motor.ExportarHtml.calidadDeAudio(marcadas))
-                },
-                onCerrar = { pidiendoWebPara = null },
-                calidadDeAudio = com.forge.pixpin.motor.ExportarHtml.calidadDeAudio(marcadas),
-                onCalidadDeAudio = { c -> lifecycleScope.launch { app?.settings?.setFuncionesWeb(com.forge.pixpin.motor.ExportarHtml.conCalidadDeAudio(marcadas, c)) } },
-                // Solo se pregunta por el audio si el documento trae alguno.
-                hayAudio = remember(cual.id) { hayAudioEn(cual) }
             )
         }
         var paginasDe by remember { mutableStateOf<com.forge.pixpin.motor.Proyecto?>(null) }
@@ -1794,6 +1773,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         )
                                     )
                                 }
+                                // **Compartir lo marcado** (27-oct-2026: «en todo compartir… las mismas
+                                // opciones»): uno, con su hoja de siempre; varios, juntos en una.
+                                IconButton(onClick = {
+                                    val estos = loMarcado.sortedBy { it.cuando }
+                                    if (estos.size == 1) compartiendo = estos.first() else compartiendoVarios = estos
+                                    marcados = emptySet()
+                                }) {
+                                    Icon(com.forge.pixpin.ui.IconoDeCompartir, contentDescription = getString(com.forge.pixpin.R.string.guardados_compartir))
+                                }
                                 // **Reenviar en bloque.** Estaba solo en el menú de uno,
                                 // y reenviar es de las cosas que más se hacen de varias a
                                 // la vez: tres fotos de la misma tanda van al mismo sitio.
@@ -2470,6 +2458,16 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 if (c == null) { compartiendo = null; avisarDeQueNoHay() } else hoja = c
             }
             hoja?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
+        }
+        compartiendoVarios?.let { cuales ->
+            var hoja by remember(cuales) { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
+            LaunchedEffect(cuales) {
+                val c = withContext(Dispatchers.IO) {
+                    runCatching { compartibleDeVarios(cuales) }.onFailure { android.util.Log.e("PixPinCompartir", "varios", it) }.getOrNull()
+                }
+                if (c == null) { compartiendoVarios = null; avisarDeQueNoHay() } else hoja = c
+            }
+            hoja?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendoVarios = null } }
         }
 
         etiquetando?.let { cual ->
@@ -7206,68 +7204,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     }
 
     /**
-     * Comparte un mensaje **componiendo lo que se ve**, no mandando su archivo.
-     *
-     * Lo que se ve y el archivo no son lo mismo en dos casos, que son justo los dos que
-     * fallaban: una foto anotada guarda la foto por un lado y lo dibujado por otro —así
-     * que se mandaba la foto limpia, o no se mandaba nada—, y una página de un PDF es una
-     * de doce, así que se mandaba el documento entero cuando se pedía una hoja.
-     *
-     * @param comoPdf con qué cara sale. Lo elige quien comparte; ver [ETIQUETAS] de la
-     *  hoja de compartir.
-     */
-    private fun compartirCompuesto(m: Mensaje, comoPdf: Boolean) {
-        lifecycleScope.launch {
-            val archivo = withContext(Dispatchers.IO) {
-                val rutaDelDibujo = m.referencia?.let {
-                    com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@MensajesActivity, it)
-                }
-                val mapa = when {
-                    m.clase == Clase.PAGINA && m.ruta != null && m.pagina != null ->
-                        paginaAnotada(
-                            this@MensajesActivity, m.ruta!!, m.pagina!!,
-                            m.referencia, rutaDelDibujo, ANCHO_AMPLIADO
-                        )
-                    rutaDelDibujo != null && File(rutaDelDibujo).exists() ->
-                        com.forge.pixpin.motor.ExcalidrawStore.cargar(rutaDelDibujo)?.let { e ->
-                            com.forge.pixpin.motor.DrawExport.aBitmap(e, ESCALA_COMPARTIDA) { id ->
-                                e.files[id]?.path?.let {
-                                    com.forge.pixpin.pin.ImageStore.cargarNitida(it)
-                                }
-                            }
-                        }
-                    // Lo que sale fuera, con todos sus píxeles.
-                    m.ruta != null ->
-                        com.forge.pixpin.pin.ImageStore.cargarNitida(m.ruta!!)
-                    else -> null
-                } ?: return@withContext null
-                val nombre = nombreDeLoCompartido(m)
-                if (comoPdf) Compartir.comoPdf(this@MensajesActivity, mapa, nombre)
-                else Compartir.comoImagen(this@MensajesActivity, mapa, nombre)
-            }
-            if (archivo == null) {
-                avisarDeQueNoHay()
-                return@launch
-            }
-            runCatching {
-                val uri = androidx.core.content.FileProvider.getUriForFile(
-                    this@MensajesActivity, "$packageName.fileprovider", archivo
-                )
-                startActivity(
-                    Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = if (comoPdf) "application/pdf" else "image/png"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        },
-                        null
-                    )
-                )
-            }
-        }
-    }
-
-    /**
      * **Lo compartible de un mensaje**, para la hoja de compartir. Un lienzo, una foto anotada, una
      * página o un proyecto salen por páginas, con todos los formatos; un archivo, una nota de voz o
      * una nota, tal cual. Y por Wi-Fi: el lienzo (si es de un proyecto), el proyecto o el archivo.
@@ -7316,7 +7252,17 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             val (p, _) = proyectoDe(m) ?: return null
             return com.forge.pixpin.ui.CompartirPaginas.de(this, nombre, listOf(p to null), wifi = wifi, editable = p, extras = listOfNotNull(talCual))
         }
+        val rutaViva = m.ruta?.takeIf { File(it).exists() }
+        val nombreDelArchivo = rutaViva?.let { m.nombre.ifBlank { File(it).name } }.orEmpty()
+        val esPdf = rutaViva?.endsWith(".pdf", ignoreCase = true) == true
+        val esDocumento = rutaViva != null && com.forge.pixpin.ui.ExportarDocumentoAnotado.esDocumento(m.nombre, rutaViva)
+        val esImagen = rutaViva != null && (m.clase == Clase.IMAGEN || com.forge.pixpin.ui.ExportarVisor.esImagen(nombreDelArchivo))
+        val hojasDelPdf = if (esPdf) runCatching { com.forge.pixpin.motor.PdfDoc.pageCount(rutaViva!!) }.getOrDefault(0) else 0
         val formatos = buildList {
+            // **Una foto: en imagen, PDF y página web**, como cualquier imagen de la aplicación (27-oct-2026).
+            if (esImagen) addAll(com.forge.pixpin.ui.ExportarVisor.deLaVista(this@MensajesActivity, nombreDelArchivo.substringBeforeLast('.')) {
+                com.forge.pixpin.pin.ImageStore.cargarNitida(rutaViva!!)
+            })
             // **Un Word o un libro: también como página web**, con lo anotado y los marcadores. Lo
             // mismo que sale desde dentro del documento. Ver [com.forge.pixpin.ui.ExportarDocumentoAnotado].
             m.ruta?.takeIf { File(it).exists() && com.forge.pixpin.ui.ExportarDocumentoAnotado.esDocumento(m.nombre, it) }?.let { ruta ->
@@ -7326,11 +7272,26 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             // solo salía el archivo tal cual, sin nada de lo anotado. Ver [com.forge.pixpin.motor.PdfConAnotaciones].
             m.ruta?.takeIf { File(it).exists() && it.endsWith(".pdf", ignoreCase = true) }?.let { ruta ->
                 val anotado = com.forge.pixpin.ui.ExportarPdfAnotado.DelChat(this@MensajesActivity, ruta)
+                val titulo = m.nombre.ifBlank { File(ruta).name }.substringBeforeLast('.')
                 add(com.forge.pixpin.ui.ExportarPdfAnotado.formatoPdf(
-                    this@MensajesActivity, ruta, m.nombre.ifBlank { File(ruta).name }.substringBeforeLast('.'),
+                    this@MensajesActivity, ruta, titulo,
                     anotado::escena, anotado::espacios, anotado::marcas
                 ))
+                // Y lo de su lector (27-oct-2026): cada hoja en imagen con lo anotado, y su página web.
+                if (hojasDelPdf > 0) {
+                    addAll(com.forge.pixpin.ui.ExportarVisor.imagenes(
+                        this@MensajesActivity, { claves -> "$titulo - hoja ${(com.forge.pixpin.ui.ExportarVisor.paginaDeClave(claves.firstOrNull()) ?: 0) + 1}" },
+                        com.forge.pixpin.ui.Compartible.UNA
+                    ) { claves ->
+                        com.forge.pixpin.ui.ExportarVisor.paginaDeClave(claves.firstOrNull())?.let {
+                            com.forge.pixpin.ui.ExportarVisor.paginaConTinta(this@MensajesActivity, ruta, it, anotado.escena(it))
+                        }
+                    })
+                    add(com.forge.pixpin.ui.ExportarPdfAnotado.formato(this@MensajesActivity, ruta, titulo, hojasDelPdf, anotado::escena))
+                }
             }
+            // **Su `.pixpin`**: el proyecto donde vive, con su chat, como en todos los visores.
+            rutaViva?.let { add(com.forge.pixpin.ui.ExportarVisor.pixpin(this@MensajesActivity, it, nombreDelArchivo)) }
             talCual?.let { add(it) }
             if (m.texto.isNotBlank()) add(
                 com.forge.pixpin.ui.Compartible.Formato(
@@ -7341,7 +7302,65 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             wifi?.let { add(com.forge.pixpin.ui.Compartible.Formato("wifi", Icons.Filled.Wifi, "Enviar por Wi-Fi", com.forge.pixpin.ui.Compartible.NINGUNA, accion = { it() })) }
         }
         if (formatos.isEmpty()) return null
-        return com.forge.pixpin.ui.Compartible(nombre, formatos = formatos)
+        val queEs = when {
+            esPdf -> com.forge.pixpin.ui.FormatosDeCompartir.Contenido.PDF
+            esDocumento -> com.forge.pixpin.ui.FormatosDeCompartir.Contenido.DOCUMENTO
+            esImagen -> com.forge.pixpin.ui.FormatosDeCompartir.Contenido.IMAGEN
+            rutaViva == null -> com.forge.pixpin.ui.FormatosDeCompartir.Contenido.NOTA
+            else -> com.forge.pixpin.ui.FormatosDeCompartir.Contenido.ARCHIVO
+        }
+        // Las hojas del PDF, para elegir cuál va en imagen (con una sola, no se ven).
+        val paginas = if (hojasDelPdf > 0) com.forge.pixpin.ui.ExportarVisor.paginasDe(hojasDelPdf) else emptyList()
+        return com.forge.pixpin.ui.Compartible(nombre, paginas, formatos, if (hojasDelPdf > 0) setOf("p0") else null, queEs)
+    }
+
+    /**
+     * **Varios mensajes marcados, en una sola hoja** (27-oct-2026). Lo que se compone (lienzos,
+     * fotos anotadas, páginas, proyectos) sale por páginas con todos los formatos, como un proyecto
+     * con varias hojas; los archivos, juntos en un ZIP como «Original»; y los textos, uno detrás de
+     * otro. Trabajo de disco.
+     */
+    private fun compartibleDeVarios(lista: List<Mensaje>): com.forge.pixpin.ui.Compartible? {
+        // Un mismo proyecto una sola vez, con todas sus páginas marcadas (sus claves no se repiten).
+        val seleccion = lista.filter { sePuedeComponer(it) || it.clase == Clase.PROYECTO }
+            .mapNotNull { proyectoDe(it) }
+            .groupBy { it.first.id }
+            .map { (_, deEse) -> deEse.first().first to deEse.flatMap { it.second }.toSet().ifEmpty { null } }
+        val archivos = lista.filterNot { sePuedeComponer(it) || it.clase == Clase.PROYECTO }
+            .mapNotNull { m -> m.ruta?.let(::File)?.takeIf { it.isFile }?.let { it to nombreConExtension(m.nombre.ifBlank { it.name }, it.extension.ifBlank { null }) } }
+        val textos = lista.filter { it.texto.isNotBlank() }.joinToString("\n\n") { it.texto }
+        val titulo = "${lista.size} mensajes"
+        val carpeta = File(cacheDir, "share").apply { mkdirs() }
+        val extras = buildList {
+            if (archivos.isNotEmpty()) add(com.forge.pixpin.ui.Compartible.Formato(
+                "original", Icons.Filled.Description, "Original", com.forge.pixpin.ui.Compartible.NINGUNA,
+                generar = {
+                    val zip = File(carpeta, "$titulo.zip")
+                    val usados = HashSet<String>()
+                    java.util.zip.ZipOutputStream(zip.outputStream().buffered()).use { z ->
+                        for ((f, n) in archivos) {
+                            var dentro = n; var i = 2
+                            while (!usados.add(dentro)) dentro = "${n.substringBeforeLast('.')} ($i).${n.substringAfterLast('.', "")}".removeSuffix(".").also { i++ }
+                            z.putNextEntry(java.util.zip.ZipEntry(dentro)); f.inputStream().use { it.copyTo(z) }; z.closeEntry()
+                        }
+                    }
+                    com.forge.pixpin.ui.Compartible.Salida(zip, "application/zip", "${archivos.size} ${if (archivos.size == 1) "archivo" else "archivos"} tal cual, en un ZIP")
+                }
+            ))
+            if (textos.isNotBlank()) add(com.forge.pixpin.ui.Compartible.Formato(
+                "texto", Icons.AutoMirrored.Filled.Notes, "Texto", com.forge.pixpin.ui.Compartible.NINGUNA,
+                accion = { runOnUiThread { com.forge.pixpin.ui.CompartirNativo.texto(this@MensajesActivity, textos) } }
+            ))
+        }
+        val queEs = com.forge.pixpin.ui.FormatosDeCompartir.Contenido.MENSAJES
+        if (seleccion.isNotEmpty()) {
+            val c = com.forge.pixpin.ui.CompartirPaginas.de(this, titulo, seleccion, editable = seleccion.singleOrNull()?.first, contenido = queEs)
+            // El texto de las notas del proyecto manda: el de los mensajes iría repetido con el mismo id.
+            val suyos = c.formatos.map { it.id }.toSet()
+            return com.forge.pixpin.ui.Compartible(c.titulo, c.paginas, c.formatos + extras.filter { it.id !in suyos }, c.marcadas, queEs)
+        }
+        if (extras.isEmpty()) return null
+        return com.forge.pixpin.ui.Compartible(titulo, formatos = extras, contenido = queEs)
     }
 
     /** Abre el lienzo del que salió una zona: la página del PDF, o el lienzo. */
@@ -7376,29 +7395,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
     }
 
-    /**
-     * **El proyecto que hay detrás de un mensaje**, con las claves de todas sus hojas: el
-     * de verdad si el mensaje es un proyecto, y uno suelto —una hoja— si es una página,
-     * un dibujo o una foto anotada. Es lo que necesitan la web y el editable, que
-     * trabajan por proyectos. Trabajo de disco.
-     */
-    /** Si el documento que se va a exportar lleva algún audio. Ver [com.forge.pixpin.motor.AudioLigero.hayAudioEn]. */
-    private fun hayAudioEn(m: Mensaje): Boolean {
-        val (p, claves) = proyectoDe(m) ?: return false
-        // **Con los mismos dibujos con los que se sacaron las claves.**
-        //
-        // Aquí se pasaba `{ null }` mientras [proyectoDe] cargaba las escenas de verdad, y las
-        // claves de las dos listas **no eran las mismas**: un lienzo con marcos sale como una
-        // página por marco (`hoja/marco/`) cuando se lee su escena y como una sola página
-        // (`hoja//`) cuando no, así que ninguna de las marcadas casaba y la pregunta por el
-        // audio no salía aunque lo hubiera. Comparar dos listas hechas con criterios distintos
-        // es un error que no se ve: las dos parecen razonables por separado.
-        return paginasConSusDibujos(p).any {
-            (claves.isEmpty() || it.clave in claves) &&
-                com.forge.pixpin.motor.AudioLigero.hayAudioEn(it.texto ?: it.hoja.nota)
-        }
-    }
-
     /** Las páginas de un proyecto leyendo las escenas de sus lienzos. Ver [proyectoDe]. */
     private fun paginasConSusDibujos(p: com.forge.pixpin.motor.Proyecto) =
         com.forge.pixpin.motor.HojasDelProyecto.paginas(p) { dibujo ->
@@ -7407,6 +7403,12 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             )
         }
 
+    /**
+     * **El proyecto que hay detrás de un mensaje**, con las claves de todas sus hojas: el
+     * de verdad si el mensaje es un proyecto, y uno suelto —una hoja— si es una página,
+     * un dibujo o una foto anotada. Es lo que necesitan la web y el editable, que
+     * trabajan por proyectos. Trabajo de disco.
+     */
     private fun proyectoDe(m: Mensaje): Pair<com.forge.pixpin.motor.Proyecto, Set<String>>? {
         val app = application as? PixPinApp ?: return null
         val nombre = nombreDeLoCompartido(m)
@@ -7431,61 +7433,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
         val claves = paginasConSusDibujos(p).map { it.clave }.toSet()
         return p to claves
-    }
-
-    /** Página web del documento, con las funciones elegidas. Ver [com.forge.pixpin.ui.ExportarWebDe]. */
-    private fun compartirComoWeb(m: Mensaje, opciones: com.forge.pixpin.motor.ExportarHtml.Opciones, calidadDeAudio: String) {
-        val deNoche = (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
-        lifecycleScope.launch {
-            val archivo = withContext(Dispatchers.IO) {
-                val (p, claves) = proyectoDe(m) ?: return@withContext null
-                com.forge.pixpin.ui.ExportarWebDe.archivo(this@MensajesActivity, listOf(p to claves), opciones, deNoche, calidadDeAudio)
-            }
-            if (archivo == null) avisarDeQueNoHay() else {
-                Toast.makeText(this@MensajesActivity, com.forge.pixpin.ui.ExportarWebDe.resumenDe(archivo, calidadDeAudio), Toast.LENGTH_LONG).show()
-                // **La página web se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
-                compartirArchivo(archivo, com.forge.pixpin.motor.ExportarHtml.MIME_TYPE)
-            }
-        }
-    }
-
-    /** El editable `.pixpin` del documento. Ver [com.forge.pixpin.motor.PaquetePixpin]. */
-    private fun compartirEditable(m: Mensaje) {
-        lifecycleScope.launch {
-            val archivo = withContext(Dispatchers.IO) {
-                val (p, _) = proyectoDe(m) ?: return@withContext null
-                val carpeta = File(cacheDir, "share").apply { mkdirs() }
-                com.forge.pixpin.motor.PaquetePixpin.escribir(
-                    this@MensajesActivity, p,
-                    File(carpeta, com.forge.pixpin.motor.ExportarProyecto.nombreDeArchivo(p.nombre) + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION),
-                    croquisDe = { id -> com.forge.pixpin.croquis3d.Croquis3DAlmacen.jsonDe(this@MensajesActivity, id) }
-                )
-            }
-            if (archivo == null) avisarDeQueNoHay() else compartirArchivo(archivo, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE)
-        }
-    }
-
-    /** El PDF de un proyecto entero, como desde la pantalla de proyectos. */
-    private fun compartirPdfDelProyecto(m: Mensaje) {
-        lifecycleScope.launch {
-            val archivo = withContext(Dispatchers.IO) {
-                val (p, claves) = proyectoDe(m) ?: return@withContext null
-                com.forge.pixpin.motor.ExportarProyecto.aArchivo(
-                    this@MensajesActivity, p, claves,
-                    escenaDe = { dibujo -> com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@MensajesActivity, dibujo)) },
-                    imageProvider = { ruta -> com.forge.pixpin.pin.ImageStore.load(ruta) }
-                )
-            }
-            if (archivo == null) avisarDeQueNoHay() else compartirArchivo(archivo, "application/pdf")
-        }
-    }
-
-    // **Cualquier archivo se ofrece como archivo o como enlace.** Ver [CompartirEnlaceActivity].
-    private fun compartirArchivo(archivo: File, tipo: String) {
-        com.forge.pixpin.ui.CompartirEnlaceActivity.abrir(
-            this, archivo, archivo.name.substringBeforeLast('.'), tipo
-        )
     }
 
     /** Abrir: cada clase se abre donde vive. Un dibujo en el lienzo, un PDF en su visor. */
@@ -7885,9 +7832,6 @@ private const val GUARDADO_MENSAJE_EN_EDICION = "mensaje_en_edicion"
  * —importante, hecho, pendiente, idea, dinero, sitio— y con mil opciones se tarda más en
  * elegir la etiqueta que en releer el mensaje.
  */
-/** A qué escala se compone un dibujo para mandarlo fuera. */
-private const val ESCALA_COMPARTIDA = 2.0
-
 /** A qué escala se compone el sello de una cita. */
 private const val ESCALA_DEL_SELLO = 0.12
 

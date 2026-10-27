@@ -1095,7 +1095,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                         antes = { ExcalidrawStore.guardar(this@DrawEditorActivity, dibujoId, controller.scene) }
                     )
                     // Al abrir, el lienzo completo (la primera): los marcos se añaden a mano.
-                    com.forge.pixpin.ui.Compartible(c.titulo, c.paginas, c.formatos, c.paginas.firstOrNull()?.let { setOf(it.clave) })
+                    com.forge.pixpin.ui.Compartible(c.titulo, c.paginas, c.formatos, c.paginas.firstOrNull()?.let { setOf(it.clave) }, c.contenido)
                 }
             }
             exportando = false
