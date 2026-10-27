@@ -121,6 +121,8 @@ class Visor3DActivity : ComponentActivity() {
     private var cajaAislada: FloatArray? = null
     /** Los niveles y las categorías del modelo (el panel). */
     private var arbol: ArbolDelModelo? = null
+    /** Las señas del modo de paso, si se abrió de otra aplicación sin guardarlo. */
+    private var estadoDePaso: com.forge.pixpin.guardados.AbrirDePaso.Estado? = null
     private var ancho = 0
     private var alto = 0
     private val prefs by lazy { getSharedPreferences("planos", Context.MODE_PRIVATE) }
@@ -134,6 +136,8 @@ class Visor3DActivity : ComponentActivity() {
         }
         val ruta = intent?.getStringExtra(EXTRA_RUTA) ?: run { finish(); return }
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { File(ruta).name }
+        // **De paso** (27-oct-2026): abierto desde otra aplicación sin guardarlo. Ver [com.forge.pixpin.guardados.ModoDePaso].
+        estadoDePaso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
@@ -578,7 +582,20 @@ class Visor3DActivity : ComponentActivity() {
                     }
                 }
             }
-            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
+            // **Abrir con…, Guardar y Compartir**, solo de paso. Ver [com.forge.pixpin.ui.BarraDePaso].
+            if (anotando == null) com.forge.pixpin.ui.BarraDePaso(
+                estadoDePaso, aLaVista || estado != null, Modifier.align(Alignment.TopCenter),
+                alCompartir = if (!listo) null else fun() {
+                    val titulo = nombre.substringBeforeLast('.').ifBlank { "Modelo" }
+                    exportando = com.forge.pixpin.ui.Compartible(
+                        titulo, formatos = com.forge.pixpin.ui.ExportarVisor.deLaVista(this@Visor3DActivity, titulo) { vista?.let { com.forge.pixpin.ui.ExportarVisor.fotoDeLaTarjeta(it) } } +
+                            listOf(com.forge.pixpin.ui.ExportarVisor.original(this@Visor3DActivity, original.absolutePath, nombre), com.forge.pixpin.ui.ExportarVisor.pixpin(this@Visor3DActivity, original.absolutePath, nombre))
+                    )
+                    toques++
+                }
+            )
+            // De paso, con «Por Wi-Fi a mis aparatos». Ver [com.forge.pixpin.guardados.AbrirDePaso.conWifi].
+            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(remember(c) { com.forge.pixpin.guardados.AbrirDePaso.conWifi(this@Visor3DActivity, c, estadoDePaso) }) { exportando = null } }
             // **Lo anotado del marcador de esta vista**: mirando, se pinta encima; anotando, el lienzo.
             @Suppress("UNUSED_EXPRESSION") camara
             val ahora = if (listo) estadoAhora() else null

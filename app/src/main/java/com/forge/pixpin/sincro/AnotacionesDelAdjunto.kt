@@ -294,6 +294,9 @@ object AnotacionesDelAdjunto {
      */
     fun uidDe(filesDir: File, ruta: String?): String? {
         if (ruta.isNullOrBlank()) return null
+        // **Un archivo abierto de paso** (27-oct-2026): lo anotado va con el código de su sesión, que
+        // no es de ningún mensaje y no viaja; «Guardar» lo pasa al del mensaje. Ver [com.forge.pixpin.guardados.ModoDePaso].
+        com.forge.pixpin.guardados.ModoDePaso.uidDeLaRuta(ruta)?.let { return it }
         conocidos[ruta]?.let { return it }
         val chat = File(filesDir, "guardados.jsonl")
         if (!chat.isFile) return null

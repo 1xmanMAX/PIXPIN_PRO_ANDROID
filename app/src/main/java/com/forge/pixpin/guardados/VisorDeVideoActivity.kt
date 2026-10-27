@@ -1,6 +1,5 @@
 package com.forge.pixpin.guardados
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -10,6 +9,9 @@ import android.widget.FrameLayout
 import android.widget.MediaController
 import android.widget.Toast
 import android.widget.VideoView
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import java.io.File
 
 /**
@@ -23,7 +25,7 @@ import java.io.File
  * Un vídeo que el teléfono no sabe leer (un códec raro) sale con «Abrir con» como antes: así nunca
  * se queda sin poder verse.
  */
-class VisorDeVideoActivity : Activity() {
+class VisorDeVideoActivity : androidx.activity.ComponentActivity() {
 
     companion object {
         private const val EXTRA_RUTA = "ruta"
@@ -58,6 +60,34 @@ class VisorDeVideoActivity : Activity() {
         val v = VideoView(this)
         marco.addView(v, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
         setContentView(marco)
+        // **De paso** (27-oct-2026, abierto desde otra aplicación sin guardarlo): arriba, «Abrir con…»,
+        // «Guardar» y «Compartir». Por eso es una `ComponentActivity` y no una `Activity` a secas: la
+        // barra es de Compose. Ver [ModoDePaso].
+        AbrirDePaso.vigilar(this)?.let { paso ->
+            val barra = androidx.compose.ui.platform.ComposeView(this).apply {
+                setContent {
+                    com.forge.pixpin.ui.theme.PixPinTheme {
+                        var compartiendo by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
+                        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxWidth(), contentAlignment = androidx.compose.ui.Alignment.TopCenter) {
+                            com.forge.pixpin.ui.BarraDePaso(paso, true, alCompartir = { compartiendo = true })
+                        }
+                        if (compartiendo) com.forge.pixpin.ui.HojaDeCompartir(
+                            androidx.compose.runtime.remember {
+                                AbrirDePaso.conWifi(
+                                    this@VisorDeVideoActivity,
+                                    com.forge.pixpin.ui.Compartible(
+                                        paso.nombre.substringBeforeLast('.'),
+                                        formatos = listOf(com.forge.pixpin.ui.ExportarVisor.original(this@VisorDeVideoActivity, ruta, paso.nombre))
+                                    ),
+                                    paso
+                                )
+                            }
+                        ) { compartiendo = false }
+                    }
+                }
+            }
+            marco.addView(barra, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
+        }
         val mandos = MediaController(this)
         mandos.setAnchorView(v)
         v.setMediaController(mandos)

@@ -424,6 +424,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         apuntarComoAbierto()
         apilados = prefsDeMultilienzo.getBoolean(CLAVE_APILADOS, false)
         papelDeLaHojita = prefsDeMultilienzo.getString("papel_hojita", null)?.takeIf { it in Hojita.PAPELES } ?: Hojita.PAPELES.first()
+        // **Una foto abierta de paso** (27-oct-2026, desde otra aplicación sin guardarla). Ver [com.forge.pixpin.guardados.ModoDePaso].
+        estadoDePaso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
         setContent {
             // El negro de verdad tiñe **todo el editor**, no solo el lienzo: con
             // el lienzo negro y las barras grises se ve un recuadro negro
@@ -1048,6 +1050,9 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
 
     /** Lo que se está compartiendo, con la hoja abierta. */
     private var compartiendo by mutableStateOf<com.forge.pixpin.ui.Compartible?>(null)
+
+    /** Las señas del modo de paso, si la foto se abrió de otra aplicación sin guardarla. */
+    private var estadoDePaso: com.forge.pixpin.guardados.AbrirDePaso.Estado? = null
 
     /**
      * Abre la hoja de compartir con este lienzo: sus páginas —«Lienzo completo» y cada marco— o,
@@ -2640,7 +2645,13 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 )
             }
 
-            compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
+            // **Abrir con…, Guardar y Compartir**, solo de paso y mirando. Ver [com.forge.pixpin.ui.BarraDePaso].
+            com.forge.pixpin.ui.BarraDePaso(
+                estadoDePaso, modoVista && !presentando, Modifier.align(Alignment.TopCenter),
+                alCompartir = { abrirCompartir() }, antesDeGuardar = { guardarYa() }
+            )
+            // De paso, con «Por Wi-Fi a mis aparatos». Ver [com.forge.pixpin.guardados.AbrirDePaso.conWifi].
+            compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(remember(c) { com.forge.pixpin.guardados.AbrirDePaso.conWifi(this@DrawEditorActivity, c, estadoDePaso) }) { compartiendo = null } }
             if (eligiendoQueImprimir) QueImprimir()
             if (pidiendoFuncionesWeb) {
                 val marcadas = ajustes.funcionesWeb ?: ExportarHtml.Opciones.NOMBRES.toSet()

@@ -757,6 +757,9 @@ class VisorHtmlActivity : ComponentActivity() {
     private var sinLado by mutableStateOf(false)
     private var anotando by mutableStateOf(false)
     private var compartiendo by mutableStateOf(false)
+
+    /** Las señas del modo de paso, si se abrió de otra aplicación sin guardarlo. */
+    private var estadoDePaso: com.forge.pixpin.guardados.AbrirDePaso.Estado? = null
     /** Hay que entrar a anotar en cuanto la página recargada (ya con márgenes) esté lista. */
     private var entrarAlCargar = false
     /** Por dónde va el documento y a qué escala, para pintar la capa en su sitio mientras se lee. */
@@ -1143,6 +1146,8 @@ class VisorHtmlActivity : ComponentActivity() {
             vocesDeMicrosoft = prefsDeLectura.getBoolean("voz:edge", false)
         }
         engancharALaVoz()
+        // **De paso** (27-oct-2026): abierto desde otra aplicación sin guardarlo. Ver [com.forge.pixpin.guardados.ModoDePaso].
+        estadoDePaso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
@@ -1348,6 +1353,24 @@ class VisorHtmlActivity : ComponentActivity() {
                         }
                     }
                 }
+                // **Abrir con…, Guardar y Compartir**, solo de paso. Ver [BarraDePaso].
+                if (!presentando) BarraDePaso(
+                    estadoDePaso, aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo, Modifier.align(Alignment.TopCenter),
+                    alCompartir = { compartiendo = true; conLaLetra = false; poniendoMarcador = false },
+                    antesDeGuardar = { guardarLaCapa() }
+                )
+                // Una página web no tiene hoja de compartir propia; de paso, el archivo, su .pixpin y el Wi-Fi.
+                if (!esDocumento && compartiendo && estadoDePaso != null) elOriginal?.let { o ->
+                    HojaDeCompartir(
+                        remember(o, suNombre) {
+                            com.forge.pixpin.guardados.AbrirDePaso.conWifi(
+                                this@VisorHtmlActivity,
+                                Compartible(sinExtension(suNombre), formatos = listOf(ExportarVisor.original(this@VisorHtmlActivity, o.absolutePath, suNombre), ExportarVisor.pixpin(this@VisorHtmlActivity, o.absolutePath, suNombre))),
+                                estadoDePaso
+                            )
+                        }
+                    ) { compartiendo = false }
+                }
                 // **El riel de la derecha** (24-oct-2026, como el PC): marcador, lápiz y marco, y los
                 // marcadores debajo. En una página web el lápiz anota en píxeles CSS, como el PC.
                 if (!presentando && !marcosDoc.imprimiendo && pagina != null) {
@@ -1381,7 +1404,8 @@ class VisorHtmlActivity : ComponentActivity() {
                         val original = comparte ?: elOriginal
                         if (original != null) HojaDeCompartir(
                             remember(original, suNombre) {
-                                Compartible(
+                                // De paso, con «Por Wi-Fi a mis aparatos». Ver [com.forge.pixpin.guardados.AbrirDePaso.conWifi].
+                                com.forge.pixpin.guardados.AbrirDePaso.conWifi(this@VisorHtmlActivity, Compartible(
                                     sinExtension(suNombre), formatos = listOf(
                                         ExportarDocumentoAnotado.formato(this@VisorHtmlActivity, original, suNombre, laPaginaQueSeVe) { withContext(Dispatchers.Main) { medirElDocumento() } },
                                         Compartible.Formato(
@@ -1393,7 +1417,7 @@ class VisorHtmlActivity : ComponentActivity() {
                                             }
                                         )
                                     )
-                                )
+                                ), estadoDePaso)
                             }
                         ) { compartiendo = false }
                     }

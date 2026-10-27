@@ -266,6 +266,9 @@ class PlanoActivity : ComponentActivity() {
      * Guarda la capa con las cotas y los marcos de ahora dentro ([CapaDelPlano.con]) y su `.hoja`
      * al lado. Un plano sin nada hecho no deja archivos.
      */
+    /** Las señas del modo de paso, si se abrió de otra aplicación sin guardarlo. */
+    private var estadoDePaso: com.forge.pixpin.guardados.AbrirDePaso.Estado? = null
+
     private fun guardarCapa() {
         val laCapa = capa ?: return
         val m = modelo ?: return
@@ -387,6 +390,8 @@ class PlanoActivity : ComponentActivity() {
         val ruta = intent?.getStringExtra(EXTRA_RUTA)
         if (ruta == null) { finish(); return }
         val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { File(ruta).name }
+        // **De paso** (27-oct-2026): abierto desde otra aplicación sin guardarlo. Ver [com.forge.pixpin.guardados.ModoDePaso].
+        estadoDePaso = com.forge.pixpin.guardados.AbrirDePaso.vigilar(this)
         setContent { PixPinTheme { Pantalla(File(ruta), nombre) } }
     }
 
@@ -882,6 +887,20 @@ class PlanoActivity : ComponentActivity() {
                     }
                 }
             }
+            // **Abrir con…, Guardar y Compartir**, solo de paso. Ver [com.forge.pixpin.ui.BarraDePaso].
+            if (!anotando) com.forge.pixpin.ui.BarraDePaso(
+                estadoDePaso, aLaVista || estado != null, Modifier.align(Alignment.TopCenter),
+                alCompartir = fun() {
+                    val m = modelo ?: return
+                    guardarCapa()
+                    exportando = ExportarPlano.compartible(
+                        this@PlanoActivity,
+                        ExportarPlano.Plano(original, nombre, m, capa?.scene, encaje, hechas + listOf(puntos).filter { it.size >= 2 }, hojas)
+                    )
+                    toques++
+                },
+                antesDeGuardar = { guardarCapa() }
+            )
             // **El riel de la derecha** (24-oct-2026): marcador, lápiz y marcos, como en todos los visores.
             if (listo) com.forge.pixpin.ui.RielDelVisor(
                 poniendoMarca = poniendoMarca, anotando = anotando, marcando = marcando,
@@ -997,7 +1016,8 @@ class PlanoActivity : ComponentActivity() {
                     this@PlanoActivity, m, cuales, hechas + listOf(puntos).filter { it.size >= 2 }, nombre.substringBeforeLast('.'), lamina, tinta
                 )
             }
-            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { exportando = null } }
+            // De paso, con «Por Wi-Fi a mis aparatos». Ver [com.forge.pixpin.guardados.AbrirDePaso.conWifi].
+            exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(remember(c) { com.forge.pixpin.guardados.AbrirDePaso.conWifi(this@PlanoActivity, c, estadoDePaso) }) { exportando = null } }
             // Acotando: la pista y sus mandos, abajo, mientras dure.
             if (acotando) {
                 Row(
