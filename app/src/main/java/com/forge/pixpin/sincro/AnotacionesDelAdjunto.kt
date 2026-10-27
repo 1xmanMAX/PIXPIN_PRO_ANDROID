@@ -295,6 +295,10 @@ object AnotacionesDelAdjunto {
     fun uidDe(filesDir: File, ruta: String?): String? {
         if (ruta.isNullOrBlank()) return null
         conocidos[ruta]?.let { return it }
+        // **El borrador de una versión** (27-oct-2026): la copia de un documento de otra persona que
+        // se está anotando aún no es un mensaje, pero su tinta ya va con el código que tendrá. Ver
+        // [VersionesVinculadas].
+        VersionesVinculadas.uidDeBorrador(filesDir, ruta)?.let { conocidos[ruta] = it; return it }
         val chat = File(filesDir, "guardados.jsonl")
         if (!chat.isFile) return null
         val sello = "${chat.length()}:${chat.lastModified()}"
