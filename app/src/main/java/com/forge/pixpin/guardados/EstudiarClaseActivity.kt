@@ -9,6 +9,27 @@ import android.widget.Toast
 import android.widget.VideoView
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.Subtitles
+import androidx.compose.material.icons.filled.SubtitlesOff
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
@@ -41,13 +62,11 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.FitScreen
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay10
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -112,7 +131,7 @@ import java.io.File
  *
  * **Como los visores** (25-oct-2026, PC fe0c9c4 y 19c060f): claro u oscuro con la luna/el sol de
  * arriba; lo que se ve (el vídeo o la captura) **se acerca como un lienzo** —pellizcar hacia los dedos,
- * arrastrar, la pastilla de − % +— con [com.forge.pixpin.ui.Encuadre]; un toque reproduce o para y
+ * arrastrar— con [com.forge.pixpin.ui.Encuadre]; un toque reproduce o para y
  * **el doble toque solo encaja** (no reproduce: el toque suelto espera a ver si viene otro). Al lado,
  * el riel de todos los visores ([com.forge.pixpin.ui.RielDelVisor]): el marcador y **el lápiz, que
  * anota la captura que se ve** en su lienzo `foto-<id>` (el mismo que al tocarla en el chat, el que
@@ -124,6 +143,23 @@ import java.io.File
  * ([EstudiarClase.posicionALaVista]). Del PC no se traen Escape, las teclas de acercar ni el clic
  * contado desde la esquina de la ventana (`ms_del_raton`, a75847c): son cosas de una ventana de
  * escritorio.
+ *
+ * **Más sitio para la imagen** (27-oct-2026, el usuario: «una forma de agrandar la zona de la imagen
+ * para hacer zoom y ver más la captura o el vídeo»). Fuera la barra de arriba con «Estudiar la clase»
+ * (atrás y el día/la noche van ahora en el cristal, encima de la imagen) y fuera la pastilla de − % +
+ * (en el teléfono basta pellizcar y el doble toque). Cómo se reparte la pantalla lo decide
+ * [EstudiarClase.reparto]:
+ *
+ * - **De pie**: la imagen arriba, grande; debajo y apretados, la barra del tiempo con sus horas, la
+ *   tira de capturas (más pequeña, cada una con su proporción y su minuto) y los mandos; abajo el
+ *   texto, que se esconde con el botón de subtítulos y entonces la imagen se queda con su sitio.
+ * - **Tumbado**: nada debajo, que se come el alto. La imagen a un lado y, en el lado del riel, la tira
+ *   en columna y los mandos en columna con la barra del tiempo de pie. El texto empieza escondido y,
+ *   si se pide, va en otra columna al lado.
+ * - **Pantalla entera** (el botón de la esquina, como YouTube): solo la imagen; los mandos encima, en
+ *   el cristal, y un toque los enseña o los esconde (sonando se van solos). Atrás sale de ella.
+ *
+ * El riel y lo de encima de la imagen van y vienen con **las barras visibles** (`barrasVisibles`).
  */
 class EstudiarClaseActivity : ComponentActivity() {
 
@@ -186,198 +222,196 @@ class EstudiarClaseActivity : ComponentActivity() {
         }
         var arrastrando by remember { mutableStateOf<Long?>(null) }
         var encuadre by remember { mutableStateOf(com.forge.pixpin.ui.Encuadre()) }
-        var verVideo by remember { mutableStateOf(true) }
         var anotando by remember { mutableStateOf<Mensaje?>(null) }
         val oscuroAhora = MaterialTheme.colorScheme.background.luminance() < 0.5f
-        var seguir by remember { mutableStateOf(true) }
         var poniendo by remember { mutableStateOf<Long?>(null) }
         val irA: (Long) -> Unit = { ms -> m?.let { irA(it, ms) } }
+        // Lo que se elige se guarda al girar el teléfono: girar rehace la actividad.
+        var seguir by rememberSaveable { mutableStateOf(true) }
+        var verVideo by rememberSaveable { mutableStateOf(true) }
+        var pantallaEntera by rememberSaveable { mutableStateOf(false) }
+        var textoEnVertical by rememberSaveable { mutableStateOf(true) }
+        var textoEnApaisada by rememberSaveable { mutableStateOf(false) }
+        // **Las barras visibles** (27-oct-2026): lo que va encima de la imagen —atrás, el día/la noche,
+        // vídeo o capturas, el riel— y, a pantalla entera, los mandos. Fuera de la pantalla entera
+        // siempre se ven (el toque reproduce, como antes); a pantalla entera un toque las enseña o
+        // las esconde y, sonando, se van solas, como en YouTube.
+        var barrasVisibles by rememberSaveable { mutableStateOf(true) }
+        val sonando = esta && estado.sonando
+        LaunchedEffect(pantallaEntera) { barrasVisibles = true }
+        LaunchedEffect(pantallaEntera, barrasVisibles, sonando) {
+            if (pantallaEntera && barrasVisibles && sonando) { kotlinx.coroutines.delay(3500); barrasVisibles = false }
+        }
+        // Atrás, a pantalla entera, sale de ella (no de la clase).
+        BackHandler(enabled = pantallaEntera) { pantallaEntera = false }
 
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { finish() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, getString(R.string.cancel)) }
-                    Column(Modifier.weight(1f)) {
-                        Text(getString(R.string.estudiar_titulo), fontWeight = FontWeight.Bold, maxLines = 1)
-                        if (titulo.isNotBlank()) Text(titulo, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
-                    }
-                    IconButton(onClick = { alCambiarTema(!oscuroAhora) }) {
-                        Icon(if (oscuroAhora) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuroAhora) "Claro" else "Oscuro")
-                    }
-                    FilterChip(selected = seguir, onClick = { seguir = !seguir }, label = { Text(getString(R.string.estudiar_seguir)) })
-                }
-                if (m == null || m.ruta == null || !File(m.ruta).exists()) {
-                    Text(
-                        getString(R.string.estudiar_sin_sonido), color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(16.dp)
-                    )
-                }
-                // Lo que se ve: el vídeo callado siguiendo a la nota, o la captura del minuto (con lo
-                // anotado encima). Se acerca como un lienzo; ver [com.forge.pixpin.ui.Encuadre].
-                val conVideo = video != null && (verVideo || capturas.isEmpty())
-                val iVista = EstudiarClase.ultimoAntes(tiemposDeCapturas, posMs)
-                val fotoVista = if (conVideo) null else iVista?.let { fotos.getOrNull(it) }
-                var imagen by remember { mutableStateOf<ImageBitmap?>(null) }
-                LaunchedEffect(fotoVista?.id, fotoVista?.referencia, anotando, version) {
-                    val f = fotoVista
-                    imagen = if (f == null) null else withContext(Dispatchers.IO) { capturaAnotada(f, 2048) }
-                }
-                // Al cambiar de captura o del vídeo a una captura, vuelve a encajada.
-                LaunchedEffect(fotoVista?.id, conVideo) { encuadre = com.forge.pixpin.ui.Encuadre() }
-                val actual = imagen
-                val (anchoImg, altoImg) = when {
-                    conVideo -> 0f to 0f
-                    actual != null -> actual.width.toFloat() to actual.height.toFloat()
-                    else -> 0f to 0f
-                }
-                Box(
-                    Modifier.fillMaxWidth().height(260.dp).clip(RoundedCornerShape(0.dp)).background(Color.Black),
-                    contentAlignment = Alignment.Center
-                ) {
-                    var caja by remember { mutableStateOf(com.forge.pixpin.ui.Encuadre.Caja(0f, 0f, 1f, 1f)) }
-                    // Sin medidas de la imagen (el vídeo se encaja solo), la caja entera hace de imagen.
-                    val w = if (anchoImg > 0f) anchoImg else caja.ancho
-                    val h = if (altoImg > 0f) altoImg else caja.alto
-                    Box(
-                        Modifier.fillMaxSize()
-                            .onSizeChanged { caja = com.forge.pixpin.ui.Encuadre.Caja(0f, 0f, it.width.toFloat(), it.height.toFloat()) }
-                            .graphicsLayer {
-                                scaleX = encuadre.aumento; scaleY = encuadre.aumento
-                                translationX = encuadre.dx; translationY = encuadre.dy
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (conVideo) VideoQueSigue(video!!, posMs, esta && estado.sonando)
-                        else if (actual != null) Image(actual, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
-                        else Icon(Icons.Filled.Image, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(48.dp))
-                    }
-                    // Los gestos, encima (el vídeo es una vista de Android y se quedaría los toques).
-                    Box(
-                        Modifier.fillMaxSize()
-                            .pointerInput(m?.ruta) {
-                                // Un toque reproduce o para; el doble toque **solo** encaja (19c060f).
-                                detectTapGestures(
-                                    onTap = { m?.ruta?.let { Reproductor.alternar(it, titulo) } },
-                                    onDoubleTap = { encuadre = com.forge.pixpin.ui.Encuadre() }
-                                )
-                            }
-                            .pointerInput(w, h, caja) {
-                                detectTransformGestures { centro, mover, zoom, _ ->
-                                    var e = encuadre
-                                    if (zoom != 1f) e = e.acercar(caja, w, h, zoom, centro.x, centro.y)
-                                    encuadre = e.mover(caja, w, h, mover.x, mover.y)
-                                }
-                            }
-                    )
-                    // Abajo a la izquierda: − % + y encajar, como la pastilla del PC.
-                    if (!conVideo || !encuadre.encajado) Row(
-                        Modifier.align(Alignment.BottomStart).padding(6.dp).clip(RoundedCornerShape(50))
-                            .background(com.forge.pixpin.ui.CRISTAL_DE_VISOR),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = { encuadre = encuadre.paso(caja, w, h, -1) }) { Text("−", color = Color.White) }
-                        Text("${encuadre.porCiento(caja, w, h)} %", color = Color.White, fontSize = 12.sp)
-                        TextButton(onClick = { encuadre = encuadre.paso(caja, w, h, 1) }) { Text("+", color = Color.White) }
-                        if (!encuadre.encajado) IconButton(onClick = { encuadre = com.forge.pixpin.ui.Encuadre() }) {
-                            Icon(Icons.Filled.FitScreen, "Encajar", tint = Color.White)
+        // Lo que se ve: el vídeo callado siguiendo a la nota, o la captura del minuto (con lo
+        // anotado encima). Se acerca como un lienzo; ver [com.forge.pixpin.ui.Encuadre].
+        val conVideo = video != null && (verVideo || capturas.isEmpty())
+        val capturaActual = EstudiarClase.ultimoAntes(tiemposDeCapturas, posMs)
+        val fotoVista = if (conVideo) null else capturaActual?.let { fotos.getOrNull(it) }
+        var imagen by remember { mutableStateOf<ImageBitmap?>(null) }
+        LaunchedEffect(fotoVista?.id, fotoVista?.referencia, anotando, version) {
+            val f = fotoVista
+            imagen = if (f == null) null else withContext(Dispatchers.IO) { capturaAnotada(f, 2048) }
+        }
+        // Al cambiar de captura o del vídeo a una captura, vuelve a encajada.
+        LaunchedEffect(fotoVista?.id, conVideo) { encuadre = com.forge.pixpin.ui.Encuadre() }
+        val actual = imagen
+        val (anchoImg, altoImg) = when {
+            conVideo -> 0f to 0f
+            actual != null -> actual.width.toFloat() to actual.height.toFloat()
+            else -> 0f to 0f
+        }
+        val posVista = EstudiarClase.posicionALaVista(posMs, arrastrando)
+        val tira = rememberLazyListState()
+        val texto = rememberLazyListState()
+        val lineaActual = if (esta) EstudiarClase.lineaEn(tiemposDeLineas, posMs) else null
+        val filaActual = lineaActual?.let { l -> filas.indexOf(EstudiarClase.Fila.Linea(l)) }?.takeIf { it >= 0 }
+
+        val alLapiz: () -> Unit = {
+            val f = fotoVista
+            when {
+                f != null -> anotando = f
+                conVideo && m != null -> {
+                    // Se para: se anota lo que se está viendo, no lo que viene.
+                    if (estado.sonando && esta) Reproductor.alternar(m.ruta!!, titulo)
+                    val ms = posMs
+                    Toast.makeText(this@EstudiarClaseActivity, "Guardando el fotograma…", Toast.LENGTH_SHORT).show()
+                    Thread {
+                        val nueva = runCatching { guardarFotograma(m, video!!, ms) }
+                            .onFailure { android.util.Log.w("PixPinEstudiar", "fotograma", it) }.getOrNull()
+                        runOnUiThread {
+                            if (nueva == null) Toast.makeText(this@EstudiarClaseActivity, R.string.estudiar_no_se_guardo, Toast.LENGTH_SHORT).show()
+                            else { verVideo = false; anotando = nueva }
                         }
-                    }
-                    // Arriba a la izquierda, el vídeo o las capturas, si hay las dos cosas.
-                    if (video != null && capturas.isNotEmpty()) TextButton(
-                        onClick = { verVideo = !conVideo },
-                        modifier = Modifier.align(Alignment.TopStart).padding(4.dp).clip(RoundedCornerShape(50)).background(com.forge.pixpin.ui.CRISTAL_DE_VISOR)
-                    ) { Text(if (conVideo) "Capturas" else "Vídeo", color = Color.White, fontSize = 12.sp) }
-                    // El riel de todos los visores: el marcador y el lápiz (anotar lo que se ve).
-                    com.forge.pixpin.ui.RielDelVisor(
-                        poniendoMarca = poniendo != null, anotando = anotando != null, marcando = false,
-                        onMarcador = { if (m != null) poniendo = posMs },
-                        onLapiz = {
-                            val f = fotoVista
-                            when {
-                                f != null -> anotando = f
-                                conVideo && m != null -> {
-                                    // Se para: se anota lo que se está viendo, no lo que viene.
-                                    if (estado.sonando && esta) Reproductor.alternar(m.ruta!!, titulo)
-                                    val ms = posMs
-                                    Toast.makeText(this@EstudiarClaseActivity, "Guardando el fotograma…", Toast.LENGTH_SHORT).show()
-                                    Thread {
-                                        val nueva = runCatching { guardarFotograma(m, video!!, ms) }
-                                            .onFailure { android.util.Log.w("PixPinEstudiar", "fotograma", it) }.getOrNull()
-                                        runOnUiThread {
-                                            if (nueva == null) Toast.makeText(this@EstudiarClaseActivity, R.string.estudiar_no_se_guardo, Toast.LENGTH_SHORT).show()
-                                            else { verVideo = false; anotando = nueva }
-                                        }
-                                    }.start()
-                                }
-                                else -> Toast.makeText(this@EstudiarClaseActivity, "Aquí no hay nada que anotar", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        onMarco = null,
-                        modifier = Modifier.align(Alignment.CenterEnd),
-                        rotuloDelLapiz = "Anotar"
-                    )
+                    }.start()
                 }
-                BarraDelTiempo(EstudiarClase.posicionALaVista(posMs, arrastrando), durMs, tiemposDeCapturas, senales, irA) { arrastrando = it }
-                Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        Transcriptor.marcaDeTiempo(posMs.toInt()) + " / " + Transcriptor.marcaDeTiempo(durMs.toInt()),
-                        fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(96.dp)
-                    )
-                    IconButton(onClick = { irA(EstudiarClase.saltar(posMs, -10_000, durMs)) }) { Icon(Icons.Filled.Replay10, null) }
-                    IconButton(onClick = { m?.ruta?.let { Reproductor.alternar(it, titulo) } }) {
-                        Icon(if (esta && estado.sonando) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, modifier = Modifier.size(34.dp))
+                else -> Toast.makeText(this@EstudiarClaseActivity, "Aquí no hay nada que anotar", Toast.LENGTH_SHORT).show()
+            }
+        }
+
+        // Las piezas de la pantalla, como funciones de aquí (comparten el estado); [Imagen] la última, que usa las demás.
+        @Composable
+        fun BarraConHoras(sobreCristal: Boolean = false) {
+            val gris = if (sobreCristal) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.onSurfaceVariant
+            Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(Transcriptor.marcaDeTiempo(posVista.toInt()), fontSize = 11.sp, color = gris)
+                BarraDelTiempo(
+                    posVista, durMs, tiemposDeCapturas, senales, irA,
+                    Modifier.weight(1f).height(30.dp).padding(horizontal = 10.dp), sobreCristal = sobreCristal
+                ) { arrastrando = it }
+                Text(Transcriptor.marcaDeTiempo(durMs.toInt()), fontSize = 11.sp, color = gris)
+            }
+        }
+
+        /** «Seguir», pequeño: el texto y la tira siguen a lo que suena. */
+        @Composable
+        fun Seguir(pequeno: Boolean) {
+            val color = if (seguir) MaterialTheme.colorScheme.primary else LocalContentColor.current.copy(alpha = 0.75f)
+            Text(
+                getString(R.string.estudiar_seguir), fontSize = if (pequeno) 10.sp else 12.sp, color = color, maxLines = 1,
+                fontWeight = if (seguir) FontWeight.SemiBold else FontWeight.Normal,
+                modifier = Modifier.clip(RoundedCornerShape(50))
+                    .border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(50))
+                    .background(if (seguir) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f) else Color.Transparent)
+                    .clickable { seguir = !seguir }
+                    .padding(horizontal = if (pequeno) 6.dp else 10.dp, vertical = 5.dp)
+            )
+        }
+
+        @Composable
+        fun BotonDelTexto(verlo: Boolean, al: () -> Unit) {
+            IconButton(onClick = al, modifier = Modifier.size(40.dp)) {
+                Icon(
+                    if (verlo) Icons.Filled.Subtitles else Icons.Filled.SubtitlesOff,
+                    if (verlo) "Esconder el texto" else "Ver el texto",
+                    tint = if (verlo) MaterialTheme.colorScheme.primary else LocalContentColor.current
+                )
+            }
+        }
+
+        /** De pie (y a pantalla entera): los mandos en una fila apretada. */
+        @Composable
+        fun MandosEnFila() {
+            Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Seguir(false)
+                IconButton(onClick = { irA(EstudiarClase.saltar(posMs, -10_000, durMs)) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.Replay10, null) }
+                IconButton(onClick = { m?.ruta?.let { Reproductor.alternar(it, titulo) } }, modifier = Modifier.size(44.dp)) {
+                    Icon(if (sonando) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, modifier = Modifier.size(32.dp))
+                }
+                IconButton(onClick = { irA(EstudiarClase.saltar(posMs, 10_000, durMs)) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.Forward10, null) }
+                Box(Modifier.size(40.dp).clip(CircleShape).clickable { Reproductor.otraVelocidad() }, contentAlignment = Alignment.Center) {
+                    Text(estado.velocidad.toString().removeSuffix(".0") + "×", fontSize = 13.sp)
+                }
+                Box(Modifier.weight(1f))
+                IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.BookmarkAdd, getString(R.string.estudiar_marcador))
+                }
+                if (pantallaEntera) IconButton(onClick = { pantallaEntera = false }, modifier = Modifier.size(40.dp)) {
+                    Icon(Icons.Filled.FullscreenExit, "Salir de la pantalla entera")
+                } else BotonDelTexto(textoEnVertical) { textoEnVertical = !textoEnVertical }
+            }
+        }
+
+        /**
+         * Tumbado: **los mandos en columna**, en el lado del riel. La barra del tiempo de pie (arriba el
+         * principio) y, a su lado, los botones uno debajo de otro.
+         */
+        @Composable
+        fun MandosEnColumna() {
+            Row(Modifier.fillMaxHeight().padding(vertical = 6.dp)) {
+                Column(Modifier.fillMaxHeight().width(44.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(Transcriptor.marcaDeTiempo(posVista.toInt()), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    BarraDelTiempo(
+                        posVista, durMs, tiemposDeCapturas, senales, irA,
+                        Modifier.weight(1f).fillMaxWidth().padding(vertical = 10.dp), vertical = true
+                    ) { arrastrando = it }
+                    Text(Transcriptor.marcaDeTiempo(durMs.toInt()), fontSize = 10.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+                Column(
+                    Modifier.fillMaxHeight().width(48.dp),
+                    verticalArrangement = Arrangement.SpaceEvenly, horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Seguir(true)
+                    IconButton(onClick = { irA(EstudiarClase.saltar(posMs, -10_000, durMs)) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.Replay10, null) }
+                    IconButton(onClick = { m?.ruta?.let { Reproductor.alternar(it, titulo) } }, modifier = Modifier.size(44.dp)) {
+                        Icon(if (sonando) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, modifier = Modifier.size(32.dp))
                     }
-                    IconButton(onClick = { irA(EstudiarClase.saltar(posMs, 10_000, durMs)) }) { Icon(Icons.Filled.Forward10, null) }
-                    TextButton(onClick = { Reproductor.otraVelocidad() }) {
-                        Text(estado.velocidad.toString().removeSuffix(".0") + "×")
+                    IconButton(onClick = { irA(EstudiarClase.saltar(posMs, 10_000, durMs)) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.Forward10, null) }
+                    Box(Modifier.size(40.dp).clip(CircleShape).clickable { Reproductor.otraVelocidad() }, contentAlignment = Alignment.Center) {
+                        Text(estado.velocidad.toString().removeSuffix(".0") + "×", fontSize = 13.sp)
                     }
-                    Box(Modifier.weight(1f))
-                    IconButton(enabled = m != null, onClick = { poniendo = posMs }) {
+                    IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.BookmarkAdd, getString(R.string.estudiar_marcador))
                     }
+                    BotonDelTexto(textoEnApaisada) { textoEnApaisada = !textoEnApaisada }
                 }
-                // La tira de capturas.
-                val tira = rememberLazyListState()
-                val capturaActual = EstudiarClase.ultimoAntes(tiemposDeCapturas, posMs)
-                if (capturas.isNotEmpty()) {
-                    LazyRow(state = tira, modifier = Modifier.fillMaxWidth().height(84.dp).padding(horizontal = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        itemsIndexed(capturas) { i, (ms, ruta) ->
-                            Miniatura(ruta, ms, i == capturaActual) { irA(ms) }
-                        }
-                    }
-                }
-                // El texto, con los marcadores en su minuto.
-                val texto = rememberLazyListState()
-                val lineaActual = if (esta) EstudiarClase.lineaEn(tiemposDeLineas, posMs) else null
-                val filaActual = lineaActual?.let { l -> filas.indexOf(EstudiarClase.Fila.Linea(l)) }?.takeIf { it >= 0 }
-                // **Con «Seguir», el texto y la tira siguen a lo que suena.**
-                LaunchedEffect(filaActual, seguir) {
-                    if (seguir && filaActual != null && !texto.isScrollInProgress) runCatching { texto.animateScrollToItem(filaActual) }
-                }
-                LaunchedEffect(capturaActual, seguir) {
-                    if (seguir && capturaActual != null && !tira.isScrollInProgress) runCatching { tira.animateScrollToItem(capturaActual) }
-                }
-                // **Y mover una con el dedo lleva la otra al mismo minuto** (`seguir` del PC: el
-                // milisegundo de la fila que se lee, y la captura que toca en él).
-                LaunchedEffect(seguir, filas, capturas) {
-                    if (!seguir) return@LaunchedEffect
-                    snapshotFlow { texto.isScrollInProgress to texto.firstVisibleItemIndex }.collect { (moviendo, i) ->
-                        if (moviendo && !tira.isScrollInProgress) {
-                            val ms = tiemposDeFilas.getOrNull(i) ?: return@collect
-                            EstudiarClase.ultimoAntes(tiemposDeCapturas, ms)?.let { runCatching { tira.scrollToItem(it) } }
-                        }
-                    }
-                }
-                LaunchedEffect(seguir, filas, capturas) {
-                    if (!seguir) return@LaunchedEffect
-                    snapshotFlow { tira.isScrollInProgress to tira.firstVisibleItemIndex }.collect { (moviendo, i) ->
-                        if (moviendo && !texto.isScrollInProgress) {
-                            val ms = tiemposDeCapturas.getOrNull(i) ?: return@collect
-                            EstudiarClase.ultimoAntes(tiemposDeFilas, ms)?.let { runCatching { texto.scrollToItem(it) } }
-                        }
-                    }
-                }
+            }
+        }
+
+        /** **La tira de capturas**: en fila de pie, en columna tumbado; cada una con su proporción y su minuto. */
+        @Composable
+        fun Tira(enColumna: Boolean, r: EstudiarClase.Reparto) {
+            if (enColumna) LazyColumn(
+                state = tira, modifier = Modifier.fillMaxHeight().width((r.anchoMaximoMiniatura + 12f).dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
+                contentPadding = PaddingValues(vertical = 6.dp)
+            ) {
+                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r) { irA(ms) } }
+            } else LazyRow(
+                state = tira, modifier = Modifier.fillMaxWidth().height((r.altoMiniatura + EstudiarClase.ALTO_DEL_MINUTO).dp),
+                horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
+                contentPadding = PaddingValues(horizontal = 8.dp)
+            ) {
+                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r) { irA(ms) } }
+            }
+        }
+
+        /** **El texto**, con los marcadores en su minuto. */
+        @Composable
+        fun Texto(modifier: Modifier) {
+            Column(modifier) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     if (filas.isEmpty()) {
                         Text(
@@ -437,8 +471,181 @@ class EstudiarClaseActivity : ComponentActivity() {
                 )
             }
         }
+
+        /**
+         * **La imagen** (el vídeo o la captura) con lo suyo encima: atrás y vídeo/capturas arriba a la
+         * izquierda, el día/la noche arriba a la derecha, el riel a la derecha y, en la esquina de
+         * abajo, **pantalla entera** (27-oct-2026, el usuario: «un botoncito en la esquina, como
+         * YouTube»). Ya no lleva la pastilla de − % +: en el teléfono basta con pellizcar y el doble
+         * toque para encajar.
+         */
+        @Composable
+        fun Imagen(modifier: Modifier) {
+            Box(modifier.clipToBounds().background(Color.Black), contentAlignment = Alignment.Center) {
+                var caja by remember { mutableStateOf(com.forge.pixpin.ui.Encuadre.Caja(0f, 0f, 1f, 1f)) }
+                // Sin medidas de la imagen (el vídeo se encaja solo), la caja entera hace de imagen.
+                val w = if (anchoImg > 0f) anchoImg else caja.ancho
+                val h = if (altoImg > 0f) altoImg else caja.alto
+                Box(
+                    Modifier.fillMaxSize()
+                        .onSizeChanged {
+                            val nueva = com.forge.pixpin.ui.Encuadre.Caja(0f, 0f, it.width.toFloat(), it.height.toFloat())
+                            caja = nueva
+                            // La caja cambia al ir a pantalla entera o esconder el texto: lo acercado se
+                            // queda, sin salirse de la caja nueva.
+                            encuadre = encuadre.acotado(nueva, if (anchoImg > 0f) anchoImg else nueva.ancho, if (altoImg > 0f) altoImg else nueva.alto)
+                        }
+                        .graphicsLayer {
+                            scaleX = encuadre.aumento; scaleY = encuadre.aumento
+                            translationX = encuadre.dx; translationY = encuadre.dy
+                        },
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (conVideo) VideoQueSigue(video!!, posMs, sonando)
+                    else if (actual != null) Image(actual, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
+                    else Icon(Icons.Filled.Image, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(48.dp))
+                }
+                // Los gestos, encima (el vídeo es una vista de Android y se quedaría los toques).
+                Box(
+                    Modifier.fillMaxSize()
+                        .pointerInput(m?.ruta, pantallaEntera) {
+                            // Un toque reproduce o para (a pantalla entera, enseña o esconde los mandos);
+                            // el doble toque **solo** encaja (19c060f).
+                            detectTapGestures(
+                                onTap = {
+                                    if (pantallaEntera) barrasVisibles = !barrasVisibles
+                                    else m?.ruta?.let { Reproductor.alternar(it, titulo) }
+                                },
+                                onDoubleTap = { encuadre = com.forge.pixpin.ui.Encuadre() }
+                            )
+                        }
+                        .pointerInput(w, h, caja) {
+                            detectTransformGestures { centro, mover, zoom, _ ->
+                                var e = encuadre
+                                if (zoom != 1f) e = e.acercar(caja, w, h, zoom, centro.x, centro.y)
+                                encuadre = e.mover(caja, w, h, mover.x, mover.y)
+                            }
+                        }
+                )
+                AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.TopStart), enter = fadeIn(), exit = fadeOut()) {
+                    Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        BotonDeCristal(Icons.AutoMirrored.Filled.ArrowBack, getString(R.string.cancel)) { finish() }
+                        // El vídeo o las capturas, si hay las dos cosas.
+                        if (video != null && capturas.isNotEmpty()) Text(
+                            if (conVideo) getString(R.string.estudiar_capturas) else "Vídeo", color = Color.White, fontSize = 12.sp,
+                            modifier = Modifier.clip(RoundedCornerShape(50)).background(com.forge.pixpin.ui.CRISTAL_DE_VISOR)
+                                .clickable { verVideo = !conVideo }.padding(horizontal = 12.dp, vertical = 9.dp)
+                        )
+                    }
+                }
+                // Claro u oscuro, como los visores.
+                AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
+                    BotonDeCristal(
+                        if (oscuroAhora) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuroAhora) "Claro" else "Oscuro",
+                        Modifier.padding(6.dp)
+                    ) { alCambiarTema(!oscuroAhora) }
+                }
+                if (m == null || m.ruta == null || !File(m.ruta).exists()) Text(
+                    getString(R.string.estudiar_sin_sonido), color = Color.White, fontSize = 12.sp,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 52.dp).clip(RoundedCornerShape(8.dp))
+                        .background(MaterialTheme.colorScheme.error.copy(alpha = 0.85f)).padding(horizontal = 10.dp, vertical = 5.dp)
+                )
+                // El riel de todos los visores: el marcador y el lápiz (anotar lo que se ve). Va y viene
+                // con las barras.
+                com.forge.pixpin.ui.RielDelVisor(
+                    poniendoMarca = poniendo != null, anotando = anotando != null, marcando = false,
+                    onMarcador = { if (m != null) poniendo = posMs },
+                    onLapiz = alLapiz,
+                    onMarco = null,
+                    modifier = Modifier.align(Alignment.CenterEnd),
+                    rotuloDelLapiz = "Anotar",
+                    visible = barrasVisibles
+                )
+                if (pantallaEntera) {
+                    // A pantalla entera, los mandos van encima de la imagen, abajo, en el cristal.
+                    AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.BottomCenter).fillMaxWidth(), enter = fadeIn(), exit = fadeOut()) {
+                        CompositionLocalProvider(LocalContentColor provides Color.White) {
+                            Column(Modifier.fillMaxWidth().background(com.forge.pixpin.ui.CRISTAL_DE_VISOR).padding(vertical = 2.dp)) {
+                                BarraConHoras(sobreCristal = true)
+                                MandosEnFila()
+                            }
+                        }
+                    }
+                } else BotonDeCristal(Icons.Filled.Fullscreen, "Pantalla entera", Modifier.align(Alignment.BottomEnd).padding(6.dp)) {
+                    pantallaEntera = true
+                }
+            }
+        }
+
+
+        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            // Tumbado, que una muesca de la cámara no se coma los mandos de su lado.
+            BoxWithConstraints(Modifier.fillMaxSize().then(if (pantallaEntera) Modifier else Modifier.windowInsetsPadding(WindowInsets.displayCutout))) {
+                // **El reparto** ([EstudiarClase.reparto]): de pie, tumbado o a pantalla entera.
+                val r = EstudiarClase.reparto(
+                    maxWidth.value, maxHeight.value, pantallaEntera, textoEnVertical, textoEnApaisada, capturas.isNotEmpty()
+                )
+                // **Con «Seguir», el texto y la tira siguen a lo que suena** (también al volver a enseñarlos).
+                LaunchedEffect(filaActual, seguir, r.conTexto) {
+                    if (seguir && r.conTexto && filaActual != null && !texto.isScrollInProgress) runCatching { texto.animateScrollToItem(filaActual) }
+                }
+                LaunchedEffect(capturaActual, seguir, r.conTira, r.forma) {
+                    if (seguir && r.conTira && capturaActual != null && !tira.isScrollInProgress) runCatching { tira.animateScrollToItem(capturaActual) }
+                }
+                // **Y mover una con el dedo lleva la otra al mismo minuto** (`seguir` del PC: el
+                // milisegundo de la fila que se lee, y la captura que toca en él).
+                LaunchedEffect(seguir, filas, capturas, r.conTexto, r.conTira) {
+                    if (!seguir || !r.conTexto || !r.conTira) return@LaunchedEffect
+                    snapshotFlow { texto.isScrollInProgress to texto.firstVisibleItemIndex }.collect { (moviendo, i) ->
+                        if (moviendo && !tira.isScrollInProgress) {
+                            val ms = tiemposDeFilas.getOrNull(i) ?: return@collect
+                            EstudiarClase.ultimoAntes(tiemposDeCapturas, ms)?.let { runCatching { tira.scrollToItem(it) } }
+                        }
+                    }
+                }
+                LaunchedEffect(seguir, filas, capturas, r.conTexto, r.conTira) {
+                    if (!seguir || !r.conTexto || !r.conTira) return@LaunchedEffect
+                    snapshotFlow { tira.isScrollInProgress to tira.firstVisibleItemIndex }.collect { (moviendo, i) ->
+                        if (moviendo && !texto.isScrollInProgress) {
+                            val ms = tiemposDeCapturas.getOrNull(i) ?: return@collect
+                            EstudiarClase.ultimoAntes(tiemposDeFilas, ms)?.let { runCatching { texto.scrollToItem(it) } }
+                        }
+                    }
+                }
+                when (r.forma) {
+                    EstudiarClase.Forma.ENTERA -> Imagen(Modifier.fillMaxSize())
+                    // De pie: la imagen arriba; debajo, apretados, la barra, la tira y los mandos; el texto abajo.
+                    EstudiarClase.Forma.VERTICAL -> Column(Modifier.fillMaxSize()) {
+                        val alto = r.altoImagen
+                        Imagen(if (alto != null) Modifier.fillMaxWidth().height(alto.dp) else Modifier.fillMaxWidth().weight(1f))
+                        BarraConHoras()
+                        if (r.conTira) Tira(false, r)
+                        MandosEnFila()
+                        if (r.conTexto) Texto(Modifier.weight(1f).fillMaxWidth())
+                    }
+                    // Tumbado: la imagen y, en el lado del riel, el texto (si se pide), la tira y los mandos en columna.
+                    EstudiarClase.Forma.APAISADA -> Row(Modifier.fillMaxSize()) {
+                        Imagen(Modifier.weight(1f).fillMaxHeight())
+                        if (r.conTexto) Texto(Modifier.width(r.anchoTexto.dp).fillMaxHeight())
+                        if (r.conTira) Tira(true, r)
+                        MandosEnColumna()
+                    }
+                }
+            }
+        }
         poniendo?.let { ms -> DialogoDelMarcador(ms, onCancelar = { poniendo = null }) { nota -> poniendo = null; poner(id, ms, nota) } }
         anotando?.let { f -> AnotarCaptura(f, oscuroAhora) { anotando = null } }
+    }
+
+    /** Un botón redondo en el cristal de los visores, para lo que va encima de la imagen. */
+    @Composable
+    private fun BotonDeCristal(icono: ImageVector, nombre: String, modifier: Modifier = Modifier, al: () -> Unit) {
+        Box(
+            modifier.size(38.dp).clip(CircleShape).background(com.forge.pixpin.ui.CRISTAL_DE_VISOR).clickable(onClickLabel = nombre, onClick = al),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icono, nombre, tint = Color.White, modifier = Modifier.size(22.dp))
+        }
     }
 
     /**
@@ -558,70 +765,95 @@ class EstudiarClaseActivity : ComponentActivity() {
         return m
     }
 
-    /** **La barra del tiempo**: lo sonado, una raya por captura y una banderita por marcador. */
+    /**
+     * **La barra del tiempo**: lo sonado, una raya por captura y una banderita por marcador.
+     * [vertical] la pone de pie, con el principio arriba (tumbado va en la columna de los mandos);
+     * [sobreCristal], en blanco, para ir encima de la imagen a pantalla entera.
+     */
     @Composable
     private fun BarraDelTiempo(
         posMs: Long, durMs: Long, capturas: List<Long>, senales: List<Senal>, irA: (Long) -> Unit,
+        modifier: Modifier = Modifier,
+        vertical: Boolean = false,
+        sobreCristal: Boolean = false,
         /** Dónde va el dedo arrastrando (null al soltar): el tirador va con él. */
         alArrastrar: (Long?) -> Unit = {}
     ) {
         val color = MaterialTheme.colorScheme.primary
-        val fondo = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.15f)
-        val raya = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+        val tinta = if (sobreCristal) Color.White else MaterialTheme.colorScheme.onSurface
+        val fondo = tinta.copy(alpha = if (sobreCristal) 0.3f else 0.15f)
+        val raya = tinta.copy(alpha = 0.55f)
         val bandera = MaterialTheme.colorScheme.tertiary
         val todas = remember(capturas, senales) { (capturas + senales.map { it.ms }).distinct().sorted() }
         val tolerancia = 14f * resources.displayMetrics.density
-        fun pegar(x: Float, ancho: Float) = irA(EstudiarClase.pegarASenal(x, ancho, durMs, todas, tolerancia))
+        fun pegar(a: Float, largo: Float) = irA(EstudiarClase.pegarASenal(a, largo, durMs, todas, tolerancia))
         Canvas(
-            Modifier.fillMaxWidth().height(40.dp).padding(horizontal = 16.dp)
-                .pointerInput(durMs, todas) { detectTapGestures { pegar(it.x, size.width.toFloat()) } }
-                .pointerInput(durMs) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = { alArrastrar(null) },
-                        onDragCancel = { alArrastrar(null) }
-                    ) { cambio, _ ->
-                        val ms = EstudiarClase.msDeLaBarra(cambio.position.x, size.width.toFloat(), durMs)
+            modifier
+                .pointerInput(durMs, todas, vertical) {
+                    detectTapGestures { pegar(if (vertical) it.y else it.x, (if (vertical) size.height else size.width).toFloat()) }
+                }
+                .pointerInput(durMs, vertical) {
+                    val alSoltar = { alArrastrar(null) }
+                    val alMover = { cambio: PointerInputChange, _: Float ->
+                        val ms = if (vertical) EstudiarClase.msDeLaBarra(cambio.position.y, size.height.toFloat(), durMs)
+                        else EstudiarClase.msDeLaBarra(cambio.position.x, size.width.toFloat(), durMs)
                         alArrastrar(ms)
                         irA(ms)
                     }
+                    if (vertical) detectVerticalDragGestures(onDragEnd = alSoltar, onDragCancel = alSoltar, onVerticalDrag = alMover)
+                    else detectHorizontalDragGestures(onDragEnd = alSoltar, onDragCancel = alSoltar, onHorizontalDrag = alMover)
                 }
         ) {
-            val y = size.height * 0.6f
-            drawLine(fondo, Offset(0f, y), Offset(size.width, y), strokeWidth = 4.dp.toPx())
-            val x = EstudiarClase.xEnLaBarra(posMs, size.width, durMs)
-            drawLine(color, Offset(0f, y), Offset(x, y), strokeWidth = 4.dp.toPx())
+            // A lo largo (a) y de través (d): la misma barra tumbada o de pie.
+            val largo = if (vertical) size.height else size.width
+            val linea = if (vertical) size.width * 0.4f else size.height * 0.6f
+            val lado = if (vertical) 1f else -1f // hacia dónde salen las banderitas
+            fun p(a: Float, d: Float) = if (vertical) Offset(linea + d, a) else Offset(a, linea + d)
+            drawLine(fondo, p(0f, 0f), p(largo, 0f), strokeWidth = 4.dp.toPx())
+            val x = EstudiarClase.xEnLaBarra(posMs, largo, durMs)
+            drawLine(color, p(0f, 0f), p(x, 0f), strokeWidth = 4.dp.toPx())
             for (c in capturas) {
-                val cx = EstudiarClase.xEnLaBarra(c, size.width, durMs)
-                drawLine(raya, Offset(cx, y - 7.dp.toPx()), Offset(cx, y + 7.dp.toPx()), strokeWidth = 2.dp.toPx())
+                val cx = EstudiarClase.xEnLaBarra(c, largo, durMs)
+                drawLine(raya, p(cx, -7.dp.toPx()), p(cx, 7.dp.toPx()), strokeWidth = 2.dp.toPx())
             }
             for (s in senales) {
-                val sx = EstudiarClase.xEnLaBarra(s.ms, size.width, durMs)
-                val p = Path().apply {
-                    moveTo(sx, y - 4.dp.toPx()); lineTo(sx, y - 16.dp.toPx())
-                    lineTo(sx + 8.dp.toPx(), y - 13.dp.toPx()); lineTo(sx, y - 10.dp.toPx()); close()
-                }
-                drawPath(p, bandera)
+                val sx = EstudiarClase.xEnLaBarra(s.ms, largo, durMs)
+                val camino = Path()
+                listOf(p(sx, lado * 4.dp.toPx()), p(sx, lado * 16.dp.toPx()), p(sx + 8.dp.toPx(), lado * 13.dp.toPx()), p(sx, lado * 10.dp.toPx()))
+                    .forEachIndexed { k, o -> if (k == 0) camino.moveTo(o.x, o.y) else camino.lineTo(o.x, o.y) }
+                camino.close()
+                drawPath(camino, bandera)
             }
-            drawCircle(color, radius = 7.dp.toPx(), center = Offset(x, y))
+            drawCircle(color, radius = 7.dp.toPx(), center = p(x, 0f))
         }
     }
 
+    /**
+     * **Una miniatura de la tira con su proporción real** (27-oct-2026, el usuario: «si es A×A,
+     * cuadrada; si es A×B, proporcional»): el alto es el de la tira y el ancho sale de la captura
+     * ([EstudiarClase.medidaDeMiniatura]); antes eran todas de 120 dp recortadas. El minuto va debajo,
+     * que encima de una tan pequeña la taparía.
+     */
     @Composable
-    private fun Miniatura(ruta: String, ms: Long, actual: Boolean, alTocar: () -> Unit) {
+    private fun Miniatura(ruta: String, ms: Long, actual: Boolean, r: EstudiarClase.Reparto, alTocar: () -> Unit) {
         var imagen by remember(ruta) { mutableStateOf<ImageBitmap?>(null) }
-        LaunchedEffect(ruta) { imagen = leer(ruta, 320) }
-        Box(
-            Modifier.fillMaxHeight().width(120.dp).clip(RoundedCornerShape(8.dp))
-                .background(MaterialTheme.colorScheme.surfaceVariant)
-                .border(if (actual) 3.dp else 0.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(8.dp))
-                .clickable(onClick = alTocar),
-            contentAlignment = Alignment.BottomStart
-        ) {
-            imagen?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
+        LaunchedEffect(ruta) { imagen = leer(ruta, 240) }
+        val (w, h) = EstudiarClase.medidaDeMiniatura(
+            imagen?.width ?: 0, imagen?.height ?: 0, r.altoMiniatura, r.anchoMinimoMiniatura, r.anchoMaximoMiniatura
+        )
+        Column(Modifier.clickable(onClick = alTocar), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(
+                Modifier.size(w.dp, h.dp).clip(RoundedCornerShape(6.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                    .border(if (actual) 2.dp else 0.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                imagen?.let { Image(it, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+            }
             Text(
-                Transcriptor.marcaDeTiempo(ms.toInt()), color = Color.White, fontSize = 11.sp,
-                modifier = Modifier.padding(4.dp).background(Color.Black.copy(alpha = 0.55f), RoundedCornerShape(6.dp))
-                    .padding(horizontal = 5.dp)
+                Transcriptor.marcaDeTiempo(ms.toInt()), fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1,
+                color = if (actual) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = if (actual) FontWeight.Bold else FontWeight.Normal
             )
         }
     }

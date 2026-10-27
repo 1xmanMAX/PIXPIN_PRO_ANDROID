@@ -292,4 +292,105 @@ object EstudiarClase {
      * vídeo: el tirador saltaba lejos del dedo.
      */
     fun posicionALaVista(medioMs: Long, arrastrando: Long?): Long = arrastrando ?: medioMs
+
+    // --- Cómo se reparte la pantalla ------------------------------------------------------------
+
+    /**
+     * **Cómo se reparte la pantalla** (27-oct-2026, el usuario: «una forma de agrandar la zona de la
+     * imagen para hacer zoom y ver más la captura o el vídeo»). Tres formas:
+     *
+     * - [Forma.VERTICAL] (el teléfono de pie): la imagen arriba y grande; debajo, apretados, la barra
+     *   del tiempo, la tira de capturas y los mandos; abajo el texto, **que se puede esconder**, y
+     *   entonces la imagen se queda con su sitio.
+     * - [Forma.APAISADA] (el teléfono tumbado): **nada de mandos debajo**, que se comen el alto. La
+     *   imagen a un lado y, en el lado del riel (el derecho), los mandos en columna con la barra del
+     *   tiempo de pie y la tira de capturas en columna. El texto empieza escondido y, si se pide, va
+     *   en otra columna al lado.
+     * - [Forma.ENTERA] (el botón de la esquina, como YouTube): solo la imagen; los mandos van encima
+     *   y un toque los enseña o los esconde.
+     *
+     * El texto se enciende y se apaga **por separado en cada forma** ([textoEnVertical],
+     * [textoEnApaisada]): esconderlo tumbado no lo esconde al volver a ponerlo de pie.
+     */
+    enum class Forma { VERTICAL, APAISADA, ENTERA }
+
+    /** Lo que se enseña y cuánto mide (en dp). Sale de [reparto]. */
+    data class Reparto(
+        val forma: Forma,
+        /** Si se ve la columna del texto. */
+        val conTexto: Boolean,
+        /** Si se ve la tira de capturas (no la hay sin capturas ni a pantalla entera). */
+        val conTira: Boolean,
+        /** De pie y con texto, el alto de la imagen; null es «lo que quede» (sin texto, o tumbado). */
+        val altoImagen: Float?,
+        /** Tumbado y con texto, el ancho de su columna (0 sin ella). */
+        val anchoTexto: Float,
+        /** El tope del alto de las miniaturas: **el alto es fijo** y el ancho sale de cada captura. */
+        val altoMiniatura: Float,
+        /** Lo más y lo menos que se ensancha una miniatura (una captura muy alargada no se come la tira). */
+        val anchoMaximoMiniatura: Float,
+        val anchoMinimoMiniatura: Float
+    )
+
+    /** De pie: lo que ocupan la barra del tiempo (30) y la fila de los mandos (44). */
+    const val ALTO_DE_LOS_MANDOS = 74f
+
+    /** Lo que ocupa el minuto escrito debajo de cada miniatura. */
+    const val ALTO_DEL_MINUTO = 16f
+
+    /** Lo menos que se deja al texto de pie: unas tres líneas. */
+    const val ALTO_MINIMO_DEL_TEXTO = 140f
+
+    /** La parte del alto que se lleva la imagen de pie y con texto: casi la mitad, más que antes (260 dp). */
+    const val PARTE_DE_LA_IMAGEN = 0.48f
+
+    /**
+     * **El reparto para una pantalla de [ancho]×[alto] dp.** Tumbada si es más ancha que alta;
+     * [pantallaEntera] gana a todo.
+     */
+    fun reparto(
+        ancho: Float, alto: Float, pantallaEntera: Boolean,
+        textoEnVertical: Boolean, textoEnApaisada: Boolean, hayCapturas: Boolean
+    ): Reparto {
+        val forma = when {
+            pantallaEntera -> Forma.ENTERA
+            ancho > alto -> Forma.APAISADA
+            else -> Forma.VERTICAL
+        }
+        return when (forma) {
+            Forma.ENTERA -> Reparto(forma, false, false, null, 0f, 52f, 96f, 26f)
+            Forma.VERTICAL -> {
+                val miniatura = 52f
+                val conTira = hayCapturas
+                val conTexto = textoEnVertical
+                val altoImagen = if (!conTexto) null else {
+                    val fijo = ALTO_DE_LOS_MANDOS + (if (conTira) miniatura + ALTO_DEL_MINUTO else 0f)
+                    val maximo = (alto - fijo - ALTO_MINIMO_DEL_TEXTO).coerceAtLeast(120f)
+                    (alto * PARTE_DE_LA_IMAGEN).coerceIn(minOf(160f, maximo), maximo)
+                }
+                Reparto(forma, conTexto, conTira, altoImagen, 0f, miniatura, 96f, 26f)
+            }
+            Forma.APAISADA -> {
+                val conTexto = textoEnApaisada
+                // El texto, una columna que se lee (≥ 200 dp) sin dejar la imagen en una rendija.
+                val anchoTexto = if (conTexto) (ancho * 0.32f).coerceIn(200f, 360f).coerceAtMost(ancho * 0.4f) else 0f
+                Reparto(forma, conTexto, hayCapturas, null, anchoTexto, 44f, 80f, 24f)
+            }
+        }
+    }
+
+    /**
+     * **La medida de una miniatura** de una captura de [ancho]×[alto] píxeles (27-oct-2026, el usuario:
+     * «que las capturas mantengan su proporción real: si es A×A, cuadrada; si es A×B, proporcional»).
+     * El alto es [topeAlto] y el ancho sale de la proporción, entre [anchoMinimo] y [anchoMaximo]. Una
+     * muy ancha que topa con el máximo baja de alto para no deformarse; una muy alta se queda en el
+     * mínimo y la imagen va encajada dentro. Sin medidas (aún no se ha leído), cuadrada.
+     */
+    fun medidaDeMiniatura(ancho: Int, alto: Int, topeAlto: Float, anchoMinimo: Float, anchoMaximo: Float): Pair<Float, Float> {
+        if (ancho <= 0 || alto <= 0 || topeAlto <= 0f) return topeAlto.coerceAtLeast(0f) to topeAlto.coerceAtLeast(0f)
+        val proporcion = ancho.toFloat() / alto
+        val w = (topeAlto * proporcion).coerceIn(minOf(anchoMinimo, anchoMaximo), anchoMaximo)
+        val h = minOf(topeAlto, w / proporcion)
+        return w to h
+    }
 }
