@@ -361,6 +361,40 @@ object LecturaVeloz {
         else -> AlLlegar.ESCRIBIR
     }
 
+    /**
+     * **Por qué no se puede**, en una frase, para que el aviso diga el problema de verdad y un
+     * próximo informe del usuario lo señale (27-oct-2026: «me dice que no pudo abrir el archivo»).
+     */
+    fun motivoDe(que: AlAbrir, doc: String?, nombre: String?, ruta: String?, hayDocumento: Boolean = true): String? = when (que) {
+        AlAbrir.ABRIR -> null
+        AlAbrir.FALTA_LA_APP -> "«Lectura Veloz» ($PAQUETE) no está instalada"
+        AlAbrir.APP_ANTIGUA -> "«Lectura Veloz» está instalada pero no recibe el enlace $ESQUEMA://$HOST"
+        AlAbrir.NO_SE_PUEDE -> when {
+            !hayDocumento -> "No es un archivo del chat ni una nota (sin código de mensaje)"
+            !docValido(doc) -> "El documento no tiene un código de mensaje válido"
+            !admite(nombre, ruta) -> "Lectura Veloz no lee archivos «.${extension(nombre).ifEmpty { extension(ruta) }.ifEmpty { "?" }}»"
+            else -> null
+        }
+    }
+
+    /** Un error al preparar o abrir, con lo que se intentaba y la causa (sin rutas largas). */
+    fun motivoDeError(paso: String, e: Throwable): String {
+        val causa = (e.message ?: "").replace(Regex("\\s+"), " ").trim().take(160)
+        return "No se pudo $paso: ${e.javaClass.simpleName}" + if (causa.isNotEmpty()) " ($causa)" else ""
+    }
+
+    /** El aviso corto: la frase de siempre y, si se sabe, el motivo. */
+    fun aviso(que: AlAbrir, motivo: String?): String {
+        val base = when (que) {
+            AlAbrir.FALTA_LA_APP -> "Hace falta instalar «Lectura Veloz» en este teléfono"
+            AlAbrir.APP_ANTIGUA -> "Pon al día «Lectura Veloz»: esta versión aún no abre documentos de PixPin"
+            AlAbrir.NO_SE_PUEDE -> "Este documento no se puede leer en Lectura Veloz"
+            AlAbrir.ABRIR -> return ""
+        }
+        val m = motivo?.trim().orEmpty()
+        return if (m.isEmpty() || que != AlAbrir.NO_SE_PUEDE) base else "$base: $m"
+    }
+
     /** Qué pasa al pulsar «Lectura veloz». */
     enum class AlAbrir { ABRIR, FALTA_LA_APP, APP_ANTIGUA, NO_SE_PUEDE }
 

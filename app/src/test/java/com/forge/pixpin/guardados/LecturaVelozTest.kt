@@ -262,4 +262,38 @@ class LecturaVelozTest {
         assertEquals(AlAbrir.ABRIR, LecturaVeloz.queHacerAlAbrir(true, true, "ABC", "x.pdf", null))
         assertNotNull(LecturaVeloz.PAQUETE)
     }
+
+    @Test
+    fun `el aviso dice el motivo de verdad`() {
+        assertNull(LecturaVeloz.motivoDe(AlAbrir.ABRIR, "ABC", "x.pdf", null))
+        assertTrue(LecturaVeloz.motivoDe(AlAbrir.FALTA_LA_APP, "ABC", "x.pdf", null)!!.contains(LecturaVeloz.PAQUETE))
+        assertTrue(LecturaVeloz.motivoDe(AlAbrir.APP_ANTIGUA, "ABC", "x.pdf", null)!!.contains("lecturaveloz://pixpin"))
+        assertTrue(LecturaVeloz.motivoDe(AlAbrir.NO_SE_PUEDE, null, null, null, hayDocumento = false)!!.contains("código de mensaje"))
+        assertTrue(LecturaVeloz.motivoDe(AlAbrir.NO_SE_PUEDE, "../x", "x.pdf", null)!!.contains("código"))
+        assertTrue(LecturaVeloz.motivoDe(AlAbrir.NO_SE_PUEDE, "ABC", "foto.png", "/a/foto.png")!!.contains("«.png»"))
+
+        val e = LecturaVeloz.motivoDeError("dar el archivo a Lectura Veloz", IllegalArgumentException("Failed to find configured root\n that contains /data/x.pdf"))
+        assertEquals("No se pudo dar el archivo a Lectura Veloz: IllegalArgumentException (Failed to find configured root that contains /data/x.pdf)", e)
+        assertEquals("No se pudo abrir Lectura Veloz: SecurityException", LecturaVeloz.motivoDeError("abrir Lectura Veloz", SecurityException()))
+
+        assertEquals("Este documento no se puede leer en Lectura Veloz: el motivo", LecturaVeloz.aviso(AlAbrir.NO_SE_PUEDE, " el motivo "))
+        assertEquals("Este documento no se puede leer en Lectura Veloz", LecturaVeloz.aviso(AlAbrir.NO_SE_PUEDE, null))
+        // La de instalarla o ponerla al día ya lo dice todo.
+        assertEquals("Hace falta instalar «Lectura Veloz» en este teléfono", LecturaVeloz.aviso(AlAbrir.FALTA_LA_APP, "x"))
+        assertEquals("", LecturaVeloz.aviso(AlAbrir.ABRIR, "x"))
+    }
+
+    @Test
+    fun `el enlace lleva el content uri entero y se descodifica igual que en Lectura Veloz`() {
+        // Como `new URL(...).searchParams` en app.js: el uri con %20 y el nombre con acentos, + y paréntesis.
+        val uri = "content://com.forge.pixpin.fileprovider/guardados/Mi%20libro%20(1).epub"
+        val nombre = "Mi libro (1) ñ+á.epub"
+        val url = LecturaVeloz.enlace("ABCDEFGHJK", nombre, uri, LecturaVeloz.TIPO_TEXTO, Posicion(fraccion = 0.25f, t = 7L), 0)
+        val q = URI(url).rawQuery.split('&').associate { it.substringBefore('=') to URLDecoder.decode(it.substringAfter('='), "UTF-8") }
+        assertEquals(uri, q["uri"])
+        assertEquals(nombre, q["nombre"])
+        assertEquals("pixpin", URI(url).host)
+        assertEquals("/abrir", URI(url).path)
+        assertFalse(url.contains('+'))
+    }
 }

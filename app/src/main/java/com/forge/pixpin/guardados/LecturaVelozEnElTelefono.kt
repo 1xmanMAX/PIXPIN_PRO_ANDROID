@@ -174,41 +174,87 @@ object LecturaVelozEnElTelefono {
             .also { if (c !is Activity) it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
     }
 
+    /** La etiqueta del registro: `adb logcat -s PixPinLecturaVeloz` cuenta por qué no se abrió. */
+    const val TAG = "PixPinLecturaVeloz"
+
+    /**
+     * **Por qué no se pudo la última vez** (o null): el detalle que acompaña al [LecturaVeloz.AlAbrir]
+     * de [abrir], para el aviso ([avisoCorto]) y el cuadro del chat. Se pone justo antes de llamar a
+     * `alNoPoder`, en el hilo principal.
+     */
+    @Volatile
+    var ultimoMotivo: String? = null
+        private set
+
+    private fun log(msg: String, e: Throwable? = null) {
+        runCatching { if (e != null) android.util.Log.w(TAG, msg, e) else android.util.Log.i(TAG, msg) }
+    }
+
     /**
      * **«Lectura veloz»**: comprueba, prepara fuera del hilo que pinta y la abre. [alNoPoder] recibe
-     * por qué no (en el hilo principal), para el aviso de cada pantalla. [documento] se calcula
-     * también fuera (busca el código del mensaje en disco).
+     * por qué no (en el hilo principal), para el aviso de cada pantalla; el detalle queda en
+     * [ultimoMotivo] y en el registro ([TAG]). [documento] se calcula también fuera (busca el código
+     * del mensaje en disco).
      */
     fun abrir(a: Activity, documento: () -> Documento?, alNoPoder: (LecturaVeloz.AlAbrir) -> Unit) {
         val pm = a.packageManager
         val principal = android.os.Handler(android.os.Looper.getMainLooper())
         Thread {
-            val d = runCatching { documento() }.getOrNull()
-            val que = LecturaVeloz.queHacerAlAbrir(estaInstalada(pm), sabeAbrir(pm), d?.doc, d?.nombre, d?.archivo?.name)
-            val i = if (que == LecturaVeloz.AlAbrir.ABRIR && d != null && d.archivo.isFile) runCatching { peticion(a, d) }.getOrNull() else null
+            var motivo: String? = null
+            val d = try {
+                documento()
+            } catch (e: Exception) {
+                log("No se pudo preparar el documento", e)
+                motivo = LecturaVeloz.motivoDeError("preparar el documento", e)
+                null
+            }
+            val instalada = estaInstalada(pm)
+            val sabe = sabeAbrir(pm)
+            val que = LecturaVeloz.queHacerAlAbrir(instalada, sabe, d?.doc, d?.nombre, d?.archivo?.name)
+            var i: Intent? = null
+            if (que == LecturaVeloz.AlAbrir.ABRIR && d != null) {
+                if (!d.archivo.isFile) {
+                    motivo = "El archivo ya no está en el teléfono (${d.archivo.name})"
+                } else try {
+                    i = peticion(a, d)
+                } catch (e: Exception) {
+                    log("No se pudo preparar el enlace para ${d.archivo}", e)
+                    motivo = LecturaVeloz.motivoDeError("dar el archivo a Lectura Veloz", e)
+                }
+            }
+            if (que != LecturaVeloz.AlAbrir.ABRIR && motivo == null) {
+                motivo = LecturaVeloz.motivoDe(que, d?.doc, d?.nombre, d?.archivo?.name, hayDocumento = d != null)
+            }
+            log("Abrir: $que (instalada=$instalada, sabeAbrir=$sabe, doc=${d?.doc}, nombre=${d?.nombre}, archivo=${d?.archivo})" +
+                (motivo?.let { " — $it" } ?: ""))
+            val intent = i
+            val porQue = motivo
             principal.post {
+                fun noPudo(q: LecturaVeloz.AlAbrir, m: String?) {
+                    ultimoMotivo = m
+                    alNoPoder(q)
+                }
                 when {
-                    que != LecturaVeloz.AlAbrir.ABRIR -> alNoPoder(que)
-                    i == null -> alNoPoder(LecturaVeloz.AlAbrir.NO_SE_PUEDE)
+                    que != LecturaVeloz.AlAbrir.ABRIR -> noPudo(que, porQue)
+                    intent == null -> noPudo(LecturaVeloz.AlAbrir.NO_SE_PUEDE, porQue)
                     else -> try {
-                        a.startActivity(i)
+                        ultimoMotivo = null
+                        a.startActivity(intent)
+                        log("Abierta con ${intent.data}")
                     } catch (e: android.content.ActivityNotFoundException) {
-                        alNoPoder(LecturaVeloz.AlAbrir.FALTA_LA_APP)
+                        log("Lectura Veloz no recibe el enlace", e)
+                        noPudo(LecturaVeloz.AlAbrir.FALTA_LA_APP, LecturaVeloz.motivoDeError("abrir Lectura Veloz", e))
                     } catch (e: SecurityException) {
-                        alNoPoder(LecturaVeloz.AlAbrir.FALTA_LA_APP)
+                        log("Android no deja abrir Lectura Veloz", e)
+                        noPudo(LecturaVeloz.AlAbrir.NO_SE_PUEDE, LecturaVeloz.motivoDeError("abrir Lectura Veloz", e))
                     }
                 }
             }
         }.start()
     }
 
-    /** El aviso corto de los visores cuando no se puede (el chat lleva su cuadro). */
-    fun avisoCorto(que: LecturaVeloz.AlAbrir): String = when (que) {
-        LecturaVeloz.AlAbrir.FALTA_LA_APP -> "Hace falta instalar «Lectura Veloz» en este teléfono"
-        LecturaVeloz.AlAbrir.APP_ANTIGUA -> "Pon al día «Lectura Veloz»: esta versión aún no abre documentos de PixPin"
-        LecturaVeloz.AlAbrir.NO_SE_PUEDE -> "Este documento no se puede leer en Lectura Veloz"
-        LecturaVeloz.AlAbrir.ABRIR -> ""
-    }
+    /** El aviso corto de los visores cuando no se puede (el chat lleva su cuadro), con el motivo si se sabe. */
+    fun avisoCorto(que: LecturaVeloz.AlAbrir, motivo: String? = ultimoMotivo): String = LecturaVeloz.aviso(que, motivo)
 
     // ---- La vuelta ----
 

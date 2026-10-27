@@ -123,3 +123,6 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
       → Hecho, falta probar en el teléfono: un `.md` del chat iba a otra app (no tenía rama); ahora abre en la nota, y de fuera se lee por su ruta (el texto entero en el intento no cabía).
 - [~] 38. Formatos de texto como el PC (txt, …): `md`, `markdown` (compuestos) y `txt`, `log`, `ini`, `cfg`, `srt`, `vtt` (tal cual).
       → Hecho, falta probar en el teléfono: la lista del visor y la familia «Texto» del PC; desde el chat (solo mirar y anotar) y desde fuera (de paso).
+- [~] 39. Lectura Veloz no abría el archivo. → Causa: Lectura Veloz pedía su comando nativo como
+      `plugin:lv-tts|copyUri` y Tauri 2 lo rechaza por permisos (solo deja `copy_uri`); arreglado en
+      Lectura Veloz 0.3.1 (en su `main`). PixPin ahora dice el motivo y lo apunta (`PixPinLecturaVeloz`).

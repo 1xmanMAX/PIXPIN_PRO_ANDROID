@@ -76,6 +76,22 @@ y devuelve su punto enseguida.
 `<intent>` `VIEW` con `scheme="lecturaveloz"`. «Sabe abrir» = el enlace
 `lecturaveloz://pixpin/abrir` resuelve en ese paquete; «instalada» = eso o que tenga icono.
 
+**Si no se puede**, el aviso dice el motivo de verdad (`LecturaVeloz.motivoDe` / `motivoDeError`:
+sin código de mensaje, formato que no lee, el archivo ya no está, el `content://` no se pudo dar…;
+en el chat, debajo del texto del cuadro) y todo queda en el registro: `adb logcat -s PixPinLecturaVeloz`
+cuenta qué se decidió (instalada, sabe abrir, código, nombre, archivo) y el enlace que se abrió.
+
+### «No se pudo abrir el documento de PixPin» (27-oct, punto 39)
+
+El primer informe del usuario: PixPin abría Lectura Veloz bien, pero ella no cargaba el archivo.
+La causa estaba **en Lectura Veloz** (≤ 0.3.0): su interfaz pedía el comando nativo como
+`plugin:lv-tts|copyUri`, y Tauri 2 comprueba el permiso con el nombre tal cual llega (el permiso
+`lv-tts:allow-copy-uri` solo deja `copy_uri`) antes de pasarlo a camelCase para el método Kotlin.
+Respuesta: «Command plugin:lv-tts|copyUri not allowed by ACL», que llegaba como cadena y se veía
+como «No se pudo abrir el documento de PixPin.». Lo mismo le pasaba a `notifyPixpin`: la vuelta
+del punto tampoco llegaba nunca. Arreglado en **Lectura Veloz 0.3.1** (`copy_uri`,
+`notify_pixpin`, y sus errores ahora dicen qué paso falló). El contrato no cambia.
+
 ## Vuelta: Lectura Veloz manda su punto (Android)
 
 ```
