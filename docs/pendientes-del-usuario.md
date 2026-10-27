@@ -1,0 +1,78 @@
+# Pedidos del usuario: checklist
+
+Todo lo que el usuario pidió desde el 26-oct-2026, para no perder nada. Se marca `[x]` cuando está
+hecho **y publicado** en un APK; `[~]` cuando está hecho pero aún sin publicar; `[ ]` pendiente.
+Al cerrar cada tanda se revisa esta lista punto por punto.
+
+## Publicado
+
+- [x] v0.143.0 — Grabaciones y carpetas: se ven y se sincronizan; tarjetas e iconos como el PC.
+- [x] v0.144.0 — OCR con Indra en el teléfono; Whisper como motor de voz por defecto.
+- [x] v0.145.0 — Fuera la pantalla de Proyectos; atrás: visor → chat → lista → salir.
+
+## En curso (tanda del 27-oct)
+
+### Chat
+- [ ] 1. Unirse a un chat compartido (el «⋮» de las instrucciones ya no existe): entrada en el «+»
+      de la lista, con código/QR, y textos de ayuda corregidos.
+- [ ] 2. Ficha del chat sin la pestaña Proyectos: Fotos, Vídeos, Archivos, Enlaces, Voz, Dibujos,
+      Fijados.
+- [ ] 3. Asistente: quitar la tira «Letras de plano / N figuras / Otros» que tapa el chat (los
+      avisos siguen guardándose y viajando).
+- [ ] 4. Todos los chats abren en el último mensaje o donde se dejó; botón «↓» como Telegram.
+- [ ] 5. Estudiar la clase: sin el tema «espacio»; mismo tema que los visores; día/noche.
+- [ ] 6. Cabecera del chat: quitar «N cosas · X MB»; lupa y ⋮ más juntos.
+- [ ] 7. Chips de búsqueda (Todos, Fotos…) con fondo legible.
+- [ ] 8. Quitar «Añadir arrastrando» (es del PC).
+- [ ] 9. Ajustes abre los ajustes, sin la ventana de bienvenida; «Bienvenido a PixPin» + «Comenzar»
+      arriba de los ajustes; fuera «Mensajes guardados» de ahí.
+- [ ] 10. Adjuntar organizado como el PC, con estilo de teléfono.
+- [ ] 11. Búsqueda global (lupa de la lista): abrir el archivo directamente desde el resultado, o ir
+      al mensaje exacto en su chat (hoy abre el chat sin llevar al mensaje); resultados agrupados
+      por tipo como dentro de un chat (Archivos, Fotos…).
+
+### Sincronización
+- [ ] 12. Pantalla de sincronizar: aparatos en cuadrados a dos columnas (nombre, punto de color,
+      botón de sincronizar a mano; sin textos de estado); botón fijo amarillo «+ Añadir»; papelera
+      con icono; actividades como están; Recibir/Enviar solo con lo esencial.
+- [ ] 13. Motor más rápido: diario de cambios (solo lo cambiado), camino rápido entre Android
+      negociado; con el PC, el protocolo de siempre.
+- [ ] 14. Más fiable: cortes a mitad, relojes, rondas simultáneas, app cerrada, disco lleno,
+      ficheros enormes, reintentos; pruebas de cada caso.
+- [ ] 15. Automática por defecto para los aparatos propios y los chats compartidos.
+- [ ] 16. Prioridades: 1 tareas, 2 chats compartidos, 3 archivos, 4 lienzos/notas/textos, 5 vídeos
+      y grabaciones; dentro, lo más ligero primero; una grabación cuenta por su peso total.
+- [ ] 17. Chats compartidos: editar lo de otra persona crea tu versión vinculada (como una
+      respuesta); nunca se mezclan versiones.
+- [ ] 18. Guía para Windows con todo lo nuevo de la sincronización
+      (`docs/guia-sincronizacion-para-windows.md`, `docs/sincronizacion-por-diario.md`,
+      `docs/versiones-en-chats-compartidos.md`).
+
+### Figuras
+- [ ] 19. Miniaturas en modo día por defecto.
+- [ ] 20. Interruptor ☀/☾ para plantillas de día o de noche (las gemelas «(noche)» del PC).
+- [ ] 21. Al tocar una figura, vista previa a pantalla completa (zoom, mover) con «Usar».
+- [ ] 22. Modo noche bien diseñado (no invertir blanco↔negro), como el PC.
+
+### Visores
+- [ ] 23. La barra lateral se esconde y aparece junto con las de arriba y abajo, en todos.
+- [ ] 24. Notas Markdown con la UI de los demás visores (pantalla completa, pastilla, riel, barras
+      que se esconden), siempre en modo ver, sin «Añadir a un proyecto».
+- [ ] 25. Estudiar la clase, nueva disposición:
+      - sin el porcentaje de zoom; sin la barra de arriba «Estudiar la clase»;
+      - miniaturas de capturas con su proporción real (el alto es el tope, varía el ancho), más
+        pequeñas;
+      - botón de pantalla completa / reducir en la esquina, como YouTube, para ver la imagen
+        grande;
+      - vertical: imagen arriba grande; abajo la barra de tiempo, las miniaturas y play/pausa/
+        marcador compactos; la transcripción se puede ocultar o mostrar;
+      - horizontal: imagen grande y, en el lateral (derecho), los mandos en vertical y las
+        miniaturas con scroll vertical; la transcripción oculta o al costado si se pide.
+
+### Tareas
+- [ ] 26. Símbolo de «compartido» en el widget de tareas (y en Tarjetas, Kanban, Horario) para las
+      tareas de chats compartidos.
+
+## Pendiente de respuesta del usuario
+
+- Whisper «tiny» (actual) o «base» como el PC (161 MB de descarga).
