@@ -10,8 +10,52 @@ import kotlinx.serialization.Serializable
  * `Double` por lo mismo que en `croquis`: con coordenadas grandes un `Float`
  * pierde precisión visible y las formas empiezan a bailar al hacer zoom.
  */
-@Serializable
+@Serializable(with = PtSerializer::class)
 data class Pt(val x: Double, val y: Double)
+
+/**
+ * **Se lee `{x, y}` y también `[x, y]`** (27-oct-2026): el PC escribe los trazos de una capa del
+ * plano que nunca pasó por el teléfono como pares (`excalidraw.rs`, `puntos_hacia`), y con un
+ * solo par así el archivo entero no se cargaba: la tinta hecha solo en el PC no aparecía aquí.
+ * Se escribe siempre como objeto, como hasta ahora.
+ */
+object PtSerializer : kotlinx.serialization.KSerializer<Pt> {
+    override val descriptor = kotlinx.serialization.descriptors.buildClassSerialDescriptor("Pt") {
+        element<Double>("x")
+        element<Double>("y")
+    }
+
+    override fun serialize(encoder: kotlinx.serialization.encoding.Encoder, value: Pt) {
+        val c = encoder.beginStructure(descriptor)
+        c.encodeDoubleElement(descriptor, 0, value.x)
+        c.encodeDoubleElement(descriptor, 1, value.y)
+        c.endStructure(descriptor)
+    }
+
+    override fun deserialize(decoder: kotlinx.serialization.encoding.Decoder): Pt {
+        val json = decoder as? kotlinx.serialization.json.JsonDecoder
+            ?: return decoder.decodeStructure(descriptor) {
+                var x = 0.0; var y = 0.0
+                while (true) {
+                    when (val i = decodeElementIndex(descriptor)) {
+                        0 -> x = decodeDoubleElement(descriptor, 0)
+                        1 -> y = decodeDoubleElement(descriptor, 1)
+                        kotlinx.serialization.encoding.CompositeDecoder.DECODE_DONE -> break
+                        else -> error("Pt: campo $i")
+                    }
+                }
+                Pt(x, y)
+            }
+        val num = { e: kotlinx.serialization.json.JsonElement? ->
+            (e as? kotlinx.serialization.json.JsonPrimitive)?.content?.toDoubleOrNull() ?: 0.0
+        }
+        return when (val e = json.decodeJsonElement()) {
+            is kotlinx.serialization.json.JsonArray -> Pt(num(e.getOrNull(0)), num(e.getOrNull(1)))
+            is kotlinx.serialization.json.JsonObject -> Pt(num(e["x"]), num(e["y"]))
+            else -> throw kotlinx.serialization.SerializationException("Pt: ni objeto ni par")
+        }
+    }
+}
 
 /**
  * Tipos de elemento. Se dejan fuera frame, embeddable e iframe.

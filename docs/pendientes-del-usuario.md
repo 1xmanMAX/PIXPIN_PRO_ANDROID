@@ -131,3 +131,5 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 
 - [~] 40. Tinta blanca del plano (PC, modo noche) llega negra al teléfono.
       → Causa: la capa del plano no trae papel y el teléfono adaptaba la tinta contra el blanco de serie (el blanco, un gris, se daba la vuelta a negro); ahora se pinta contra el papel del plano y solo se adapta de noche, como el PC (`TintaDelPlano`). Falta verlo en el teléfono.
+- [~] 41. Una capa del plano hecha solo en el PC no aparecía en el teléfono. → El PC escribe los puntos
+      como pares `[x, y]` y el teléfono solo leía `{x, y}`: ahora lee los dos (y escribe objetos).
