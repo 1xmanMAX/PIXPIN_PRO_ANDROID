@@ -477,6 +477,7 @@ fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {
             "palabras" -> PalabrasMagicasCard()
             "voz" -> MotorDeVozCard()
             "asistente" -> com.forge.pixpin.asistente.AsistenteCard()
+            "asistente-web" -> com.forge.pixpin.asistente.web.LaWebDelAsistenteCard()
             "fluidez" -> FluidezCard()
             "noche" -> ModoNocheCard()
             "oled" -> OledCard()

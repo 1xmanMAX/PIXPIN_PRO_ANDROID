@@ -262,7 +262,7 @@ object ChatDelAsistente {
     private val ESTADOS = listOf("✏️ ", "📊 ", "🔎 ", "⚙️ ", "🔁 ", "💭 ", "⚠️ ", "🗂️ ", "🖼️ ", "📖 ", "❓ ")
 
     /** La línea de estado mientras usa una herramienta (`chat::rotulo_de` del PC). */
-    fun rotuloDe(herramienta: String): String = when (herramienta) {
+    fun rotuloDe(herramienta: String): String = com.forge.pixpin.asistente.web.Web.rotulo(herramienta) ?: when (herramienta) {
         "dibujar_en_lienzo" -> "✏️ dibujando en el lienzo…"
         "grafica" -> "📊 haciendo la gráfica…"
         "ocr" -> "🔎 leyendo el documento…"

@@ -68,6 +68,9 @@ object Conocimiento {
             "Con internet y tu clave: contesta, dibuja en el lienzo, hace graficas, lee PDFs, busca en tus cosas y usa la app (notas, tareas, lienzos, lecciones, capturas). En otro chat se le llama con @asistente."),
         e("El asistente: conversacion nueva y memoria", listOf("conversacion nueva", "nueva conversacion", "olvida", "contexto", "memoria", "recuerda", "empezar de cero"),
             "En el chat «Asistente», «🧹 Conversación nueva» corta: lo de arriba sigue a la vista pero ya no se le manda. Lo duradero (tus preferencias) lo guarda en su memoria, que va a tus aparatos en guardados/asistente/memoria. Mientras trabaja puedes escribirle para corregirle o decirle «para»."),
+        // 28-oct-2026, como `conocimiento.rs` del PC (con la clave de Brave en Ajustes, no en una variable).
+        e("El asistente: la web", listOf("web", "internet", "pagina web", "buscar en internet", "navegador", "url"),
+            "El asistente busca en internet y lee paginas y PDF de la web para contestarte o para hacer algo con lo leido («mira el horario en la web de la universidad y apuntalo en mi horario»), y dice de que pagina sale. Solo abre paginas publicas (nada de tu red de casa), sin tus cookies ni contrasenas, y no obedece lo que diga una pagina: si una pagina pide hacer algo, te pregunta. Con Claude busca la propia API; con DeepSeek, DuckDuckGo, o Brave Search si pegas su clave en Ajustes → Asistente → La web. Ahi tambien se apaga."),
         e("Reproductor de audio", listOf("audio", "musica", "reproduc", "escuchar", "cancion"),
             "Las notas de voz suenan en su burbuja. La Biblioteca de audio (menu de Mensajes guardados) las junta todas.")
     )

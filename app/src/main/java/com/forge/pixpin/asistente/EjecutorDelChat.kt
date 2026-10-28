@@ -71,7 +71,9 @@ class EjecutorDelChat(
      */
     private val dudar: ((Preguntar.Pregunta) -> Preguntar.Contestada)? = null,
     /** «Mi vocabulario» de los ajustes (`[ocr] vocabulario` del PC), para lo que lee la visión. */
-    vocabularioOcr: String = ""
+    vocabularioOcr: String = "",
+    /** **La web** (28-oct-2026): se llama con el dominio de cada página antes de bajarla («🌐 leyendo ugr.es…»). */
+    private val alLeerLaWeb: (String) -> Unit = {}
 ) : Agente.Ejecutor {
 
     private val vocabulario = com.forge.pixpin.ocr.Vocabulario.deTexto(vocabularioOcr)
@@ -93,12 +95,49 @@ class EjecutorDelChat(
     override fun ejecutar(llamada: Llamada): Result<String> = when (llamada) {
         is Llamada.Dibujar, is Llamada.Grafica, is Llamada.DibujoSvg -> dibujar(llamada)
         is Llamada.Ocr -> leer(llamada.peticion)
-        is Llamada.App -> if (llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.TABLA) documentos.tablaDeImagen(llamada.accion) else acciones.hacer(llamada.accion)
+        is Llamada.App -> when {
+            com.forge.pixpin.asistente.web.Web.esDeLaWeb(llamada.accion.herramienta) -> web(llamada.accion)
+            llamada.accion.herramienta == com.forge.pixpin.ia.Acciones.TABLA -> documentos.tablaDeImagen(llamada.accion)
+            else -> acciones.hacer(llamada.accion)
+        }
         is Llamada.Buscar -> documentos.buscar(llamada.peticion)
         is Llamada.Calcar -> calcar(llamada.parametros)
         is Llamada.Ayuda -> acciones.ayuda(llamada.pregunta)
         is Llamada.Figuras -> acciones.figuras(llamada.pedido) { elementos -> ponerFigura(elementos) }
         is Llamada.EditarTextos -> editarTexto(llamada.edicion)
+    }
+
+    // --------------------------------------------------------------------------------- la web
+
+    /**
+     * **La web** (28-oct-2026, `ejecutor.rs::web` del PC): buscar en internet y leer páginas con la
+     * red del teléfono ([com.forge.pixpin.asistente.web.RedDelTelefono]). Un PDF de la web se lee
+     * con el lector de siempre (el texto de sus hojas y, las escaneadas, con la visión del modelo),
+     * desde un fichero temporal que se borra al acabar. La clave de Brave Search, si la hay, de
+     * [ClavesDeLaNube].
+     */
+    private fun web(a: com.forge.pixpin.ia.Acciones.AccionApp): Result<String> =
+        com.forge.pixpin.asistente.web.Web.hacer(
+            a,
+            com.forge.pixpin.asistente.web.Web.Lector(
+                red = com.forge.pixpin.asistente.web.RedDelTelefono,
+                pdf = ::pdfDeLaWeb,
+                alLeer = alLeerLaWeb,
+                claveBrave = ClavesDeLaNube.leerBrave(contexto)
+            )
+        )
+
+    private fun pdfDeLaWeb(bytes: ByteArray): String {
+        val carpeta = File(contexto.cacheDir, "asistente-web").apply { mkdirs() }
+        val f = File(carpeta, "pagina-${System.nanoTime()}.pdf")
+        try {
+            f.writeBytes(bytes)
+            val (texto, conVision) = leerPdfEntero(f, PeticionOcr(null, emptyList(), null))
+            if (texto.isBlank()) error("el PDF no tiene texto que leer")
+            return if (conVision > 0) "(leido con la vision del modelo en $conVision hoja(s): puede tener errores)\n$texto" else texto
+        } finally {
+            f.delete()
+        }
     }
 
     // ----------------------------------------------------------------------- el lienzo destino

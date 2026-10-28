@@ -223,6 +223,11 @@ data class Settings(
     val asistenteRevisarDicho: Boolean = false,
     /** Leer cada respuesta en voz alta al acabar (`leer_respuestas`). */
     val asistenteLeerRespuestas: Boolean = false,
+    /**
+     * **El asistente entra a la web** (28-oct-2026, como el PC, donde va siempre): buscar en
+     * internet y leer páginas. Encendido de serie; apagado, ni Claude ni DeepSeek la tienen.
+     */
+    val asistenteWeb: Boolean = true,
 
     /**
      * **Qué hace Whisper con dos idiomas mezclados**: [MODO_CADA_IDIOMA], cada trozo en el
@@ -505,6 +510,7 @@ class SettingsRepository(private val context: Context) {
         val ASISTENTE_DOCUMENTOS_NUBE = stringPreferencesKey("asistente_documentos_nube")
         val ASISTENTE_REVISAR_DICHO = booleanPreferencesKey("asistente_revisar_dicho")
         val ASISTENTE_LEER_RESPUESTAS = booleanPreferencesKey("asistente_leer_respuestas")
+        val ASISTENTE_WEB = booleanPreferencesKey("asistente_web")
         val MODO_DE_IDIOMAS = stringPreferencesKey("modo_de_idiomas")
         val SERVICIO_DE_ENLACE = stringPreferencesKey("servicio_de_enlace")
         val FONDO_DEL_CHAT = stringPreferencesKey("fondo_del_chat")
@@ -561,6 +567,7 @@ class SettingsRepository(private val context: Context) {
             asistenteDocumentosNube = prefs[Keys.ASISTENTE_DOCUMENTOS_NUBE] ?: "",
             asistenteRevisarDicho = prefs[Keys.ASISTENTE_REVISAR_DICHO] ?: false,
             asistenteLeerRespuestas = prefs[Keys.ASISTENTE_LEER_RESPUESTAS] ?: false,
+            asistenteWeb = prefs[Keys.ASISTENTE_WEB] ?: true,
             modoDeIdiomas = prefs[Keys.MODO_DE_IDIOMAS] ?: MODO_CADA_IDIOMA,
             servicioDeEnlace = prefs[Keys.SERVICIO_DE_ENLACE] ?: "",
             fondoDelChat = prefs[Keys.FONDO_DEL_CHAT] ?: "",
@@ -777,6 +784,7 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setAsistenteRevisarDicho(si: Boolean) { context.dataStore.edit { it[Keys.ASISTENTE_REVISAR_DICHO] = si } }
     suspend fun setAsistenteLeerRespuestas(si: Boolean) { context.dataStore.edit { it[Keys.ASISTENTE_LEER_RESPUESTAS] = si } }
+    suspend fun setAsistenteWeb(si: Boolean) { context.dataStore.edit { it[Keys.ASISTENTE_WEB] = si } }
 
     /** [MODO_CADA_IDIOMA] o [MODO_TODO_EN_UNO]. Ver [Settings.modoDeIdiomas]. */
     suspend fun setModoDeIdiomas(valor: String) {
