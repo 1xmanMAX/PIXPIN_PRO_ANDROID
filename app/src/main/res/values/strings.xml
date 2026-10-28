@@ -1078,6 +1078,51 @@
     <string name="clase_sin_video">No se pudo grabar la pantalla: se graba solo el audio</string>
     <string name="clase_sin_audio">El vídeo entró en el chat, pero sin audio no hay nota que pasar a texto</string>
     <string name="clase_ver_video">Vídeo</string>
+    <!-- Reunión presencial (28-oct-2026, §3.3 de las novedades del PC). Ver guardados/ReunionPresencialService.kt. -->
+    <string name="clase_modo_presencial">Presencial</string>
+    <string name="clase_modo_presencial_sub">Una reunión en persona: graba con la app fuera y la pantalla apagada; «Foto» y «Clip» usan la cámara de atrás a su resolución completa</string>
+    <string name="reunion_forma">Qué graba el móvil</string>
+    <string name="reunion_forma_audio">Solo audio</string>
+    <string name="reunion_forma_video">Vídeo de la sala</string>
+    <string name="reunion_forma_audio_sub">El móvil en la mesa: la nota de voz de siempre. «Foto» y «Clip» con la cámara de atrás.</string>
+    <string name="reunion_forma_video_sub">El móvil apoyado mirando a la sala: el vídeo entero de la reunión (HEVC si el móvil lo tiene, si no H.264). La nota de voz sale de su audio.</string>
+    <string name="reunion_calidad_1080">1080p</string>
+    <string name="reunion_calidad_720">720p</string>
+    <string name="reunion_calidad_auto">Automática</string>
+    <string name="reunion_calidad_1080_pista">1080p a 30 fps, unos 2,2 GB por hora con H.264 (menos con HEVC)</string>
+    <string name="reunion_calidad_720_pista">720p a unos 2,5 Mbps: para reuniones largas, algo más de 1 GB por hora</string>
+    <string name="reunion_calidad_auto_pista">1080p la primera hora y, si sigue, 720p</string>
+    <string name="reunion_burbuja">Burbuja flotante encima de otras apps</string>
+    <string name="reunion_burbuja_sub">Con Foto, Clip, pausa y Terminar. Sin ella, los mismos botones están en la notificación.</string>
+    <string name="reunion_sin_camara_permiso">Sin permiso de la cámara se graba solo el audio, sin fotos ni clips</string>
+    <string name="reunion_canal">Reunión presencial</string>
+    <string name="reunion_notif">Grabando…</string>
+    <string name="reunion_foto">Foto</string>
+    <string name="reunion_clip">Clip</string>
+    <string name="reunion_parar_clip">Parar clip</string>
+    <string name="reunion_nombre">Reunión %1$s</string>
+    <string name="reunion_foto_hecha">Foto guardada en el %1$s</string>
+    <string name="reunion_foto_fallo">No se pudo hacer la foto</string>
+    <string name="reunion_clip_empezado">Grabando un clip… pulsa otra vez para pararlo</string>
+    <string name="reunion_clip_hecho">Clip guardado en el %1$s</string>
+    <string name="reunion_clip_fallo">No se pudo grabar el clip</string>
+    <string name="reunion_sin_camara">No se pudo abrir la cámara: se graba solo el audio</string>
+    <string name="reunion_sin_video">No se pudo grabar el vídeo: se graba solo el audio</string>
+    <string name="reunion_sin_nota">La reunión no tiene audio: lo de la cámara entró suelto en el chat</string>
+    <string name="reunion_lista_con_texto">Reunión guardada con %1$d fotos y %2$d clips. Pasando a texto…</string>
+    <string name="reunion_lista_sin_texto">Reunión guardada con %1$d fotos y %2$d clips. Para el texto, pulsa «Pasar a texto» en la nota del chat.</string>
+    <plurals name="reunion_fotos">
+        <item quantity="one">1 foto</item>
+        <item quantity="many">%d fotos</item>
+        <item quantity="other">%d fotos</item>
+    </plurals>
+    <plurals name="reunion_clips">
+        <item quantity="one">1 clip</item>
+        <item quantity="many">%d clips</item>
+        <item quantity="other">%d clips</item>
+    </plurals>
+    <string name="estudiar_clip">Vídeo · %1$s</string>
+    <string name="estudiar_clip_movil">Vídeo del móvil · %1$s</string>
     <!-- El interruptor Chat · Funciones de arriba de la lista de chats y los mosaicos de Funciones,
          en su orden (25-oct-2026, las claves y los textos del PC: docs/ui-funciones-y-chats.md). -->
     <string name="proyectos_interruptor_chat">Chat</string>

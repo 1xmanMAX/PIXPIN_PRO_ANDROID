@@ -182,8 +182,16 @@ class EstudiarClaseActivity : ComponentActivity() {
         }
     }
 
-    /** Una señal de la columna del texto: un marcador con nota o una banderita de la letra. */
-    private class Senal(val ms: Long, val texto: String, val banderita: Boolean)
+    /**
+     * Una señal de la columna del texto: un marcador con nota, una banderita de la letra o **un clip de
+     * vídeo** de la clase (28-oct-2026, la reunión presencial y la cámara del móvil, como `Senal::clip`
+     * del PC de `be891856` y `d1ffc126`): su mensaje, lo que dura y si lo mandó el móvil. Un clip no se
+     * edita ni se quita como un marcador (es de lo grabado); un toque lleva a su minuto y lo abre.
+     */
+    private class Senal(
+        val ms: Long, val texto: String, val banderita: Boolean,
+        val clip: Mensaje? = null, val duracionMs: Long = 0, val delMovil: Boolean = false
+    )
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
@@ -202,9 +210,16 @@ class EstudiarClaseActivity : ComponentActivity() {
         val video = remember(todos, m) { m?.let { videoDeLaLetra(it, todos) } }
         val lineas = remember(m?.transcripcion) { EstudiarClase.lineasDe(m?.transcripcion) }
         // Los marcadores y las banderitas, juntos y en orden: la ventana del PC enseña los dos.
-        val senales = remember(m?.marcadores, m?.marcas) {
+        // Y los clips de la clase (`clips` de la nota), con ▶ en su minuto: los de la cámara
+        // (`fuente: "camara"`, la reunión presencial de aquí o del PC) y los del móvil (`"movil"`).
+        val senales = remember(m?.marcadores, m?.marcas, m?.clips, todos) {
+            val porId = todos.associateBy { it.id }
             (EstudiarClase.marcadoresDe(m?.marcadores).map { Senal(it.ms, it.texto, false) } +
-                m?.marcas.orEmpty().map { Senal(it.toLong(), "", true) }).sortedBy { it.ms }
+                m?.marcas.orEmpty().map { Senal(it.toLong(), "", true) } +
+                (m?.let { Presencial.clipsDe(it) }.orEmpty()).mapNotNull { c ->
+                    val pieza = porId[c.id] ?: return@mapNotNull null
+                    Senal(c.ms, "", false, clip = pieza, duracionMs = c.duracionMs, delMovil = Presencial.esDelMovil(pieza))
+                }).sortedBy { it.ms }
         }
         val tiemposDeLineas = remember(lineas) { lineas.map { it.ms } }
         val filas = remember(lineas, senales) { EstudiarClase.mezclar(tiemposDeLineas, senales.map { it.ms }) }
@@ -261,9 +276,23 @@ class EstudiarClaseActivity : ComponentActivity() {
         val capturaActual = EstudiarClase.ultimoAntes(tiemposDeCapturas, posMs)
         val fotoVista = if (conVideo) null else capturaActual?.let { fotos.getOrNull(it) }
         var imagen by remember { mutableStateOf<ImageBitmap?>(null) }
-        LaunchedEffect(fotoVista?.id, fotoVista?.referencia, anotando, version) {
+        // **La imagen entera al acercarla** (28-oct-2026, «a resolución COMPLETA, para que se vean más
+        // detalles», PC `be891856`): encajada basta con 2048; acercada más allá de lo cargado
+        // ([Presencial.haceFaltaLaEntera]) se vuelve a leer a su tamaño de verdad (hasta lo que pinta
+        // la GPU, [Presencial.PIXELES_DE_LA_ENTERA]). Una vez por captura.
+        var entera by remember(fotoVista?.id) { mutableStateOf(false) }
+        var anchoDeVerdad by remember(fotoVista?.id) { mutableIntStateOf(0) }
+        LaunchedEffect(fotoVista?.id, fotoVista?.referencia, anotando, version, entera) {
             val f = fotoVista
-            imagen = if (f == null) null else withContext(Dispatchers.IO) { capturaAnotada(f, 2048) }
+            if (f == null) imagen = null
+            else {
+                val leida = withContext(Dispatchers.IO) {
+                    f.ruta?.let { r -> anchoDeVerdad = anchoDe(r) }
+                    capturaAnotada(f, if (entera) LADO_ENTERO else 2048)
+                }
+                // Al pasar a la entera, la de antes se queda hasta que llega (sin parpadeo).
+                if (leida != null || !entera) imagen = leida
+            }
         }
         // Al cambiar de captura o del vídeo a una captura, vuelve a encajada.
         LaunchedEffect(fotoVista?.id, conVideo) { encuadre = com.forge.pixpin.ui.Encuadre() }
@@ -459,17 +488,30 @@ class EstudiarClaseActivity : ComponentActivity() {
                                             .clip(RoundedCornerShape(12.dp))
                                             .background(MaterialTheme.colorScheme.tertiaryContainer)
                                             .combinedClickable(
-                                                onClick = { irA(s.ms) },
-                                                onLongClick = { quitar(id, s) }
+                                                onClick = {
+                                                    irA(s.ms)
+                                                    // Un clip: a su minuto y se abre, como el clic del PC.
+                                                    s.clip?.let { CarpetaActivity.abrirPagina(this@EstudiarClaseActivity, it) }
+                                                },
+                                                onLongClick = { if (s.clip == null) quitar(id, s) }
                                             )
                                             .padding(horizontal = 10.dp, vertical = 5.dp),
                                         verticalAlignment = Alignment.CenterVertically
                                     ) {
-                                        Icon(if (s.banderita) Icons.Filled.Flag else Icons.Filled.BookmarkAdd, null,
+                                        Icon(
+                                            when {
+                                                s.clip != null -> Icons.Filled.PlayArrow
+                                                s.banderita -> Icons.Filled.Flag
+                                                else -> Icons.Filled.BookmarkAdd
+                                            }, null,
                                             tint = MaterialTheme.colorScheme.onTertiaryContainer, modifier = Modifier.size(16.dp))
                                         Text(
                                             " " + Transcriptor.marcaDeTiempo(s.ms.toInt()) +
-                                                (if (s.texto.isNotBlank()) " · " + s.texto else ""),
+                                                (if (s.clip != null) " · " + getString(
+                                                    if (s.delMovil) R.string.estudiar_clip_movil else R.string.estudiar_clip,
+                                                    Transcriptor.marcaDeTiempo(s.duracionMs.coerceIn(0, Int.MAX_VALUE.toLong()).toInt())
+                                                )
+                                                else if (s.texto.isNotBlank()) " · " + s.texto else ""),
                                             fontSize = 14.sp, color = MaterialTheme.colorScheme.onTertiaryContainer
                                         )
                                     }
@@ -532,11 +574,17 @@ class EstudiarClaseActivity : ComponentActivity() {
                                 onDoubleTap = { encuadre = com.forge.pixpin.ui.Encuadre() }
                             )
                         }
-                        .pointerInput(w, h, caja) {
+                        .pointerInput(w, h, caja, actual, conVideo) {
                             detectTransformGestures { centro, mover, zoom, _ ->
                                 var e = encuadre
                                 if (zoom != 1f) e = e.acercar(caja, w, h, zoom, centro.x, centro.y)
                                 encuadre = e.mover(caja, w, h, mover.x, mover.y)
+                                // Acercada más allá de lo cargado: la imagen entera.
+                                val cargada = actual
+                                if (!entera && !conVideo && cargada != null && w > 0f && h > 0f) {
+                                    val pintado = minOf(caja.ancho / w, caja.alto / h) * w * encuadre.aumento
+                                    if (Presencial.haceFaltaLaEntera(pintado, cargada.width, anchoDeVerdad)) entera = true
+                                }
                             }
                         }
                 )
@@ -736,13 +784,15 @@ class EstudiarClaseActivity : ComponentActivity() {
 
     /** **La captura con lo anotado encima**, si tiene lienzo; si no, la foto tal cual. */
     private fun capturaAnotada(f: Mensaje, lado: Int): ImageBitmap? = runCatching {
+        // Con lo anotado encima, la «entera» se queda en 4096: el dibujo se pinta entero cada vez.
+        val ladoDelDibujo = if (lado == LADO_ENTERO) 4096 else lado
         val dibujo = f.referencia
         val escena = dibujo?.let { com.forge.pixpin.motor.ExcalidrawStore.cargar(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this, it)) }
         if (escena != null && escena.elements.any { !it.isDeleted }) {
             val ancho = escena.elements.filter { !it.isDeleted }.maxOf { it.x + it.width } - escena.elements.filter { !it.isDeleted }.minOf { it.x }
-            val escala = (lado / ancho.coerceAtLeast(1.0)).coerceIn(0.05, 2.0)
+            val escala = (ladoDelDibujo / ancho.coerceAtLeast(1.0)).coerceIn(0.05, 2.0)
             com.forge.pixpin.motor.DrawExport.aBitmap(escena, escala) { idf ->
-                escena.files[idf]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it, lado) }
+                escena.files[idf]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it, ladoDelDibujo) }
             }?.asImageBitmap()
         } else null
     }.getOrNull() ?: f.ruta?.let { leerYa(it, lado) }
@@ -841,8 +891,10 @@ class EstudiarClaseActivity : ComponentActivity() {
             for (s in senales) {
                 val sx = EstudiarClase.xEnLaBarra(s.ms, largo, durMs)
                 val camino = Path()
-                listOf(p(sx, lado * 4.dp.toPx()), p(sx, lado * 16.dp.toPx()), p(sx + 8.dp.toPx(), lado * 13.dp.toPx()), p(sx, lado * 10.dp.toPx()))
-                    .forEachIndexed { k, o -> if (k == 0) camino.moveTo(o.x, o.y) else camino.lineTo(o.x, o.y) }
+                // Un clip, un ▶ en su minuto; lo demás, su banderita.
+                val puntos = if (s.clip != null) listOf(p(sx, lado * 5.dp.toPx()), p(sx, lado * 15.dp.toPx()), p(sx + 9.dp.toPx(), lado * 10.dp.toPx()))
+                else listOf(p(sx, lado * 4.dp.toPx()), p(sx, lado * 16.dp.toPx()), p(sx + 8.dp.toPx(), lado * 13.dp.toPx()), p(sx, lado * 10.dp.toPx()))
+                puntos.forEachIndexed { k, o -> if (k == 0) camino.moveTo(o.x, o.y) else camino.lineTo(o.x, o.y) }
                 camino.close()
                 drawPath(camino, bandera)
             }
@@ -981,21 +1033,34 @@ class EstudiarClaseActivity : ComponentActivity() {
 }
 
 /** La imagen reducida a [lado], fuera del hilo de la pantalla. */
-private suspend fun leer(ruta: String, lado: Int): ImageBitmap? = withContext(Dispatchers.IO) {
-    runCatching {
-        val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-        BitmapFactory.decodeFile(ruta, medidas)
-        var paso = 1
-        while (maxOf(medidas.outWidth, medidas.outHeight) / paso > lado) paso *= 2
-        BitmapFactory.decodeFile(ruta, BitmapFactory.Options().apply { inSampleSize = paso })?.asImageBitmap()
-    }.getOrNull()
-}
+private suspend fun leer(ruta: String, lado: Int): ImageBitmap? = withContext(Dispatchers.IO) { leerYa(ruta, lado) }
 
-/** Como [leer], ya en el hilo en que se esté (para quien ya va fuera del de la pantalla). */
+/** El lado con que se pide la imagen entera: el tope lo pone [Presencial.PIXELES_DE_LA_ENTERA]. */
+private const val LADO_ENTERO = Int.MAX_VALUE
+
+/** El ancho de verdad de una imagen (ya derecha), sin leerla. 0 si no se sabe. */
+private fun anchoDe(ruta: String): Int = runCatching {
+    val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeFile(ruta, medidas)
+    val giro = GiroExif.de(orientacionExif(ruta))
+    if (giro.grados == 90 || giro.grados == 270) medidas.outHeight else medidas.outWidth
+}.getOrDefault(0)
+
+private fun orientacionExif(ruta: String): Int = runCatching {
+    android.media.ExifInterface(ruta).getAttributeInt(android.media.ExifInterface.TAG_ORIENTATION, android.media.ExifInterface.ORIENTATION_NORMAL)
+}.getOrDefault(android.media.ExifInterface.ORIENTATION_NORMAL)
+
+/**
+ * Como [leer], ya en el hilo en que se esté (para quien ya va fuera del de la pantalla). **Derecha**
+ * (28-oct-2026): una foto de la cámara que llegó del PC sin enderezar (tal cual, con el giro en su
+ * EXIF) se gira al leerla, como hace el PC. Con [LADO_ENTERO], entera hasta lo que pinta la GPU.
+ */
 private fun leerYa(ruta: String, lado: Int): ImageBitmap? = runCatching {
     val medidas = BitmapFactory.Options().apply { inJustDecodeBounds = true }
     BitmapFactory.decodeFile(ruta, medidas)
-    var paso = 1
-    while (maxOf(medidas.outWidth, medidas.outHeight) / paso > lado) paso *= 2
-    BitmapFactory.decodeFile(ruta, BitmapFactory.Options().apply { inSampleSize = paso })?.asImageBitmap()
+    var paso = if (lado == LADO_ENTERO) Presencial.pasoParaLaEntera(medidas.outWidth, medidas.outHeight) else 1
+    while (lado != LADO_ENTERO && maxOf(medidas.outWidth, medidas.outHeight) / paso > lado) paso *= 2
+    val b = BitmapFactory.decodeFile(ruta, BitmapFactory.Options().apply { inSampleSize = paso }) ?: return@runCatching null
+    val giro = GiroExif.de(orientacionExif(ruta))
+    FotoDerecha.girada(b, giro).asImageBitmap()
 }.getOrNull()

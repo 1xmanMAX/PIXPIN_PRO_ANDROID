@@ -133,3 +133,8 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
       → Causa: la capa del plano no trae papel y el teléfono adaptaba la tinta contra el blanco de serie (el blanco, un gris, se daba la vuelta a negro); ahora se pinta contra el papel del plano y solo se adapta de noche, como el PC (`TintaDelPlano`). Falta verlo en el teléfono.
 - [~] 41. Una capa del plano hecha solo en el PC no aparecía en el teléfono. → El PC escribe los puntos
       como pares `[x, y]` y el teléfono solo leía `{x, y}`: ahora lee los dos (y escribe objetos).
+
+## Tanda del 28-oct
+
+- [~] 43. Reunión presencial: grabar en segundo plano con Foto y Clip, todo en su minuto, a resolución completa.
+      → Hecho, falta probar en el teléfono: modo «Presencial» en Grabar clase (vídeo de la sala o solo audio), notificación «Grabando…» con Foto/Clip/Terminar y burbuja, fotos y clips con `fuente: "camara"` y `clips` como el PC; ver `docs/reunion-presencial-android.md`.

@@ -47,8 +47,19 @@ class GrabarClaseActivity : ComponentActivity() {
 
     private var proyecto: String? = null
 
-    /** «Grabar también el vídeo de la pantalla» (25-oct-2026, como el PC): apagado, pesa mucho. */
-    private var conVideo by androidx.compose.runtime.mutableStateOf(false)
+    /**
+     * **El modo**: «Audio y capturas», «Pantalla y sonido» (25-oct-2026) o **«Presencial»** (28-oct-2026,
+     * la reunión en persona del PC, §3.3). Se recuerda por su palabra, la del PC ([Presencial.Modo]).
+     */
+    private var modo by androidx.compose.runtime.mutableStateOf(Presencial.Modo.CAPTURAS)
+
+    /** «Grabar también el vídeo de la pantalla» (25-oct-2026, como el PC): el modo «Pantalla y sonido». */
+    private val conVideo: Boolean get() = modo == Presencial.Modo.PANTALLA
+
+    /** La presencial: vídeo de la sala o solo audio, su calidad y si sale la burbuja (28-oct-2026). */
+    private var forma by androidx.compose.runtime.mutableStateOf(Presencial.Forma.AUDIO)
+    private var calidad by androidx.compose.runtime.mutableStateOf(Presencial.Calidad.AUTOMATICA)
+    private var conBurbuja by androidx.compose.runtime.mutableStateOf(true)
 
     /**
      * **La calidad del vídeo** (25-oct-2026, como la ficha de Preparar del PC): «Ligero», «Normal» o
@@ -72,18 +83,38 @@ class GrabarClaseActivity : ComponentActivity() {
         if (si) seguir() else Toast.makeText(this, R.string.clase_sin_microfono, Toast.LENGTH_LONG).show()
     }
 
+    /**
+     * **Los permisos de la presencial** (28-oct-2026): el micrófono (sin él no hay reunión), la cámara
+     * (sin ella, solo audio) y los avisos (Android 13: sin ellos la notificación con Foto, Clip y
+     * Terminar no se ve).
+     */
+    private val pedirLosDeLaReunion = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { r ->
+        val microfono = r[Manifest.permission.RECORD_AUDIO] == true || tiene(Manifest.permission.RECORD_AUDIO)
+        if (!microfono) {
+            Toast.makeText(this, R.string.clase_sin_microfono, Toast.LENGTH_LONG).show()
+            return@registerForActivityResult
+        }
+        if (!tiene(Manifest.permission.CAMERA)) Toast.makeText(this, R.string.reunion_sin_camara_permiso, Toast.LENGTH_LONG).show()
+        arrancarLaReunion()
+    }
+
+    private fun tiene(permiso: String) = ContextCompat.checkSelfPermission(this, permiso) == PackageManager.PERMISSION_GRANTED
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         proyecto = intent.getStringExtra(EL_PROYECTO)
-        if (GrabarClaseService.enMarcha) {
+        if (GrabarClaseService.enMarcha || ReunionPresencialService.enMarcha) {
             Toast.makeText(this, R.string.clase_ya, Toast.LENGTH_SHORT).show()
             finish()
             return
         }
         aPantallaCompleta()
         perfil = PerfilDeVideo.deClave(runCatching { prefs().getString(PERFIL, null) }.getOrNull())
-        // **El modo, recordado** (25-oct-2026, como el PC: «pantalla» o «capturas»).
-        conVideo = runCatching { prefs().getString(MODO, null) }.getOrNull() == MODO_PANTALLA
+        // **El modo, recordado** (25-oct-2026, como el PC: «pantalla», «capturas» o «presencial»).
+        modo = Presencial.Modo.de(runCatching { prefs().getString(MODO, null) }.getOrNull())
+        forma = Presencial.Forma.de(runCatching { prefs().getString(FORMA, null) }.getOrNull())
+        calidad = Presencial.Calidad.de(runCatching { prefs().getString(CALIDAD, null) }.getOrNull())
+        conBurbuja = runCatching { prefs().getBoolean(BURBUJA, true) }.getOrDefault(true)
         setContent { PixPinTheme { Pantalla() } }
     }
 
@@ -127,19 +158,29 @@ class GrabarClaseActivity : ComponentActivity() {
                     Modifier.fillMaxWidth().padding(top = 16.dp),
                     horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
                 ) {
-                    for ((pantalla, rotulo) in listOf(false to R.string.clase_modo_capturas, true to R.string.clase_modo_pantalla)) {
+                    for ((m, rotulo) in listOf(
+                        Presencial.Modo.CAPTURAS to R.string.clase_modo_capturas,
+                        Presencial.Modo.PANTALLA to R.string.clase_modo_pantalla,
+                        Presencial.Modo.PRESENCIAL to R.string.clase_modo_presencial
+                    )) {
                         androidx.compose.material3.FilterChip(
-                            selected = conVideo == pantalla,
+                            selected = modo == m,
                             onClick = {
-                                conVideo = pantalla
-                                runCatching { prefs().edit().putString(MODO, if (pantalla) MODO_PANTALLA else MODO_CAPTURAS).apply() }
+                                modo = m
+                                runCatching { prefs().edit().putString(MODO, m.palabra).apply() }
                             },
                             label = { Text(getString(rotulo)) }
                         )
                     }
                 }
                 Text(
-                    getString(if (conVideo) R.string.clase_modo_pantalla_sub else R.string.clase_modo_capturas_sub),
+                    getString(
+                        when (modo) {
+                            Presencial.Modo.PANTALLA -> R.string.clase_modo_pantalla_sub
+                            Presencial.Modo.CAPTURAS -> R.string.clase_modo_capturas_sub
+                            Presencial.Modo.PRESENCIAL -> R.string.clase_modo_presencial_sub
+                        }
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 4.dp)
@@ -179,6 +220,7 @@ class GrabarClaseActivity : ComponentActivity() {
                         modifier = Modifier.padding(top = 2.dp)
                     )
                 }
+                if (modo == Presencial.Modo.PRESENCIAL) Reunion()
                 Button(onClick = { empezar() }, modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
                     Text(getString(R.string.clase_empezar))
                 }
@@ -189,7 +231,83 @@ class GrabarClaseActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * **Lo de la presencial** (28-oct-2026): vídeo de la sala o solo audio, la calidad del vídeo y la
+     * burbuja. Sin `return` antes de tiempo: es una composable en línea (R8).
+     */
+    @Composable
+    private fun Reunion() {
+        Text(getString(R.string.reunion_forma), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 12.dp))
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().padding(top = 4.dp),
+            horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+        ) {
+            for ((f, rotulo) in listOf(Presencial.Forma.AUDIO to R.string.reunion_forma_audio, Presencial.Forma.VIDEO to R.string.reunion_forma_video)) {
+                androidx.compose.material3.FilterChip(
+                    selected = forma == f,
+                    onClick = { forma = f; runCatching { prefs().edit().putString(FORMA, f.clave).apply() } },
+                    label = { Text(getString(rotulo)) }
+                )
+            }
+        }
+        Text(
+            getString(if (forma == Presencial.Forma.VIDEO) R.string.reunion_forma_video_sub else R.string.reunion_forma_audio_sub),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = 4.dp)
+        )
+        if (forma == Presencial.Forma.VIDEO) {
+            Text(getString(R.string.clase_calidad), style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 12.dp))
+            androidx.compose.foundation.layout.Row(
+                Modifier.fillMaxWidth().padding(top = 4.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(8.dp)
+            ) {
+                for ((c, rotulo) in listOf(
+                    Presencial.Calidad.ALTA to R.string.reunion_calidad_1080,
+                    Presencial.Calidad.LIGERA to R.string.reunion_calidad_720,
+                    Presencial.Calidad.AUTOMATICA to R.string.reunion_calidad_auto
+                )) {
+                    androidx.compose.material3.FilterChip(
+                        selected = calidad == c,
+                        onClick = { calidad = c; runCatching { prefs().edit().putString(CALIDAD, c.clave).apply() } },
+                        label = { Text(getString(rotulo)) }
+                    )
+                }
+            }
+            Text(
+                getString(
+                    when (calidad) {
+                        Presencial.Calidad.ALTA -> R.string.reunion_calidad_1080_pista
+                        Presencial.Calidad.LIGERA -> R.string.reunion_calidad_720_pista
+                        Presencial.Calidad.AUTOMATICA -> R.string.reunion_calidad_auto_pista
+                    }
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 2.dp)
+            )
+        }
+        androidx.compose.foundation.layout.Row(
+            Modifier.fillMaxWidth().padding(top = 12.dp),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(getString(R.string.reunion_burbuja), style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    getString(R.string.reunion_burbuja_sub),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            androidx.compose.material3.Switch(
+                checked = conBurbuja,
+                onCheckedChange = { conBurbuja = it; runCatching { prefs().edit().putBoolean(BURBUJA, it).apply() } }
+            )
+        }
+    }
+
     private fun empezar() {
+        if (modo == Presencial.Modo.PRESENCIAL) return empezarLaReunion()
         // Sin dibujar encima no hay barra: a los ajustes, como la portada.
         if (!Settings.canDrawOverlays(this)) {
             Toast.makeText(this, R.string.need_overlay_toast, Toast.LENGTH_LONG).show()
@@ -215,11 +333,42 @@ class GrabarClaseActivity : ComponentActivity() {
     }
 
     private fun arrancar(codigo: Int = 0, datos: Intent? = null) {
-        if (GrabarClaseService.enMarcha) {
+        if (GrabarClaseService.enMarcha || ReunionPresencialService.enMarcha) {
             Toast.makeText(this, R.string.clase_ya, Toast.LENGTH_SHORT).show()
         } else {
             // Ahora, con esta pantalla delante: es lo que deja al servicio quedarse el micrófono.
             runCatching { GrabarClaseService.empezar(this, proyecto, codigo, datos, perfil) }
+                .onFailure { Toast.makeText(this, R.string.clase_no_arranca, Toast.LENGTH_LONG).show() }
+        }
+        finish()
+    }
+
+    /**
+     * **La presencial**: la burbuja solo si se quiere (sin permiso de dibujar encima se va a los
+     * ajustes, como la barra); luego el micrófono, la cámara y los avisos de una vez.
+     */
+    private fun empezarLaReunion() {
+        if (conBurbuja && !Settings.canDrawOverlays(this)) {
+            Toast.makeText(this, R.string.need_overlay_toast, Toast.LENGTH_LONG).show()
+            runCatching {
+                startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+            }
+            return
+        }
+        val faltan = buildList {
+            add(Manifest.permission.RECORD_AUDIO)
+            add(Manifest.permission.CAMERA)
+            if (android.os.Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+        }.filterNot { tiene(it) }
+        if (faltan.isEmpty()) arrancarLaReunion() else pedirLosDeLaReunion.launch(faltan.toTypedArray())
+    }
+
+    private fun arrancarLaReunion() {
+        if (GrabarClaseService.enMarcha || ReunionPresencialService.enMarcha) {
+            Toast.makeText(this, R.string.clase_ya, Toast.LENGTH_SHORT).show()
+        } else {
+            // Ahora, con esta pantalla delante: es lo que deja al servicio quedarse el micrófono y la cámara.
+            runCatching { ReunionPresencialService.empezar(this, proyecto, forma, calidad, conBurbuja) }
                 .onFailure { Toast.makeText(this, R.string.clase_no_arranca, Toast.LENGTH_LONG).show() }
         }
         finish()
@@ -241,9 +390,10 @@ class GrabarClaseActivity : ComponentActivity() {
         private const val EL_PROYECTO = "clase_proyecto"
         private const val PERFIL = "perfil_video"
         private const val MODO = "modo_de_grabar"
-        /** Las claves del modo, las del PC (`voz/modo-de-grabar.txt`). */
-        private const val MODO_PANTALLA = "pantalla"
-        private const val MODO_CAPTURAS = "capturas"
+        /** La forma de la presencial, su calidad y la burbuja (28-oct-2026). */
+        private const val FORMA = "forma_presencial"
+        private const val CALIDAD = "calidad_presencial"
+        private const val BURBUJA = "burbuja_presencial"
 
         /** Abre la preparación para grabar en el chat [proyecto] (null, el general). */
         fun abrir(context: Context, proyecto: String?) {
