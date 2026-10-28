@@ -109,10 +109,15 @@ object Web {
      * vuelta siguiente, como el pensamiento. Con tope de usos por pregunta para que una duda no se
      * coma los créditos.
      */
-    fun herramientasDeClaude(): List<JsonObject> = listOf(
-        buildJsonObject { put("type", "web_search_20250305"); put("name", BUSCAR_CLAUDE); put("max_uses", 5) },
-        buildJsonObject { put("type", "web_fetch_20250910"); put("name", LEER_CLAUDE); put("max_uses", 3) }
-    )
+    fun herramientasDeClaude(modelo: String = com.forge.pixpin.ia.Nube.Proveedor.CLAUDE.modelo): List<JsonObject> {
+        // **Con Sonnet** (el fuerte que elige Jev, 28-oct-2026), las versiones nuevas que recomienda
+        // Anthropic para él; con el de siempre, las de antes.
+        val nuevas = modelo.startsWith("claude-sonnet")
+        return listOf(
+            buildJsonObject { put("type", if (nuevas) "web_search_20260209" else "web_search_20250305"); put("name", BUSCAR_CLAUDE); put("max_uses", 5) },
+            buildJsonObject { put("type", if (nuevas) "web_fetch_20260209" else "web_fetch_20250910"); put("name", LEER_CLAUDE); put("max_uses", 3) }
+        )
+    }
 
     /**
      * **Lo que se enseña en la burbuja** mientras se usa la web, o null si no es de la web:

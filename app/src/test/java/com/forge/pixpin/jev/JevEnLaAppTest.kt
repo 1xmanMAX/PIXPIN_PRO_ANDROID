@@ -198,6 +198,26 @@ class JevEnLaAppTest {
     }
 
     @Test
+    fun `con sonnet la web de claude va en su version nueva`() {
+        val p = Peticion(
+            listOf(MensajeIa.usuario("busca el horario de la biblioteca")),
+            com.forge.pixpin.ia.Herramientas.catalogo() + com.forge.pixpin.asistente.web.Web.herramientas()
+        )
+        fun versiones(m: Nube.Motor) = (m.cuerpo(p)["tools"] as JsonArray).map { it as JsonObject }
+            .filter { (it["name"] as? JsonPrimitive)?.content in setOf("web_search", "web_fetch") }
+            .map { it["type"]!!.jsonPrimitive.content }
+        val clave = "sk-ant-api03-CLAVEFALSA0123456789"
+        assertEquals(listOf("web_search_20250305", "web_fetch_20250910"), versiones(Nube.Motor(Nube.Proveedor.CLAUDE, clave)))
+        val sonnet = Nube.Motor(Nube.Proveedor.CLAUDE, clave, modelo = "claude-sonnet-5-5")
+        assertEquals(listOf("web_search_20260209", "web_fetch_20260209"), versiones(sonnet))
+        // Lo demás del cuerpo, igual.
+        assertEquals(
+            (Nube.Motor(Nube.Proveedor.CLAUDE, clave).cuerpo(p)["tools"] as JsonArray).size,
+            (sonnet.cuerpo(p)["tools"] as JsonArray).size
+        )
+    }
+
+    @Test
     fun `la conversacion y los recientes con quien los dijo`() {
         val pregunta = Mensaje(id = "q", cuando = 10, clase = Clase.NOTA, texto = "explícame la entropía", proyecto = "a")
         val ms = listOf(

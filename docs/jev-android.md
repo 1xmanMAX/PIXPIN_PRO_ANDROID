@@ -48,7 +48,9 @@ interruptor por función (encendidas de fábrica; sin clave no hacen nada):
    rápido va a **Claude Sonnet** (`claude-sonnet-5-5`) o **DeepSeek V4 Pro** (`deepseek-v4-pro`) si Jev
    lo juzga difícil, y si no al de siempre (Haiku, DeepSeek Flash), con la misma clave y el mismo
    «pensar». Se decide en el hilo del turno, al pedir la primera respuesta. Encima de la caja del chat
-   sale la pastilla **«✦ Claude Sonnet · Jev»** (o el que fuera) durante 15 minutos.
+   sale la pastilla **«✦ Claude Sonnet · Jev»** (o el que fuera) durante 15 minutos. Con Sonnet, la web
+   de Claude va en las versiones que Anthropic recomienda para él (`web_search_20260209`,
+   `web_fetch_20260209`); con Haiku, las de siempre.
 
 **Un fallo de Jev (sin red, 401, 429, respuesta rota, más de 2 s) es un error, nunca un «no»**: la
 función hace lo de siempre y lo apunta en el registro.

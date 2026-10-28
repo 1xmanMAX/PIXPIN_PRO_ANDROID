@@ -539,7 +539,13 @@ object Nube {
                 Proveedor.CLAUDE -> Claude.cuerpo(p, mem, max, ligero)
                 Proveedor.DEEPSEEK -> DeepSeek.cuerpo(p, mem, pensar.get(), max)
             }
-            return if (modelo == proveedor.modelo) c else JsonObject(c + ("model" to JsonPrimitive(modelo)))
+            if (modelo == proveedor.modelo) return c
+            // Otro modelo (Jev): el suyo, y la web de Claude en la versión de ese modelo.
+            val web = com.forge.pixpin.asistente.web.Web.herramientasDeClaude(modelo).associateBy { (it["name"] as? JsonPrimitive)?.content }
+            val tools = (c["tools"] as? JsonArray)?.let { t ->
+                JsonArray(t.map { h -> if (proveedor == Proveedor.CLAUDE) web[((h as? JsonObject)?.get("name") as? JsonPrimitive)?.content] ?: h else h })
+            }
+            return JsonObject(c + ("model" to JsonPrimitive(modelo)) + (if (tools != null) mapOf("tools" to tools) else emptyMap()))
         }
 
         private fun recordar(id: String, v: JsonElement) = synchronized(memoria) {
