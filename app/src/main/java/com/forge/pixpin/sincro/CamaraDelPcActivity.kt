@@ -157,6 +157,31 @@ private fun apuntar(c: Context, cola: ColaDeLaCamara, v: CamaraDelPc.Visto, f: F
     SubidaDeLaCamaraService.empujar(c)
 }
 
+/**
+ * **Una foto sin grabación a la vista** (28-oct-2026, §12.4 de la guía del PC: «que se puedan tomar
+ * fotos normalmente aunque NO se esté conectado»): entra ya en la Conversación general como una foto
+ * normal, con su hora (`tomadaEn`), y se apunta en la cola **por su hora** (sin `grabacion`, a
+ * cualquier PC del grupo, con su uid de `clave`). Cuando un PC la oiga, la pone en la grabación donde
+ * caiga su hora; si no cae en ninguna, se queda como está. Devuelve si se guardó.
+ */
+private fun apuntarPorSuHora(c: Context, cola: ColaDeLaCamara, f: File, nombre: String, cuando: Long): Boolean {
+    val almacen = com.forge.pixpin.guardados.MensajesStore(c)
+    val ruta = almacen.copiarAdjunto(f, nombre, "jpg", aligerar = false) ?: return false
+    val m = com.forge.pixpin.guardados.Mensaje(
+        id = UUID.randomUUID().toString(), cuando = cuando, clase = com.forge.pixpin.guardados.Clase.IMAGEN,
+        ruta = ruta, nombre = nombre, bytes = File(ruta).length(), tomadaEn = cuando
+    )
+    almacen.anadir(m)
+    cola.poner(
+        ColaDeLaCamara.Toma(
+            clave = Codigos.unico(m), fichero = f.name, nombre = nombre, mime = "image/jpeg",
+            grabacion = "", pc = "", ms = 0, tomadaEn = cuando, creada = System.currentTimeMillis()
+        )
+    )
+    SubidaDeLaCamaraService.empujar(c)
+    return true
+}
+
 @SuppressLint("MissingPermission")
 @Composable
 private fun Pantalla(cerrar: () -> Unit) {
@@ -219,13 +244,30 @@ private fun Pantalla(cerrar: () -> Unit) {
     val cambios by ColaDeLaCamara.cambios.collectAsState()
     val grabacion = visto?.anuncio?.grabacion
     val tomas by produceState(emptyList<ColaDeLaCamara.Toma>(), cambios, grabacion) {
-        value = withContext(Dispatchers.IO) { cola.todas().filter { it.grabacion == grabacion }.sortedByDescending { it.creada } }
+        value = withContext(Dispatchers.IO) { cola.todas().filter { it.grabacion == (grabacion ?: "") }.sortedByDescending { it.creada } }
     }
 
     val disparar = {
         val v = visto
         if (v == null || !v.grabando) {
-            Toast.makeText(contexto, "Ningún PC está grabando ahora", Toast.LENGTH_SHORT).show()
+            // Sin grabación a la vista: por su hora (§12.4).
+            val cuando = System.currentTimeMillis()
+            val f = cola.ficheroNuevo("jpg")
+            foto.takePicture(
+                ImageCapture.OutputFileOptions.Builder(f).build(), ContextCompat.getMainExecutor(contexto),
+                object : ImageCapture.OnImageSavedCallback {
+                    override fun onImageSaved(r: ImageCapture.OutputFileResults) {
+                        Thread {
+                            val bien = FotoEnJpeg.asegurar(f) && apuntarPorSuHora(contexto, cola, f, nombreDeToma("IMG", cuando, "jpg"), cuando)
+                            if (!bien) f.delete()
+                        }.start()
+                    }
+                    override fun onError(e: ImageCaptureException) {
+                        f.delete()
+                        Toast.makeText(contexto, "No se pudo hacer la foto: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            )
         } else {
             // El minuto y la hora, en el disparo: no cuando acabe de guardarse ni cuando se mande.
             val ms = v.reloj.ms(SystemClock.elapsedRealtime())
@@ -318,7 +360,7 @@ private fun Pantalla(cerrar: () -> Unit) {
                 val v = visto
                 val texto = when {
                     v != null -> RelojDelMovil.rotulo(v.reloj.ms(ahora), v.reloj.enPausa, !v.grabando)
-                    preguntado -> "Ningún PC está grabando"
+                    preguntado -> "Fotos por su hora"
                     else -> "Buscando la grabación del PC…"
                 }
                 val color = when {
@@ -334,7 +376,7 @@ private fun Pantalla(cerrar: () -> Unit) {
             }
             val v = visto
             val detalle = when {
-                v == null && preguntado -> "Empieza «Grabar clase» en el PC (con la cámara del móvil encendida en su barra), en la misma Wi-Fi."
+                v == null && preguntado -> "Sin conexión con una grabación: las fotos se guardan en la Conversación general con su hora y, al conectar, entran en la grabación del PC donde caiga su hora."
                 v != null && v.grabando -> "«${v.titulo}» · ${v.nombreDelPc}"
                 v != null -> "«${v.titulo}» terminó. Lo pendiente sigue subiendo y entra en su minuto."
                 else -> null
@@ -376,7 +418,7 @@ private fun Pantalla(cerrar: () -> Unit) {
                 // El disparador grande.
                 Box(
                     Modifier.size(84.dp).clip(CircleShape).border(4.dp, Color.White, CircleShape).padding(8.dp)
-                        .clip(CircleShape).background(if (v?.grabando == true) Color.White else Color(0x88FFFFFF))
+                        .clip(CircleShape).background(Color.White)
                         .clickable { disparar() }
                 )
                 Spacer(Modifier.size(64.dp))
@@ -409,7 +451,8 @@ private fun Miniatura(t: ColaDeLaCamara.Toma, f: File) {
         if (i != null) Image(i, t.nombre, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         val (marca, fondo) = when (t.estado) {
             ColaDeLaCamara.LISTA -> "✓" to Color(0xFF2E9E4F)
-            ColaDeLaCamara.NEGADA -> "!" to Color(0xFFE0453A)
+            // Por su hora y fuera de toda grabación: se quedó como una foto normal, no es un fallo.
+            ColaDeLaCamara.NEGADA -> if (t.porSuHora && CamaraRemota.esNinguna(t.error.orEmpty())) "·" to Color(0x99000000) else "!" to Color(0xFFE0453A)
             else -> "…" to Color(0x99000000)
         }
         Text(
@@ -417,7 +460,7 @@ private fun Miniatura(t: ColaDeLaCamara.Toma, f: File) {
             modifier = Modifier.align(Alignment.BottomEnd).padding(2.dp).clip(CircleShape).background(fondo).padding(horizontal = 5.dp)
         )
         Text(
-            (if (t.esClip) "▶ " else "") + CamaraRemota.minuto(t.msListo ?: t.ms), color = Color.White, fontSize = 9.sp,
+            if (t.porSuHora && t.msListo == null) "🕒" else (if (t.esClip) "▶ " else "") + CamaraRemota.minuto(t.msListo ?: t.ms), color = Color.White, fontSize = 9.sp,
             modifier = Modifier.align(Alignment.TopStart).background(Color(0x66000000)).padding(horizontal = 2.dp)
         )
     }

@@ -158,6 +158,8 @@ object CamaraDelPc {
             if (r.isFailure) { if (m.id == antes?.pc) elDeAntesNoContesto = true; continue }
             val resp = r.getOrNull() ?: continue
             adelantos[m.id] = resp.adelanto
+            // Lo que va adelantado su reloj (el del PC sobre el de aquí), para las fotos por su hora.
+            if (resp.anuncio.reloj > 0) FotosPorSuHora.medido(disco.filesDir, m.id, -resp.adelanto)
             if (resp.anuncio.grabacion.isEmpty()) continue
             conCamara += m.id
             val ahora = SystemClock.elapsedRealtime()
@@ -186,6 +188,7 @@ object CamaraDelPc {
         conCamara += otro.id
         // Sin la vuelta no hay NTP: lo medido al preguntar, o lo que dice la hora del aviso.
         val adelanto = adelantos[otro.id] ?: if (a.reloj > 0) llegoEn - a.reloj else 0L
+        if (a.reloj > 0) app?.let { FotosPorSuHora.medido(it.filesDir, otro.id, a.reloj - llegoEn) }
         val ahora = SystemClock.elapsedRealtime()
         val reloj = antes?.takeIf { it.pc == otro.id }?.reloj?.alDia(a, ahora) ?: RelojDelMovil.de(a, ahora)
         visto.value = Visto(a, otro.id, otro.nombre, adelanto, reloj, ahora)

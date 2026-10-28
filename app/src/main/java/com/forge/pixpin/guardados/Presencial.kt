@@ -390,7 +390,11 @@ object Presencial {
     // --- Lo que se guarda ---------------------------------------------------------------------
 
     /** Una foto ya en la carpeta de adjuntos: su mensaje, su minuto, su fichero. */
-    data class FotoGuardada(val id: String, val ms: Long, val ruta: String, val nombre: String, val bytes: Long)
+    data class FotoGuardada(
+        val id: String, val ms: Long, val ruta: String, val nombre: String, val bytes: Long,
+        /** La hora de pared del disparo (28-oct-2026, las fotos por su hora: `tomadaEn`). 0: no se sabe. */
+        val tomadaEn: Long = 0
+    )
 
     /** Un clip ya en la carpeta de adjuntos. */
     data class ClipGuardado(
@@ -442,7 +446,8 @@ object Presencial {
             Mensaje(
                 id = f.id, cuando = cuando++, clase = Clase.IMAGEN, texto = GrabarClase.pie(f.ms, nombre),
                 ruta = f.ruta, nombre = f.nombre, bytes = f.bytes, proyecto = proyecto,
-                enGrabacion = GrabarClase.enGrabacion(vozId, f.ms), fuente = DE_CAMARA
+                enGrabacion = GrabarClase.enGrabacion(vozId, f.ms), fuente = DE_CAMARA,
+                tomadaEn = f.tomadaEn.takeIf { it > 0 }
             )
         }
         val deVideo = clipsEnOrden.map { c ->

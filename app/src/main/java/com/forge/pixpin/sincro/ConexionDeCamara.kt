@@ -78,7 +78,10 @@ class ConexionDeCamara private constructor(
             canal,
             Protocolo.Peticion(
                 "suelto", nombre = t.nombre, mime = t.mime, bytes = largo, destino = CamaraRemota.DESTINO,
-                grabacion = t.grabacion, ms = t.ms, tomadaEn = t.tomadaEn, reloj = t.reloj,
+                // **Por su hora** (§12.4): una foto hecha sin saber de ninguna grabación va sin
+                // `grabacion` ni `ms`, solo con su hora y su desfase; quien graba decide dónde cae.
+                grabacion = t.grabacion.ifEmpty { null }, ms = t.ms.takeIf { t.grabacion.isNotEmpty() },
+                tomadaEn = t.tomadaEn, reloj = t.reloj,
                 duracionMs = if (t.esClip) t.duracionMs else 0, clave = t.clave
             )
         )
@@ -91,6 +94,26 @@ class ConexionDeCamara private constructor(
         if (bien == null) throw Protocolo.ErrorDelOtro("El archivo cambió mientras se mandaba")
         listo.error?.let { throw Protocolo.ErrorDelOtro(it) }
         return listo.ms ?: t.ms
+    }
+
+    /**
+     * **Quien graba aquí avisa de la suya al otro** (28-oct-2026, §13, `anunciar_la_mia` del PC): la
+     * misma `camara_remota` que [preguntar], pero con la grabación de este teléfono en `suya`. El otro
+     * la apunta (sale «Captura para la grabación del móvil») y contesta con la suya. Devuelve su
+     * anuncio y lo que va adelantado el reloj de aquí sobre el suyo. Lanza [Protocolo.ErrorDelOtro]
+     * si el otro es de antes, con la conexión sana.
+     */
+    fun anunciarLaMia(mia: CamaraRemota.Anuncio, ahora: () -> Long = System::currentTimeMillis): Respuesta {
+        val t0 = ahora()
+        val pregunta = CamaraRemota.Pregunta(reloj = t0, suya = mia.copy(t = CamaraRemota.PETICION, reloj = t0))
+        canal.enviar(Protocolo.JSON_, CamaraRemota.aTexto(pregunta).toByteArray())
+        val (tipo, datos) = canal.recibir()
+        val t2 = ahora()
+        if (tipo != Protocolo.JSON_) throw IOException("Se esperaba una respuesta")
+        val r = CamaraRemota.deTexto(datos.decodeToString())
+        r.error?.let { throw Protocolo.ErrorDelOtro(it) }
+        val adelanto = if (r.reloj > 0) -CamaraRemota.desfase(t0, r.reloj, t2) else 0L
+        return Respuesta(r, adelanto, ((t2 - t0) / 2).coerceAtLeast(0))
     }
 
     /** Se despide (`adios`). Si la conexión ya se rompió, no pasa nada. */
@@ -162,9 +185,15 @@ object SubidaALaGrabacion {
         var reintentar = false
         var motivo: String? = null
         if (!con.sabeDeCamara) return Pasada(0, 0, true, "El PC no sabe de la cámara del móvil: actualiza PixPin en el PC")
-        for (t in cola.pendientes().filter { it.pc == pc }) {
-            val f = cola.fichero(t)
-            if (!f.isFile) { cola.negada(t.clave, "«${t.nombre}» ya no está en el teléfono", ahora()); negadas++; continue }
+        // Lo de este PC y lo que va por su hora (a cualquier PC del grupo, §12.4).
+        val tomas = cola.pendientes().filter { it.pc == pc || it.pc.isEmpty() }
+        // **Por su hora, con el reloj medido ahora** si la toma no lo sabía: lo que va adelantado este
+        // teléfono sobre el PC, para pasar su hora a la del PC.
+        val adelanto by lazy { runCatching { con.preguntar(ahora).adelanto }.getOrNull() }
+        for (t0 in tomas) {
+            val f = cola.fichero(t0)
+            if (!f.isFile) { cola.negada(t0.clave, "«${t0.nombre}» ya no está en el teléfono", ahora()); negadas++; continue }
+            val t = if (t0.porSuHora && t0.reloj == 0L) adelanto?.let { t0.copy(reloj = it) } ?: t0 else t0
             try {
                 val ms = con.mandar(f, t, avance)
                 cola.lista(t.clave, ms, ahora())

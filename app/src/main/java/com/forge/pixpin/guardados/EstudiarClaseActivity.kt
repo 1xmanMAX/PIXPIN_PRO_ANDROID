@@ -282,6 +282,10 @@ class EstudiarClaseActivity : ComponentActivity() {
         val todos = remember(version) { almacen.leer() }
         val m = remember(todos) { todos.firstOrNull { it.id == id } }
         val capturas = remember(todos, m) { m?.let { capturasDeLaLetra(it, todos) }.orEmpty() }
+        // De quién es cada captura (un colaborador) y si su hora no se comprobó (28-oct-2026, §14).
+        val autores = remember(todos, m) {
+            m?.let { v -> autoresDeLaLetra(v, todos, runCatching { v.proyecto?.let { chatsCompartidosDentro(this@EstudiarClaseActivity)[it]?.lados } }.getOrNull()) }.orEmpty()
+        }
         // El mensaje de cada captura (el mismo orden): para su lienzo anotado.
         val fotos = remember(todos, m) {
             val porId = todos.associateBy { it.id }
@@ -592,13 +596,13 @@ class EstudiarClaseActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = PaddingValues(vertical = 6.dp)
             ) {
-                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r) { irA(ms) } }
+                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r, autores.getOrNull(i)) { irA(ms) } }
             } else LazyRow(
                 state = tira, modifier = Modifier.fillMaxWidth().height((r.altoMiniatura + EstudiarClase.ALTO_DEL_MINUTO).dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
                 contentPadding = PaddingValues(horizontal = 8.dp)
             ) {
-                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r) { irA(ms) } }
+                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r, autores.getOrNull(i)) { irA(ms) } }
             }
         }
 
@@ -1312,7 +1316,7 @@ class EstudiarClaseActivity : ComponentActivity() {
      * que encima de una tan pequeña la taparía.
      */
     @Composable
-    private fun Miniatura(ruta: String, ms: Long, actual: Boolean, r: EstudiarClase.Reparto, alTocar: () -> Unit) {
+    private fun Miniatura(ruta: String, ms: Long, actual: Boolean, r: EstudiarClase.Reparto, autor: AutorDeCaptura? = null, alTocar: () -> Unit) {
         var imagen by remember(ruta) { mutableStateOf<ImageBitmap?>(null) }
         LaunchedEffect(ruta) { imagen = leer(ruta, 240) }
         val (w, h) = EstudiarClase.medidaDeMiniatura(
@@ -1326,6 +1330,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                 contentAlignment = Alignment.Center
             ) {
                 imagen?.let { Image(it, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+                autor?.let { ChapaDeAutor(it, Modifier.align(Alignment.TopStart)) }
             }
             Text(
                 Transcriptor.marcaDeTiempo(ms.toInt()), fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1,

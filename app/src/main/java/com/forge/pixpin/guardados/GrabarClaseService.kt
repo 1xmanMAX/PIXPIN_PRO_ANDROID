@@ -70,6 +70,7 @@ import androidx.core.app.NotificationCompat
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
 import com.forge.pixpin.audio.Grabador
+import com.forge.pixpin.sincro.GrabacionDelMovil
 import com.forge.pixpin.capture.CaptureFlow
 import com.forge.pixpin.capture.CaptureService
 import com.forge.pixpin.capture.ProjectionSession
@@ -277,6 +278,8 @@ class GrabarClaseService : Service() {
         val c = GrabarClase.Cronometro()
         cronometro = c
         enMarcha = true
+        // El PC puede mandar capturas a esta grabación (§13 de la guía del PC). Ver [GrabacionDelMovil].
+        GrabacionDelMovil.empezar(this, getString(R.string.clase_nombre, GrabarClase.fechaDelNombre(ahora))) { c.llevadoMs() to c.enPausa }
         ensenarLaBarra()
         // El mismo bucle que el chat para la onda; y el reloj de la barra.
         scope.launch {
@@ -385,6 +388,7 @@ class GrabarClaseService : Service() {
         val p = !c.enPausa
         c.pausar(p)
         grabador?.pausar(p)
+        GrabacionDelMovil.pausa(this)
         barra.update { it.copy(enPausa = p) }
         if (p) avisar(getString(R.string.clase_en_pausa))
     }
@@ -408,6 +412,7 @@ class GrabarClaseService : Service() {
     private fun descartar() {
         terminado = true
         enMarcha = false
+        GrabacionDelMovil.tirar(this)
         quitarVentanas()
         val g = grabador
         grabador = null
@@ -430,6 +435,7 @@ class GrabarClaseService : Service() {
         if (terminado) return
         terminado = true
         enMarcha = false
+        GrabacionDelMovil.acabar(this)
         quitarVentanas()
         val g = grabador
         grabador = null
@@ -479,7 +485,7 @@ class GrabarClaseService : Service() {
         picos: List<Int>, hechas: List<Hecha>, video: File?
     ): String {
         val almacen = MensajesStore(context)
-        fun soltar() { archivo?.delete(); video?.delete(); hechas.forEach { it.archivo?.delete() } }
+        fun soltar() { archivo?.delete(); video?.delete(); hechas.forEach { it.archivo?.delete() }; GrabacionDelMovil.tirar(context) }
         if ((!bien || archivo == null || !archivo.exists()) && video != null && video.length() > 0) {
             // Vídeo sin pista de audio que sacar: el vídeo entra solo, como un archivo más.
             archivo?.delete()
@@ -488,6 +494,7 @@ class GrabarClaseService : Service() {
                 context.getString(R.string.clase_nombre, GrabarClase.fechaDelNombre(System.currentTimeMillis()))
             ), "video/mp4", proyecto)
             video.delete()
+            GrabacionDelMovil.tirar(context)
             return context.getString(R.string.clase_sin_audio)
         }
         if (!bien || archivo == null || !archivo.exists()) {
@@ -568,11 +575,14 @@ class GrabarClaseService : Service() {
         // **Y todo dentro de su carpeta** (25-oct-2026, como el PC desde `e015e2b`): en el chat se ve
         // UNA tarjeta y no la nota, el vídeo y cada captura sueltos. Los enlaces de arriba no cambian
         // («Estudiar la clase» va por ellos); si la carpeta no entra, lo de dentro sigue suelto.
-        runCatching {
+        val laCarpeta = runCatching {
             val carpeta = GrabarClase.carpetaDeLaGrabacion(vozId, duracion.toLong(), elVideo?.id, enlazadas)
             val cuando = CarpetaDePaginas.cuandoLibre(System.currentTimeMillis(), almacen.leer())
             almacen.anadir(CarpetaDePaginas.mensajeNuevo(nombre, cuando, proyecto, carpeta))
-        }.onFailure { android.util.Log.w("PixPinClase", "la clase quedó sin su carpeta", it) }
+            cuando.toString()
+        }.onFailure { android.util.Log.w("PixPinClase", "la clase quedó sin su carpeta", it) }.getOrNull()
+        // Las capturas del PC, el reloj de pared y los colaboradores, en la nota (§12-§14).
+        GrabacionDelMovil.guardada(context, proyecto, vozId, laCarpeta, duracion.toLong())
         // **Y se pasa a texto**, como el PC al terminar: es lo que se va a querer leer junto a
         // las imágenes. Si no hay reconocedor, se guarda igual y se dice dónde pedirlo luego.
         // Por la cola ([ColaDeTexto]), en primer plano y retomada si el proceso muere (28-oct-2026).

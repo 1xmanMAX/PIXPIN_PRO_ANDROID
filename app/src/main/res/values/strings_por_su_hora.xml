@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Las fotos por su hora, de la PC al móvil y colaboradores (28-oct-2026, §12-§14 de
+  docs/movil-como-camara.md del PC; aquí, docs/fotos-por-su-hora-android.md).
+-->
+<resources>
+    <string name="clase_todos_aportan">Que todos los del chat aporten fotos</string>
+    <string name="clase_solo_mis_fotos">Solo mis fotos en esta grabación</string>
+    <string name="clase_todos_aportan_hecho">Las fotos de los del chat entrarán en su minuto</string>
+    <string name="clase_solo_mis_fotos_hecho">Solo entran tus fotos en esta grabación</string>
+    <string name="clase_todos_aportan_detalle">Las fotos que hagan las personas del chat compartido durante la reunión entran en su minuto, aunque no estén conectadas.</string>
+    <string name="foto_adjuntar_a_la_grabacion">Adjuntar a la grabación</string>
+    <string name="foto_sin_grabaciones">No hay grabaciones en este chat</string>
+    <string name="foto_adjuntada_a_la_grabacion">En «%1$s», en el %2$s</string>
+    <string name="clase_hora_sin_comprobar">hora sin comprobar</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="one">%d captura del PC</item>
+        <item quantity="other">%d capturas del PC</item>
+    </plurals>
+</resources>

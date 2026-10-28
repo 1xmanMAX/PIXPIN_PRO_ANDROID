@@ -132,6 +132,18 @@ class ReunionEnCursoActivity : ComponentActivity() {
                 color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp
             )
             Text(e.aviso ?: " ", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 2, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            // **Colaboradores** (28-oct-2026, §14 de la guía del PC): los del chat compartido aportan
+            // fotos que entran en su minuto; y lo que manda el PC a esta grabación (§13).
+            val todos by com.forge.pixpin.sincro.GrabacionDelMovil.abiertaATodos.collectAsState()
+            val delPc by com.forge.pixpin.sincro.GrabacionDelMovil.delPc.collectAsState()
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    getString(R.string.clase_todos_aportan) +
+                        (if (delPc > 0) " · " + resources.getQuantityString(R.plurals.reunion_capturas_del_pc, delPc, delPc) else ""),
+                    color = Color.White.copy(alpha = 0.85f), fontSize = 14.sp, modifier = Modifier.weight(1f)
+                )
+                androidx.compose.material3.Switch(checked = todos, onCheckedChange = { com.forge.pixpin.sincro.GrabacionDelMovil.abiertaATodos.value = it })
+            }
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)

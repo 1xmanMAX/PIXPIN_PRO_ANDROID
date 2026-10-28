@@ -80,6 +80,7 @@ import com.forge.pixpin.audio.Grabador
 import com.forge.pixpin.motor.añadirVistaFluida
 import com.forge.pixpin.pin.OverlayComposeWindow
 import com.forge.pixpin.pin.Voz
+import com.forge.pixpin.sincro.GrabacionDelMovil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -231,7 +232,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
 
 
     /** Una foto hecha: su minuto y el JPEG en la carpeta de adjuntos. */
-    private class FotoHecha(val ms: Long, val archivo: File)
+    private class FotoHecha(val ms: Long, val archivo: File, val cuando: Long = 0)
 
     /** Un clip: su minuto, lo que dura y su MP4 (null en la forma de vídeo: se recorta al terminar). */
     private class ClipHecho(val ms: Long, val duracionMs: Long, val archivo: File?)
@@ -384,6 +385,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
         val c = GrabarClase.Cronometro()
         cronometro = c
+        // El PC puede mandar capturas a esta grabación (§13 de la guía del PC). Ver [GrabacionDelMovil].
+        GrabacionDelMovil.empezar(this, getString(R.string.reunion_nombre, GrabarClase.fechaDelNombre(ahora))) { c.llevadoMs() to c.enPausa }
         estado.update { it.copy(lista = true, conCamara = camara != null, video = forma == Presencial.Forma.VIDEO, mirilla = camara?.conMirilla == true) }
         actualizarAviso()
         if (conBurbuja) ensenarLaBurbuja()
@@ -435,6 +438,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             return
         }
         val ms = Presencial.msDeLaFoto(c.llevadoMs())
+        val cuando = System.currentTimeMillis()
         val n = ++numeroDeFoto
         val f = File(carpeta, "reunion_foto_${System.currentTimeMillis()}_$n.jpg")
         fotosPendientes++
@@ -446,7 +450,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             try {
                 val bien = cam.foto(f) && withContext(Dispatchers.IO) { FotoDeLaCamara.enSuSitio(f) || f.length() > 0 }
                 if (bien) {
-                    fotos += FotoHecha(ms, f)
+                    fotos += FotoHecha(ms, f, cuando)
                     estado.update { it.copy(fotos = fotos.size) }
                     avisar(getString(R.string.reunion_foto_hecha, GrabarClase.minuto(ms)), fuera = true)
                     actualizarAviso()
@@ -540,6 +544,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         c.pausar(p)
         grabador?.pausar(p)
         camara?.pausar(p)
+        GrabacionDelMovil.pausa(this)
         estado.update { it.copy(enPausa = p) }
         sentir(null)
         avisar(getString(if (p) R.string.clase_en_pausa else R.string.reunion_sigue))
@@ -587,6 +592,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
         terminado = true
         enMarcha = false
+        GrabacionDelMovil.acabar(this)
         sentir(MediaActionSound.STOP_VIDEO_RECORDING)
         estado.update { it.copy(terminando = true) }
         quitarLaBurbuja()
@@ -688,7 +694,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             val fichero = Presencial.nombreDeLaFoto(true, ahora, i + 1, "jpg")
             val final = File(carpeta, "${ahora}_$fichero")
             if (!f.archivo.renameTo(final)) return@mapIndexedNotNull null
-            Presencial.FotoGuardada(UUID.randomUUID().toString(), Presencial.msDeLaFoto(f.ms, duracion.toLong().takeIf { conNota }), final.absolutePath, fichero, final.length())
+            Presencial.FotoGuardada(UUID.randomUUID().toString(), Presencial.msDeLaFoto(f.ms, duracion.toLong().takeIf { conNota }), final.absolutePath, fichero, final.length(), f.cuando)
         }
         // El vídeo de la reunión: el primer tramo; los siguientes (720p pasada la hora), como clips.
         val primero = losTramos.firstOrNull()?.archivo?.takeIf { it.exists() && it.length() > 0 }
@@ -715,6 +721,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             video?.let { suelto(Mensaje(id = it.id, cuando = cuando++, clase = Clase.ARCHIVO, ruta = it.ruta, nombre = it.nombre, bytes = it.bytes, duracionMs = it.duracionMs, proyecto = proyecto)) }
             for (f in fotosListas) suelto(Mensaje(id = f.id, cuando = cuando++, clase = Clase.IMAGEN, ruta = f.ruta, nombre = f.nombre, bytes = f.bytes, proyecto = proyecto, fuente = Presencial.DE_CAMARA))
             for (c in todosLosClips) suelto(Mensaje(id = c.id, cuando = cuando++, clase = Clase.ARCHIVO, ruta = c.ruta, nombre = c.nombre, bytes = c.bytes, duracionMs = c.duracionMs.toInt(), proyecto = proyecto, fuente = Presencial.DE_CAMARA))
+            GrabacionDelMovil.tirar(context)
             return context.getString(if (video != null || fotosListas.isNotEmpty() || todosLosClips.isNotEmpty()) R.string.reunion_sin_nota else R.string.voz_muy_corta)
         }
         val elM4a = m4a!!
@@ -728,11 +735,14 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         // En orden y con números seguidos, como el PC: la nota, el vídeo, las fotos y los clips.
         mensajes.forEach { almacen.anadir(it) }
         // Y todo dentro de su carpeta (§3.2): una tarjeta en el chat, las fotos con «⏱» y los clips con «▶».
-        runCatching {
+        val laCarpeta = runCatching {
             val doc = Presencial.carpeta(vozId, duracion.toLong(), video?.id, fotosListas, todosLosClips)
             val cuando = CarpetaDePaginas.cuandoLibre(System.currentTimeMillis(), almacen.leer())
             almacen.anadir(CarpetaDePaginas.mensajeNuevo(nombre, cuando, proyecto, doc))
-        }.onFailure { android.util.Log.w("PixPinReunion", "la reunión quedó sin su carpeta", it) }
+            cuando.toString()
+        }.onFailure { android.util.Log.w("PixPinReunion", "la reunión quedó sin su carpeta", it) }.getOrNull()
+        // Las capturas del PC, el reloj de pared y los colaboradores, en la nota (§12-§14).
+        GrabacionDelMovil.guardada(context, proyecto, vozId, laCarpeta, duracion.toLong())
         // **Y se pasa a texto, siempre**, como la clase: `[m:ss]` cada trozo. Por la cola ([ColaDeTexto]):
         // en primer plano, aunque la app esté fuera, y retomada si el proceso muere (28-oct-2026; antes
         // se lanzaba en un hilo suelto y, con el servicio ya parado, Android congelaba el proceso).
