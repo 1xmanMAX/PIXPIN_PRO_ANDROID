@@ -71,7 +71,12 @@ object FormatosDeCompartir {
         GRABACION,
         /** Una lección. */
         LECCION,
-        /** Una carpeta (un cuaderno) de páginas del chat. */
+        /**
+         * Una carpeta (un cuaderno) de páginas del chat. **Con todo, como un proyecto** (28-oct-2026,
+         * «que añada todos los formatos que tienen los demás»): la imagen de una página, el PDF, la
+         * web, el texto de sus notas, su `.pixpin`, el ZIP de sus páginas y la Wi-Fi. Ver
+         * [com.forge.pixpin.guardados.CompartirCarpeta].
+         */
         CARPETA,
         /** Una imagen suelta: una captura de la galería, un pin, lo recién capturado. */
         IMAGEN,
@@ -97,7 +102,7 @@ object FormatosDeCompartir {
         Contenido.CROQUIS_3D to listOf(Clase.PNG, Clase.JPG, Clase.PDF, Clase.WEB, Clase.OTRO, Clase.PIXPIN, Clase.ORIGINAL),
         Contenido.GRABACION to listOf(Clase.PDF, Clase.WEB, Clase.WORD, Clase.MARKDOWN, Clase.TEXTO, Clase.PIXPIN, Clase.ORIGINAL, Clase.ANKI, Clase.WIFI),
         Contenido.LECCION to listOf(Clase.PNG, Clase.JPG, Clase.PDF, Clase.WEB, Clase.MARKDOWN, Clase.TEXTO, Clase.PIXPIN, Clase.ORIGINAL),
-        Contenido.CARPETA to listOf(Clase.PNG, Clase.JPG, Clase.PDF),
+        Contenido.CARPETA to listOf(Clase.PNG, Clase.JPG, Clase.PDF, Clase.WEB, Clase.WORD, Clase.MARKDOWN, Clase.TEXTO, Clase.PIXPIN, Clase.ORIGINAL, Clase.WIFI),
         Contenido.IMAGEN to listOf(Clase.PNG, Clase.JPG, Clase.PDF, Clase.WEB, Clase.TEXTO, Clase.PIXPIN, Clase.ORIGINAL, Clase.WIFI),
         Contenido.ARCHIVO to listOf(Clase.TEXTO, Clase.PIXPIN, Clase.ORIGINAL, Clase.WIFI)
     )

@@ -7381,6 +7381,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * Trabajo de disco.
      */
     private fun compartibleDe(m: Mensaje): com.forge.pixpin.ui.Compartible? {
+        // **Un cuaderno o la carpeta de una grabación**: la misma hoja que desde su pantalla (28-oct-2026).
+        if (CarpetaDePaginas.esCarpeta(m)) CompartirCarpeta.compartible(this, m, almacen.leer())?.let { return it }
         val app = application as? PixPinApp ?: return null
         val nombre = nombreDeLoCompartido(m)
         val real = m.proyecto?.let { app.proyectos.porId(it) }
@@ -7491,7 +7493,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * con varias hojas; los archivos, juntos en un ZIP como «Original»; y los textos, uno detrás de
      * otro. Trabajo de disco.
      */
-    private fun compartibleDeVarios(lista: List<Mensaje>): com.forge.pixpin.ui.Compartible? {
+    private fun compartibleDeVarios(marcados: List<Mensaje>): com.forge.pixpin.ui.Compartible? {
+        // **Un cuaderno marcado va con sus páginas**; uno solo, con su hoja (28-oct-2026). Ver [CompartirCarpeta].
+        val todos = almacen.leer()
+        CompartirCarpeta.deVarios(this, marcados, todos)?.let { return it }
+        val lista = CompartirCarpeta.conSusPaginas(marcados, todos)
         // Un mismo proyecto una sola vez, con todas sus páginas marcadas (sus claves no se repiten).
         val seleccion = lista.filter { sePuedeComponer(it) || it.clase == Clase.PROYECTO }
             .mapNotNull { proyectoDe(it) }
