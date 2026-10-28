@@ -280,13 +280,23 @@ class CamaraDelPcTest {
             Thread.sleep(200)
         }
         assertTrue("lo llegado espera en ${parcial.path}: ${parcial.length()}", parcial.length() >= (1 shl 20))
+        // El PC puede tardar un momento en soltar la conexión cortada y contestar «ocupado»: la
+        // subida de verdad reintenta, y aquí igual (hasta 10 s).
         var segundaVez = 0L
-        conectar({ o -> object : FilterOutputStream(o) {
-            override fun write(b: ByteArray, off: Int, len: Int) { segundaVez += len; out.write(b, off, len) }
-        } }) { so, out ->
-            val p = SubidaALaGrabacion.subir(so.getInputStream(), out, movil.identidad.leer(), cola, "id-pc", ahora = ::ahoraMovil)
-            assertEquals("$p · ${cola.todas().first { it.clave == cortado.clave }} · " + File(raiz, "pc.log").readText(), 1, p.subidas)
+        var subidas = 0
+        var ultima = ""
+        val hastaQueSuelte = System.currentTimeMillis() + 10_000
+        while (subidas == 0 && System.currentTimeMillis() < hastaQueSuelte) {
+            conectar({ o -> object : FilterOutputStream(o) {
+                override fun write(b: ByteArray, off: Int, len: Int) { segundaVez += len; out.write(b, off, len) }
+            } }) { so, out ->
+                val p = SubidaALaGrabacion.subir(so.getInputStream(), out, movil.identidad.leer(), cola, "id-pc", ahora = ::ahoraMovil)
+                subidas = p.subidas
+                ultima = "$p"
+            }
+            if (subidas == 0) Thread.sleep(300)
         }
+        assertEquals("$ultima · ${cola.todas().first { it.clave == cortado.clave }} · " + File(raiz, "pc.log").readText(), 1, subidas)
         assertTrue("solo lo que faltaba: $segundaVez de ${grande.size}", segundaVez < grande.size - (1 shl 20))
         assertEquals(30 * s, cola.todas().first { it.clave == cortado.clave }.msListo)
 
