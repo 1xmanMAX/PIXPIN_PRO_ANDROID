@@ -441,6 +441,9 @@ class GrabarClaseService : Service() {
         val app = applicationContext as PixPinApp
         val cerrarLaSesion = abrimosLaSesion
         val elVideo = conVideo
+        // **El servicio de pasar a texto, arrancado ya** (28-oct-2026): ahora Android deja (es el toque
+        // de «Terminar»); dentro de unos segundos, con la clase ya guardada, quizá no. Ver [ColaDeTexto].
+        val reserva = PasarATextoService.reservar(app, getString(R.string.pasar_a_texto_titulo))
         app.scope.launch(Dispatchers.IO) {
             val bien = Voz.parar(g)
             val dicho = runCatching {
@@ -459,6 +462,8 @@ class GrabarClaseService : Service() {
                 if (cerrarLaSesion) CaptureService.stopSession(app)
                 toast(dicho)
                 notaGuardada?.let { avisarParaEstudiar(it) }
+                // La cola ya cogió la nota (o la cogerá con el servicio aún en pie).
+                android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ PasarATextoService.soltar(reserva) }, 10_000)
                 stopSelf()
             }
         }
@@ -570,8 +575,9 @@ class GrabarClaseService : Service() {
         }.onFailure { android.util.Log.w("PixPinClase", "la clase quedó sin su carpeta", it) }
         // **Y se pasa a texto**, como el PC al terminar: es lo que se va a querer leer junto a
         // las imágenes. Si no hay reconocedor, se guarda igual y se dice dónde pedirlo luego.
+        // Por la cola ([ColaDeTexto]), en primer plano y retomada si el proceso muere (28-oct-2026).
         val conTexto = Transcriptor.disponible(context)
-        if (conTexto) almacen.transcribir(voz)
+        if (conTexto && ColaDeTexto.entraSola(voz, hayAudio = true, grabadoAqui = true)) almacen.transcribir(voz)
         return context.getString(
             if (conTexto) R.string.clase_lista_con_texto else R.string.clase_lista_sin_texto,
             enlazadas.size

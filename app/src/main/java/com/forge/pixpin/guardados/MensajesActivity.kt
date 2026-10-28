@@ -6967,7 +6967,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 duracionMs = duracion,
                 picos = picos,
                 proyecto = chatDe
-            )
+            ),
+            // Lo grabado se pasa a texto siempre (28-oct-2026). Ver [ColaDeTexto.entraSola].
+            transcribir = true
         )
     }
 

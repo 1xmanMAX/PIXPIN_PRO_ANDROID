@@ -11,6 +11,21 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
+import android.graphics.drawable.Icon
+import android.media.MediaActionSound
+import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
+import androidx.camera.core.Preview
+import androidx.camera.view.PreviewView
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.border
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.flow.StateFlow
 import android.hardware.display.DisplayManager
 import android.os.IBinder
 import android.provider.Settings
@@ -117,6 +132,27 @@ import kotlin.math.roundToInt
  * En las dos, **la nota de voz sale siempre** y se pasa a texto al terminar, como la clase; las fotos,
  * a la resolución entera de la cámara y en JPEG ([FotoDeLaCamara]), entran como capturas con
  * `fuente: "camara"`, y los clips en `clips` de la nota. Ver [Presencial.mensajes].
+ *
+ * ## Saber qué se hizo y poder terminar siempre (28-oct-2026)
+ *
+ * El usuario: «mientras grabo una reunión no sé si tomé la foto o grabé el clip, y no hay botón para
+ * terminar la grabación»; y luego: «puede ser un pequeño cuadro donde vea que estoy tomando fotos o
+ * grabando». Ahora:
+ *
+ * - **Cada toque se nota al momento** ([sentir]): una vibración corta y el sonido del sistema (el
+ *   obturador para la foto, el de empezar y parar vídeo para el clip), y la cuenta sube en la
+ *   notificación, en la burbuja y en la pantalla de la reunión. Grabando un clip se ve «● Clip 0:12».
+ * - **La notificación lleva los botones a la vista también plegada**: es de estilo multimedia
+ *   (`Notification.MediaStyle`, con Foto, Clip y Terminar en la vista compacta y la pausa al
+ *   desplegarla). Antes eran acciones normales, que Android solo enseña desplegada: plegada no había
+ *   ni «Terminar». **Tocarla abre la pantalla de la reunión** ([ReunionEnCursoActivity]).
+ * - **La burbuja es un cuadro con la mirilla de la cámara** (lo que se fotografía, en vivo, ver
+ *   [CamaraDeLaReunion.ponerMirilla]): un destello blanco al hacer una foto, «● 0:12» en rojo mientras
+ *   se graba un clip, y Foto, Clip, pausa y **Terminar** en el propio cuadro. Si el teléfono no da la
+ *   mirilla (o se soltó para grabar el vídeo), la burbuja de siempre, con el contador.
+ * - **Con PixPin delante**, la burbuja se esconde y cada pantalla de la app lleva abajo **la barra de
+ *   la reunión** ([ReunionEnLaApp]) con lo mismo; tocar su reloj abre la pantalla de la reunión, con
+ *   la mirilla grande.
  */
 class ReunionPresencialService : Service(), LifecycleOwner {
 
@@ -141,6 +177,44 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         var enMarcha = false
             private set
 
+        /** El servicio en marcha, para la pantalla y la barra de la reunión en la app (mismo proceso). */
+        @Volatile
+        private var vivo: ReunionPresencialService? = null
+
+        private val _estado = MutableStateFlow(EstadoDeLaReunion())
+
+        /** **Lo que pintan la burbuja, la notificación, la barra y la pantalla de la reunión.** */
+        val estado: StateFlow<EstadoDeLaReunion> get() = _estado
+
+        /**
+         * **Si hay una pantalla de PixPin delante** (lo pone [ReunionEnLaApp]): entonces la burbuja se
+         * esconde y manda la barra de la reunión de la app, que hace lo mismo sin tapar nada.
+         */
+        val appDelante = MutableStateFlow(false)
+
+        /** Una foto, como el botón de la notificación. */
+        fun foto() { vivo?.foto() }
+        /** Empieza o para un clip. */
+        fun clip() { vivo?.clip() }
+        /** Pausa o sigue. */
+        fun pausa() { vivo?.pausa() }
+        /** Termina y guarda la reunión. */
+        fun terminar() { vivo?.terminar() }
+
+        /**
+         * **La mirilla en la pantalla de la reunión de la app** (su `PreviewView`), o null al irse: vuelve
+         * a la burbuja si la hay.
+         */
+        fun mirillaEnLaApp(proveedor: Preview.SurfaceProvider?) {
+            val s = vivo ?: return
+            s.mirillaDeLaApp = proveedor
+            s.elegirMirilla()
+        }
+
+        /** Lo que abre tocar la notificación o la barra: la pantalla de la reunión. */
+        fun intentoDeLaPantalla(context: Context): Intent =
+            Intent(context, ReunionEnCursoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+
         /** Empieza la reunión en el chat [proyecto] (null, el general). Con la app a la vista. */
         fun empezar(
             context: Context, proyecto: String?, forma: Presencial.Forma, calidad: Presencial.Calidad, burbuja: Boolean
@@ -155,17 +229,6 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
     }
 
-    /** Lo que pintan la burbuja y la notificación. */
-    private data class Estado(
-        val segundos: Long = 0,
-        val enPausa: Boolean = false,
-        val fotos: Int = 0,
-        val clips: Int = 0,
-        /** El minuto en que empezó el clip que se graba, o null. */
-        val clipDesde: Long? = null,
-        val aviso: String? = null,
-        val lista: Boolean = false
-    )
 
     /** Una foto hecha: su minuto y el JPEG en la carpeta de adjuntos. */
     private class FotoHecha(val ms: Long, val archivo: File)
@@ -179,7 +242,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     private val registro = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = registro
 
-    private val estado = MutableStateFlow(Estado())
+    private val estado get() = _estado
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val wm by lazy { getSystemService(WindowManager::class.java) }
 
@@ -205,6 +268,16 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     private var orientacion: OrientationEventListener? = null
 
     private var burbuja: OverlayComposeWindow? = null
+    /** Dónde se ve la mirilla: la `PreviewView` de la burbuja o la de la pantalla de la reunión. */
+    private var mirillaDeLaBurbuja: Preview.SurfaceProvider? = null
+    private var mirillaDeLaApp: Preview.SurfaceProvider? = null
+    private val sonidos by lazy {
+        MediaActionSound().apply {
+            runCatching {
+                load(MediaActionSound.SHUTTER_CLICK); load(MediaActionSound.START_VIDEO_RECORDING); load(MediaActionSound.STOP_VIDEO_RECORDING)
+            }
+        }
+    }
     private var lp: WindowManager.LayoutParams? = null
     private var avisoJob: Job? = null
 
@@ -215,6 +288,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     override fun onCreate() {
         super.onCreate()
         registro.currentState = Lifecycle.State.CREATED
+        _estado.value = EstadoDeLaReunion()
+        vivo = this
         val canal = NotificationChannel(CANAL, getString(R.string.reunion_canal), NotificationManager.IMPORTANCE_LOW)
             .apply { setShowBadge(false) }
         getSystemService(NotificationManager::class.java).createNotificationChannel(canal)
@@ -270,6 +345,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             camara = cam
             cam!!.camaraId?.let { id -> runCatching { prefs.edit().putString(CAMARA, id).apply() } }
             vigilarElGiro()
+            elegirMirilla()
         } else {
             avisar(getString(R.string.reunion_sin_camara))
         }
@@ -308,7 +384,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
         val c = GrabarClase.Cronometro()
         cronometro = c
-        estado.update { it.copy(lista = true) }
+        estado.update { it.copy(lista = true, conCamara = camara != null, video = forma == Presencial.Forma.VIDEO, mirilla = camara?.conMirilla == true) }
         actualizarAviso()
         if (conBurbuja) ensenarLaBurbuja()
         // El reloj, la onda y, con la calidad automática, el paso a 720p pasada la hora.
@@ -337,6 +413,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         quitarLaBurbuja()
         orientacion?.disable()
         enMarcha = false
+        if (vivo === this) vivo = null
+        runCatching { sonidos.release() }
         registro.currentState = Lifecycle.State.DESTROYED
         scope.cancel()
         super.onDestroy()
@@ -360,20 +438,25 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         val n = ++numeroDeFoto
         val f = File(carpeta, "reunion_foto_${System.currentTimeMillis()}_$n.jpg")
         fotosPendientes++
+        // **Se nota al momento** (28-oct-2026): el obturador, una vibración y el destello en la mirilla,
+        // antes de que la cámara devuelva la foto (eso tarda: es la resolución entera).
+        sentir(MediaActionSound.SHUTTER_CLICK)
+        estado.update { it.copy(destellos = it.destellos + 1, fotosEnCurso = fotosPendientes) }
         scope.launch {
             try {
                 val bien = cam.foto(f) && withContext(Dispatchers.IO) { FotoDeLaCamara.enSuSitio(f) || f.length() > 0 }
                 if (bien) {
                     fotos += FotoHecha(ms, f)
                     estado.update { it.copy(fotos = fotos.size) }
-                    avisar(getString(R.string.reunion_foto_hecha, GrabarClase.minuto(ms)))
+                    avisar(getString(R.string.reunion_foto_hecha, GrabarClase.minuto(ms)), fuera = true)
                     actualizarAviso()
                 } else {
                     f.delete()
-                    avisar(getString(R.string.reunion_foto_fallo))
+                    avisar(getString(R.string.reunion_foto_fallo), fuera = true)
                 }
             } finally {
                 fotosPendientes--
+                estado.update { it.copy(fotosEnCurso = fotosPendientes) }
             }
         }
     }
@@ -390,8 +473,9 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             val ms = c.llevadoMs()
             if (forma == Presencial.Forma.VIDEO) {
                 if (tramos.isEmpty()) return
+                sentir(MediaActionSound.START_VIDEO_RECORDING)
                 estado.update { it.copy(clipDesde = ms) }
-                avisar(getString(R.string.reunion_clip_empezado))
+                avisar(getString(R.string.reunion_clip_empezado), fuera = true)
                 actualizarAviso()
                 return
             }
@@ -403,11 +487,12 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     if (cam.empezarVideo(mp4, 1080, conSonido = false)) {
                         if (c.enPausa) cam.pausar(true)
                         clipArchivo = mp4
-                        estado.update { it.copy(clipDesde = ms) }
-                        avisar(getString(R.string.reunion_clip_empezado))
+                        sentir(MediaActionSound.START_VIDEO_RECORDING)
+                        estado.update { it.copy(clipDesde = ms, mirilla = cam.conMirilla) }
+                        avisar(getString(R.string.reunion_clip_empezado), fuera = true)
                     } else {
                         mp4.delete()
-                        avisar(getString(R.string.reunion_clip_fallo))
+                        avisar(getString(R.string.reunion_clip_fallo), fuera = true)
                     }
                     actualizarAviso()
                 } finally {
@@ -418,25 +503,28 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             val dura = (c.llevadoMs() - desde).coerceAtLeast(0)
             if (forma == Presencial.Forma.VIDEO) {
                 clips += ClipHecho(desde, dura, null)
+                sentir(MediaActionSound.STOP_VIDEO_RECORDING)
                 estado.update { it.copy(clipDesde = null, clips = clips.size) }
-                avisar(getString(R.string.reunion_clip_hecho, GrabarClase.minuto(desde)))
+                avisar(getString(R.string.reunion_clip_hecho, GrabarClase.minuto(desde)), fuera = true)
                 actualizarAviso()
                 return
             }
             clipCambiando = true
             scope.launch {
                 try {
+                    sentir(MediaActionSound.STOP_VIDEO_RECORDING)
                     val bien = camara?.pararVideo() == true
                     val f = clipArchivo
                     clipArchivo = null
                     if (bien && f != null) {
                         clips += ClipHecho(desde, dura, f)
-                        avisar(getString(R.string.reunion_clip_hecho, GrabarClase.minuto(desde)))
+                        avisar(getString(R.string.reunion_clip_hecho, GrabarClase.minuto(desde)), fuera = true)
                     } else {
                         f?.delete()
-                        avisar(getString(R.string.reunion_clip_fallo))
+                        avisar(getString(R.string.reunion_clip_fallo), fuera = true)
                     }
-                    estado.update { it.copy(clipDesde = null, clips = clips.size) }
+                    estado.update { it.copy(clipDesde = null, clips = clips.size, mirilla = camara?.conMirilla == true) }
+                    elegirMirilla()
                     actualizarAviso()
                 } finally {
                     clipCambiando = false
@@ -453,7 +541,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         grabador?.pausar(p)
         camara?.pausar(p)
         estado.update { it.copy(enPausa = p) }
-        if (p) avisar(getString(R.string.clase_en_pausa))
+        sentir(null)
+        avisar(getString(if (p) R.string.clase_en_pausa else R.string.reunion_sigue))
         actualizarAviso()
     }
 
@@ -498,9 +587,14 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
         terminado = true
         enMarcha = false
+        sentir(MediaActionSound.STOP_VIDEO_RECORDING)
+        estado.update { it.copy(terminando = true) }
         quitarLaBurbuja()
         orientacion?.disable()
         val app = applicationContext as PixPinApp
+        // **El servicio de pasar a texto, arrancado ya** (28-oct-2026): el toque de «Terminar» deja
+        // arrancarlo; cuando la reunión esté guardada (segundos después), quizá ya no. Ver [ColaDeTexto].
+        val reserva = PasarATextoService.reservar(app, getString(R.string.pasar_a_texto_titulo))
         val c = cronometro
         val clipAbierto = estado.value.clipDesde
         val elProyecto = proyecto
@@ -538,6 +632,9 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 withContext(Dispatchers.Main) {
                     toast(dicho)
                     notaGuardada?.let { avisarParaEstudiar(it) }
+                    estado.update { EstadoDeLaReunion(guardada = notaGuardada) }
+                    // La cola ya cogió la nota (o la cogerá con el servicio aún en pie).
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ PasarATextoService.soltar(reserva) }, 10_000)
                     stopSelf()
                 }
             }
@@ -636,9 +733,11 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             val cuando = CarpetaDePaginas.cuandoLibre(System.currentTimeMillis(), almacen.leer())
             almacen.anadir(CarpetaDePaginas.mensajeNuevo(nombre, cuando, proyecto, doc))
         }.onFailure { android.util.Log.w("PixPinReunion", "la reunión quedó sin su carpeta", it) }
-        // Y se pasa a texto, como la clase: `[m:ss]` cada trozo.
+        // **Y se pasa a texto, siempre**, como la clase: `[m:ss]` cada trozo. Por la cola ([ColaDeTexto]):
+        // en primer plano, aunque la app esté fuera, y retomada si el proceso muere (28-oct-2026; antes
+        // se lanzaba en un hilo suelto y, con el servicio ya parado, Android congelaba el proceso).
         val conTexto = Transcriptor.disponible(context)
-        if (conTexto) almacen.transcribir(mensajes.first())
+        if (conTexto && ColaDeTexto.entraSola(mensajes.first(), hayAudio = true, grabadoAqui = true)) almacen.transcribir(mensajes.first())
         return context.getString(
             if (conTexto) R.string.reunion_lista_con_texto else R.string.reunion_lista_sin_texto,
             fotosListas.size, todosLosClips.size
@@ -687,13 +786,82 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         lp = null
     }
 
+    /**
+     * **La burbuja** (28-oct-2026): con la cámara y su mirilla, **un cuadro pequeño con lo que se
+     * fotografía** —un destello blanco al hacer una foto, «● 0:12» en rojo mientras se graba un clip— y
+     * debajo Foto, Clip, pausa y Terminar. Sin mirilla (sin cámara, o soltada para grabar el vídeo), la
+     * fila de siempre con el contador. Con PixPin delante no se pinta: manda la barra de la app
+     * ([ReunionEnLaApp]).
+     */
     @Composable
     private fun LaBurbuja() {
         val e by estado.collectAsState()
+        val delante by appDelante.collectAsState()
         val fondo = Color(0xEE1E1E22)
         val claro = Color.White
-        Column(horizontalAlignment = Alignment.Start) {
-            Row(
+        val rojo = Color(0xFFE53935)
+        if (!delante) Column(horizontalAlignment = Alignment.Start) {
+            if (e.mirilla) {
+                val destello = remember { Animatable(0f) }
+                LaunchedEffect(e.destellos) {
+                    if (e.destellos > 0) { destello.snapTo(0.9f); destello.animateTo(0f, tween(380)) }
+                }
+                Box(
+                    Modifier.size(120.dp, 160.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black)
+                        .border(if (e.clipDesde != null) 3.dp else 1.dp, if (e.clipDesde != null) rojo else claro.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                        .pointerInput(Unit) { detectDragGestures { cambio, d -> cambio.consume(); mover(d.x, d.y) } }
+                ) {
+                    AndroidView(
+                        factory = { c ->
+                            PreviewView(c).apply {
+                                implementationMode = PreviewView.ImplementationMode.COMPATIBLE
+                                scaleType = PreviewView.ScaleType.FILL_CENTER
+                                mirillaDeLaBurbuja = surfaceProvider
+                                elegirMirilla()
+                            }
+                        },
+                        onRelease = { mirillaDeLaBurbuja = null; elegirMirilla() },
+                        modifier = Modifier.matchParentSize()
+                    )
+                    Box(Modifier.matchParentSize().background(Color.White.copy(alpha = destello.value)))
+                    Text(
+                        if (e.clipDesde != null) "● " + getString(R.string.reunion_clip) + " " + GrabarClase.minuto((e.segundos * 1000 - e.clipDesde!!).coerceAtLeast(0))
+                        else (if (e.enPausa) "❚❚ " else "● ") + GrabarClase.minuto(e.segundos * 1000),
+                        color = claro, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(8.dp))
+                            .background(if (e.clipDesde != null) rojo else Color.Black.copy(alpha = 0.55f)).padding(horizontal = 5.dp, vertical = 1.dp)
+                    )
+                    if (e.fotos > 0 || e.fotosEnCurso > 0) Text(
+                        "📷 ${e.fotos}" + (if (e.fotosEnCurso > 0) "…" else ""), color = claro, fontSize = 11.sp,
+                        modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(RoundedCornerShape(8.dp))
+                            .background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 5.dp, vertical = 1.dp)
+                    )
+                }
+                Row(
+                    Modifier.padding(top = 4.dp).clip(RoundedCornerShape(20.dp)).background(fondo),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = { foto() }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.PhotoCamera, getString(R.string.reunion_foto), tint = claro)
+                    }
+                    IconButton(onClick = { clip() }, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            if (e.clipDesde != null) Icons.Filled.StopCircle else Icons.Filled.Videocam,
+                            getString(if (e.clipDesde != null) R.string.reunion_parar_clip else R.string.reunion_clip),
+                            tint = if (e.clipDesde != null) Color(0xFFFF5252) else claro
+                        )
+                    }
+                    IconButton(onClick = { pausa() }, modifier = Modifier.size(40.dp)) {
+                        Icon(
+                            if (e.enPausa) Icons.Filled.PlayArrow else Icons.Filled.Pause,
+                            getString(if (e.enPausa) R.string.clase_seguir else R.string.clase_pausa), tint = claro
+                        )
+                    }
+                    IconButton(onClick = { terminar() }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.Stop, getString(R.string.clase_terminar), tint = Color(0xFF81C784))
+                    }
+                }
+            } else Row(
                 Modifier.clip(RoundedCornerShape(24.dp)).background(fondo).padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -705,7 +873,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 )
                 Box(
                     Modifier.padding(start = 2.dp, end = 6.dp).size(10.dp).clip(CircleShape)
-                        .background(if (e.enPausa) Color.Gray else Color(0xFFE53935))
+                        .background(if (e.enPausa) Color.Gray else rojo)
                 )
                 Text(
                     GrabarClase.minuto(e.segundos * 1000), color = claro, fontSize = 14.sp,
@@ -727,9 +895,9 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     )
                     Spacer(Modifier.width(4.dp))
                     Text(
-                        if (desde != null) GrabarClase.minuto((e.segundos * 1000 - desde).coerceAtLeast(0))
+                        if (desde != null) "● " + getString(R.string.reunion_clip) + " " + GrabarClase.minuto((e.segundos * 1000 - desde).coerceAtLeast(0))
                         else if (e.clips == 0) getString(R.string.reunion_clip) else "${getString(R.string.reunion_clip)} · ${e.clips}",
-                        color = claro, fontSize = 13.sp
+                        color = if (desde != null) Color(0xFFFF8A80) else claro, fontSize = 13.sp
                     )
                 }
                 IconButton(onClick = { pausa() }, modifier = Modifier.size(40.dp)) {
@@ -751,6 +919,30 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 )
             }
         }
+    }
+
+    /**
+     * **Dónde va la mirilla**: a la pantalla de la reunión si está abierta; si no, a la burbuja (si se
+     * ve); si no, a ningún sitio (la cámara no la alimenta).
+     */
+    private fun elegirMirilla() {
+        val cam = camara ?: return
+        val donde = mirillaDeLaApp ?: mirillaDeLaBurbuja.takeIf { !appDelante.value }
+        cam.ponerMirilla(donde)
+        estado.update { it.copy(mirilla = cam.conMirilla) }
+    }
+
+    /**
+     * **Que se note**: una vibración corta y, si se da, un sonido del sistema (el obturador, empezar o
+     * parar vídeo). Es lo que dice que la foto o el clip se hizo con el teléfono en el bolsillo.
+     */
+    private fun sentir(sonido: Int?) {
+        runCatching {
+            val v = if (Build.VERSION.SDK_INT >= 31) getSystemService(VibratorManager::class.java)?.defaultVibrator
+            else @Suppress("DEPRECATION") getSystemService(Vibrator::class.java)
+            v?.vibrate(VibrationEffect.createPredefined(VibrationEffect.EFFECT_CLICK))
+        }
+        if (sonido != null) runCatching { sonidos.play(sonido) }
     }
 
     // --- El giro, los avisos y la notificación ------------------------------------------------
@@ -781,7 +973,12 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         orientacion = o
     }
 
-    private fun avisar(texto: String) {
+    /**
+     * Un aviso corto en la burbuja y en la barra de la app. Con [fuera] (una foto, un clip) y sin nadie
+     * que lo vea (ni burbuja ni PixPin delante), también un toast: es la confirmación de que se hizo.
+     */
+    private fun avisar(texto: String, fuera: Boolean = false) {
+        if (fuera && burbuja == null && !appDelante.value) runCatching { Toast.makeText(applicationContext, texto, Toast.LENGTH_SHORT).show() }
         estado.update { it.copy(aviso = texto) }
         avisoJob?.cancel()
         avisoJob = scope.launch {
@@ -826,37 +1023,103 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
+    private fun boton(icono: Int, texto: Int, accion: String, codigo: Int): Notification.Action =
+        Notification.Action.Builder(Icon.createWithResource(this, icono), getString(texto), alServicio(accion, codigo)).build()
+
     /**
-     * **La notificación permanente**: «Grabando…», lo que va hecho y **Foto**, **Clip** (o «Parar clip»)
-     * y **Terminar**. El reloj lo lleva el sistema (se ajusta en cada cambio, también en las pausas).
+     * **La notificación permanente**: «Grabando…» (o «● Clip» con su reloj mientras se graba uno), lo
+     * que va hecho y **Foto**, **Clip** (o «Parar clip»), **Terminar** y la pausa.
+     *
+     * **De estilo multimedia** (28-oct-2026, el usuario: «no hay botón para terminar la grabación»):
+     * con acciones normales Android solo enseña los botones con la notificación desplegada, y plegada
+     * —como se queda casi siempre— no había ni «Terminar». Con `MediaStyle` los tres primeros van
+     * también en la vista compacta. Sin sesión multimedia: no es música, y así no sale en los mandos de
+     * reproducción del sistema. **Tocarla abre la pantalla de la reunión** ([ReunionEnCursoActivity]).
      */
     private fun aviso(): Notification {
         val e = estado.value
         val llevado = cronometro?.llevadoMs() ?: 0L
+        val desde = e.clipDesde
+        val titulo = when {
+            desde != null -> "● " + getString(R.string.reunion_clip)
+            e.enPausa -> getString(R.string.reunion_notif_pausa)
+            else -> getString(R.string.reunion_notif)
+        }
         val texto = buildString {
+            if (desde != null) append(getString(R.string.reunion_notif)).append(" ").append(GrabarClase.minuto(llevado)).append(" · ")
             append(getString(if (forma == Presencial.Forma.VIDEO) R.string.reunion_forma_video else R.string.reunion_forma_audio))
             append(" · ").append(resources.getQuantityString(R.plurals.reunion_fotos, e.fotos, e.fotos))
             append(" · ").append(resources.getQuantityString(R.plurals.reunion_clips, e.clips, e.clips))
-            if (e.enPausa) append(" · ").append(getString(R.string.clase_pausa))
         }
-        val b = NotificationCompat.Builder(this, CANAL)
+        val abrir = PendingIntent.getActivity(
+            this, 4, intentoDeLaPantalla(this), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val b = Notification.Builder(this, CANAL)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(getString(R.string.reunion_notif))
+            .setContentTitle(titulo)
             .setContentText(texto)
+            .setContentIntent(abrir)
             .setOngoing(true)
-            .setSilent(true)
             .setOnlyAlertOnce(true)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
+            .setVisibility(Notification.VISIBILITY_PUBLIC)
+            .setCategory(Notification.CATEGORY_SERVICE)
+        if (Build.VERSION.SDK_INT >= 31) b.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
         if (e.lista && !e.enPausa) {
-            b.setUsesChronometer(true).setWhen(System.currentTimeMillis() - llevado).setShowWhen(true)
-        }
+            // El reloj lo lleva el sistema: el de la reunión o, grabando un clip, el del clip.
+            val desdeCuando = if (desde != null) llevado - desde else llevado
+            b.setUsesChronometer(true).setWhen(System.currentTimeMillis() - desdeCuando.coerceAtLeast(0)).setShowWhen(true)
+        } else b.setShowWhen(false)
+        val compactos: IntArray
         if (e.lista) {
-            b.addAction(0, getString(R.string.reunion_foto), alServicio(ACCION_FOTO, 1))
-            b.addAction(0, getString(if (e.clipDesde != null) R.string.reunion_parar_clip else R.string.reunion_clip), alServicio(ACCION_CLIP, 2))
+            b.addAction(boton(R.drawable.ic_reunion_foto, R.string.reunion_foto, ACCION_FOTO, 1))
+            b.addAction(
+                if (desde != null) boton(R.drawable.ic_reunion_parar_clip, R.string.reunion_parar_clip, ACCION_CLIP, 2)
+                else boton(R.drawable.ic_reunion_clip, R.string.reunion_clip, ACCION_CLIP, 2)
+            )
+            b.addAction(boton(R.drawable.ic_reunion_terminar, R.string.clase_terminar, ACCION_TERMINAR, 3))
+            b.addAction(
+                if (e.enPausa) boton(R.drawable.ic_reunion_seguir, R.string.clase_seguir, ACCION_PAUSA, 5)
+                else boton(R.drawable.ic_reunion_pausa, R.string.clase_pausa, ACCION_PAUSA, 5)
+            )
+            compactos = intArrayOf(0, 1, 2)
+        } else {
+            b.addAction(boton(R.drawable.ic_reunion_terminar, R.string.clase_terminar, ACCION_TERMINAR, 3))
+            compactos = intArrayOf(0)
         }
-        b.addAction(0, getString(R.string.clase_terminar), alServicio(ACCION_TERMINAR, 3))
+        b.setStyle(Notification.MediaStyle().setShowActionsInCompactView(*compactos))
         return b.build()
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).roundToInt()
 }
+
+/**
+ * **Lo que se ve de una reunión presencial en marcha** (28-oct-2026): lo pintan la burbuja, la
+ * notificación, la barra de la reunión en la app ([ReunionEnLaApp]) y su pantalla
+ * ([ReunionEnCursoActivity]).
+ */
+data class EstadoDeLaReunion(
+    val segundos: Long = 0,
+    val enPausa: Boolean = false,
+    val fotos: Int = 0,
+    val clips: Int = 0,
+    /** El minuto en que empezó el clip que se graba, o null. */
+    val clipDesde: Long? = null,
+    val aviso: String? = null,
+    /** Ya graba (el reloj corre). */
+    val lista: Boolean = false,
+    /** Cuántas fotos se han pedido: cada una es un destello en la mirilla. */
+    val destellos: Int = 0,
+    /** Fotos pedidas que la cámara aún no ha devuelto. */
+    val fotosEnCurso: Int = 0,
+    /** Si hay cámara (fotos y clips). */
+    val conCamara: Boolean = false,
+    /** Si hay mirilla que enseñar ahora. */
+    val mirilla: Boolean = false,
+    /** Si se graba el vídeo de la sala. */
+    val video: Boolean = false,
+    /** Pulsado «Terminar»: guardándose. */
+    val terminando: Boolean = false,
+    /** La nota de la reunión ya guardada (para «Estudiar»), al acabar. */
+    val guardada: String? = null
+)

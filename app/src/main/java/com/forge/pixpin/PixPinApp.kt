@@ -103,6 +103,11 @@ class PixPinApp : Application() {
         // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
         // vista. Ver [com.forge.pixpin.sincro.Presencia].
         com.forge.pixpin.sincro.Presencia.instalar(this)
+        // **Lo grabado se pasa a texto siempre** (28-oct-2026): la cola retoma lo que quedó a medias al
+        // volver a PixPin y lo que esperaba al modelo al volver la red. Ver [com.forge.pixpin.guardados.ColaDeTexto].
+        com.forge.pixpin.guardados.PasarATexto.vigilar(this)
+        // **La barra de la reunión presencial** en cada pantalla mientras se graba. Ver [com.forge.pixpin.guardados.ReunionEnLaApp].
+        com.forge.pixpin.guardados.ReunionEnLaApp.vigilar(this)
         // **Lo que dejaron los archivos abiertos de paso** (27-oct-2026): un cierre a la fuerza no
         // borra la copia ni lo anotado sin guardar. Ver [com.forge.pixpin.guardados.ModoDePaso].
         com.forge.pixpin.guardados.AbrirDePaso.limpiarAlArrancar(this)

@@ -301,8 +301,14 @@ class CarpetaActivity : ComponentActivity() {
         }
 
         Scaffold(
-            // La nota de voz que se toca aquí suena con su barra, sin salir de la carpeta.
-            bottomBar = { BarraDelReproductor() },
+            // La nota de voz que se toca aquí suena con su barra, sin salir de la carpeta. **Salvo la de la
+            // propia clase** (28-oct-2026): esa se estudia en «Estudiar la clase», la única pantalla con su
+            // reproductor y su texto; aquí la carpeta es solo la lista de lo grabado y lo adjuntado.
+            bottomBar = {
+                val suena by Reproductor.estado.collectAsState()
+                val laDeLaClase = if (grabacion) lista.firstOrNull { it.id == documento.voz }?.ruta else null
+                if (laDeLaClase == null || suena.ruta != laDeLaClase) BarraDelReproductor()
+            },
             topBar = {
                 TopAppBar(
                     navigationIcon = {

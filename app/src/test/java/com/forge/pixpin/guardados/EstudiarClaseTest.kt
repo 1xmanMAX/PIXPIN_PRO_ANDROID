@@ -210,4 +210,31 @@ class EstudiarClaseTest {
         assertFalse(entera.conTexto || entera.conTira)
         assertFalse(EstudiarClase.reparto(400f, 800f, false, true, false, hayCapturas = false).conTira)
     }
+
+    @Test
+    fun `sin imagen arriba va el cartel que ocupa menos`() {
+        // 800 de alto: el cartel, un tercio largo (0,34), y no la mitad de la imagen.
+        val cartel = EstudiarClase.reparto(400f, 800f, false, textoEnVertical = true, textoEnApaisada = false, hayCapturas = false, conImagen = false)
+        assertEquals(272f, cartel.altoImagen!!, 0.001f)
+        assertFalse(cartel.conTira)
+    }
+
+    @Test
+    fun `una cancion se estudia renglon a renglon y con sus tiempos`() {
+        // Sin tiempos: cada renglón, y el blanco entre estrofas se queda.
+        val llana = EstudiarClase.lineasDeLaCancion("Bésame\nbésame mucho\n\ncomo si fuera")
+        assertEquals(listOf("Bésame", "bésame mucho", "", "como si fuera"), llana.map { it.texto })
+        assertTrue(llana.all { it.ms == null })
+        // Con tiempos (el formato del PC): su minuto, y un silencio es una línea vacía con minuto.
+        val conTiempos = EstudiarClase.lineasDeLaCancion("[0:12] Bésame\n\n[0:18] mucho\n\n[0:25]")
+        assertEquals(listOf(12_000L, 18_000L, 25_000L), conTiempos.map { it.ms })
+        assertEquals(listOf("Bésame", "mucho", ""), conTiempos.map { it.texto })
+        assertEquals(1, EstudiarClase.lineaEn(conTiempos.map { it.ms }, 20_000))
+        // Y una nota de voz sigue por párrafos.
+        val nota = Mensaje(id = "n", cuando = 1, clase = Clase.VOZ, ruta = "/a.m4a", transcripcion = "[0:00] hola\nqué tal\n\n[0:15] adiós")
+        assertEquals(listOf("hola\nqué tal", "adiós"), EstudiarClase.lineasDeLaNota(nota).map { it.texto })
+        val cancion = nota.copy(estadoDelTexto = TEXTO_LETRA, transcripcion = "uno\ndos")
+        assertEquals(listOf("uno", "dos"), EstudiarClase.lineasDeLaNota(cancion).map { it.texto })
+        assertTrue(EstudiarClase.lineasDeLaNota(null).isEmpty())
+    }
 }

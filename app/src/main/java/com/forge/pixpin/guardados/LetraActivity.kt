@@ -4,271 +4,63 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.School
-import androidx.compose.material.icons.filled.TextDecrease
-import androidx.compose.material.icons.filled.TextIncrease
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.forge.pixpin.R
-import com.forge.pixpin.ui.theme.PixPinTheme
 
 /**
- * **La letra de una canción o el texto de un audio, a pantalla completa, para seguirlo.**
+ * **La letra o el texto de un audio, a pantalla completa** (5-sep-2026): ahora **un desvío a «Estudiar
+ * la clase»** (28-oct-2026).
  *
- * Letra grande, que se puede agrandar y achicar, y abajo el reproductor con sus mandos:
- * es la pantalla para cantar una canción o releer una nota de voz mientras suena.
+ * El usuario: «en las grabaciones de mi clase hay dos interfaces que se ven y funcionan parecido pero
+ * son distintas, para la misma clase». Eran esta pantalla —el texto con su minuto, las banderitas, el
+ * lápiz y, desde el 25-oct, la imagen del minuto y una ficha por captura— y [EstudiarClaseActivity],
+ * que hace todo eso y más (el vídeo, la tira de capturas, los marcadores, los clips, el acercar). Se
+ * llegaba a una o a otra según por dónde se entrara: dos toques en el texto de la nota, el título de
+ * la barra del reproductor del chat o «Letra» del menú abrían esta; la tarjeta de la carpeta, la
+ * pastilla «Estudiar» o el aviso al terminar, la otra.
  *
- * - Cada párrafo de una transcripción lleva **su minuto** (`[1:23] …`): tocarlo salta ahí
- *   en el audio, y mientras suena el párrafo por el que va se resalta y se mantiene a la vista.
- * - Las **banderitas** ([Mensaje.marcas]): la bandera de arriba deja una en el punto en
- *   que va el audio; salen como fichas, un toque vuelve a ese punto y mantener pulsado
- *   la quita.
- * - El lápiz abre el editor de notas; lo guardado vuelve al mensaje (o a su hoja).
- * - **Una clase grabada** (25-oct-2026, como el PC): la imagen del minuto que suena junto al texto
- *   y una ficha por captura que lleva el audio ahí; si trae vídeo, una ficha que lo abre. Ver
- *   [PanelDeCapturas] y [GrabarClase].
- *
- * Lo pidió el usuario (5-sep-2026).
+ * **Ahora hay una sola**: todo audio del chat (la nota de una clase o de una reunión, una nota de voz,
+ * una canción) se estudia en [EstudiarClaseActivity], que sin imagen enseña arriba la línea que suena
+ * en grande y que trae lo que solo tenía esta: el tamaño del texto y el lápiz ([editarElTextoDelAudio]).
+ * Esta actividad se queda para lo que aún la abra por su nombre ([abrir], `MensajesActivity`, el
+ * teleprónter): llega a la misma pantalla y se va.
  */
 class LetraActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val id = intent.getStringExtra(EL_MENSAJE).orEmpty()
-        aPantallaCompleta()
-        setContent { PixPinTheme { Pantalla(id) } }
+        intent.getStringExtra(EL_MENSAJE)?.takeIf { it.isNotEmpty() }?.let { EstudiarClaseActivity.abrir(this, it) }
+        finish()
     }
-
-    /** Un párrafo del texto: en qué milisegundo empieza (o -1) y qué dice. */
-    private class Parrafo(val ms: Int, val texto: String)
-
-    @Composable
-    private fun Pantalla(id: String) {
-        val almacen = remember { MensajesStore(this) }
-        var version by remember { mutableIntStateOf(0) }
-        // Se vuelve a leer cada vez que el almacén cambia: al volver del editor, la letra nueva.
-        LaunchedEffect(Unit) { MensajesStore.cambios.collect { version++ } }
-        val todos = remember(version) { almacen.leer() }
-        val m = remember(todos) { todos.firstOrNull { it.id == id } }
-        // **Una clase grabada** (25-oct-2026, como el PC): sus capturas y su vídeo. Ver [PanelDeCapturas].
-        val capturas = remember(todos, m) { m?.let { capturasDeLaLetra(it, todos) }.orEmpty() }
-        val video = remember(todos, m) { m?.let { videoDeLaLetra(it, todos) } }
-        var tamano by remember { mutableIntStateOf(22) }
-        val estado by Reproductor.estado.collectAsState()
-        val titulo = m?.let { tituloDeAudio(this, it) } ?: ""
-        val parrafos = remember(m?.transcripcion) { parrafosDe(m?.transcripcion) }
-        val esteAudio = m?.ruta != null && estado.ruta == m.ruta
-        // El párrafo por el que va el audio: el último cuyo minuto ya se pasó.
-        val actual = if (esteAudio) parrafos.indexOfLast { it.ms in 0..estado.posicionMs } else -1
-
-        // Un `Surface` y no un `background`: el `Surface` es el que pone el color del texto
-        // a juego con el fondo. Con solo el fondo, de noche el texto salía negro sobre negro.
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize()) {
-                Row(Modifier.fillMaxWidth().padding(4.dp), verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { finish() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = getString(R.string.cancel)) }
-                    Text(titulo, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f), maxLines = 1)
-                    IconButton(onClick = { if (tamano > 14) tamano -= 2 }) { Icon(Icons.Filled.TextDecrease, contentDescription = null) }
-                    IconButton(onClick = { if (tamano < 40) tamano += 2 }) { Icon(Icons.Filled.TextIncrease, contentDescription = null) }
-                    // La banderita: una marca donde va el audio.
-                    IconButton(
-                        enabled = m?.ruta != null,
-                        onClick = {
-                            val ms = if (esteAudio) estado.posicionMs else 0
-                            Thread { almacen.actualizar(id) { it.copy(marcas = (it.marcas + ms).distinct().sorted()) } }.start()
-                        }
-                    ) { Icon(Icons.Filled.Flag, contentDescription = getString(R.string.letra_marcar)) }
-                    IconButton(onClick = { m?.let { editar(it) } }) { Icon(Icons.Filled.Edit, contentDescription = getString(R.string.letra_editar)) }
-                    // **Estudiar la clase** (25-oct-2026, como la pastilla del PC junto a la de texto).
-                    if (m != null && EstudiarClase.esDeUnaClase(m)) {
-                        IconButton(onClick = { EstudiarClaseActivity.abrir(this@LetraActivity, m.id) }) {
-                            Icon(androidx.compose.material.icons.Icons.Filled.School, contentDescription = getString(R.string.estudiar_titulo))
-                        }
-                    }
-                }
-                if (m != null && m.marcas.isNotEmpty()) {
-                    LazyRow(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 2.dp)) {
-                        itemsIndexed(m.marcas) { _, ms ->
-                            Text(
-                                "⚑ " + Transcriptor.marcaDeTiempo(ms),
-                                fontSize = 13.sp,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                modifier = Modifier
-                                    .padding(end = 6.dp)
-                                    .clip(RoundedCornerShape(12.dp))
-                                    .background(MaterialTheme.colorScheme.primaryContainer)
-                                    .combinedClickable(
-                                        onClick = { saltarA(m, ms) },
-                                        onLongClick = { Thread { almacen.actualizar(id) { it.copy(marcas = it.marcas - ms) } }.start() }
-                                    )
-                                    .padding(horizontal = 10.dp, vertical = 5.dp)
-                            )
-                        }
-                    }
-                }
-                // **El texto a un lado y la imagen del minuto que suena al otro**, como el PC
-                // (`reparto_de_la_clase`): con sitio (560 dp, tableta o en horizontal), al lado; en
-                // un teléfono en vertical, la imagen encima. Sin capturas ni vídeo, la letra entera.
-                val conPanel = m != null && (capturas.isNotEmpty() || video != null)
-                val panel: @Composable (Modifier) -> Unit = { modificador ->
-                    PanelDeCapturas(
-                        capturas,
-                        posicionMs = if (esteAudio) estado.posicionMs.toLong() else 0L,
-                        modifier = modificador,
-                        alVerVideo = video?.let { v -> { com.forge.pixpin.ui.AbrirCon.abrir(this@LetraActivity, java.io.File(v)) } }
-                    ) { ms -> m?.let { saltarA(it, ms.toInt()) } }
-                }
-                androidx.compose.foundation.layout.BoxWithConstraints(Modifier.weight(1f).fillMaxWidth()) {
-                val alLado = conPanel && maxWidth >= 560.dp
-                val altoDeLaImagen = maxHeight * 0.42f
-                Row(Modifier.fillMaxSize()) {
-                Column(Modifier.weight(if (alLado) 0.52f else 1f).fillMaxHeight()) {
-                if (conPanel && !alLado) {
-                    panel(Modifier.fillMaxWidth().height(if (capturas.isEmpty()) 44.dp else altoDeLaImagen))
-                }
-                Box(Modifier.weight(1f).fillMaxWidth()) {
-                    if (parrafos.isEmpty()) {
-                        Column(Modifier.align(Alignment.Center).padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                            Text(getString(R.string.letra_vacia), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            TextButton(onClick = { m?.let { editar(it) } }) { Text(getString(R.string.letra_pegar)) }
-                        }
-                    } else {
-                        val lista = rememberLazyListState()
-                        // La vista sigue al audio: el párrafo que suena, a la vista.
-                        LaunchedEffect(actual) { if (actual >= 0) runCatching { lista.animateScrollToItem(actual) } }
-                        LazyColumn(state = lista, modifier = Modifier.fillMaxSize()) {
-                            itemsIndexed(parrafos) { i, p ->
-                                val activo = i == actual
-                                Column(
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .background(if (activo) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else Color.Transparent)
-                                        .combinedClickable(enabled = p.ms >= 0 && m?.ruta != null, onClick = { if (m != null) saltarA(m, p.ms) })
-                                        .padding(horizontal = 20.dp, vertical = 8.dp)
-                                ) {
-                                    if (p.ms >= 0) {
-                                        Text(
-                                            Transcriptor.marcaDeTiempo(p.ms),
-                                            fontSize = (tamano * 0.6f).sp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                    Text(
-                                        p.texto,
-                                        fontSize = tamano.sp,
-                                        lineHeight = (tamano * 1.45f).sp,
-                                        fontWeight = if (activo) FontWeight.SemiBold else FontWeight.Normal
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-                }
-                if (alLado) panel(Modifier.weight(0.48f).fillMaxHeight().padding(top = 8.dp, end = 8.dp))
-                }
-                }
-                if (m?.ruta != null) {
-                    // Con el audio cargado aunque no suene: los mandos a mano desde el primer momento.
-                    LaunchedEffect(m.ruta) {
-                        if (Reproductor.estado.value.ruta != m.ruta) Reproductor.cargar(m.ruta, titulo, arrancar = false)
-                    }
-                    BarraDelReproductor()
-                }
-            }
-        }
-    }
-
-    /** A ese punto del audio, cargándolo si hacía falta, y sonando. */
-    private fun saltarA(m: Mensaje, ms: Int) {
-        val ruta = m.ruta ?: return
-        if (Reproductor.estado.value.ruta != ruta) Reproductor.cargar(ruta, tituloDeAudio(this, m), arrancar = false)
-        val total = Reproductor.estado.value.duracionMs
-        if (total > 0) Reproductor.irA(ms.toFloat() / total)
-        if (!Reproductor.estado.value.sonando) Reproductor.seguir()
-    }
-
-    /** Del texto guardado a párrafos: los que llevan `[m:ss]` delante saben a dónde saltar. */
-    private fun parrafosDe(texto: String?): List<Parrafo> {
-        if (texto.isNullOrBlank()) return emptyList()
-        return texto.split(Regex("\n\\s*\n")).mapNotNull { bloque ->
-            val limpio = sinMarcas(bloque)
-            if (limpio.isBlank()) return@mapNotNull null
-            val con = Transcriptor.tiempoDe(limpio)
-            if (con != null) Parrafo(con.first, con.second.trim()) else Parrafo(-1, limpio)
-        }
-    }
-
-    private fun editar(m: Mensaje) {
-        // Con hoja en un proyecto, se edita la hoja (que es el `.md` de verdad); si no, lo
-        // escrito vuelve al mensaje.
-        val app = application as? com.forge.pixpin.PixPinApp
-        val hoja = m.hojaDelTexto
-        val proyecto = m.proyecto?.let { app?.proyectos?.porId(it) }
-        val laHoja = if (hoja != null) proyecto?.hojas?.firstOrNull { it.id == hoja } else null
-        if (laHoja != null && proyecto != null) {
-            com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this, laHoja.id, laHoja.nota ?: "", desdeProyecto = proyecto.id, mensaje = m.id)
-        } else {
-            com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this, "letra-${m.id}", m.transcripcion ?: "", mensaje = m.id)
-        }
-    }
-
-    /** Lo escrito sin las marcas de Markdown que no aportan cantando: `#`, `**`, `__`, `![audio]`. */
-    private fun sinMarcas(texto: String): String =
-        texto.lines()
-            .filterNot { it.trimStart().startsWith("![") }
-            .joinToString("\n") { linea -> linea.trimStart('#', ' ').replace("**", "").replace("__", "") }
-            .trim()
 
     companion object {
         private const val EL_MENSAJE = "letra_mensaje"
 
+        /** Abre el audio [mensaje] para leerlo, cantarlo o estudiarlo: en [EstudiarClaseActivity]. */
         fun abrir(context: Context, mensaje: String) {
-            context.startActivity(
-                Intent(context, LetraActivity::class.java)
-                    .putExtra(EL_MENSAJE, mensaje)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            )
+            EstudiarClaseActivity.abrir(context, mensaje)
         }
+
+        /** El intento de siempre (por si algo lo guardó): llega a la pantalla de estudiar. */
+        @Suppress("unused")
+        fun intento(context: Context, mensaje: String): Intent =
+            Intent(context, LetraActivity::class.java).putExtra(EL_MENSAJE, mensaje).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+    }
+}
+
+/**
+ * **El lápiz del texto de un audio** (lo que hacía el de [LetraActivity]): con hoja en un proyecto, se
+ * edita la hoja (que es el `.md` de verdad); si no, lo escrito vuelve al mensaje. Ver
+ * [com.forge.pixpin.ui.MarkdownEditorActivity] (`mensaje`).
+ */
+fun editarElTextoDelAudio(context: Context, m: Mensaje) {
+    val app = context.applicationContext as? com.forge.pixpin.PixPinApp
+    val hoja = m.hojaDelTexto
+    val proyecto = m.proyecto?.let { app?.proyectos?.porId(it) }
+    val laHoja = if (hoja != null) proyecto?.hojas?.firstOrNull { it.id == hoja } else null
+    if (laHoja != null && proyecto != null) {
+        com.forge.pixpin.ui.MarkdownEditorActivity.abrir(context, laHoja.id, laHoja.nota ?: "", desdeProyecto = proyecto.id, mensaje = m.id)
+    } else {
+        com.forge.pixpin.ui.MarkdownEditorActivity.abrir(context, "letra-${m.id}", m.transcripcion ?: "", mensaje = m.id)
     }
 }
 

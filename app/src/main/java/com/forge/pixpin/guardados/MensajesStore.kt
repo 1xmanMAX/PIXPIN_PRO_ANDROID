@@ -3,6 +3,7 @@ package com.forge.pixpin.guardados
 import android.content.Context
 import java.io.File
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.update
 import kotlinx.serialization.json.Json
 
 /**
@@ -96,6 +97,13 @@ class MensajesStore(private val context: Context) {
      * (`BotonDeTexto` en `MensajesActivity`). Lo único que sigue pidiéndolo solo es
      * practicar pronunciación, y ahí el texto **es** la función: sin él no hay con qué
      * comparar lo que has leído (`PronunciarActivity`, que pasa `transcribir = true`).
+     *
+     * **Y lo grabado en la app, desde el 28-oct-2026** (el usuario: «asegúrate de que todo lo
+     * grabado se transcriba siempre, con sus tiempos»): la nota del micrófono del chat y de la
+     * grabadora, la clase y la reunión presencial pasan `transcribir = true` y entran en la cola
+     * ([PasarATexto], la decisión en [ColaDeTexto.entraSola]); una canción nueva, para ponerle los
+     * tiempos a la letra. Lo que se **sube** (un audio o un vídeo importado) y lo que llega de otro
+     * aparato siguen sin pasarse solos, como se pidió el 8-sep.
      */
     fun anadir(mensaje: Mensaje, transcribir: Boolean = false, idioma: String? = null) {
         // **Lo que entra en el chat de un proyecto ya NO entra solo en el proyecto** (usuario,
@@ -171,7 +179,9 @@ class MensajesStore(private val context: Context) {
         }
         // **Solo si quien llama lo pide**, que hoy es únicamente practicar pronunciación.
         // Ver el porqué en la documentación de esta función.
-        if (transcribir && apuntado.clase == Clase.VOZ && apuntado.ruta != null && !apuntado.esMusica) transcribir(apuntado, idioma)
+        if (transcribir && ColaDeTexto.entraSola(apuntado, hayAudio = apuntado.ruta?.let { File(it).exists() } == true, grabadoAqui = true)) {
+            if (apuntado.esMusica) PasarATexto.encolar(context, apuntado.id, idioma) else transcribir(apuntado, idioma)
+        }
         cambios.value = cambios.value + 1
     }
 
@@ -183,9 +193,14 @@ class MensajesStore(private val context: Context) {
      * [Mensaje.estadoDelTexto]) y, en el chat de un proyecto, además en una hoja de notas
      * con el audio adjunto. Antes salía como una nota aparte que contestaba al audio y no
      * se podía abrir ni se leía entera (lo reportó el usuario el 5-sep-2026).
+     *
+     * **Por la cola, desde el 28-oct-2026** ([PasarATexto], [ColaDeTexto]): se apunta en el disco y
+     * se trabaja en primer plano ([PasarATextoService]). Antes se lanzaba en un hilo suelto y, con la
+     * app fuera (la reunión presencial se guarda así), Android congelaba o mataba el proceso a medias
+     * y nadie lo volvía a intentar. Una canción no pasa por aquí: se le ponen tiempos a la letra.
      */
     fun transcribir(m: Mensaje, idioma: String? = null) {
-        val ruta = m.ruta ?: return
+        if (m.ruta == null) return
         if (!Transcriptor.disponible(context)) {
             // Se dice por qué, una vez: sin el reconocedor en el dispositivo no hay texto.
             Thread { actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) } }.start()
@@ -193,47 +208,65 @@ class MensajesStore(private val context: Context) {
             return
         }
         ponerAvance(m.id, 0f)
-        // [idioma] solo lo pone quien practica otro idioma (ver `PronunciarActivity`); si no, el de Ajustes.
-        // Una conversación por turnos se reconoce turno a turno, con el nombre delante de cada uno.
-        val tramos = m.turnos.map { Transcriptor.Tramo(it.desdeMs, it.hastaMs, "**${it.quien}:** ") }.ifEmpty { null }
-        Transcriptor.transcribir(context, File(ruta), idioma = idioma, avance = { ponerAvance(m.id, it) }, tramos = tramos) { r ->
-            Thread {
-                when (r) {
-                    is Transcriptor.Resultado.Texto -> {
-                        val cuando = System.currentTimeMillis()
-                        // Con sus tiempos: cada párrafo dice en qué minuto va, y se salta ahí.
-                        val texto = r.porParrafos ?: if (r.segmentos.isEmpty()) r.texto else Transcriptor.conTiempos(r.segmentos)
-                        val hoja = apuntarTranscripcion(
-                            titulo = context.getString(com.forge.pixpin.R.string.guardados_transcripcion),
-                            cuerpo = texto, audio = File(ruta), proyecto = m.proyecto, cuando = cuando, deMensaje = m.id
+        PasarATexto.encolar(context, m.id, idioma)
+    }
+
+    /**
+     * **Pasa a texto [m] aquí mismo**, en el hilo de quien llama (el de la cola, [PasarATexto]), y
+     * apunta el resultado en la nota. [avance] de 0 a 1. Devuelve cómo acabó, para la cola.
+     */
+    internal fun transcribirAqui(m: Mensaje, idioma: String?, avance: (Float) -> Unit): ColaDeTexto.Fin {
+        val ruta = m.ruta ?: return ColaDeTexto.Fin.NADA_QUE_HACER
+        ponerAvance(m.id, 0f)
+        try {
+            // [idioma] solo lo pone quien practica otro idioma (ver `PronunciarActivity`); si no, el de Ajustes.
+            // Una conversación por turnos se reconoce turno a turno, con el nombre delante de cada uno.
+            val tramos = m.turnos.map { Transcriptor.Tramo(it.desdeMs, it.hastaMs, "**${it.quien}:** ") }.ifEmpty { null }
+            val r = runCatching {
+                Transcriptor.transcribirAqui(context.applicationContext, File(ruta), idioma ?: Transcriptor.idiomaElegido(context), { ponerAvance(m.id, it); avance(it) }, tramos)
+            }.getOrElse { e ->
+                android.util.Log.e("PixPinVoz", "transcribir: " + e, e)
+                Transcriptor.Resultado.Fallo(if (e is UnsatisfiedLinkError || e is NoClassDefFoundError) Transcriptor.SIN_MOTOR else Transcriptor.FALLO_INTERNO, Transcriptor.resumenDe(e))
+            }
+            return when (r) {
+                is Transcriptor.Resultado.Texto -> {
+                    val cuando = System.currentTimeMillis()
+                    // Con sus tiempos: cada párrafo dice en qué minuto va, y se salta ahí.
+                    val texto = r.porParrafos ?: if (r.segmentos.isEmpty()) r.texto else Transcriptor.conTiempos(r.segmentos)
+                    val hoja = apuntarTranscripcion(
+                        titulo = context.getString(com.forge.pixpin.R.string.guardados_transcripcion),
+                        cuerpo = texto, audio = File(ruta), proyecto = m.proyecto, cuando = cuando, deMensaje = m.id
+                    )
+                    actualizar(m.id) {
+                        it.copy(
+                            transcripcion = texto,
+                            estadoDelTexto = if (r.avisos > 0) TEXTO_CON_AVISOS else TEXTO_BIEN,
+                            hojaDelTexto = hoja
                         )
-                        actualizar(m.id) {
-                            it.copy(
-                                transcripcion = texto,
-                                estadoDelTexto = if (r.avisos > 0) TEXTO_CON_AVISOS else TEXTO_BIEN,
-                                hojaDelTexto = hoja
-                            )
-                        }
                     }
-                    is Transcriptor.Resultado.DescargandoIdioma -> {
-                        actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
-                        avisar(context.getString(com.forge.pixpin.R.string.guardados_transcripcion_idioma))
-                    }
-                    is Transcriptor.Resultado.Fallo -> {
-                        actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
-                        val aviso = when (r.codigo) {
-                            Transcriptor.NADA -> null
-                            Transcriptor.NO_SE_LEE -> com.forge.pixpin.R.string.guardados_transcripcion_no
-                            Transcriptor.SIN_MOTOR -> com.forge.pixpin.R.string.guardados_transcripcion_sin_motor
-                            Transcriptor.SIN_IDIOMA -> com.forge.pixpin.R.string.guardados_transcripcion_sin_idioma
-                            else -> com.forge.pixpin.R.string.guardados_transcripcion_fallo
-                        }
-                        // Con el detalle técnico detrás: es lo que permite saber qué pasó sin el registro.
-                        if (aviso != null) avisar(context.getString(aviso) + (r.detalle?.let { "\n($it)" } ?: ""))
-                    }
+                    ColaDeTexto.Fin.HECHO
                 }
-                quitarAvance(m.id)
-            }.start()
+                // Sin el modelo y sin red: se queda en la cola esperando (sin marcarla «mal»: no lo está).
+                is Transcriptor.Resultado.DescargandoIdioma -> ColaDeTexto.Fin.SIN_MODELO
+                is Transcriptor.Resultado.Fallo -> {
+                    actualizar(m.id) { it.copy(estadoDelTexto = TEXTO_MAL) }
+                    val aviso = when (r.codigo) {
+                        Transcriptor.NADA -> null
+                        Transcriptor.NO_SE_LEE -> com.forge.pixpin.R.string.guardados_transcripcion_no
+                        Transcriptor.SIN_MOTOR -> com.forge.pixpin.R.string.guardados_transcripcion_sin_motor
+                        Transcriptor.SIN_IDIOMA -> com.forge.pixpin.R.string.guardados_transcripcion_sin_idioma
+                        else -> com.forge.pixpin.R.string.guardados_transcripcion_fallo
+                    }
+                    // Con el detalle técnico detrás: es lo que permite saber qué pasó sin el registro.
+                    if (aviso != null) avisar(context.getString(aviso) + (r.detalle?.let { "\n($it)" } ?: ""))
+                    // Lo que no tiene arreglo (nada que oír, un audio que no se lee, sin motor) no se
+                    // reintenta; un fallo interno, sí.
+                    if (r.codigo == Transcriptor.FALLO_INTERNO || r.codigo == Transcriptor.SIN_IDIOMA) ColaDeTexto.Fin.FALLO
+                    else ColaDeTexto.Fin.HECHO
+                }
+            }
+        } finally {
+            quitarAvance(m.id)
         }
     }
 
@@ -260,8 +293,8 @@ class MensajesStore(private val context: Context) {
         }
     }
 
-    private fun ponerAvance(id: String, v: Float) { avances.value = avances.value + (id to v) }
-    private fun quitarAvance(id: String) { avances.value = avances.value - id }
+    internal fun ponerAvance(id: String, v: Float) { avances.update { it + (id to v) } }
+    internal fun quitarAvance(id: String) { avances.update { it - id } }
 
     /**
      * Deja una transcripción como hoja de notas del proyecto —**con el audio dentro**,
