@@ -81,6 +81,8 @@ fun AsistenteCard() {
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             QuienContesta(ajustes)
+            // La clave de TypeSafe y un interruptor por función (28-oct-2026, `[jev]` del PC).
+            com.forge.pixpin.jev.AjustesDeJev()
         }
     }
 }

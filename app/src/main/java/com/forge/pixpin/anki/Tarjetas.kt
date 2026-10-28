@@ -167,11 +167,27 @@ object Tarjetas {
      */
     fun deLaClase(titulo: String, pregunta: String, trozos: List<Pair<Long, String>>, capturas: List<Pair<Long, Imagen>>): List<Tarjeta> {
         val ordenadas = capturas.sortedBy { it.first }
-        val tiempos = ordenadas.map { it.first }
+        val dichos = loDichoPorCaptura(trozos, ordenadas.map { it.first })
         return ordenadas.mapIndexed { n, (ms, imagen) ->
+            val dicho = dichos[n]
+            val cabeza = "${titulo.trim()} · ⏱ ${minuto(ms)}"
+            Tarjeta(
+                frente = "<img src=\"${imagen.nombre}\"><br><small>${html(cabeza)}</small><br>${html(pregunta)}",
+                reverso = if (dicho.isEmpty()) html(cabeza) else "${html(dicho)}<br><small>${html(cabeza)}</small>",
+                imagenes = listOf(imagen)
+            )
+        }
+    }
+
+    /**
+     * **Lo dicho en el tramo de cada captura** ([tiempos], en orden; 28-oct-2026, PC `a4974705`): desde
+     * el trozo que sonaba al hacerla (empezó un poco antes) hasta la siguiente, recortado a
+     * [MAXIMO_REVERSO]. Es el reverso de su tarjeta, y lo que valora Jev para quedarse solo con las que
+     * valen la pena ([com.forge.pixpin.jev.AnkiEnLaApp]).
+     */
+    fun loDichoPorCaptura(trozos: List<Pair<Long, String>>, tiempos: List<Long>): List<String> =
+        tiempos.mapIndexed { n, ms ->
             val hasta = tiempos.getOrNull(n + 1) ?: Long.MAX_VALUE
-            // Lo dicho en el tramo: desde el trozo que sonaba al hacer la captura (empezó un poco
-            // antes) hasta la siguiente.
             val primero = trozos.indexOfLast { it.first <= ms }.takeIf { it >= 0 } ?: 0
             var dicho = ""
             for ((t, texto) in trozos.drop(primero)) {
@@ -183,14 +199,15 @@ object Tarjetas {
                     break
                 }
             }
-            val cabeza = "${titulo.trim()} · ⏱ ${minuto(ms)}"
-            Tarjeta(
-                frente = "<img src=\"${imagen.nombre}\"><br><small>${html(cabeza)}</small><br>${html(pregunta)}",
-                reverso = if (dicho.isEmpty()) html(cabeza) else "${html(dicho)}<br><small>${html(cabeza)}</small>",
-                imagenes = listOf(imagen)
-            )
+            dicho
         }
-    }
+
+    /**
+     * **Solo las que quedan** (`quedarse_con` del PC): `quedan[i]` dice si la tarjeta `i` se manda. Si
+     * los largos no casan, todas (lo de siempre: nada se pierde por un error).
+     */
+    fun quedarseCon(tarjetas: List<Tarjeta>, quedan: List<Boolean>): List<Tarjeta> =
+        if (quedan.size != tarjetas.size) tarjetas else tarjetas.filterIndexed { i, _ -> quedan[i] }
 
     /** **Una foto sola**: delante la imagen; detrás su descripción. */
     fun deLaFoto(imagen: Imagen, descripcion: String, titulo: String): Tarjeta {

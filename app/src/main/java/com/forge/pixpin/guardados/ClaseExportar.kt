@@ -54,7 +54,12 @@ object ClaseExportar {
         /** Los marcadores y las banderitas (sin nota), en orden. */
         val marcadores: List<Marcador> = emptyList(),
         /** Lo demás que cuelga de la grabación (un PDF adjunto, una foto que no es captura). */
-        val adjuntos: List<String> = emptyList()
+        val adjuntos: List<String> = emptyList(),
+        /**
+         * **Lo importante que halló Jev** en la transcripción (28-oct-2026, PC `a6b248fe`; ver
+         * [Importantes]): chapitas en cada renglón y un filtro arriba. Vacío, la página es la de siempre.
+         */
+        val importantes: List<Importantes.Importante> = emptyList()
     ) {
         /** La duración: la apuntada o, sin ella, la última señal. */
         fun duracion(): Long {
@@ -144,7 +149,8 @@ object ClaseExportar {
             capturas = capturas.sortedBy { it.first },
             lineas = lineas,
             marcadores = marcadores.sortedBy { it.ms },
-            adjuntos = adjuntos
+            adjuntos = adjuntos,
+            importantes = Importantes.de(voz).orEmpty()
         )
     }
 
@@ -220,8 +226,21 @@ object ClaseExportar {
         val irAlMinuto: String = "Ir a este minuto",
         val cerrar: String = "Cerrar",
         val audio: String = "Audio",
-        val video: String = "Vídeo"
+        val video: String = "Vídeo",
+        /** El filtro de lo importante: «Todo» (cada tipo dice lo suyo, [Importantes.Tipo.rotulo]). */
+        val importanteTodo: String = "Todo"
     )
+
+    /**
+     * Las chapitas de lo importante de un renglón ([ms]), y sus tipos para el filtro (`data-tipos`).
+     * Sin nada, cadenas vacías (`chapitas_de` del PC).
+     */
+    private fun chapitasDe(c: Datos, ms: Long): Pair<String, String> {
+        val tipos = Importantes.tiposEn(c.importantes, ms)
+        if (tipos.isEmpty()) return "" to ""
+        val chapas = tipos.joinToString("") { "<span class=\"chip ${it.id}\">${escapar(it.rotulo)}</span>" }
+        return " data-tipos=\"${tipos.joinToString(" ") { it.id }}\"" to "<span class=\"chips\">$chapas</span>"
+    }
 
     // --- Escapar --------------------------------------------------------------------------------
 
@@ -337,6 +356,16 @@ object ClaseExportar {
             h.append("<button type=\"button\" id=\"velocidad\" class=\"velocidad\" title=\"${escapar(r.velocidad)}\">1×</button>")
             h.append("</div>\n")
         }
+        // El filtro de lo importante (Jev): «Todo» y un botón por tipo hallado.
+        if (c.importantes.isNotEmpty() && c.lineas.isNotEmpty()) {
+            h.append("<div class=\"filtro-importante\" role=\"group\"><button type=\"button\" data-filtro=\"\" class=\"activo\">${escapar(r.importanteTodo)}</button>")
+            val cuentas = Importantes.cuentas(c.importantes)
+            for (t in Importantes.Tipo.entries) {
+                val n = cuentas[t] ?: 0
+                if (n > 0) h.append("<button type=\"button\" data-filtro=\"${t.id}\" class=\"${t.id}\"><span class=\"punto-chip\" aria-hidden=\"true\"></span>${escapar(t.rotulo)} $n</button>")
+            }
+            h.append("</div>\n")
+        }
         if (c.lineas.isNotEmpty()) {
             val buscar = escapar(r.buscar)
             h.append("<div class=\"busqueda\"><input type=\"search\" id=\"buscar\" placeholder=\"$buscar\" aria-label=\"$buscar\" autocomplete=\"off\">")
@@ -367,7 +396,10 @@ object ClaseExportar {
         for (f in filas(c)) when (f) {
             is Fila.Linea -> {
                 val (ms, texto) = c.lineas[f.i]
-                if (ms != null) h.append("<p class=\"linea\" id=\"t-$ms\" data-ms=\"$ms\">${minutoHtml(ms, conMedio)}<span class=\"dicho\">${textoConSaltos(texto)}</span></p>\n")
+                if (ms != null) {
+                    val (tipos, chapas) = chapitasDe(c, ms)
+                    h.append("<p class=\"linea\" id=\"t-$ms\" data-ms=\"$ms\"$tipos>${minutoHtml(ms, conMedio)}$chapas<span class=\"dicho\">${textoConSaltos(texto)}</span></p>\n")
+                }
                 else h.append("<p class=\"linea sin-tiempo\"><span class=\"dicho\">${textoConSaltos(texto)}</span></p>\n")
             }
             is Fila.Captura -> {

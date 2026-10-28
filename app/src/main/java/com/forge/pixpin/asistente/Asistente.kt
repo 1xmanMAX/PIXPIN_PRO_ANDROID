@@ -301,7 +301,9 @@ object Asistente {
         val (motor0, motivo) = motorDelTurno(app, ajustes)
         // Una orden simple sale sin modelo (camino rápido); sin motor, el resto avisa.
         val esOrden = !conFoto && com.forge.pixpin.ia.Rapido.interpretar(ChatDelAsistente.sinMencion(pregunta.texto), com.forge.pixpin.ia.Momento.ahora()) != null
-        val motor = motor0 ?: if (esOrden) Agente.SinMotor(motivo.orEmpty()) else null
+        // Con Jev (28-oct-2026), el fuerte del mismo proveedor si el pedido lo pide; si no, el de siempre.
+        val motor = motor0?.let { com.forge.pixpin.jev.ModeloEnLaApp.segunJev(app, it, pregunta, esOrden, ligero = ajustes.asistentePensar == "no") }
+            ?: if (esOrden) Agente.SinMotor(motivo.orEmpty()) else null
         if (motor == null) {
             escribir("⚠️ " + motivo.orEmpty())
             return

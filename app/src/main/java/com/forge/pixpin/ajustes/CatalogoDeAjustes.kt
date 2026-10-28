@@ -192,7 +192,7 @@ object CatalogoDeAjustes {
                 "asistente_motor", "asistente_pensar", "asistente_documentos_nube",
                 "asistente_revisar_dicho", "asistente_leer_respuestas"
             ),
-            "ia inteligencia artificial modelo chat claude deepseek nube clave api pensar voz"
+            "ia inteligencia artificial modelo chat claude deepseek nube clave api pensar voz typesafe jev"
         ) { listOf(it.asistenteMotor, it.asistentePensar, it.asistenteDocumentosNube, it.asistenteRevisarDicho, it.asistenteLeerRespuestas) },
         Opcion(
             "fluidez", Seccion.ASPECTO, "Máxima fluidez",

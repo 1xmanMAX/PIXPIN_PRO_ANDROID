@@ -96,23 +96,45 @@ object AnkiDelMensaje {
     fun tarjetasDe(
         m: Mensaje, todos: List<Mensaje>, titulo: String, chat: String,
         existe: (String) -> Boolean = { java.io.File(it).isFile }
-    ): List<Tarjetas.Tarjeta> {
+    ): List<Tarjetas.Tarjeta> = tarjetasYQuitadas(m, todos, titulo, chat, existe, null).first
+
+    /**
+     * **Lo mismo, quedándose con las que valen la pena** (28-oct-2026, Jev, PC `6f70a416`): en una clase,
+     * [valer] recibe lo dicho en el tramo de cada captura (`(ms, dicho)`, en el orden de las tarjetas) y
+     * dice cuáles quedan; null (sin clave, o si falla): todas, como siempre. Devuelve las tarjetas y
+     * cuántas dejó fuera.
+     */
+    fun tarjetasYQuitadas(
+        m: Mensaje, todos: List<Mensaje>, titulo: String, chat: String,
+        existe: (String) -> Boolean = { java.io.File(it).isFile },
+        valer: ((List<Pair<Long, String>>) -> List<Boolean>?)?
+    ): Pair<List<Tarjetas.Tarjeta>, Int> {
         fun leer(c: Mensaje): Tarjetas.Imagen? {
             val ruta = c.ruta?.takeIf { it.isNotBlank() && existe(it) } ?: return null
             return Tarjetas.Imagen(nombreEnAnki(c), ruta)
         }
+        var quitadas = 0
         val v = when (m.clase) {
             Clase.VOZ -> {
+                // En el orden de `deLaClase` (por minuto, estable).
                 val capturas = capturasDe(m).mapNotNull { (ms, id) ->
                     val c = todos.firstOrNull { it.id == id } ?: return@mapNotNull null
                     leer(c)?.let { ms to it }
+                }.sortedBy { it.first }
+                val trozos = trozosDe(m.transcripcion)
+                val todas = Tarjetas.deLaClase(titulo, PREGUNTA_CLASE, trozos, capturas)
+                val tiempos = capturas.map { it.first }
+                val quedan = valer?.invoke(tiempos.zip(Tarjetas.loDichoPorCaptura(trozos, tiempos)))
+                if (quedan == null || quedan.size != todas.size) todas
+                else {
+                    quitadas = quedan.count { !it }
+                    Tarjetas.quedarseCon(todas, quedan)
                 }
-                Tarjetas.deLaClase(titulo, PREGUNTA_CLASE, trozosDe(m.transcripcion), capturas)
             }
             Clase.IMAGEN -> leer(m)?.let { listOf(Tarjetas.deLaFoto(it, m.texto, m.nombre)) }.orEmpty()
             else -> Tarjetas.deLaNota(m.texto)
         }
         val etiquetas = listOf("pixpin", Tarjetas.etiqueta(chat))
-        return v.map { it.copy(etiquetas = etiquetas) }
+        return v.map { it.copy(etiquetas = etiquetas) } to quitadas
     }
 }

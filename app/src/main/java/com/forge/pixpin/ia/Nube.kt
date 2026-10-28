@@ -504,7 +504,9 @@ object Nube {
         private val url: String = proveedor.url,
         private val esperas: List<Long> = ESPERAS_MS,
         private val ligero: Boolean = false,
-        private val dormir: (Long) -> Unit = { Thread.sleep(it) }
+        private val dormir: (Long) -> Unit = { Thread.sleep(it) },
+        /** El modelo, si no es el de siempre del proveedor (el fuerte que elige Jev, 28-oct-2026). */
+        val modelo: String = proveedor.modelo
     ) : com.forge.pixpin.ia.Motor {
         private val clave = clave.trim()
         private val memoria = LinkedHashMap<String, JsonElement>()
@@ -516,10 +518,11 @@ object Nube {
             val mem = synchronized(memoria) { LinkedHashMap(memoria) }
             val reserva = if (ligero) 0 else RESERVA_PENSAR
             val max = minOf(p.maxTokens + reserva, proveedor.maxTokens)
-            return when (proveedor) {
+            val c = when (proveedor) {
                 Proveedor.CLAUDE -> Claude.cuerpo(p, mem, max, ligero)
                 Proveedor.DEEPSEEK -> DeepSeek.cuerpo(p, mem, pensar.get(), max)
             }
+            return if (modelo == proveedor.modelo) c else JsonObject(c + ("model" to JsonPrimitive(modelo)))
         }
 
         private fun recordar(id: String, v: JsonElement) = synchronized(memoria) {
