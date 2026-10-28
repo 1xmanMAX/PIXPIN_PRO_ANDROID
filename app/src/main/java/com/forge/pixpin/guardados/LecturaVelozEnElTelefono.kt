@@ -258,6 +258,14 @@ object LecturaVelozEnElTelefono {
 
     // ---- La vuelta ----
 
+    /**
+     * **El mensaje del chat con ese código**, para «Abrir en PixPin» desde Lectura Veloz
+     * ([LecturaVeloz.EXTRA_DOC]). Solo uno que ella sabe leer (un archivo con su ruta). Toca disco.
+     */
+    fun mensajeDe(c: Context, doc: String?): Mensaje? = if (!LecturaVeloz.docValido(doc)) null else runCatching {
+        MensajesStore(c).leer().firstOrNull { sePuede(it) && Codigos.unico(it) == doc }
+    }.getOrNull()
+
     /** Un documento que no se apuntó al abrirlo (se borraron los datos): se busca en el chat. */
     private fun buscarEnElChat(c: Context, doc: String): Documento? = runCatching {
         MensajesStore(c).leer().firstOrNull { sePuede(it) && Codigos.unico(it) == doc }?.let { deMensaje(c, it) }

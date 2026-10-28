@@ -109,6 +109,28 @@ Lo recibe `LecturaVelozReceiver` (exportado, con esa acción en el manifiesto). 
   ignora; uno más viejo que el marcador de PixPin (la voz lo movió después) solo actualiza la
   chapa; si no, se escribe el marcador.
 
+## «En PixPin»: Lectura Veloz abre el documento aquí (28-oct-2026)
+
+El usuario: Lectura Veloz es para leer rápido y PixPin para previsualizar, así que el documento
+se **ve** en PixPin. En Lectura Veloz ≥ 0.5.0, «En PixPin» (panel rápido del lector) manda el
+archivo original del libro como cualquier «Abrir con»:
+
+```
+Intent(ACTION_VIEW).setDataAndType(content://com.lecturaveloz.app.lvfiles/abrir_en_pixpin/<nombre>, <mime>)
+  .setPackage("com.forge.pixpin").addFlags(FLAG_GRANT_READ_URI_PERMISSION)
+  extras: com.lecturaveloz.extra.PIXPIN_DOC = <doc> (solo si el libro vino de PixPin)
+          com.lecturaveloz.extra.PAGINA = <hoja desde 1> (PDF)
+```
+
+Lo recibe [AbrirConPixPinActivity] (el modo de paso). Si llega `PIXPIN_DOC` y es un mensaje del
+chat de este teléfono (`LecturaVelozEnElTelefono.mensajeDe`: el archivo con ese `Codigos.unico`), se
+abre **ese mensaje** con su visor (`MensajesActivity.abrirYAbrir`), con el marcador verde que ella
+ya movió; si no, el archivo se abre de paso como siempre. Un PixPin anterior ignora el extra y lo
+abre de paso: nada se rompe. `PAGINA` queda para cuando el modo de paso sepa ir a una hoja.
+
+En el PC no hace falta nada: ella abre `pixpinmax://abrir?ruta=<archivo>&pagina=<N>` (el verbo
+`abrir` de siempre), con la ruta que mandó PixPin si el libro vino de él.
+
 ## El marcador de PixPin, sin formato nuevo
 
 Se escribe donde PixPin ya guarda el marcador verde de la voz, así que viaja a los demás aparatos y

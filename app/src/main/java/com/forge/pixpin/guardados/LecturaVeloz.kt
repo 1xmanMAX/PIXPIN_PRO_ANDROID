@@ -37,6 +37,14 @@ object LecturaVeloz {
     /** El aviso con que Lectura Veloz devuelve su punto. Ver [LecturaVelozReceiver]. */
     const val ACCION_DE_VUELTA = "com.forge.pixpin.LECTURA_VELOZ"
 
+    /**
+     * **«Abrir en PixPin» desde Lectura Veloz** (28-oct-2026): ella manda el archivo con
+     * ACTION_VIEW a [AbrirConPixPinActivity], como cualquier «Abrir con», y si el libro vino de
+     * PixPin añade este extra con su `doc`. Si es un mensaje del chat, se abre ese mensaje (con su
+     * marcador verde) en vez de la copia de paso. Un PixPin sin esto lo abre de paso igual.
+     */
+    const val EXTRA_DOC = "com.lecturaveloz.extra.PIXPIN_DOC"
+
     const val TIPO_PDF = "pdf"
     const val TIPO_TEXTO = "texto"
 

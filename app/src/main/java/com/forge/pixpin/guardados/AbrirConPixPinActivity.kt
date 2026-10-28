@@ -56,11 +56,23 @@ class AbrirConPixPinActivity : LanzadorDePaso() {
         when (i?.action) {
             Intent.ACTION_VIEW -> {
                 val uri = i.data ?: run { finish(); return }
-                lifecycleScope.launch { deUno(uri, i.type) }
+                val doc = i.getStringExtra(LecturaVeloz.EXTRA_DOC)
+                lifecycleScope.launch { if (!delChat(doc)) deUno(uri, i.type) }
             }
             Intent.ACTION_SEND, Intent.ACTION_SEND_MULTIPLE -> lifecycleScope.launch { compartido(i) }
             else -> finish()
         }
+    }
+
+    /**
+     * **Desde Lectura Veloz, un documento que salió de PixPin** ([LecturaVeloz.EXTRA_DOC]): se abre
+     * su mensaje del chat, con su visor y su marcador verde (que ella ya movió), en vez de una copia
+     * de paso. Falso si no hay tal mensaje en este teléfono: entonces se abre de paso.
+     */
+    private suspend fun delChat(doc: String?): Boolean {
+        if (doc == null) return false
+        val m = withContext(Dispatchers.IO) { LecturaVelozEnElTelefono.mensajeDe(this@AbrirConPixPinActivity, doc) } ?: return false
+        return runCatching { MensajesActivity.abrirYAbrir(this, m.id); finish() }.isSuccess
     }
 
     /** Un archivo: de paso en su visor; si PixPin no lo ve, al menú corto. */
