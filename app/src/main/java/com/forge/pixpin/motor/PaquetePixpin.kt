@@ -36,6 +36,7 @@ import java.util.zip.ZipOutputStream
  * | `documento.pdf`                 | El PDF del proyecto, si lo hay (el limpio, sin anotar). |
  * | `chat/mensajes.jsonl`           | Opcional: los mensajes de su chat, uno por línea.       |
  * | `chat/adjuntos/<clave>`         | Opcional: los archivos de esos mensajes.                |
+ * | `guardados.jsonl`               | Opcional: el chat como lo lee el PC (un cuaderno).      |
  *
  * El chat solo lo pone el envío por Wi-Fi (`sincro/ChatQueViaja.kt`); quien no lo entienda lo
  * ignora y el proyecto se abre igual.
@@ -45,6 +46,9 @@ object PaquetePixpin {
     const val EXTENSION = "pixpin"
     const val MIME_TYPE = "application/zip"
     const val VERSION = 1
+
+    /** Las entradas que escribe [escribir] por su cuenta: una de [escribir]`.otras` no las pisa. */
+    private val PROPIAS = setOf("manifest.json", "proyecto.json", "documento.pdf", "chat/mensajes.jsonl")
 
     /**
      * Escribe [proyecto] entero en [destino].
@@ -60,7 +64,13 @@ object PaquetePixpin {
         escrito: Long = System.currentTimeMillis(),
         /** Los mensajes del chat, ya en texto, y sus archivos por clave. Ver la tabla de arriba. */
         chat: String? = null,
-        adjuntosDelChat: Map<String, File> = emptyMap()
+        adjuntosDelChat: Map<String, File> = emptyMap(),
+        /**
+         * **Entradas de más**, tal cual y en la raíz (28-oct-2026): el `guardados.jsonl` que lee el PC
+         * en el `.pixpin` de un cuaderno ([com.forge.pixpin.guardados.CompartirCarpeta]). Quien no
+         * las entienda las ignora; no pisan ninguna de las de arriba.
+         */
+        otras: Map<String, ByteArray> = emptyMap()
     ): File? = runCatching {
         destino.parentFile?.mkdirs()
         ZipOutputStream(destino.outputStream().buffered()).use { zip ->
@@ -114,6 +124,10 @@ object PaquetePixpin {
                 for ((clave, archivo) in adjuntosDelChat) {
                     if (archivo.isFile) entrada("chat/adjuntos/$clave", archivo.readBytes())
                 }
+            }
+            for ((nombre, bytes) in otras) {
+                if (nombre in PROPIAS || nombre.contains("..")) continue
+                entrada(nombre, bytes)
             }
         }
         destino

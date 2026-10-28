@@ -17,6 +17,8 @@ versión de escritorio— y se sigue editando allí.
 | `notas/<id-de-hoja>.md`      | Cada nota, en Markdown. También va inline en `proyecto.json` (`hojas[].nota`). |
 | `tablas/<id>.json`           | Cada tabla con fórmulas (`hojas[].tabla` es su id). `{"nombre","celdas":{"B7":"=SUMA(B1:B6)"},"anchos":{"B":140},"estilos":{"A1":{"n":true,"a":"c","f":"#fff3bf"}},"tocado"}`. Se guarda lo tecleado, nunca el resultado. |
 | `documento.pdf`              | El PDF del proyecto, si lo tiene: el limpio (sin anotar). |
+| `chat/mensajes.jsonl`        | Opcional: los mensajes de su chat, uno por línea, con sus archivos en `chat/adjuntos/<clave>` (rutas `adjunto:<clave>`; el PDF del proyecto, `documento:`). |
+| `guardados.jsonl`            | Opcional (28-oct-2026, el `.pixpin` de un cuaderno): el mismo chat como lo lee el PC, con las rutas relativas a la carpeta del chat (`chat/adjuntos/<clave>`, `documento.pdf`, `lienzos/<dibujo>.excalidraw`) y sin `proyecto`. El PC copia el paquete a la carpeta del chat y, si trae este fichero, es su chat (`almacen::importar_paquete`): así la carpeta del cuaderno llega con sus páginas. El teléfono lo ignora y lee `chat/mensajes.jsonl`. |
 
 ## `proyecto.json`
 

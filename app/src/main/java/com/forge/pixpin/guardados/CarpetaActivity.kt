@@ -276,6 +276,16 @@ class CarpetaActivity : ComponentActivity() {
             }
         }
 
+        /** **Compartir el cuaderno o la grabación**: lo arma [CompartirCarpeta], como en el chat. */
+        fun compartir(carpeta: Mensaje, lista: List<Mensaje>) {
+            alcance.launch {
+                compartiendo = withContext(Dispatchers.IO) {
+                    runCatching { CompartirCarpeta.compartible(this@CarpetaActivity, carpeta, lista) }
+                        .onFailure { android.util.Log.e("PixPinCompartir", "carpeta", it) }.getOrNull()
+                }
+            }
+        }
+
         fun cambiar(cambio: (CarpetaDePaginas) -> CarpetaDePaginas?) {
             alcance.launch(Dispatchers.IO) { CarpetasDelChat.cambiar(this@CarpetaActivity, id, cambio) }
         }
@@ -339,22 +349,11 @@ class CarpetaActivity : ComponentActivity() {
                             IconButton(onClick = { adjuntandoA = id; elegirAdjunto.launch(arrayOf("*/*")) }) {
                                 Icon(Icons.Filled.AttachFile, "Adjuntar a la clase")
                             }
-                            IconButton(onClick = {
-                                alcance.launch {
-                                    compartiendo = withContext(Dispatchers.IO) {
-                                        runCatching {
-                                            ExportarGrabacion.notaDe(carpeta, lista)?.let { ExportarGrabacion.compartible(this@CarpetaActivity, it, lista) }
-                                        }.getOrNull()
-                                    }
-                                }
-                            }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, "Compartir la grabación") }
+                            IconButton(onClick = { compartir(carpeta, lista) }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, "Compartir la grabación") }
                         } else IconButton(enabled = !trabajando && paginas.isNotEmpty(), onClick = {
-                            // **La hoja de compartir de toda la aplicación** (27-oct-2026): el PDF con las
-                            // páginas que se marquen, o una en imagen. Antes, el PDF entero sin preguntar.
-                            compartiendo = CarpetaEnPdf.compartible(
-                                this@CarpetaActivity, nombre,
-                                paginas.map { (m, p) -> m to p.titulo.ifBlank { m.nombre.ifBlank { CarpetasDelChat.PAGINA } } }
-                            )
+                            // **La hoja de compartir de toda la aplicación, con todos sus formatos**
+                            // (28-oct-2026): la misma que desde el chat. Ver [CompartirCarpeta].
+                            compartir(carpeta, lista)
                         }) { Icon(com.forge.pixpin.ui.IconoDeCompartir, "Compartir la carpeta") }
                     }
                 )

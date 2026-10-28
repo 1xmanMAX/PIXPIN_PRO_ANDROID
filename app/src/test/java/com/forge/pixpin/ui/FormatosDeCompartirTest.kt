@@ -52,7 +52,7 @@ class FormatosDeCompartirTest {
             Contenido.CROQUIS_3D to "PNG JPG PDF WEB OTRO PIXPIN ORIGINAL",
             Contenido.GRABACION to "PDF WEB WORD MARKDOWN TEXTO PIXPIN ORIGINAL ANKI WIFI",
             Contenido.LECCION to "PNG JPG PDF WEB MARKDOWN TEXTO PIXPIN ORIGINAL",
-            Contenido.CARPETA to "PNG JPG PDF",
+            Contenido.CARPETA to "PNG JPG PDF WEB WORD MARKDOWN TEXTO PIXPIN ORIGINAL WIFI",
             Contenido.IMAGEN to "PNG JPG PDF WEB TEXTO PIXPIN ORIGINAL WIFI",
             Contenido.ARCHIVO to "TEXTO PIXPIN ORIGINAL WIFI"
         )
@@ -103,10 +103,10 @@ class FormatosDeCompartirTest {
             listOf("png", "jpg", "pdf-anotado", "web-pdf-anotado", "web-anotada", "al-pdf", "editable", "original", "wifi"),
             FormatosDeCompartir.visibles(null, dados) { it }
         )
-        // Una carpeta no tiene página web ni .pixpin aunque alguien los diera; lo propio sí sale.
+        // Una carpeta (un cuaderno) lo tiene todo, como un proyecto (28-oct-2026), salvo el SVG y Anki.
         assertEquals(
-            listOf("png", "pdf", "al-pdf"),
-            FormatosDeCompartir.visibles(Contenido.CARPETA, listOf("web", "pdf", "editable", "png", "al-pdf")) { it }
+            listOf("png", "pdf", "web", "al-pdf", "editable", "wifi"),
+            FormatosDeCompartir.visibles(Contenido.CARPETA, listOf("web", "pdf", "editable", "svg", "png", "anki", "wifi", "al-pdf")) { it }
         )
         assertFalse(FormatosDeCompartir.enOrden(listOf(Clase.PDF, Clase.PNG)))
     }
