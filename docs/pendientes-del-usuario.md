@@ -10,6 +10,8 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [x] v0.144.0 — OCR con Indra en el teléfono; Whisper como motor de voz por defecto.
 - [x] v0.145.0 — Fuera la pantalla de Proyectos; atrás: visor → chat → lista → salir.
 - [x] v0.147.0 — Markdown y formatos de texto; Lectura Veloz 0.3.1 abre los archivos (puntos 37–39).
+- [x] v0.149.0 — Sin ⚙ en los visores, menú por tipo, una pantalla por clase, transcripción
+      siempre, letra con tiempos, cuadernos con todos los formatos (puntos 44–52).
 - [x] v0.148.0 — Tinta del plano, reunión presencial y el móvil como cámara del PC (puntos 40–43).
 - [x] v0.146.0 — Toda la tanda del 27-oct (puntos 1–36, abajo). Probado con pruebas JVM y el PC
       simulado; falta verlo en el teléfono.
@@ -146,22 +148,22 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 ## Tanda del 28-oct (2)
 
 ### Lectura veloz y el menú del mensaje
-- [ ] 44. Quitar el engranaje ⚙ de los visores (PDF, Word…): sus opciones repetían las de la pantalla
+- [x] 44. Quitar el engranaje ⚙ de los visores (PDF, Word…): sus opciones repetían las de la pantalla
       (bloquear desplazamiento, voz…). Lectura veloz se abre solo desde el menú del mensaje.
-- [ ] 45. Menú al mantener pulsado: solo lo que tiene sentido para cada tipo (archivo, texto, audio,
+- [x] 45. Menú al mantener pulsado: solo lo que tiene sentido para cada tipo (archivo, texto, audio,
       imagen…); fuera lo absurdo (p. ej. recordatorio o llamada falsa en un PDF).
 
 ### Grabaciones, música y Estudiar la clase
-- [ ] 46. Una sola interfaz para una misma clase grabada (hoy hay dos parecidas pero distintas).
-- [ ] 47. Toda grabación se transcribe siempre (también la reunión presencial), con marcas de tiempo
+- [x] 46. Una sola interfaz para una misma clase grabada (hoy hay dos parecidas pero distintas).
+- [x] 47. Toda grabación se transcribe siempre (también la reunión presencial), con marcas de tiempo
       para saltar entre ellas.
-- [ ] 48. Música: transcribirla y fusionar la letra pegada (la buena) con la transcripción (los
+- [x] 48. Música: transcribirla y fusionar la letra pegada (la buena) con la transcripción (los
       tiempos) en una letra con marcas de tiempo.
-- [ ] 49. Estudiar la clase a pantalla completa: su color sube hasta la cámara, sin franja blanca.
-- [ ] 52. Reunión presencial: se nota al tomar una foto o un clip, y siempre hay un botón visible
+- [x] 49. Estudiar la clase a pantalla completa: su color sube hasta la cámara, sin franja blanca.
+- [x] 52. Reunión presencial: se nota al tomar una foto o un clip, y siempre hay un botón visible
       para terminar (notificación, burbuja y una barra dentro de PixPin).
-- [ ] 50. La pantalla de la música con su letra, unificada con Estudiar la clase.
+- [x] 50. La pantalla de la música con su letra, unificada con Estudiar la clase.
 
 ### Compartir
-- [ ] 51. Compartir un cuaderno con todos los formatos (PDF, HTML, PixPin, fotos…), con la misma hoja
+- [x] 51. Compartir un cuaderno con todos los formatos (PDF, HTML, PixPin, fotos…), con la misma hoja
       de compartir de siempre.

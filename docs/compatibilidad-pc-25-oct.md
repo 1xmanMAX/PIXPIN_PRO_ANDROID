@@ -251,3 +251,14 @@ sincronización y las 2 de la cámara del PC pasan con el PC simulado de esa ver
 - **Tinta del plano**: el teléfono pinta con los papeles del plano del PC y la misma regla (solo se
   adapta sobre papel de noche), y lee los puntos como pares `[x, y]` además de `{x, y}`.
 - **Markdown y texto** (v0.147.0): `md`, `markdown`, `txt`, `log`, `ini`, `cfg`, `srt`, `vtt`.
+
+## v0.149.0: menús por tipo, sin engranaje, una pantalla por clase y cuadernos con todos los formatos (28-oct)
+
+- **Sin cambios de formato** en lo que viaja, salvo el `.pixpin` de un cuaderno, que ahora lleva
+  también un `guardados.jsonl` en la raíz con el formato del PC (`exportable.rs`), para que el PC
+  importe la carpeta con sus páginas. Ver `docs/formato-pixpin.md`.
+- **Letra con tiempos**: la fusión de la letra pegada con la transcripción escribe `[m:ss] línea`
+  con una línea en blanco entre líneas, que el PC ya lee.
+- Lo demás es solo del teléfono: el menú del mensaje por tipo, los visores sin ⚙, «Estudiar la
+  clase» como única pantalla de una grabación (y de las canciones), la cola de transcripción y la
+  reunión presencial con aviso, vista previa y «Terminar» siempre a la vista.
