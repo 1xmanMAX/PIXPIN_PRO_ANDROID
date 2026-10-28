@@ -18,20 +18,27 @@ import android.os.Handler
 import android.os.Looper
 import android.util.DisplayMetrics
 import android.view.Display
-import com.forge.pixpin.audio.Grabador
 import java.io.File
 import java.nio.ByteBuffer
 
 /**
- * **El vídeo de la pantalla de una clase, con el mismo audio** (25-oct-2026, como el PC desde
- * `20162e9`): MediaProjection → `MediaRecorder` (H.264 + AAC del micrófono) en un `.mp4`.
+ * **El vídeo de la pantalla de una clase** (25-oct-2026, como el PC desde `20162e9`): MediaProjection →
+ * `MediaRecorder` (H.264) en un `.mp4`.
  *
- * ## Una grabadora para todo, y la nota sale del vídeo
+ * ## Sin sonido y en trozos (28-oct-2026, «Grabar sin perder nada»)
  *
- * Con vídeo, **el micrófono lo abre solo el `MediaRecorder`**: dos capturas del micrófono a la vez
- * en la misma app no son fiables en todos los teléfonos. La nota de voz se saca al final del propio
- * vídeo copiando su pista AAC a un `.m4a` sin recomprimir ([sacarElAudio]), así que audio y vídeo
- * van al milisegundo y la transcripción sale de la nota, como en el PC.
+ * Hasta hoy el `MediaRecorder` grababa también el micrófono y la nota se sacaba del vídeo al terminar:
+ * si Android mataba la app a media clase, el `.mp4` sin cerrar (sin `moov`) no lo abría nadie y **se
+ * perdía todo, sonido incluido**. Ahora, como pide la guía del PC («el sonido nunca depende del
+ * vídeo»):
+ *
+ * - **El sonido lo graba la nota** ([com.forge.pixpin.audio.Grabador.Realzado], con su respaldo WAV): el
+ *   micrófono lo sigue abriendo uno solo, así que no hay dos capturas peleándose por él.
+ * - **El vídeo va en trozos** de [TrozosDeVideo.TROZO_MS]: [cambiarDeTrozo] prepara otra
+ *   `MediaRecorder`, le da la pantalla (`VirtualDisplay.setSurface`) y cierra la de antes, que queda
+ *   como un MP4 entero. Si Android mata la app, se pierde como mucho el trozo en curso.
+ * - Al terminar (o al recuperar) se juntan sin recodificar y con el sonido de la nota
+ *   ([GuardarLaGrabacion.juntarVideo]).
  *
  * ## Las capturas, del propio vídeo
  *
@@ -39,97 +46,107 @@ import java.nio.ByteBuffer
  * para la captura de siempre ([com.forge.pixpin.capture.ProjectionSession]), y pedir otro permiso
  * cortaría este. Por eso con vídeo «Captura» apunta el minuto y la imagen se saca del `.mp4` al
  * terminar ([fotograma]), a pantalla entera.
- *
- * Implementa [Grabador] para que el servicio la trate como cualquier nota: picos, pausa y parar.
  */
 class VideoDeLaClase private constructor(
     private val proyeccion: MediaProjection,
     private val pantalla: VirtualDisplay,
-    private val grabadora: MediaRecorder
-) : Grabador {
+    private var grabadora: MediaRecorder,
+    private var actual: File,
+    private val preparar: (File) -> MediaRecorder?
+) {
 
-    @Volatile private var parada = false
+    @Volatile var parada = false
+        private set
+    @Volatile private var enPausa = false
 
-    override fun pico(): Int = runCatching { grabadora.maxAmplitude }.getOrDefault(0).coerceAtLeast(0)
+    /** El trozo que se graba ahora. */
+    val trozo: File get() = actual
 
-    override fun pausar(pausa: Boolean) {
+    fun pausar(pausa: Boolean) = synchronized(this) {
+        if (parada) return@synchronized
+        enPausa = pausa
         runCatching { if (pausa) grabadora.pause() else grabadora.resume() }
+        Unit
     }
 
-    override fun parar(): Boolean {
-        if (parada) return false
+    /**
+     * **Cierra el trozo en curso y sigue en [siguiente]**, sin soltar la pantalla. Devuelve si el trozo
+     * cerrado quedó bien, o null si no se cambió (en pausa, parado, o la grabadora nueva no arrancó: se
+     * sigue en el mismo).
+     */
+    fun cambiarDeTrozo(siguiente: File): Boolean? = synchronized(this) {
+        if (parada || enPausa) return@synchronized null
+        val nueva = preparar(siguiente) ?: return@synchronized null
+        if (runCatching { nueva.start() }.isFailure) {
+            runCatching { nueva.release() }
+            siguiente.delete()
+            return@synchronized null
+        }
+        runCatching { pantalla.surface = nueva.surface }
+        val vieja = grabadora
+        grabadora = nueva
+        actual = siguiente
+        val bien = runCatching { vieja.stop() }.isSuccess
+        runCatching { vieja.release() }
+        bien
+    }
+
+    /** Para, cierra el trozo en curso y suelta la pantalla. Devuelve si el trozo quedó bien. */
+    fun parar(): Boolean = synchronized(this) {
+        if (parada) return@synchronized false
         parada = true
         val bien = runCatching { grabadora.stop() }.isSuccess
         runCatching { grabadora.release() }
         runCatching { pantalla.release() }
         runCatching { proyeccion.stop() }
-        return bien
+        bien
     }
 
     companion object {
         /**
-         * Empieza a grabar la pantalla y el micrófono en [destino], con el permiso recién concedido
-         * ([codigo], [datos]). **Antes** hay que estar en primer plano con el tipo `mediaProjection`
-         * (Android 14). [alPerderse] se llama si el sistema corta la proyección (el chip de la barra,
-         * bloquear la pantalla). Null si este teléfono no deja: entonces se graba solo el audio.
+         * Empieza a grabar la pantalla en [primerTrozo], con el permiso recién concedido ([codigo],
+         * [datos]). **Antes** hay que estar en primer plano con el tipo `mediaProjection` (Android 14).
+         * [alPerderse] se llama si el sistema corta la proyección (el chip de la barra, bloquear la
+         * pantalla), no si se para aquí. Null si este teléfono no deja: entonces solo la nota.
          */
         fun empezar(
-            context: Context, codigo: Int, datos: Intent, destino: File,
+            context: Context, codigo: Int, datos: Intent, primerTrozo: File,
             perfil: PerfilDeVideo = PerfilDeVideo.NORMAL, alPerderse: () -> Unit
         ): VideoDeLaClase? {
             var grabadora: MediaRecorder? = null
             var proyeccion: MediaProjection? = null
             return runCatching {
                 val metricas = metricas(context) ?: error("sin pantalla")
-                // **Con la calidad elegida** (25-oct-2026, como el PC: «Ligero», «Normal», «Nítido»).
-                // Si el codificador del teléfono no admite el tamaño de «Nítido» (muchos no pasan
-                // de 1080p), «Normal»: mejor un vídeo algo más blando que ninguno.
+                // **Con la calidad elegida** (25-oct-2026, como el PC). Si el codificador del teléfono no
+                // admite el tamaño de «Nítido», «Normal»: mejor un vídeo algo más blando que ninguno.
                 val probar = listOf(perfil, PerfilDeVideo.NORMAL, PerfilDeVideo.LIGERO).distinct()
+                var preparar: ((File) -> MediaRecorder?)? = null
                 var medidas: Pair<Int, Int>? = null
                 for (p in probar) {
                     val (ancho, alto) = GrabarClase.medidasDelVideo(metricas.widthPixels, metricas.heightPixels, p)
-                    // **Antes de configurar, si el H.264 del teléfono lo admite** (25-oct-2026, lo que
-                    // hace AOSP `screenrecord`, `docs/motor-de-video.md` del PC): un `prepare` que pasa
-                    // con un tamaño que el codificador no da revienta luego al empezar.
+                    // **Antes de configurar, si el H.264 del teléfono lo admite** (lo que hace AOSP
+                    // `screenrecord`): un `prepare` que pasa con un tamaño que el codificador no da
+                    // revienta luego al empezar.
                     if (!admiteH264(ancho, alto, p.porSegundo)) continue
                     val (media, _) = PerfilDeVideo.bitsPorSegundo(p, ancho, alto)
-                    val g = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context)
-                    else @Suppress("DEPRECATION") MediaRecorder())
-                    val lista = runCatching {
-                        g.apply {
-                            // El micrófono de una clase: `CAMCORDER`, orientado al frente y con su AGC
-                            // (`docs/motor-de-audio.md` §8 del PC).
-                            setAudioSource(MediaRecorder.AudioSource.CAMCORDER)
-                            setVideoSource(MediaRecorder.VideoSource.SURFACE)
-                            setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
-                            setOutputFile(destino.absolutePath)
-                            setVideoEncoder(MediaRecorder.VideoEncoder.H264)
-                            setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
-                            setVideoSize(ancho, alto)
-                            setVideoFrameRate(p.porSegundo)
-                            // La media del PC para este tamaño: una hora de «Normal» ≈ 300 MB.
-                            setVideoEncodingBitRate(media)
-                            // El `.m4a` de la nota sale de esta pista: mono a 48 000 y 96 kb/s, el de
-                            // la Grabadora del PC.
-                            setAudioChannels(1)
-                            setAudioSamplingRate(48_000)
-                            setAudioEncodingBitRate(96_000)
-                            prepare()
-                        }
-                    }.isSuccess
-                    if (lista) {
+                    val esta = { destino: File -> grabadoraDeVideo(context, destino, ancho, alto, p.porSegundo, media) }
+                    val g = esta(primerTrozo)
+                    if (g != null) {
                         grabadora = g
+                        preparar = esta
                         medidas = ancho to alto
                         break
                     }
-                    runCatching { g.release() }
                 }
                 val (ancho, alto) = medidas ?: error("sin codificador")
                 proyeccion = context.getSystemService(MediaProjectionManager::class.java).getMediaProjection(codigo, datos)
                     ?: error("sin proyección")
+                val instancia = arrayOfNulls<VideoDeLaClase>(1)
                 // Android 14: el aviso de que se corta se pone **antes** de crear el display.
                 proyeccion!!.registerCallback(object : MediaProjection.Callback() {
-                    override fun onStop() = alPerderse()
+                    override fun onStop() {
+                        if (instancia[0]?.parada != true) alPerderse()
+                    }
                 }, Handler(Looper.getMainLooper()))
                 val display = proyeccion!!.createVirtualDisplay(
                     "pixpin-clase", ancho, alto, metricas.densityDpi,
@@ -137,13 +154,39 @@ class VideoDeLaClase private constructor(
                     grabadora!!.surface, null, null
                 ) ?: error("sin display")
                 grabadora!!.start()
-                VideoDeLaClase(proyeccion!!, display, grabadora!!)
+                VideoDeLaClase(proyeccion!!, display, grabadora!!, primerTrozo, preparar!!).also { instancia[0] = it }
             }.getOrElse {
                 runCatching { grabadora?.release() }
                 runCatching { proyeccion?.stop() }
-                destino.delete()
+                primerTrozo.delete()
                 null
             }
+        }
+
+        /**
+         * Una `MediaRecorder` de solo imagen ya preparada para [destino], o null. Sin micrófono: el sonido
+         * es de la nota.
+         */
+        private fun grabadoraDeVideo(context: Context, destino: File, ancho: Int, alto: Int, fps: Int, bits: Int): MediaRecorder? {
+            val g = (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) MediaRecorder(context)
+            else @Suppress("DEPRECATION") MediaRecorder())
+            val lista = runCatching {
+                g.apply {
+                    setVideoSource(MediaRecorder.VideoSource.SURFACE)
+                    setOutputFormat(MediaRecorder.OutputFormat.MPEG_4)
+                    setOutputFile(destino.absolutePath)
+                    setVideoEncoder(MediaRecorder.VideoEncoder.H264)
+                    setVideoSize(ancho, alto)
+                    setVideoFrameRate(fps)
+                    // La media del PC para este tamaño: una hora de «Normal» ≈ 300 MB.
+                    setVideoEncodingBitRate(bits)
+                    prepare()
+                }
+            }.isSuccess
+            if (lista) return g
+            runCatching { g.release() }
+            destino.delete()
+            return null
         }
 
         /**
