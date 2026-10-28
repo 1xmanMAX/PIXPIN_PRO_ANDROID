@@ -138,3 +138,5 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 
 - [~] 42. El móvil como cámara de la reunión que graba el PC (fotos y clips en su minuto).
       → Hecho y probado contra el PC de verdad (`CamaraDelPcTest`, `docs/movil-como-camara-android.md`); falta probarlo con el PC y el teléfono en la misma Wi-Fi (la cámara, los clips y la subida en segundo plano).
+- [~] 43. Reunión presencial: grabar en segundo plano con Foto y Clip, todo en su minuto, a resolución completa.
+      → Hecho, falta probar en el teléfono: modo «Presencial» en Grabar clase (vídeo de la sala o solo audio), notificación «Grabando…» con Foto/Clip/Terminar y burbuja, fotos y clips con `fuente: "camara"` y `clips` como el PC; ver `docs/reunion-presencial-android.md`.

@@ -110,11 +110,20 @@ object GrabarClase {
      * **La carpeta de una clase** (25-oct-2026, `carpeta_de_la_grabacion` del PC, e015e2b y 40daac7): la
      * nota, el vídeo y las capturas en el orden de la grabación, cada una con su minuto (las capturas
      * con el suyo de título, «⏱ 1:05»; la nota y el vídeo, sin título: se ve su nombre).
+     *
+     * **Y los clips de la cámara** (28-oct-2026, la reunión presencial, `carpeta_de_la_grabacion` del PC
+     * de `69ac5a89`): cada uno con «▶ 1:05» en su minuto, mezclados con las capturas por su `ms` (a la
+     * par, la captura primero, como el orden estable del PC).
      */
-    fun carpetaDeLaGrabacion(voz: String?, duracionMs: Long, video: String?, capturas: List<Enlace>): CarpetaDePaginas {
+    fun carpetaDeLaGrabacion(
+        voz: String?, duracionMs: Long, video: String?, capturas: List<Enlace>,
+        clips: List<Presencial.Clip> = emptyList()
+    ): CarpetaDePaginas {
         var c = CarpetaDePaginas.grabacion(voz.orEmpty(), duracionMs).copy(video = video.orEmpty())
         for (id in listOfNotNull(voz, video)) c = c.anadirAlMinuto(id, "", 0) ?: c
-        for (k in capturas.sortedBy { it.ms }) c = c.anadirAlMinuto(k.id, "⏱ ${minuto(k.ms)}", k.ms) ?: c
+        val enOrden = (capturas.map { Triple(it.ms, it.id, "⏱ ${minuto(it.ms)}") } +
+            clips.map { Triple(it.ms, it.id, "▶ ${minuto(it.ms)}") }).sortedBy { it.first }
+        for ((ms, id, titulo) in enOrden) c = c.anadirAlMinuto(id, titulo, ms) ?: c
         return c
     }
 

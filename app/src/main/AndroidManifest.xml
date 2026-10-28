@@ -18,6 +18,8 @@
     <!-- «Grabar clase»: el micrófono sigue abierto mientras se está en Meet o en las
          diapositivas. Ver guardados/GrabarClaseService.kt. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- La reunión presencial (28-oct-2026): la cámara con la app fuera. Ver guardados/ReunionPresencialService.kt. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     <!-- Qwen3-ASR (25-oct-2026): pasar una grabación a texto (mediaProcessing, Android 15) y bajar el
          modelo (dataSync) en un servicio en primer plano. Ver guardados/PasarATextoService.kt. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
@@ -717,6 +719,12 @@
             android:name=".guardados.GrabarClaseService"
             android:exported="false"
             android:foregroundServiceType="microphone|mediaProjection" />
+
+        <!-- La reunión presencial: micrófono y cámara en segundo plano (28-oct-2026). -->
+        <service
+            android:name=".guardados.ReunionPresencialService"
+            android:exported="false"
+            android:foregroundServiceType="microphone|camera" />
 
         <!-- Qwen3-ASR pasando a texto o bajándose: ver PasarATextoService. -->
         <service

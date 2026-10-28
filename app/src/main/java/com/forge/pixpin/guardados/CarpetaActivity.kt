@@ -528,6 +528,8 @@ class CarpetaActivity : ComponentActivity() {
         val esquina = when {
             adjunto -> ""
             m.clase == Clase.VOZ || m.id == c.video -> GrabarClase.minuto(m.duracionMs.toLong())
+            // **Un clip de la cámara** (28-oct-2026, la reunión presencial, §3.2): «▶ 1:05» en su minuto.
+            CarpetaDePaginas.piezaDe(m) == CarpetaDePaginas.Pieza.VIDEO -> "▶ " + GrabarClase.minuto(p.ms ?: 0)
             else -> "⏱ " + GrabarClase.minuto(p.ms ?: 0)
         }
         Row(

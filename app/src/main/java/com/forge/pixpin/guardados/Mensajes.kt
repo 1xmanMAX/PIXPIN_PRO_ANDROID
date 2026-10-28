@@ -3,7 +3,12 @@
 package com.forge.pixpin.guardados
 
 import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.KSerializer
+import kotlinx.serialization.KeepGeneratedSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 
 /**
  * Mensajes guardados: **un chat con uno mismo**.
@@ -138,7 +143,8 @@ private val EXTENSIONES_CONOCIDAS = setOf(
  * archivo**, es algo que se abre en el editor, y confundirlos llevaría a intentar
  * compartir un identificador o a abrir un PDF en el lienzo.
  */
-@Serializable
+@KeepGeneratedSerializer
+@Serializable(with = MensajeSerializer::class)
 data class Mensaje(
     val id: String,
     val cuando: Long,
@@ -366,6 +372,33 @@ data class Mensaje(
      */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val marcadores: kotlinx.serialization.json.JsonArray? = null,
+    /**
+     * **Los clips de vídeo de una clase** (28-oct-2026, la reunión presencial del PC, `69ac5a89`, y la
+     * cámara del móvil, §3.4): en la nota de voz, `clips: [{duracionMs, id, ms}]` en orden de `ms`; cada
+     * clip es un `ARCHIVO` `.mp4` con `enGrabacion: {de, duracionMs, ms}`. **Sin clips la clave se
+     * quita** (null, nunca `[]`). Se conservan tal cual al reescribir el mensaje. Ver [Presencial].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val clips: kotlinx.serialization.json.JsonArray? = null,
+    /**
+     * **De dónde salió una imagen o un clip de una clase** (28-oct-2026, PC `92b2843e`): `"camara"` (la
+     * cámara del aparato que grababa, la reunión presencial) o `"movil"` (el móvil haciendo de cámara
+     * del PC). Falta en las capturas de pantalla y en todo lo de antes: **falta = pantalla**. Nunca
+     * `origen`, que es el campo de arriba ([origen]); lo escrito así se rescata al leer
+     * ([Presencial.rescatar], en [MensajeSerializer]). Ver [Presencial.FUENTE].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val fuente: String? = null,
+    /**
+     * **Lo que trae del móvil una foto o un clip de la cámara del PC** (28-oct-2026,
+     * `docs/manual-sincronizar-lo-nuevo.md` del PC: «conservar `fuente`, `deAparato`, `tomadaEn`»):
+     * el nombre del teléfono que la hizo y su hora en el reloj del teléfono. Los pone el PC; aquí
+     * solo se conservan para que viajen de vuelta tal cual.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val deAparato: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val tomadaEn: Long? = null,
 
     /**
      * **Es un escaneo** (23-oct-2026, lo pidió el usuario): entró por «Escanear» del clip y se puede
@@ -395,6 +428,20 @@ data class Mensaje(
     @EncodeDefault(EncodeDefault.Mode.NEVER)
     val versionN: Int? = null
 )
+
+/**
+ * **Cómo se lee y se escribe un [Mensaje]** (28-oct-2026): lo de siempre (el serializador que genera
+ * Kotlin, que se guarda con `@KeepGeneratedSerializer`), y al leer, **el rescate de las líneas del PC
+ * con `origen` repetido** ([Presencial.rescatar]). Va aquí y no en cada sitio que lee mensajes (el
+ * chat, la sincronización, los envíos, las copias): todos piden `Mensaje.serializer()` y todos
+ * rescatan. Escribir no cambia nada.
+ */
+object MensajeSerializer : KSerializer<Mensaje> {
+    private val generado: KSerializer<Mensaje> get() = Mensaje.generatedSerializer()
+    override val descriptor: SerialDescriptor get() = generado.descriptor
+    override fun serialize(encoder: Encoder, value: Mensaje) = generado.serialize(encoder, value)
+    override fun deserialize(decoder: Decoder): Mensaje = Presencial.rescatar(generado.deserialize(decoder))
+}
 
 /**
  * La etiqueta de un escaneo: con qué aplicación se hizo ([app], el paquete) y qué documento es en
