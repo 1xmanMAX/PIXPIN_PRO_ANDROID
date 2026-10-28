@@ -23,6 +23,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -190,7 +192,13 @@ private data class PermissionItem(
 fun OnboardingScreen(@Suppress("UNUSED_PARAMETER") loQuePiden: Intent? = null) {
     val app = LocalContext.current.applicationContext as PixPinApp
     val proyectos by app.proyectos.proyectos.collectAsState()
-    com.forge.pixpin.ui.ListaDeChats(proyectos)
+    androidx.compose.foundation.layout.Box(Modifier.fillMaxSize()) {
+        com.forge.pixpin.ui.ListaDeChats(proyectos)
+        // **Una grabación que se cortó** (28-oct-2026, «Grabar sin perder nada»): Recuperar / Descartar.
+        com.forge.pixpin.guardados.TarjetasDeGrabacionesCortadas(
+            Modifier.align(androidx.compose.ui.Alignment.BottomCenter).then(Modifier.windowInsetsPadding(androidx.compose.foundation.layout.WindowInsets.navigationBars)).padding(bottom = 72.dp)
+        )
+    }
 }
 
 /**

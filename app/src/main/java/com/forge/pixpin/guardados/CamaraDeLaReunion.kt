@@ -213,7 +213,21 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
      * el micrófono en el mismo MP4. Se ata un `Preview` cuya superficie es la del [MediaRecorder]: la
      * cámara le da sus fotogramas al codificador y sigue haciendo fotos. False si no se pudo.
      */
-    suspend fun empezarVideo(destino: File, alto: Int, conSonido: Boolean): Boolean {
+    suspend fun empezarVideo(
+        destino: File, alto: Int, conSonido: Boolean,
+        /**
+         * **En trozos** (28-oct-2026, «Grabar sin perder nada»): con esto, al acercarse a
+         * [TrozosDeVideo.bytesDelTrozo] el vídeo sigue en el fichero que dé (`setNextOutputFile`, en el
+         * siguiente fotograma clave) y el de antes queda cerrado: si Android mata la app, solo se pierde
+         * el trozo en curso. Null: un fichero entero, como un clip.
+         */
+        siguienteTrozo: (() -> File)? = null,
+        /**
+         * Cuando un trozo se cerró ([cerrado]) y el vídeo sigue en [nuevo]; [nuevo] null si el vídeo se
+         * paró ahí (el teléfono no aceptó el siguiente fichero).
+         */
+        alCambiarDeTrozo: ((cerrado: File, nuevo: File?) -> Unit)? = null
+    ): Boolean {
         val p = proveedor ?: return false
         val s = selector ?: return false
         if (grabadora != null) return false
@@ -240,7 +254,7 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
                 return@setSurfaceProvider
             }
             val tam = pedido.resolution
-            val g = prepararGrabadora(destino, tam.width, tam.height, rotacion, conSonido)
+            val g = prepararGrabadora(destino, tam.width, tam.height, rotacion, conSonido, siguienteTrozo, alCambiarDeTrozo)
             if (g == null) {
                 pedido.willNotProvideSurface()
                 listo.complete(false)
@@ -336,7 +350,10 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
      * El [MediaRecorder] del vídeo, ya preparado. **HEVC si el teléfono lo codifica por hardware** a
      * ese tamaño; si no (o si `prepare` falla), H.264. Null si ninguno.
      */
-    private fun prepararGrabadora(destino: File, ancho: Int, alto: Int, rotacion: Int, conSonido: Boolean): MediaRecorder? {
+    private fun prepararGrabadora(
+        destino: File, ancho: Int, alto: Int, rotacion: Int, conSonido: Boolean,
+        siguienteTrozo: (() -> File)? = null, alCambiarDeTrozo: ((File, File?) -> Unit)? = null
+    ): MediaRecorder? {
         val probar = buildList {
             if (hevcPorHardware(ancho, alto)) add(true)
             add(false)
@@ -362,6 +379,7 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
                         setAudioEncodingBitRate(Presencial.SONIDO_BITS)
                     }
                     setOrientationHint(((rotacion % 360) + 360) % 360)
+                    if (siguienteTrozo != null) enTrozos(this, destino, Presencial.bitsDeLaReunion(minOf(ancho, alto), conHevc), siguienteTrozo, alCambiarDeTrozo)
                     prepare()
                 }
             }.onFailure { Log.w(TAG, "el codificador ${if (conHevc) "HEVC" else "H.264"} no se preparó", it) }.isSuccess
@@ -373,6 +391,39 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
             destino.delete()
         }
         return null
+    }
+
+    /**
+     * **El vídeo en trozos** ([empezarVideo]): un tope de tamaño y, al acercarse, el fichero siguiente.
+     * El escritor de Android pasa a él en el siguiente fotograma clave y cierra el de antes entero.
+     */
+    private fun enTrozos(g: MediaRecorder, primero: File, bits: Int, siguiente: () -> File, alCambiar: ((File, File?) -> Unit)?) {
+        var actual = primero
+        var pendiente: File? = null
+        g.setMaxFileSize(TrozosDeVideo.bytesDelTrozo(bits))
+        g.setOnInfoListener { mr, que, _ ->
+            when (que) {
+                MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_APPROACHING -> if (pendiente == null) {
+                    val f = siguiente()
+                    val bien = runCatching { mr.setNextOutputFile(f) }
+                        .onFailure { Log.w(TAG, "el vídeo no acepta el trozo siguiente", it) }.isSuccess
+                    if (bien) pendiente = f else f.delete()
+                }
+                MediaRecorder.MEDIA_RECORDER_INFO_NEXT_OUTPUT_FILE_STARTED -> {
+                    val nuevo = pendiente ?: return@setOnInfoListener
+                    pendiente = null
+                    val cerrado = actual
+                    actual = nuevo
+                    alCambiar?.invoke(cerrado, nuevo)
+                }
+                MediaRecorder.MEDIA_RECORDER_INFO_MAX_FILESIZE_REACHED -> {
+                    // Sin fichero siguiente, el vídeo se para aquí (cerrado entero); la nota sigue.
+                    pendiente?.delete()
+                    pendiente = null
+                    alCambiar?.invoke(actual, null)
+                }
+            }
+        }
     }
 
     private suspend fun obtenerProveedor(): ProcessCameraProvider? = suspendCancellableCoroutine { cont ->
