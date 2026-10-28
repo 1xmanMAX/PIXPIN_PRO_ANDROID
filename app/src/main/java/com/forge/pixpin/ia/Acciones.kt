@@ -292,7 +292,8 @@ object Acciones {
     /** **Todas las filas**: las de la app y las de los documentos. */
     val TODAS: List<Accion> get() = ACCIONES + ACCIONES_DOCUMENTOS
 
-    fun porNombre(nombre: String): Accion? = TODAS.firstOrNull { it.herramienta == nombre }
+    /** La fila de [nombre]: de la tabla o, si no, de la web (`buscar_en_la_web`, `abrir_pagina`). */
+    fun porNombre(nombre: String): Accion? = TODAS.firstOrNull { it.herramienta == nombre } ?: com.forge.pixpin.asistente.web.Web.fila(nombre)
 
     fun esDeDocumentos(herramienta: String) = ACCIONES_DOCUMENTOS.any { it.herramienta == herramienta }
 

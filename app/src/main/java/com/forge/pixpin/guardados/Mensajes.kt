@@ -429,6 +429,19 @@ data class Mensaje(
     val versionN: Int? = null,
 
     /**
+     * **Lo importante de una clase o reunión** (28-oct-2026, Jev de TypeSafe, PC `df8884e2`/`d8ddb756`,
+     * `docs/manual-sincronizar-lo-nuevo.md` §14 del PC): en la nota de voz, `importantes: [{ms, tipo,
+     * p}]` (con `quien`/`cuando`/`enTareas` en las tareas) y `importantesDe` el modelo que lo halló.
+     * **Sin la clave: nunca se miró; `[]`: se miró y no hay nada** (por eso un `[]` se escribe y se
+     * conserva). Lo escribe el PC o este teléfono con su propia clave; se conservan tal cual al
+     * reescribir el mensaje. Las cuentas, en [Importantes].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val importantes: kotlinx.serialization.json.JsonArray? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val importantesDe: String? = null,
+
+    /**
      * **Las fotos por su hora** (28-oct-2026, PC `por_su_hora.rs`, `docs/movil-como-camara.md` §12-§14
      * del PC). En la nota de voz de una clase: `reloj` (la ventana de la grabación en la hora de pared
      * de quien grabó, `{aparato, inicio, fin, pausas, vistoEn, huecos, grabacion}`, ver [RelojDePared]) y

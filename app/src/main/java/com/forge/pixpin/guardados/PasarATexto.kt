@@ -139,6 +139,10 @@ object PasarATexto {
             ColaDeTexto.Fin.FALLO
         }
         cambiar(app) { ColaDeTexto.alAcabar(it, id, fin) }
+        // **Lo importante de la clase** (28-oct-2026, Jev): con la clave de TypeSafe, al acabar de pasar
+        // a texto una nota se buscan sus tareas, decisiones, preguntas y lo de examen, en su hilo. Volver
+        // a pasarla lo rehace entero (lo ya apuntado en Tareas sigue marcado). Sin clave, nada.
+        if (fin == ColaDeTexto.Fin.HECHO && tarea != ColaDeTexto.Tarea.TIEMPOS_DE_LA_LETRA) com.forge.pixpin.jev.ReunionEnLaApp.lanzar(app, id, forzar = true)
         when {
             fin == ColaDeTexto.Fin.SIN_MODELO -> avisarDelModelo(app)
             !ColaDeTexto.esperaAlModelo(_cola.value) -> quitarElAviso(app)

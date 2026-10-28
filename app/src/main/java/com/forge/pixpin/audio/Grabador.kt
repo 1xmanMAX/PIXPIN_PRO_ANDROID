@@ -30,6 +30,13 @@ interface Grabador {
      */
     fun pausar(pausa: Boolean) {}
 
+    /**
+     * **Por dónde va la nota**, en ms de sonido escrito (silencios de relleno incluidos, pausas no), o
+     * null si este grabador no lo sabe (28-oct-2026, el latido del diario de «Grabar sin perder nada»:
+     * compara esto con la hora de pared para ver si el teléfono congeló la app).
+     */
+    fun llevadoMs(): Long? = null
+
     class DelSistema(private val r: MediaRecorder) : Grabador {
         override fun pico() = runCatching { r.maxAmplitude }.getOrDefault(0).coerceAtLeast(0)
         override fun pausar(pausa: Boolean) {
@@ -51,7 +58,13 @@ interface Grabador {
         private val codec: MediaCodec,
         private val muxer: MediaMuxer,
         private val muestreo: Int,
-        private val fuente: Int
+        private val fuente: Int,
+        /**
+         * **El respaldo WAV** de lo mismo que va al `.m4a` (28-oct-2026, «Grabar sin perder nada»): si
+         * la app muere, de él se rehace la nota ([RehacerM4a]). Null en las notas cortas de siempre.
+         */
+        private val respaldo: RespaldoWav.EnHilo? = null,
+        private val context: android.content.Context? = null
     ) : Grabador {
         @Volatile private var corriendo = true
         @Volatile private var maximo = 0
@@ -64,10 +77,35 @@ interface Grabador {
         private val info = MediaCodec.BufferInfo()
         private val realce = Realce(muestreo)
         private val hilo = Thread({ bucle() }, "pixpin-voz")
+        /** Lo que se ha metido en el codificador, en muestras (lo lee el latido desde otro hilo). */
+        @Volatile private var metidas = 0L
+        /** Lo pide el aviso de aparatos: el micrófono que se usaba se fue (unos cascos Bluetooth). */
+        @Volatile private var reabrirYa = false
+        private val vigia: android.media.AudioDeviceCallback? = context?.let { vigilarAparatos(it) }
 
         init { hilo.start() }
 
         override fun pico(): Int { val m = maximo; maximo = 0; return m }
+
+        override fun llevadoMs(): Long = metidas * 1000 / muestreo
+
+        /**
+         * **Los cascos que se van** (28-oct-2026): si el aparato por el que entraba el sonido desaparece
+         * (Bluetooth fuera de alcance, el cable que se quita), se vuelve a abrir el micrófono en el acto
+         * ([reabrir], que pone silencio al paso del reloj), sin esperar a que `read` falle: hay
+         * teléfonos que siguen dando ceros del aparato muerto.
+         */
+        private fun vigilarAparatos(c: android.content.Context): android.media.AudioDeviceCallback? = runCatching {
+            val am = c.getSystemService(android.media.AudioManager::class.java) ?: return null
+            val cb = object : android.media.AudioDeviceCallback() {
+                override fun onAudioDevicesRemoved(quitados: Array<out android.media.AudioDeviceInfo>?) {
+                    val usado = runCatching { record.routedDevice?.id }.getOrNull()
+                    if (quitados.orEmpty().any { it.isSource && (usado == null || it.id == usado) }) reabrirYa = true
+                }
+            }
+            am.registerAudioDeviceCallback(cb, android.os.Handler(android.os.Looper.getMainLooper()))
+            cb
+        }.getOrNull()
 
         override fun pausar(pausa: Boolean) { enPausa = pausa }
 
@@ -79,6 +117,7 @@ interface Grabador {
             val buf = ShortArray(muestreo / 10)
             try {
                 while (corriendo) {
+                    if (reabrirYa) { reabrirYa = false; reabrir(); continue }
                     val n = record.read(buf, 0, buf.size)
                     if (n == AudioRecord.ERROR_DEAD_OBJECT) {
                         // El micrófono se fue (unos cascos que se quitan, otra app que lo coge): se
@@ -129,6 +168,8 @@ interface Grabador {
         }
 
         private fun meter(buf: ShortArray, n: Int, fin: Boolean) {
+            // El mismo PCM al respaldo, en su hilo (no espera nunca), y la cuenta para el latido.
+            if (n > 0) { respaldo?.escribir(buf, n); metidas += n }
             var hecho = 0
             var intentos = 0
             while (true) {
@@ -178,8 +219,10 @@ interface Grabador {
 
         override fun parar(): Boolean {
             corriendo = false
+            vigia?.let { cb -> runCatching { context?.getSystemService(android.media.AudioManager::class.java)?.unregisterAudioDeviceCallback(cb) } }
             runCatching { record.stop() }
             runCatching { hilo.join(3000) }
+            runCatching { respaldo?.cerrar() }
             runCatching { record.release() }
             runCatching { codec.stop() }
             runCatching { codec.release() }
@@ -222,7 +265,13 @@ interface Grabador {
              * es el preset del micrófono ([PRESET_DE_VOZ] o [PRESET_DE_CLASE]).
              */
             @SuppressLint("MissingPermission")
-            fun empezar(destino: File, muestreo: Int, bitsPorSegundo: Int, fuente: Int = PRESET_DE_VOZ): Realzado? {
+            fun empezar(
+                destino: File, muestreo: Int, bitsPorSegundo: Int, fuente: Int = PRESET_DE_VOZ,
+                /** Con respaldo WAV (una clase o una reunión): dónde. Ver [RespaldoWav]. */
+                respaldo: File? = null,
+                /** Para vigilar los aparatos de sonido (los cascos que se van). */
+                context: android.content.Context? = null
+            ): Realzado? {
                 var record: AudioRecord? = null
                 var codec: MediaCodec? = null
                 var muxer: MediaMuxer? = null
@@ -244,7 +293,9 @@ interface Grabador {
                         record = abrirMicrofono(MediaRecorder.AudioSource.MIC, muestreo)?.also { it.startRecording() }
                         if (record?.recordingState != AudioRecord.RECORDSTATE_RECORDING) error("ocupado")
                     }
-                    Realzado(record!!, codec!!, muxer!!, muestreo, fuente)
+                    // El respaldo, si no se puede crear (sin sitio), no para nada: la nota se graba igual.
+                    val wav = respaldo?.let { r -> runCatching { RespaldoWav.EnHilo(r, muestreo) }.getOrNull() }
+                    Realzado(record!!, codec!!, muxer!!, muestreo, fuente, wav, context?.applicationContext)
                 }.getOrElse {
                     runCatching { record?.release() }; runCatching { codec?.release() }; runCatching { muxer?.release() }
                     destino.delete()

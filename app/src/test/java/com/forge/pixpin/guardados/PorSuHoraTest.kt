@@ -98,9 +98,9 @@ class PorSuHoraTest {
         val nota = Mensaje(id = "voz1", cuando = 1, clase = Clase.VOZ)
         assertNull(RelojDePared.de(nota))
         val conReloj = nota.copy(reloj = reloj().aJson())
-        // Byte a byte lo del PC: sin vistoEn, huecos ni grabacion.
+        // Byte a byte lo del PC (claves en orden alfabético): sin vistoEn, huecos ni grabacion.
         assertEquals(
-            """{"aparato":"PC01","inicio":$pared,"fin":${pared + 130 * s},"pausas":[[${pared + 40 * s},${pared + 70 * s}]]}""",
+            """{"aparato":"PC01","fin":${pared + 130 * s},"inicio":$pared,"pausas":[[${pared + 40 * s},${pared + 70 * s}]]}""",
             conReloj.reloj.toString()
         )
         assertEquals(reloj(), RelojDePared.de(conReloj))

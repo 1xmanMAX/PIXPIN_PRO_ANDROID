@@ -55,16 +55,20 @@ class EnviarAAnkiActivity : ComponentActivity() {
         val todos = runCatching { MensajesStore(this).leer() }.getOrDefault(emptyList())
         val m = todos.firstOrNull { it.id == id } ?: return "El mensaje ya no está" to null
         val chat = m.proyecto?.let { app?.proyectos?.porId(it)?.nombre } ?: "Mensajes guardados"
-        val tarjetas = AnkiDelMensaje.tarjetasDe(m, todos, tituloDeAudio(this, m), chat)
+        // Con Jev (28-oct-2026), de una clase solo las tarjetas que valen la pena; sin clave, todas.
+        val titulo = tituloDeAudio(this, m)
+        val valer = if (m.clase == com.forge.pixpin.guardados.Clase.VOZ) com.forge.pixpin.jev.AnkiEnLaApp.valer(this, titulo) else null
+        val (tarjetas, quitadas) = AnkiDelMensaje.tarjetasYQuitadas(m, todos, titulo, chat, valer = valer)
+        val jev = com.forge.pixpin.jev.AnkiEnLaApp.aviso(quitadas)
         if (tarjetas.isEmpty()) return NADA to null
         val mazo = AnkiDelMensaje.mazoDe(chat)
         if (AnkiDroid.instalado(this) && AnkiDroid.tienePermiso(this)) {
             val hecho = runCatching { AnkiDroid.anadir(this, mazo, tarjetas) }
-            hecho.onSuccess { return "$it tarjetas en Anki, mazo «$mazo»" to null }
+            hecho.onSuccess { return "$it tarjetas en Anki, mazo «$mazo»$jev" to null }
             android.util.Log.w("PixPin", "Anki no admitió las tarjetas", hecho.exceptionOrNull())
         }
         return runCatching { aFichero(mazo, tarjetas) }.fold(
-            { "AnkiDroid no está (o no dio permiso). ${tarjetas.size} tarjetas en un fichero: en Anki, Archivo → Importar." to it },
+            { "AnkiDroid no está (o no dio permiso). ${tarjetas.size} tarjetas en un fichero: en Anki, Archivo → Importar.$jev" to it },
             { "No se pudo: ${it.message}" to null }
         )
     }

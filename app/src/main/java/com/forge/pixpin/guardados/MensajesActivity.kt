@@ -1165,6 +1165,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             loMandado = nota.id
                             refrescar()
                         }
+                        // El modelo que eligió Jev para el último pedido («Claude Sonnet · Jev», 28-oct-2026).
+                        com.forge.pixpin.jev.PastillaDelModelo(chatDe, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 4.dp))
                         // «Conversación nueva»: lo de arriba ya no se le manda (asistente/Asistente.kt).
                         com.forge.pixpin.asistente.ConversacionNueva(chatDe, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA)) { loMandado = System.currentTimeMillis().toString(); refrescar() }
                     }

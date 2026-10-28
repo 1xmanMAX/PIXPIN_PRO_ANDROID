@@ -58,13 +58,19 @@ object Voz {
          * Una clase y no una nota (25-oct-2026): el preset `CAMCORDER` en vez de
          * `VOICE_RECOGNITION`, como recomienda `docs/motor-de-audio.md` §8 del PC.
          */
-        paraUnaClase: Boolean = false
+        paraUnaClase: Boolean = false,
+        /**
+         * **El respaldo WAV** de la nota (28-oct-2026, «Grabar sin perder nada»): una clase o una
+         * reunión lo escriben al lado, para rehacer la nota si la app muere. Solo con el grabador que
+         * realza (el de `AudioRecord`): la grabadora del sistema de reserva no da el PCM.
+         */
+        respaldo: File? = null
     ): com.forge.pixpin.audio.Grabador? {
         // **Con el realce de la voz**, como el PC (3-oct-2026): una voz baja sale clara. Si este
         // teléfono no deja montar el codificador, la grabadora de siempre.
         val preset = if (paraUnaClase) com.forge.pixpin.audio.Grabador.Realzado.PRESET_DE_CLASE
         else com.forge.pixpin.audio.Grabador.Realzado.PRESET_DE_VOZ
-        com.forge.pixpin.audio.Grabador.Realzado.empezar(destino, MUESTREO, BITS_POR_SEGUNDO, preset)?.let { return it }
+        com.forge.pixpin.audio.Grabador.Realzado.empezar(destino, MUESTREO, BITS_POR_SEGUNDO, preset, respaldo, context)?.let { return it }
         return runCatching {
             val grabador = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
                 MediaRecorder(context)

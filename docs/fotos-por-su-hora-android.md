@@ -71,16 +71,19 @@ idempotente; la foto de otra persona no se toca nunca (la colocación vive en la
 | La hora del EXIF | `guardados/HoraDeLaFoto.kt`, desde `MensajesStore.anadir` |
 | §12.4 la cámara sin grabación | `CamaraDelPcActivity.apuntarPorSuHora`, `ColaDeLaCamara.Toma.porSuHora` (`grabacion`/`pc` vacíos), `ConexionDeCamara.mandar` (sin `grabacion` ni `ms`), `SubidaALaGrabacion.pasar` (mide el reloj con `camara_remota` si la toma no lo sabía), `CamaraRemota.NINGUNA` («no cae en ninguna»: negada para siempre, ya es una foto normal) |
 | §13 el teléfono que graba | `sincro/GrabacionesDelMovil.kt` (el `Camaras` del PC, puro) y `sincro/GrabacionDelMovil.kt` (las cuatro llamadas de la grabadora, el anuncio a cada PC cada 30 s, la recepción); `CamaraRemota.Pregunta` (`suya`), `ConexionDeCamara.anunciarLaMia`, `QuienGraba` y `Respondedor.recibirParaLaGrabacion`; `Presencia` sigue escuchando mientras se graba |
-| Las grabadoras | `ReunionPresencialService` y `GrabarClaseService`: `GrabacionDelMovil.empezar/pausa/acabar/guardada/tirar` |
+| Las grabadoras | `ReunionPresencialService` y `GrabarClaseService`: `GrabacionDelMovil.empezar/pausa/acabar`; `GuardarLaGrabacion`: `guardada`/`tirar` |
 | §14 invitar y el autor | `ReunionEnCursoActivity` (el interruptor), `OpcionesDelMensaje.Opcion.APORTAN_TODOS` / `ADJUNTAR_A_LA_GRABACION` y `FotosALaGrabacion`; `AutoresDeLaClase.kt` y la miniatura de `EstudiarClaseActivity` |
 
 ## El reloj de pared mientras se graba
 
-El PC lo apunta en disco cada 15 s; en Android, el diario de la grabación y el reloj de pared en
-vivo son de «grabar sin perder nada» (otro trabajo en curso). Aquí `GrabacionesDelMovil` lleva el
-suyo (hora de pared, puesto al día con el cronómetro de la grabadora con 250 ms de tolerancia) para
-anunciar la grabación al PC y, **si la nota aún no lleva `reloj`**, lo escribe al guardarse con el id
-de la grabación (`m-…`). El del diario, con sus huecos, manda si ya está.
+El reloj de pared de la grabación y su diario son de «grabar sin perder nada»
+(`guardados/RelojDeLaGrabacion.kt`): al terminar (o al recuperar tras un corte) la nota entra ya con su
+`reloj`, huecos incluidos y con las claves en orden alfabético, byte a byte el del PC. Aquí
+`GrabacionesDelMovil` lleva además el suyo (hora de pared, al día con el cronómetro de la grabadora
+con 250 ms de tolerancia) solo para anunciar la grabación al PC y pasar sus capturas a su minuto; al
+guardarse, **escribe `reloj` solo si la nota aún no lo lleva** (el del diario manda). Las grabadoras
+llaman a `GrabacionDelMovil.empezar/pausa/acabar`; el guardado, en `GuardarLaGrabacion.clase/reunion`
+(el mismo camino de «Terminar» y de recuperar), llama a `guardada` o `tirar`.
 
 ## Probado contra el PC de verdad
 

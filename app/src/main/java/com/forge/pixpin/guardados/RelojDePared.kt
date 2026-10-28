@@ -35,8 +35,11 @@ data class RelojDePared(
     /** El id con que se anunció a los demás aparatos (`camara_remota`). */
     val grabacion: String = ""
 ) {
-    /** Como va en la nota. */
-    fun aJson(): JsonObject = JSON.encodeToJsonElement(serializer(), this).jsonObject
+    /**
+     * Como va en la nota: **con las claves en orden alfabético**, como las deja el PC (su `resto` es un
+     * `serde_json::Map` sin `preserve_order`, un `BTreeMap`), byte a byte lo mismo.
+     */
+    fun aJson(): JsonObject = JsonObject(JSON.encodeToJsonElement(serializer(), this).jsonObject.toSortedMap())
 
     companion object {
         private val JSON = Json { ignoreUnknownKeys = true; encodeDefaults = false }

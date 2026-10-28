@@ -27,7 +27,7 @@ class FotosPorSuHoraCompatibilidadTest {
 
     /** Como las escribe el PC (lo que llega por la sincronización), una por línea. */
     private val delPc = listOf(
-        """{"id":"1793178000000","cuando":1793178000000,"clase":"VOZ","ruta":"Clase.m4a","nombre":"Clase.m4a","bytes":3,"duracionMs":100000,"proyecto":"p1","uid":"ABCDEFGHJK","aparato":"PC01","grabacion":"clase","capturas":[{"aparato":"ANA1","horaSinComprobar":true,"id":"1793178020000","ms":20000,"uid":"u-f2"},{"id":"1793178060000","ms":60000}],"reloj":{"aparato":"PC01","inicio":1793178000000,"fin":1793178130000,"pausas":[[1793178040000,1793178070000]],"vistoEn":1793178129000,"huecos":[[1793178100000,1793178110000]],"grabacion":"g-7"},"colaboradores":["*","K7Q2"]}""",
+        """{"id":"1793178000000","cuando":1793178000000,"clase":"VOZ","ruta":"Clase.m4a","nombre":"Clase.m4a","bytes":3,"duracionMs":100000,"proyecto":"p1","uid":"ABCDEFGHJK","aparato":"PC01","grabacion":"clase","capturas":[{"aparato":"ANA1","horaSinComprobar":true,"id":"1793178020000","ms":20000,"uid":"u-f2"},{"id":"1793178060000","ms":60000}],"reloj":{"aparato":"PC01","fin":1793178130000,"grabacion":"g-7","huecos":[[1793178100000,1793178110000]],"inicio":1793178000000,"pausas":[[1793178040000,1793178070000]],"vistoEn":1793178129000},"colaboradores":["*","K7Q2"]}""",
         """{"id":"1793178020000","cuando":1793178020000,"clase":"IMAGEN","ruta":"f2.jpg","nombre":"f2.jpg","bytes":4,"proyecto":"p1","uid":"u-f2","aparato":"ANA1","tomadaEn":1793178020000,"tomadaEnExif":"2026:10:28 10:05:03","desfaseExif":"+01:00","paraGrabacion":"1793178000000"}""",
         """{"id":"1793178060000","cuando":1793178060000,"clase":"IMAGEN","ruta":"copia.jpg","nombre":"copia.jpg","bytes":4,"proyecto":"p1","aparato":"PC01","enGrabacion":{"de":"1793178000000","ms":60000},"fuente":"movil","deAparato":"Teléfono","tomadaEn":1793178067000,"fotoUid":"toma-1"}"""
     )
@@ -61,6 +61,8 @@ class FotosPorSuHoraCompatibilidadTest {
     fun `el reloj escrito aqui es byte a byte el del PC`() {
         val r = RelojDePared.de(json.decodeFromString(Mensaje.serializer(), delPc[0]).reloj)!!
         assertEquals(obj(delPc[0])["reloj"].toString(), r.aJson().toString())
+        // Y el mismo que escribe el diario de la grabación (`RelojDeLaGrabacion.enJson`).
+        assertEquals(r.aJson().toString(), RelojDeLaGrabacion.enJson(r).toString())
     }
 
     @Test

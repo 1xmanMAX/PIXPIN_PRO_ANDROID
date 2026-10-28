@@ -128,7 +128,11 @@ class GrabacionesDelMovil(
      * con sus huecos, manda si ya está). Va a la última acabada sin guardar (o a la de ahora). Devuelve
      * cuántas entraron.
      */
-    fun guardada(destino: Destino, duracion: Long?, ahora: Long): Int {
+    fun guardada(destino0: Destino, duracion: Long?, ahora: Long): Int {
+        // Sin carpeta dicha: la de la grabación de esa nota, si la hay.
+        val destino = if (destino0.carpeta != null || destino0.voz == null) destino0 else destino0.copy(
+            carpeta = destino0.disco.leerMensajes().firstOrNull { it.proyecto == destino0.proyecto && CarpetaDePaginas.deMensaje(it)?.voz == destino0.voz }?.id
+        )
         if (acabadas.all { it.destino != null }) acabar(ahora)
         val g = acabadas.firstOrNull { it.destino == null } ?: return 0
         if (duracion != null && duracion > 0) g.duracion = duracion

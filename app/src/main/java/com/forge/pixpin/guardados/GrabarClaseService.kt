@@ -71,6 +71,7 @@ import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
 import com.forge.pixpin.audio.Grabador
 import com.forge.pixpin.sincro.GrabacionDelMovil
+import com.forge.pixpin.audio.RespaldoWav
 import com.forge.pixpin.capture.CaptureFlow
 import com.forge.pixpin.capture.CaptureService
 import com.forge.pixpin.capture.ProjectionSession
@@ -90,7 +91,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
 import java.io.File
-import java.util.UUID
 import kotlin.coroutines.resume
 import kotlin.math.roundToInt
 
@@ -127,6 +127,16 @@ import kotlin.math.roundToInt
  * La nota entra en el chat con `capturas` y `grabacion: "clase"`, cada imagen detrás con su
  * minuto en el pie y `enGrabacion`, y la nota se pasa a texto ([MensajesStore.transcribir]).
  * Cerrar no es tirar: si el sistema para el servicio, lo grabado se guarda. Tirar es ✕ dos veces.
+ *
+ * ## Grabar sin perder nada (28-oct-2026, `docs/grabar-sin-perder-nada.md` del PC)
+ *
+ * - **La nota va siempre aparte del vídeo** ([Voz.empezar] con su respaldo WAV): se graba en
+ *   `<nota>.parte` y se pone en su nombre al cerrarse; si no se cierra, se rehace del respaldo.
+ * - **El vídeo, sin sonido y en trozos** de 3 minutos ([VideoDeLaClase], [TrozosDeVideo]); al terminar
+ *   se juntan con el sonido de la nota.
+ * - **El diario** ([DiarioEnMarcha]): cada captura se escribe en su carpeta en el acto, el reloj de pared
+ *   late cada 5 s (y apunta los huecos si Android congela la app) y el disco se mira cada 20 s.
+ * - Si algo se corta, al volver a abrir PixPin se ofrece recuperarla ([RecuperarGrabacion]).
  */
 class GrabarClaseService : Service() {
 
@@ -178,8 +188,8 @@ class GrabarClaseService : Service() {
     )
 
     /**
-     * Una captura: ya recortada en la caché, o —con vídeo— solo su minuto ([archivo] nulo), que se
-     * saca del `.mp4` al terminar.
+     * Una captura: ya en la carpeta del diario, o —con vídeo— solo su minuto ([archivo] nulo), que se
+     * saca del vídeo al terminar.
      */
     private class Hecha(val ms: Long, val archivo: File?)
 
@@ -191,16 +201,32 @@ class GrabarClaseService : Service() {
     private val wm by lazy { getSystemService(WindowManager::class.java) }
 
     private var grabador: Grabador? = null
-    private var destino: File? = null
-    /** Con vídeo: [destino] es el `.mp4` y la nota se saca de él al terminar. */
+    /**
+     * **La nota** (28-oct-2026, «Grabar sin perder nada»): se graba en `<nota>.parte` con su respaldo WAV
+     * al lado, y se pone en su nombre al cerrarse ([GuardarLaGrabacion.cerrarLaNota]).
+     */
+    private var nota: File? = null
+    /** El vídeo de la pantalla, en trozos y sin sonido ([VideoDeLaClase]); null sin vídeo o ya cortado. */
+    private var video: VideoDeLaClase? = null
+    /** Si se empezó con vídeo (las capturas salen de sus fotogramas). */
     private var conVideo = false
+    private var trozoDesde = 0L
+    private var numeroDeTrozo = 1
+    private var numeroDeCaptura = 0
     private var proyecto: String? = null
+    private var nombre = ""
+    private var marca = 0L
     private var cronometro: GrabarClase.Cronometro? = null
+    /** **El diario en el disco** de esta grabación ([DiarioEnMarcha]). */
+    private var diario: DiarioEnMarcha? = null
     private val picos = Picos()
     private val hechas = mutableListOf<Hecha>()
     private var fotografiando = false
     private var abrimosLaSesion = false
     private var terminado = false
+    /** El servicio no pudo ponerse en primer plano (Android no da el micrófono desde atrás). */
+    private var sinPrimerPlano = false
+    private var avisadoPocoSitio = false
 
     private var ventana: OverlayComposeWindow? = null
     private var lp: WindowManager.LayoutParams? = null
@@ -216,65 +242,94 @@ class GrabarClaseService : Service() {
             .apply { setShowBadge(false) }
         getSystemService(NotificationManager::class.java).createNotificationChannel(canal)
         // Con la app a la vista (la arranca [GrabarClaseActivity]): si no, Android 14 no da el
-        // micrófono a un servicio y esto lanza. Entonces no se graba nada y se dice.
-        val bien = runCatching {
+        // micrófono a un servicio y esto lanza. Lo que se hace entonces lo decide [onStartCommand]:
+        // si Android volvió a crear el servicio tras matar la app, no es un fallo que decir.
+        sinPrimerPlano = runCatching {
             startForeground(AVISO, aviso(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
-        }.isSuccess
-        if (!bien) {
-            toast(getString(R.string.clase_no_arranca))
-            terminado = true
-            stopSelf()
-        }
+        }.isFailure
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACCION_TERMINAR) {
+        if (intent == null) {
+            // **Android volvió a crear el servicio** tras matar la app a media clase (START_STICKY): la
+            // grabación de antes no se puede seguir, pero quedó en su diario. Se avisa para recuperarla.
+            if (grabador == null) {
+                RecuperarGrabacion.avisarSiHay(this)
+                terminado = true
+                stopSelf()
+            }
+            return START_NOT_STICKY
+        }
+        if (intent.action == ACCION_TERMINAR) {
             terminar()
             return START_NOT_STICKY
         }
-        if (grabador != null || terminado) return START_NOT_STICKY
-        proyecto = intent?.getStringExtra(EL_PROYECTO)
+        if (grabador != null || terminado) return START_STICKY
+        if (sinPrimerPlano) {
+            toast(getString(R.string.clase_no_arranca))
+            terminado = true
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        proyecto = intent.getStringExtra(EL_PROYECTO)
         val carpeta = MensajesStore(this).carpetaDeAdjuntos()
         val ahora = System.currentTimeMillis()
-        var f = File(carpeta, "clase_$ahora.m4a")
+        marca = ahora
+        nombre = getString(R.string.clase_nombre, GrabarClase.fechaDelNombre(ahora))
+        val m4a = File(carpeta, "clase_$ahora.m4a")
+        val d = GrabacionAMedias.Diario.nuevo(ahora, proyecto.orEmpty(), nombre, m4a.absolutePath).apply {
+            nombreProyecto = GuardarLaGrabacion.nombreDelChat(this@GrabarClaseService, proyecto)
+            microfono = true
+            modo = Presencial.Modo.CAPTURAS.palabra
+        }
         @Suppress("DEPRECATION")
-        val datos = intent?.getParcelableExtra<Intent>(LOS_DATOS)
-        var g: Grabador? = null
+        val datos = intent.getParcelableExtra<Intent>(LOS_DATOS)
         if (datos != null) {
+            // **El disco antes de empezar** (como el PC): con menos de 500 MB, el vídeo ni empieza.
+            val sitio = GrabacionAMedias.espacio(DiarioEnMarcha.libres(this))
             // Android 14: primero en primer plano con el tipo `mediaProjection`, luego el permiso.
-            val enPrimerPlano = runCatching {
+            val enPrimerPlano = sitio != GrabacionAMedias.Espacio.CRITICO && runCatching {
                 startForeground(
                     AVISO, aviso(),
                     ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
                 )
             }.isSuccess
-            val mp4 = File(carpeta, "clase_$ahora.mp4")
-            g = if (enPrimerPlano) {
+            val trozo = File(carpeta, "clase_${ahora}_t1.mp4")
+            val v = if (enPrimerPlano) {
                 VideoDeLaClase.empezar(
-                    this, intent.getIntExtra(EL_CODIGO, 0), datos, mp4,
+                    this, intent.getIntExtra(EL_CODIGO, 0), datos, trozo,
                     PerfilDeVideo.deClave(intent.getStringExtra(EL_PERFIL))
                 ) {
-                    // El sistema cortó la pantalla (el chip, bloquear): se guarda lo que haya.
-                    scope.launch { terminar() }
+                    // El sistema cortó la pantalla (el chip, bloquear): el vídeo acaba ahí y la nota
+                    // sigue (el sonido nunca depende del vídeo).
+                    scope.launch { cortarElVideo(getString(R.string.sin_perder_video_cortado)) }
                 }
             } else null
-            if (g != null) {
-                f = mp4
+            if (v != null) {
+                video = v
                 conVideo = true
+                d.modo = Presencial.Modo.PANTALLA.palabra
+                d.video = File(carpeta, "clase_$ahora.mp4").absolutePath
+                d.empezarTrozo(0, trozo.absolutePath, 0)
             } else {
-                toast(getString(R.string.clase_sin_video))
+                toast(getString(if (sitio == GrabacionAMedias.Espacio.CRITICO) R.string.sin_perder_sin_sitio_para_video else R.string.clase_sin_video))
             }
         }
-        if (g == null) g = Voz.empezar(this, f, paraUnaClase = true)
+        // **La nota, siempre aparte del vídeo** y con su respaldo WAV (28-oct-2026).
+        val g = Voz.empezar(this, GuardarLaGrabacion.parteDe(m4a), paraUnaClase = true, respaldo = RespaldoWav.rutaDelRespaldo(m4a))
         if (g == null) {
-            f.delete()
+            video?.let { v -> runCatching { v.parar() }; v.trozo.delete() }
+            video = null
+            GuardarLaGrabacion.parteDe(m4a).delete()
+            RespaldoWav.rutaDelRespaldo(m4a).delete()
             toast(getString(R.string.clase_no_arranca))
             terminado = true
             stopSelf()
             return START_NOT_STICKY
         }
         grabador = g
-        destino = f
+        nota = m4a
+        diario = DiarioEnMarcha(this, d)
         val c = GrabarClase.Cronometro()
         cronometro = c
         enMarcha = true
@@ -290,8 +345,23 @@ class GrabarClaseService : Service() {
                 delay(Voz.MS_ENTRE_PICOS)
             }
         }
-        // NOT_STICKY: un servicio recreado sin la grabación no tendría nada que hacer.
-        return START_NOT_STICKY
+        // **El latido, el disco y los trozos del vídeo** (28-oct-2026, «Grabar sin perder nada»).
+        scope.launch {
+            var desdeElEspacio = 0L
+            while (isActive && !terminado) {
+                delay(GrabacionAMedias.CADA_LATIDO_MS)
+                if (terminado) break
+                latir()
+                desdeElEspacio += GrabacionAMedias.CADA_LATIDO_MS
+                if (desdeElEspacio >= GrabacionAMedias.CADA_ESPACIO_MS) {
+                    desdeElEspacio = 0
+                    mirarElDisco()
+                }
+                if (video != null && !c.enPausa && c.llevadoMs() - trozoDesde >= TrozosDeVideo.TROZO_MS) cambiarDeTrozo()
+            }
+        }
+        // STICKY: si Android mata la app, al volver a crear el servicio se avisa de lo que quedó.
+        return START_STICKY
     }
 
     override fun onDestroy() {
@@ -303,6 +373,67 @@ class GrabarClaseService : Service() {
         super.onDestroy()
     }
 
+    // --- Grabar sin perder nada -----------------------------------------------------------
+
+    /** Por dónde va la nota de verdad (lo escrito), o el cronómetro si el grabador no lo sabe. */
+    private fun msDeLaNota(): Long = grabador?.llevadoMs() ?: cronometro?.llevadoMs() ?: 0
+
+    /** **Un latido del diario**; si apunta un hueco (Android congeló la app), se dice. */
+    private fun latir() {
+        val c = cronometro ?: return
+        val hueco = diario?.latir(msDeLaNota(), c.enPausa) ?: return
+        avisar(getString(R.string.sin_perder_hueco, hueco))
+    }
+
+    /** **La guarda del disco** (como el PC): poco sitio, se avisa; casi nada, se cierra el vídeo y el audio sigue. */
+    private fun mirarElDisco() {
+        when (diario?.espacio()) {
+            GrabacionAMedias.Espacio.POCO -> if (!avisadoPocoSitio) {
+                avisadoPocoSitio = true
+                avisar(getString(R.string.sin_perder_poco_sitio))
+            }
+            GrabacionAMedias.Espacio.CRITICO -> if (video != null) cortarElVideo(getString(R.string.sin_perder_disco_lleno))
+            else -> Unit
+        }
+    }
+
+    /** **Cierra el vídeo con lo grabado** (el disco se llena, el sistema cortó la pantalla); la nota sigue. */
+    private fun cortarElVideo(porQue: String) {
+        val v = video ?: return
+        video = null
+        val llevado = cronometro?.llevadoMs() ?: 0
+        val desde = trozoDesde
+        val app = applicationContext as PixPinApp
+        app.scope.launch(Dispatchers.IO) {
+            runCatching { v.parar() }
+            diario?.cambiar { cerrarTrozo(v.trozo.absolutePath, llevado - desde) }
+        }
+        avisar(porQue)
+    }
+
+    /** **El trozo siguiente del vídeo** ([TrozosDeVideo.TROZO_MS]): se cierra el de ahora, entero. */
+    private fun cambiarDeTrozo() {
+        val v = video ?: return
+        val c = cronometro ?: return
+        if (c.enPausa) return
+        val desde = c.llevadoMs()
+        val siguiente = File(MensajesStore(this).carpetaDeAdjuntos(), "clase_${marca}_t${++numeroDeTrozo}.mp4")
+        val antes = trozoDesde
+        trozoDesde = desde
+        scope.launch {
+            val viejo = v.trozo
+            val bien = withContext(Dispatchers.IO) { v.cambiarDeTrozo(siguiente) }
+            if (bien == null) {
+                trozoDesde = antes
+                return@launch
+            }
+            diario?.cambiar {
+                cerrarTrozo(viejo.absolutePath, desde - antes)
+                empezarTrozo(desde, siguiente.absolutePath, 0)
+            }
+        }
+    }
+
     // --- Las acciones de la barra ---------------------------------------------------------
 
     private fun captura(cambiarZona: Boolean) {
@@ -311,8 +442,9 @@ class GrabarClaseService : Service() {
         // El minuto es el de cuando se pulsa, no el de cuando acaba de elegirse la zona.
         val ms = c.llevadoMs()
         if (conVideo) {
-            // Con vídeo la imagen sale del propio `.mp4` al terminar (ver [VideoDeLaClase]).
+            // Con vídeo la imagen sale del propio vídeo al terminar (ver [VideoDeLaClase]).
             hechas += Hecha(ms, null)
+            diario?.cambiar { capturasDelVideo += ms }
             barra.update { it.copy(capturas = hechas.size) }
             avisar(getString(R.string.clase_captura_hecha, GrabarClase.minuto(ms)))
             return
@@ -354,11 +486,16 @@ class GrabarClaseService : Service() {
                 ventana?.isContentVisible = true
                 null
             }
-            val archivo = withContext(Dispatchers.IO) { recortarYGuardar(foto, elegida, ms) }
+            // **En la carpeta del diario, en el acto** (28-oct-2026): si la app muere, la captura está.
+            val d = diario
+            val fichero = d?.diario?.ficheroDeCaptura(++numeroDeCaptura, "png") ?: "captura-${System.currentTimeMillis()}-$ms.png"
+            val dir = d?.dir ?: File(cacheDir, "clase")
+            val archivo = withContext(Dispatchers.IO) { recortarYGuardar(foto, elegida, File(dir, fichero)) }
             if (archivo == null) {
                 avisar(getString(R.string.clase_sin_zona))
                 return
             }
+            d?.cambiar { apuntarCaptura(ms, fichero, false) }
             hechas += Hecha(ms, archivo)
             barra.update { it.copy(capturas = hechas.size) }
             avisar(getString(R.string.clase_captura_hecha, GrabarClase.minuto(ms)))
@@ -367,19 +504,19 @@ class GrabarClaseService : Service() {
         }
     }
 
-    /** El recorte de [foto] a la zona, en PNG en la caché. Si la zona ya no cabe (giró), la pantalla. */
-    private fun recortarYGuardar(foto: Bitmap, zona: GrabarClase.Zona?, ms: Long): File? = runCatching {
+    /** El recorte de [foto] a la zona, en PNG en [destino]. Si la zona ya no cabe (giró), la pantalla. */
+    private fun recortarYGuardar(foto: Bitmap, zona: GrabarClase.Zona?, destino: File): File? = runCatching {
         val r = GrabarClase.recorte(zona, foto.width, foto.height)
             ?: GrabarClase.recorte(null, foto.width, foto.height)
             ?: return null
         val recorte = if (r.x == 0 && r.y == 0 && r.ancho == foto.width && r.alto == foto.height) foto
         else Bitmap.createBitmap(foto, r.x, r.y, r.ancho, r.alto)
-        val carpeta = File(cacheDir, "clase").apply { mkdirs() }
-        val f = File(carpeta, "captura-${System.currentTimeMillis()}-$ms.png")
-        f.outputStream().use { recorte.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        destino.parentFile?.mkdirs()
+        val bytes = java.io.ByteArrayOutputStream().also { recorte.compress(Bitmap.CompressFormat.PNG, 100, it) }.toByteArray()
+        GrabacionAMedias.escribirEntero(destino, bytes)
         if (recorte !== foto) recorte.recycle()
         foto.recycle()
-        f
+        destino
     }.getOrNull()
 
     private fun pausa() {
@@ -389,7 +526,10 @@ class GrabarClaseService : Service() {
         c.pausar(p)
         grabador?.pausar(p)
         GrabacionDelMovil.pausa(this)
+        video?.pausar(p)
         barra.update { it.copy(enPausa = p) }
+        // La pausa, en el reloj de pared en el acto.
+        diario?.latir(msDeLaNota(), p)
         if (p) avisar(getString(R.string.clase_en_pausa))
     }
 
@@ -409,6 +549,7 @@ class GrabarClaseService : Service() {
         }
     }
 
+    /** **Tirar** (✕ dos veces): lo único, junto a «Descartar», que borra lo grabado. */
     private fun descartar() {
         terminado = true
         enMarcha = false
@@ -416,14 +557,17 @@ class GrabarClaseService : Service() {
         quitarVentanas()
         val g = grabador
         grabador = null
-        val f = destino
-        val sueltas = hechas.toList()
+        val v = video
+        video = null
+        val d = diario
+        diario = null
         hechas.clear()
         val app = applicationContext as PixPinApp
         app.scope.launch(Dispatchers.IO) {
             Voz.parar(g)
-            f?.delete()
-            sueltas.forEach { it.archivo?.delete() }
+            runCatching { v?.parar() }
+            d?.cerrar(borrar = false)
+            d?.let { GrabacionAMedias.descartar(it.dir, it.diario) }
         }
         if (abrimosLaSesion) CaptureService.stopSession(app)
         toast(getString(R.string.clase_tirada))
@@ -439,31 +583,72 @@ class GrabarClaseService : Service() {
         quitarVentanas()
         val g = grabador
         grabador = null
-        val archivo = destino
+        val v = video
+        video = null
+        val d = diario
+        d?.acabar()
+        val llevado = cronometro?.llevadoMs() ?: 0
+        val desde = trozoDesde
+        val laNota = nota
         val lasPicos = picos.lista()
         val lasHechas = hechas.toList()
         hechas.clear()
         val elProyecto = proyecto
+        val elNombre = nombre
+        val laMarca = marca
         val app = applicationContext as PixPinApp
         val cerrarLaSesion = abrimosLaSesion
-        val elVideo = conVideo
         // **El servicio de pasar a texto, arrancado ya** (28-oct-2026): ahora Android deja (es el toque
         // de «Terminar»); dentro de unos segundos, con la clase ya guardada, quizá no. Ver [ColaDeTexto].
         val reserva = PasarATextoService.reservar(app, getString(R.string.pasar_a_texto_titulo))
         app.scope.launch(Dispatchers.IO) {
-            val bien = Voz.parar(g)
-            val dicho = runCatching {
-                if (elVideo && archivo != null) {
-                    // La nota sale del vídeo, y las capturas, de sus fotogramas.
-                    val m4a = File(archivo.parentFile, archivo.nameWithoutExtension + ".m4a")
-                    val conAudio = bien && VideoDeLaClase.sacarElAudio(archivo, m4a)
-                    val sacadas = if (bien) fotogramas(archivo, lasHechas) else emptyList()
-                    guardar(app, conAudio, m4a, elProyecto, lasPicos, sacadas, video = archivo.takeIf { bien && it.exists() })
-                } else {
-                    guardar(app, bien, archivo, elProyecto, lasPicos, lasHechas, video = null)
-                }
+            if (v != null) {
+                runCatching { v.parar() }
+                d?.cambiar { cerrarTrozo(v.trozo.absolutePath, llevado - desde) }
             }
-                .getOrElse { getString(R.string.clase_no_arranca) }
+            val bien = Voz.parar(g)
+            val resultado = runCatching {
+                val m4a = laNota?.let { GuardarLaGrabacion.cerrarLaNota(it, bien) }
+                // El vídeo: sus trozos juntos, con el sonido de la nota.
+                val trozos = d?.diario?.let { di -> synchronized(di) { di.trozos.map { GuardarLaGrabacion.TrozoDeGrupo(File(it.ruta), it.ms, it.grupo) } } }.orEmpty()
+                val carpeta = MensajesStore(app).carpetaDeAdjuntos()
+                val partes = if (trozos.isEmpty()) emptyList()
+                else GuardarLaGrabacion.juntarVideo(trozos, m4a) { File(carpeta, "clase_${laMarca}_video$it.mp4") }
+                val elVideo = partes.firstOrNull()?.archivo
+                val delVideo = lasHechas.filter { it.archivo == null }.map { it.ms }
+                val sacadas = if (elVideo != null) GuardarLaGrabacion.fotogramas(elVideo, delVideo, File(cacheDir, "clase")) else emptyList()
+                val capturas = lasHechas.mapNotNull { h -> h.archivo?.let { GuardarLaGrabacion.Imagen(h.ms, it) } } + sacadas
+                val r = GuardarLaGrabacion.clase(app, m4a, null, elProyecto, elNombre, System.currentTimeMillis(), lasPicos, capturas, elVideo, d?.reloj())
+                notaGuardada = r.notaId
+                sacadas.forEach { it.archivo.delete() }
+                when (r.que) {
+                    GuardarLaGrabacion.Que.LISTA, GuardarLaGrabacion.Que.SIN_NOTA -> {
+                        // Entró: fuera el diario, el respaldo y lo que sobre. Lo que no se abría se queda.
+                        laNota?.let { RespaldoWav.rutaDelRespaldo(it).delete(); GuardarLaGrabacion.parteDe(it).delete() }
+                        if (r.que == GuardarLaGrabacion.Que.SIN_NOTA) elVideo?.delete()
+                        d?.cerrar(borrar = true)
+                    }
+                    GuardarLaGrabacion.Que.MUY_CORTA -> {
+                        // Un resbalón en el botón: se borra todo, como siempre.
+                        d?.cerrar(borrar = false)
+                        d?.let { GrabacionAMedias.descartar(it.dir, it.diario) }
+                        partes.forEach { it.archivo.delete() }
+                    }
+                    GuardarLaGrabacion.Que.NADA -> d?.cerrar(borrar = false)
+                }
+                r
+            }.onFailure {
+                android.util.Log.e("PixPinClase", "la clase no se guardó: queda en su diario", it)
+                d?.cerrar(borrar = false)
+            }.getOrNull()
+            val dicho = when (resultado?.que) {
+                GuardarLaGrabacion.Que.LISTA -> getString(
+                    if (resultado!!.conTexto) R.string.clase_lista_con_texto else R.string.clase_lista_sin_texto, resultado.capturas
+                )
+                GuardarLaGrabacion.Que.SIN_NOTA -> getString(R.string.clase_sin_audio)
+                GuardarLaGrabacion.Que.MUY_CORTA -> getString(R.string.voz_muy_corta)
+                else -> getString(R.string.sin_perder_quedo_para_recuperar)
+            }
             withContext(Dispatchers.Main) {
                 if (cerrarLaSesion) CaptureService.stopSession(app)
                 toast(dicho)
@@ -472,142 +657,6 @@ class GrabarClaseService : Service() {
                 android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({ PasarATextoService.soltar(reserva) }, 10_000)
                 stopSelf()
             }
-        }
-    }
-
-    /**
-     * **Mete la clase en el chat**: la nota y detrás cada captura, enlazadas (como `guardar` del
-     * PC). Los identificadores se sacan antes, así que la nota se escribe ya con sus `capturas` y
-     * no hay que reescribirla. Devuelve lo que se le dice al usuario.
-     */
-    private fun guardar(
-        context: Context, bien: Boolean, archivo: File?, proyecto: String?,
-        picos: List<Int>, hechas: List<Hecha>, video: File?
-    ): String {
-        val almacen = MensajesStore(context)
-        fun soltar() { archivo?.delete(); video?.delete(); hechas.forEach { it.archivo?.delete() }; GrabacionDelMovil.tirar(context) }
-        if ((!bien || archivo == null || !archivo.exists()) && video != null && video.length() > 0) {
-            // Vídeo sin pista de audio que sacar: el vídeo entra solo, como un archivo más.
-            archivo?.delete()
-            hechas.forEach { it.archivo?.delete() }
-            AlChat.meterArchivo(context, video, GrabarClase.nombreDelVideo(
-                context.getString(R.string.clase_nombre, GrabarClase.fechaDelNombre(System.currentTimeMillis()))
-            ), "video/mp4", proyecto)
-            video.delete()
-            GrabacionDelMovil.tirar(context)
-            return context.getString(R.string.clase_sin_audio)
-        }
-        if (!bien || archivo == null || !archivo.exists()) {
-            soltar()
-            return context.getString(R.string.clase_no_arranca)
-        }
-        val duracion = Voz.duracion(archivo.absolutePath)
-        if (duracion < Voz.MINIMO_MS) {
-            soltar()
-            return context.getString(R.string.voz_muy_corta)
-        }
-        val ahora = System.currentTimeMillis()
-        val nombre = context.getString(R.string.clase_nombre, GrabarClase.fechaDelNombre(ahora))
-        val vozId = UUID.randomUUID().toString()
-        notaGuardada = vozId
-        // **El vídeo, justo detrás de la nota** (como el PC): se renombra en su sitio, sin copiar
-        // un fichero que puede pesar un giga.
-        val elVideo = video?.let { v ->
-            val nombreDelVideo = GrabarClase.nombreDelVideo(nombre)
-            val final = File(v.parentFile, "${ahora}_${nombreConExtension(nombreDelVideo, "mp4")}")
-            val ruta = if (v.renameTo(final)) final else v
-            Mensaje(
-                id = UUID.randomUUID().toString(),
-                cuando = ahora + 1,
-                clase = Clase.ARCHIVO,
-                ruta = ruta.absolutePath,
-                nombre = nombreDelVideo,
-                bytes = ruta.length(),
-                duracionMs = Voz.duracion(ruta.absolutePath),
-                proyecto = proyecto,
-                enGrabacion = GrabarClase.enGrabacion(vozId, 0)
-            )
-        }
-        val primera = if (elVideo != null) 2 else 1
-        val enlazadas = ArrayList<GrabarClase.Enlace>()
-        val imagenes = ArrayList<Mensaje>()
-        hechas.sortedBy { it.ms }.forEachIndexed { i, h ->
-            val origen = h.archivo ?: return@forEachIndexed
-            val fichero = "clase-$ahora-${i + 1}.png"
-            // Ni se aligera ni se endereza: es una captura de pantalla recién hecha.
-            val ruta = almacen.copiarAdjunto(origen, fichero, "png", aligerar = false, enderezar = false)
-            origen.delete()
-            if (ruta == null) return@forEachIndexed
-            val id = UUID.randomUUID().toString()
-            imagenes += Mensaje(
-                id = id,
-                cuando = ahora + primera + i,
-                clase = Clase.IMAGEN,
-                texto = GrabarClase.pie(h.ms, nombre),
-                ruta = ruta,
-                nombre = fichero,
-                bytes = File(ruta).length(),
-                proyecto = proyecto,
-                enGrabacion = GrabarClase.enGrabacion(vozId, h.ms)
-            )
-            enlazadas += GrabarClase.Enlace(h.ms, id)
-        }
-        val voz = Mensaje(
-            id = vozId,
-            cuando = ahora,
-            clase = Clase.VOZ,
-            ruta = archivo.absolutePath,
-            nombre = GrabarClase.nombreDeLaNota(nombre),
-            bytes = archivo.length(),
-            duracionMs = duracion,
-            picos = picos,
-            proyecto = proyecto,
-            // Como el PC desde `df01da9`: siempre, aunque no haya capturas; es lo que dice que la
-            // nota es de una clase.
-            capturas = GrabarClase.capturasEnJson(enlazadas),
-            grabacion = GrabarClase.CLASE,
-            video = elVideo?.let { GrabarClase.videoEnJson(it.id) }
-        )
-        // En orden y con números seguidos, como el PC: la nota, el vídeo y las capturas.
-        almacen.anadir(voz)
-        elVideo?.let { almacen.anadir(it) }
-        imagenes.forEach { almacen.anadir(it) }
-        // **Y todo dentro de su carpeta** (25-oct-2026, como el PC desde `e015e2b`): en el chat se ve
-        // UNA tarjeta y no la nota, el vídeo y cada captura sueltos. Los enlaces de arriba no cambian
-        // («Estudiar la clase» va por ellos); si la carpeta no entra, lo de dentro sigue suelto.
-        val laCarpeta = runCatching {
-            val carpeta = GrabarClase.carpetaDeLaGrabacion(vozId, duracion.toLong(), elVideo?.id, enlazadas)
-            val cuando = CarpetaDePaginas.cuandoLibre(System.currentTimeMillis(), almacen.leer())
-            almacen.anadir(CarpetaDePaginas.mensajeNuevo(nombre, cuando, proyecto, carpeta))
-            cuando.toString()
-        }.onFailure { android.util.Log.w("PixPinClase", "la clase quedó sin su carpeta", it) }.getOrNull()
-        // Las capturas del PC, el reloj de pared y los colaboradores, en la nota (§12-§14).
-        GrabacionDelMovil.guardada(context, proyecto, vozId, laCarpeta, duracion.toLong())
-        // **Y se pasa a texto**, como el PC al terminar: es lo que se va a querer leer junto a
-        // las imágenes. Si no hay reconocedor, se guarda igual y se dice dónde pedirlo luego.
-        // Por la cola ([ColaDeTexto]), en primer plano y retomada si el proceso muere (28-oct-2026).
-        val conTexto = Transcriptor.disponible(context)
-        if (conTexto && ColaDeTexto.entraSola(voz, hayAudio = true, grabadoAqui = true)) almacen.transcribir(voz)
-        return context.getString(
-            if (conTexto) R.string.clase_lista_con_texto else R.string.clase_lista_sin_texto,
-            enlazadas.size
-        )
-    }
-
-    /** Las capturas de una clase con vídeo, sacadas de sus fotogramas a PNG en la caché. */
-    private fun fotogramas(mp4: File, hechas: List<Hecha>): List<Hecha> {
-        if (hechas.isEmpty()) return emptyList()
-        val r = android.media.MediaMetadataRetriever()
-        return try {
-            r.setDataSource(mp4.absolutePath)
-            hechas.mapNotNull { h ->
-                val foto = VideoDeLaClase.fotograma(r, h.ms) ?: return@mapNotNull null
-                recortarYGuardar(foto, null, h.ms)?.let { Hecha(h.ms, it) }
-            }
-        } catch (_: Throwable) {
-            emptyList()
-        } finally {
-            runCatching { r.release() }
         }
     }
 
