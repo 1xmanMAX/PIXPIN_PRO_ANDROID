@@ -77,9 +77,11 @@ import androidx.lifecycle.LifecycleRegistry
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.R
 import com.forge.pixpin.audio.Grabador
+import com.forge.pixpin.audio.RespaldoWav
 import com.forge.pixpin.motor.añadirVistaFluida
 import com.forge.pixpin.pin.OverlayComposeWindow
 import com.forge.pixpin.pin.Voz
+import com.forge.pixpin.sincro.GrabacionDelMovil
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -93,7 +95,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
-import java.util.UUID
 import kotlin.math.roundToInt
 
 /**
@@ -122,16 +123,25 @@ import kotlin.math.roundToInt
  * ## Las dos formas
  *
  * - **Vídeo de la sala** ([Presencial.Forma.VIDEO]): el vídeo entero de la reunión (HEVC o H.264,
- *   1080p30 o 720p, AAC mono 96 kb/s) con su micrófono; al terminar la nota de voz sale de su pista de
- *   audio ([Mp4DeLaReunion.unirAudio]). Con la calidad automática, pasada la hora sigue a 720p en otro
- *   tramo (que entra como un clip largo en su minuto: ver `docs/reunion-presencial-android.md`). Los
- *   clips se recortan del propio vídeo ([Mp4DeLaReunion.recortar]): la cámara ya está grabando.
+ *   1080p30 o 720p). Desde el 28-oct-2026 («Grabar sin perder nada») **sin sonido y en trozos**: el
+ *   sonido lo graba la nota de voz aparte (con su respaldo WAV) y se le pone al vídeo al juntar sus
+ *   trozos ([GuardarLaGrabacion.juntarVideo]); así, si Android mata la app, la nota se rehace y del
+ *   vídeo solo se pierde el trozo en curso. Con la calidad automática, pasada la hora sigue a 720p en
+ *   otro tramo (que entra como un clip largo en su minuto: ver `docs/reunion-presencial-android.md`).
+ *   Los clips se recortan del propio vídeo ya junto ([Mp4DeLaReunion.recortar]).
  * - **Solo audio** ([Presencial.Forma.AUDIO]): la nota de voz de siempre ([Voz.empezar]); un clip
  *   graba la cámara sin micrófono y al terminar se le pone el trozo de la nota ([Mp4DeLaReunion.ponerSonido]).
  *
  * En las dos, **la nota de voz sale siempre** y se pasa a texto al terminar, como la clase; las fotos,
  * a la resolución entera de la cámara y en JPEG ([FotoDeLaCamara]), entran como capturas con
  * `fuente: "camara"`, y los clips en `clips` de la nota. Ver [Presencial.mensajes].
+ *
+ * ## Grabar sin perder nada (28-oct-2026)
+ *
+ * Todo lo que se hace se apunta en el acto en su diario ([DiarioEnMarcha]): cada foto se escribe en su
+ * carpeta, cada clip y cada trozo del vídeo con su minuto, y el reloj de pared late cada 5 s. Si la
+ * reunión no llega a guardarse, al volver a abrir PixPin se ofrece recuperarla ([RecuperarGrabacion]).
+ * Ver `docs/grabar-sin-perder-nada-android.md`.
  *
  * ## Saber qué se hizo y poder terminar siempre (28-oct-2026)
  *
@@ -231,13 +241,16 @@ class ReunionPresencialService : Service(), LifecycleOwner {
 
 
     /** Una foto hecha: su minuto y el JPEG en la carpeta de adjuntos. */
-    private class FotoHecha(val ms: Long, val archivo: File)
+    private class FotoHecha(val ms: Long, val archivo: File, val cuando: Long = 0)
 
     /** Un clip: su minuto, lo que dura y su MP4 (null en la forma de vídeo: se recorta al terminar). */
     private class ClipHecho(val ms: Long, val duracionMs: Long, val archivo: File?)
 
-    /** Un tramo del vídeo de la reunión: su fichero y el minuto de la nota en que empezó. */
-    private class TramoGrabado(val archivo: File, val desdeMs: Long)
+    /**
+     * Un tramo del vídeo de la reunión: su fichero, el minuto de la nota en que empezó y su grupo (los
+     * trozos de un mismo tamaño se juntan al terminar; ver [TrozosDeVideo]).
+     */
+    private class TramoGrabado(val archivo: File, val desdeMs: Long, val grupo: Int = 0)
 
     private val registro = LifecycleRegistry(this)
     override val lifecycle: Lifecycle get() = registro
@@ -256,8 +269,6 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     private val tramos = mutableListOf<TramoGrabado>()
     private var cambiandoDeTramo = false
     private var cronometro: GrabarClase.Cronometro? = null
-    /** Lo que dice la baliza de esta reunión (28-oct-2026): el PC sabe en un segundo que se graba. */
-    private val paraLaBaliza = com.forge.pixpin.sincro.GrabacionParaLaBaliza.de(com.forge.pixpin.sincro.GrabacionParaLaBaliza.idNuevo()) { cronometro }
     private val picos = Picos()
     private val fotos = mutableListOf<FotoHecha>()
     private val clips = mutableListOf<ClipHecho>()
@@ -268,6 +279,18 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     private var terminado = false
     private var empezado = false
     private var orientacion: OrientationEventListener? = null
+    /** **El diario en el disco** de esta reunión ([DiarioEnMarcha], «Grabar sin perder nada»). */
+    private var diario: DiarioEnMarcha? = null
+    private var marca = 0L
+    private var nombre = ""
+    /** El grupo de los trozos que se graban ahora (sube al cambiar de calidad). */
+    private var grupo = 0
+    private var numeroDeTrozo = 0
+    /** El vídeo se cerró antes de terminar (el disco casi lleno): la nota sigue. */
+    private var videoCortado = false
+    private var avisadoPocoSitio = false
+    /** No se pudo poner en primer plano (Android no da el micrófono desde atrás). */
+    private var sinPrimerPlano = false
 
     private var burbuja: OverlayComposeWindow? = null
     /** Dónde se ve la mirilla: la `PreviewView` de la burbuja o la de la pantalla de la reunión. */
@@ -307,30 +330,119 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 startForeground(AVISO, aviso(), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
             }.isSuccess)
         if (!bien) {
-            toast(getString(R.string.clase_no_arranca))
-            terminado = true
-            stopSelf()
+            // Lo que se hace lo decide [onStartCommand]: si Android volvió a crear el servicio tras
+            // matar la app, no es un fallo que decir.
+            sinPrimerPlano = true
             return
         }
         registro.currentState = Lifecycle.State.RESUMED
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
+        if (intent == null) {
+            // **Android volvió a crear el servicio** tras matar la app a media reunión (START_STICKY): la
+            // de antes quedó en su diario. Se avisa para recuperarla.
+            if (!empezado) {
+                RecuperarGrabacion.avisarSiHay(this)
+                terminado = true
+                stopSelf()
+            }
+            return START_NOT_STICKY
+        }
+        if (sinPrimerPlano && !empezado) {
+            toast(getString(R.string.clase_no_arranca))
+            terminado = true
+            stopSelf()
+            return START_NOT_STICKY
+        }
+        when (intent.action) {
             ACCION_FOTO -> { foto(); return START_NOT_STICKY }
             ACCION_CLIP -> { clip(); return START_NOT_STICKY }
             ACCION_PAUSA -> { pausa(); return START_NOT_STICKY }
             ACCION_TERMINAR -> { terminar(); return START_NOT_STICKY }
         }
-        if (empezado || terminado) return START_NOT_STICKY
+        if (empezado || terminado) return START_STICKY
         empezado = true
         enMarcha = true
-        proyecto = intent?.getStringExtra(EL_PROYECTO)
-        forma = Presencial.Forma.de(intent?.getStringExtra(LA_FORMA))
-        calidad = Presencial.Calidad.de(intent?.getStringExtra(LA_CALIDAD))
-        val conBurbuja = intent?.getBooleanExtra(LA_BURBUJA, true) ?: true
+        proyecto = intent.getStringExtra(EL_PROYECTO)
+        forma = Presencial.Forma.de(intent.getStringExtra(LA_FORMA))
+        calidad = Presencial.Calidad.de(intent.getStringExtra(LA_CALIDAD))
+        val conBurbuja = intent.getBooleanExtra(LA_BURBUJA, true)
         scope.launch { arrancar(conBurbuja) }
-        return START_NOT_STICKY
+        // STICKY: si Android mata la app, al volver a crear el servicio se avisa de lo que quedó.
+        return START_STICKY
+    }
+
+    // --- Grabar sin perder nada ---------------------------------------------------------------
+
+    /**
+     * **Empieza el vídeo de la sala** en [mp4], sin sonido (la nota lo graba aparte, con su respaldo) y
+     * **en trozos** ([CamaraDeLaReunion.empezarVideo]): cada trozo cerrado queda entero en el disco.
+     */
+    private suspend fun empezarElVideo(cam: CamaraDeLaReunion, mp4: File, alto: Int, desdeMs: Long): Boolean {
+        val g = grupo
+        val bien = cam.empezarVideo(
+            mp4, alto, conSonido = false,
+            siguienteTrozo = { File(carpeta, "reunion_${marca}_${++numeroDeTrozo}.mp4") },
+            alCambiarDeTrozo = { cerrado, nuevo -> alCambiarDeTrozo(cerrado, nuevo, g) }
+        )
+        if (bien) {
+            tramos += TramoGrabado(mp4, desdeMs, g)
+            diario?.cambiar { empezarTrozo(desdeMs, mp4.absolutePath, g) } ?: run { pendienteDelDiario += Triple(desdeMs, mp4, g) }
+        }
+        return bien
+    }
+
+    /** Los trozos que empezaron antes de abrir el diario (el vídeo arranca antes que la nota). */
+    private val pendienteDelDiario = mutableListOf<Triple<Long, File, Int>>()
+
+    private fun alCambiarDeTrozo(cerrado: File, nuevo: File?, g: Int) {
+        val ms = cronometro?.llevadoMs() ?: 0
+        val desde = tramos.lastOrNull { it.archivo == cerrado }?.desdeMs ?: ms
+        diario?.cambiar {
+            cerrarTrozo(cerrado.absolutePath, ms - desde)
+            if (nuevo != null) empezarTrozo(ms, nuevo.absolutePath, g)
+        }
+        if (nuevo != null) tramos += TramoGrabado(nuevo, ms, g)
+        else {
+            // El teléfono no aceptó el trozo siguiente: el vídeo acaba aquí, la nota sigue.
+            videoCortado = true
+            avisar(getString(R.string.sin_perder_video_cortado))
+        }
+    }
+
+    /** Por dónde va la nota de verdad, o el cronómetro. */
+    private fun msDeLaNota(): Long = grabador?.llevadoMs() ?: cronometro?.llevadoMs() ?: 0
+
+    /** **Un latido del diario**; si apunta un hueco (Android congeló la app), se dice. */
+    private fun latir() {
+        val c = cronometro ?: return
+        val hueco = diario?.latir(msDeLaNota(), c.enPausa) ?: return
+        avisar(getString(R.string.sin_perder_hueco, hueco))
+    }
+
+    /** **La guarda del disco**: poco sitio, se avisa; casi nada, se cierra el vídeo y la nota sigue. */
+    private fun mirarElDisco() {
+        when (diario?.espacio()) {
+            GrabacionAMedias.Espacio.POCO -> if (!avisadoPocoSitio) {
+                avisadoPocoSitio = true
+                avisar(getString(R.string.sin_perder_poco_sitio))
+            }
+            GrabacionAMedias.Espacio.CRITICO -> {
+                val cam = camara
+                if (forma == Presencial.Forma.VIDEO && cam != null && cam.grabando && !videoCortado && estado.value.clipDesde == null) {
+                    videoCortado = true
+                    scope.launch {
+                        val ultimo = tramos.lastOrNull()
+                        cam.pararVideo()
+                        val ms = cronometro?.llevadoMs() ?: 0
+                        ultimo?.let { t -> diario?.cambiar { cerrarTrozo(t.archivo.absolutePath, ms - t.desdeMs) } }
+                        avisar(getString(R.string.sin_perder_disco_lleno))
+                    }
+                }
+            }
+            else -> Unit
+        }
     }
 
     private suspend fun arrancar(conBurbuja: Boolean) {
@@ -352,11 +464,15 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             avisar(getString(R.string.reunion_sin_camara))
         }
         val ahora = System.currentTimeMillis()
+        marca = ahora
+        nombre = getString(R.string.reunion_nombre, GrabarClase.fechaDelNombre(ahora))
         var empezoElVideo = false
-        if (forma == Presencial.Forma.VIDEO && abierta) {
-            val mp4 = File(carpeta, "reunion_${ahora}_1.mp4")
-            empezoElVideo = cam!!.empezarVideo(mp4, Presencial.altoDelVideo(calidad, 0), conSonido = true)
-            if (empezoElVideo) tramos += TramoGrabado(mp4, 0) else mp4.delete()
+        // **El disco antes de empezar** (como el PC): con menos de 500 MB, el vídeo ni empieza.
+        val sitio = GrabacionAMedias.espacio(DiarioEnMarcha.libres(this))
+        if (forma == Presencial.Forma.VIDEO && abierta && sitio != GrabacionAMedias.Espacio.CRITICO) {
+            val mp4 = File(carpeta, "reunion_${ahora}_${++numeroDeTrozo}.mp4")
+            empezoElVideo = empezarElVideo(cam!!, mp4, Presencial.altoDelVideo(calidad, 0), 0)
+            if (!empezoElVideo) mp4.delete()
         }
         if (terminado) {
             if (empezoElVideo) cam?.pararVideo()
@@ -369,24 +485,38 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             forma = Presencial.Forma.AUDIO
             toast(getString(R.string.reunion_sin_video))
         }
-        if (forma == Presencial.Forma.AUDIO) {
-            val m4a = File(carpeta, "reunion_$ahora.m4a")
-            val g = Voz.empezar(this, m4a, paraUnaClase = true)
-            if (g == null) {
-                m4a.delete()
-                toast(getString(R.string.clase_no_arranca))
-                terminado = true
-                enMarcha = false
-                camara?.cerrar()
-                stopSelf()
-                return
-            }
-            grabador = g
-            nota = m4a
+        // **La nota, siempre** (28-oct-2026, «Grabar sin perder nada»): también con el vídeo de la sala,
+        // que ya no lleva el micrófono. Con su respaldo WAV, por si Android mata la app.
+        val m4a = File(carpeta, "reunion_$ahora.m4a")
+        val g = Voz.empezar(this, GuardarLaGrabacion.parteDe(m4a), paraUnaClase = true, respaldo = RespaldoWav.rutaDelRespaldo(m4a))
+        if (g == null) {
+            if (empezoElVideo) cam?.pararVideo()
+            tramos.forEach { it.archivo.delete() }
+            tramos.clear()
+            GuardarLaGrabacion.parteDe(m4a).delete()
+            RespaldoWav.rutaDelRespaldo(m4a).delete()
+            toast(getString(R.string.clase_no_arranca))
+            terminado = true
+            enMarcha = false
+            camara?.cerrar()
+            stopSelf()
+            return
         }
+        grabador = g
+        nota = m4a
+        val d = GrabacionAMedias.Diario.nuevo(ahora, proyecto.orEmpty(), nombre, m4a.absolutePath).apply {
+            nombreProyecto = GuardarLaGrabacion.nombreDelChat(this@ReunionPresencialService, proyecto)
+            modo = Presencial.Modo.PRESENCIAL.palabra
+            microfono = true
+            if (empezoElVideo) video = File(carpeta, "reunion_$ahora.mp4").absolutePath
+            pendienteDelDiario.forEach { (ms, f, gr) -> empezarTrozo(ms, f.absolutePath, gr) }
+        }
+        pendienteDelDiario.clear()
+        diario = DiarioEnMarcha(this, d)
         val c = GrabarClase.Cronometro()
         cronometro = c
-        com.forge.pixpin.sincro.BalizaDelMovil.empezo(paraLaBaliza)
+        // El PC puede mandar capturas a esta grabación (§13 de la guía del PC). Ver [GrabacionDelMovil].
+        GrabacionDelMovil.empezar(this, getString(R.string.reunion_nombre, GrabarClase.fechaDelNombre(ahora))) { c.llevadoMs() to c.enPausa }
         estado.update { it.copy(lista = true, conCamara = camara != null, video = forma == Presencial.Forma.VIDEO, mirilla = camara?.conMirilla == true) }
         actualizarAviso()
         if (conBurbuja) ensenarLaBurbuja()
@@ -394,18 +524,32 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         scope.launch {
             var ultimoSegundo = -1L
             while (isActive && !terminado) {
-                if (!c.enPausa) picos.anota(if (forma == Presencial.Forma.VIDEO) camara?.pico() ?: 0 else Voz.pico(grabador))
+                if (!c.enPausa) picos.anota(Voz.pico(grabador))
                 val llevado = c.llevadoMs()
                 val s = llevado / 1000
                 if (s != ultimoSegundo) {
                     ultimoSegundo = s
                     estado.update { it.copy(segundos = s) }
                     val cam2 = camara
-                    if (forma == Presencial.Forma.VIDEO && cam2 != null && !cambiandoDeTramo && cam2.grabando &&
+                    if (forma == Presencial.Forma.VIDEO && cam2 != null && !cambiandoDeTramo && cam2.grabando && !videoCortado &&
                         Presencial.tocaBajar(calidad, llevado, cam2.altoDelVideo)
                     ) scope.launch { siguienteTramo() }
                 }
                 delay(Voz.MS_ENTRE_PICOS)
+            }
+        }
+        // **El latido y el disco** (28-oct-2026, «Grabar sin perder nada»).
+        scope.launch {
+            var desdeElEspacio = 0L
+            while (isActive && !terminado) {
+                delay(GrabacionAMedias.CADA_LATIDO_MS)
+                if (terminado) break
+                latir()
+                desdeElEspacio += GrabacionAMedias.CADA_LATIDO_MS
+                if (desdeElEspacio >= GrabacionAMedias.CADA_ESPACIO_MS) {
+                    desdeElEspacio = 0
+                    mirarElDisco()
+                }
             }
         }
     }
@@ -416,7 +560,6 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         quitarLaBurbuja()
         orientacion?.disable()
         enMarcha = false
-        com.forge.pixpin.sincro.BalizaDelMovil.acabo(paraLaBaliza)
         if (vivo === this) vivo = null
         runCatching { sonidos.release() }
         registro.currentState = Lifecycle.State.DESTROYED
@@ -439,8 +582,12 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             return
         }
         val ms = Presencial.msDeLaFoto(c.llevadoMs())
+        val cuando = System.currentTimeMillis()
         val n = ++numeroDeFoto
-        val f = File(carpeta, "reunion_foto_${System.currentTimeMillis()}_$n.jpg")
+        // **En la carpeta del diario, en el acto** (28-oct-2026): si la app muere, la foto está.
+        val d = diario
+        val f = if (d != null) File(d.dir, d.diario.ficheroDeCaptura(n, "jpg"))
+        else File(carpeta, "reunion_foto_${System.currentTimeMillis()}_$n.jpg")
         fotosPendientes++
         // **Se nota al momento** (28-oct-2026): el obturador, una vibración y el destello en la mirilla,
         // antes de que la cámara devuelva la foto (eso tarda: es la resolución entera).
@@ -450,7 +597,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             try {
                 val bien = cam.foto(f) && withContext(Dispatchers.IO) { FotoDeLaCamara.enSuSitio(f) || f.length() > 0 }
                 if (bien) {
-                    fotos += FotoHecha(ms, f)
+                    d?.cambiar { apuntarCaptura(ms, f.name, true) }
+                    fotos += FotoHecha(ms, f, cuando)
                     estado.update { it.copy(fotos = fotos.size) }
                     avisar(getString(R.string.reunion_foto_hecha, GrabarClase.minuto(ms)), fuera = true)
                     actualizarAviso()
@@ -479,6 +627,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 if (tramos.isEmpty()) return
                 sentir(MediaActionSound.START_VIDEO_RECORDING)
                 estado.update { it.copy(clipDesde = ms) }
+                diario?.cambiar { empezarClip(ms, "") }
                 avisar(getString(R.string.reunion_clip_empezado), fuera = true)
                 actualizarAviso()
                 return
@@ -491,6 +640,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     if (cam.empezarVideo(mp4, 1080, conSonido = false)) {
                         if (c.enPausa) cam.pausar(true)
                         clipArchivo = mp4
+                        diario?.cambiar { empezarClip(ms, mp4.absolutePath) }
                         sentir(MediaActionSound.START_VIDEO_RECORDING)
                         estado.update { it.copy(clipDesde = ms, mirilla = cam.conMirilla) }
                         avisar(getString(R.string.reunion_clip_empezado), fuera = true)
@@ -507,6 +657,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             val dura = (c.llevadoMs() - desde).coerceAtLeast(0)
             if (forma == Presencial.Forma.VIDEO) {
                 clips += ClipHecho(desde, dura, null)
+                diario?.cambiar { cerrarClip("", dura) }
                 sentir(MediaActionSound.STOP_VIDEO_RECORDING)
                 estado.update { it.copy(clipDesde = null, clips = clips.size) }
                 avisar(getString(R.string.reunion_clip_hecho, GrabarClase.minuto(desde)), fuera = true)
@@ -520,11 +671,14 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     val bien = camara?.pararVideo() == true
                     val f = clipArchivo
                     clipArchivo = null
-                    if (bien && f != null) {
+                    // **Un clip que no se pudo parar bien no se borra** (28-oct-2026, PC `9b61bda7`): si lo
+                    // grabado se abre, entra; si no, se queda en el disco (y en el diario) para recuperarlo.
+                    val seAbre = f != null && (bien || GrabacionAMedias.mirar(f).seAbre)
+                    if (seAbre) {
                         clips += ClipHecho(desde, dura, f)
+                        diario?.cambiar { cerrarClip(f!!.absolutePath, dura) }
                         avisar(getString(R.string.reunion_clip_hecho, GrabarClase.minuto(desde)), fuera = true)
                     } else {
-                        f?.delete()
                         avisar(getString(R.string.reunion_clip_fallo), fuera = true)
                     }
                     estado.update { it.copy(clipDesde = null, clips = clips.size, mirilla = camara?.conMirilla == true) }
@@ -544,36 +698,39 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         c.pausar(p)
         grabador?.pausar(p)
         camara?.pausar(p)
+        GrabacionDelMovil.pausa(this)
+        // La pausa, en el reloj de pared en el acto.
+        diario?.latir(msDeLaNota(), p)
         estado.update { it.copy(enPausa = p) }
-        com.forge.pixpin.sincro.BalizaDelMovil.cambio()
         sentir(null)
         avisar(getString(if (p) R.string.clase_en_pausa else R.string.reunion_sigue))
         actualizarAviso()
     }
 
     /**
-     * **Pasada la hora, a 720p** (la calidad automática): se cierra el tramo de 1080p y se abre otro.
-     * Mientras se cambia, el cronómetro se para: lo que no se graba no cuenta en el minuto de las fotos.
+     * **Pasada la hora, a 720p** (la calidad automática): se cierra el tramo de 1080p y se abre otro, de
+     * otro grupo (no se puede pegar con el de antes: otro tamaño). Desde el 28-oct-2026 el cronómetro
+     * no se para: la nota sigue grabando (lleva el sonido) y el tramo nuevo va en su minuto.
      */
     private suspend fun siguienteTramo() {
         val cam = camara ?: return
         val c = cronometro ?: return
-        if (cambiandoDeTramo || terminado) return
+        if (cambiandoDeTramo || terminado || videoCortado) return
         cambiandoDeTramo = true
         try {
-            val yaEnPausa = c.enPausa
-            if (!yaEnPausa) c.pausar(true)
+            val ultimo = tramos.lastOrNull()
             cam.pararVideo()
-            val mp4 = File(carpeta, "reunion_${System.currentTimeMillis()}_${tramos.size + 1}.mp4")
             val desde = c.llevadoMs()
-            if (cam.empezarVideo(mp4, Presencial.altoDelVideo(calidad, desde), conSonido = true)) {
-                tramos += TramoGrabado(mp4, desde)
-                if (yaEnPausa) cam.pausar(true)
+            ultimo?.let { t -> diario?.cambiar { cerrarTrozo(t.archivo.absolutePath, desde - t.desdeMs) } }
+            grupo++
+            val mp4 = File(carpeta, "reunion_${marca}_${++numeroDeTrozo}.mp4")
+            if (empezarElVideo(cam, mp4, Presencial.altoDelVideo(calidad, desde), desde)) {
+                if (c.enPausa) cam.pausar(true)
             } else {
                 mp4.delete()
+                videoCortado = true
                 avisar(getString(R.string.reunion_sin_video))
             }
-            if (!yaEnPausa) c.pausar(false)
         } finally {
             cambiandoDeTramo = false
         }
@@ -592,7 +749,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
         terminado = true
         enMarcha = false
-        com.forge.pixpin.sincro.BalizaDelMovil.acabo(paraLaBaliza)
+        GrabacionDelMovil.acabar(this)
         sentir(MediaActionSound.STOP_VIDEO_RECORDING)
         estado.update { it.copy(terminando = true) }
         quitarLaBurbuja()
@@ -606,6 +763,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         val elProyecto = proyecto
         val laForma = forma
         val lasPicos = picos.lista()
+        val d = diario
+        d?.acabar()
         // En el alcance de la app y no en el del servicio: si el sistema para el servicio a media
         // reunión, esto sigue hasta guardarlo (el del servicio se cancela al destruirse).
         app.scope.launch(Dispatchers.Main.immediate) {
@@ -615,28 +774,66 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             val cam = camara
             if (clipAbierto != null) {
                 val dura = (llevado - clipAbierto).coerceAtLeast(0)
-                if (laForma == Presencial.Forma.VIDEO) clips += ClipHecho(clipAbierto, dura, null)
-                else {
+                if (laForma == Presencial.Forma.VIDEO) {
+                    clips += ClipHecho(clipAbierto, dura, null)
+                    d?.cambiar { cerrarClip("", dura) }
+                } else {
                     val f = clipArchivo
                     clipArchivo = null
-                    if (cam?.pararVideo() == true && f != null) clips += ClipHecho(clipAbierto, dura, f) else f?.delete()
+                    val bien = cam?.pararVideo() == true
+                    // Un clip que no se pudo parar bien no se borra (PC `9b61bda7`): entra si se abre.
+                    if (f != null && (bien || GrabacionAMedias.mirar(f).seAbre)) {
+                        clips += ClipHecho(clipAbierto, dura, f)
+                        d?.cambiar { cerrarClip(f.absolutePath, dura) }
+                    }
                 }
             }
-            val bienElVideo = if (laForma == Presencial.Forma.VIDEO) cam?.pararVideo() == true || tramos.isNotEmpty() else false
+            if (laForma == Presencial.Forma.VIDEO && cam?.grabando == true) {
+                val ultimo = tramos.lastOrNull()
+                cam.pararVideo()
+                ultimo?.let { t -> d?.cambiar { cerrarTrozo(t.archivo.absolutePath, llevado - t.desdeMs) } }
+            }
             cam?.cerrar()
-            val bienLaNota = if (laForma == Presencial.Forma.AUDIO) Voz.parar(grabador) else bienElVideo
+            val bienLaNota = Voz.parar(grabador)
             grabador = null
-            val lasFotos = fotos.sortedBy { it.ms }
-            val losClips = clips.sortedBy { it.ms }
-            val losTramos = tramos.toList()
+            val lasFotos = fotos.sortedBy { it.ms }.map { GuardarLaGrabacion.Imagen(it.ms, it.archivo, it.cuando) }
+            val losClips = clips.sortedBy { it.ms }.map { GuardarLaGrabacion.ClipHecho(it.ms, it.duracionMs, it.archivo) }
+            val losTramos = tramos.map { GuardarLaGrabacion.TrozoDeGrupo(it.archivo, it.desdeMs, it.grupo) }
             val laNota = nota
+            val elNombre = nombre
+            val laMarca = marca
             app.scope.launch(Dispatchers.IO) {
-                val dicho = runCatching {
-                    guardar(app, bienLaNota, laForma, laNota, losTramos, elProyecto, lasPicos, lasFotos, losClips)
-                }.onFailure { android.util.Log.e("PixPinReunion", "la reunión no se guardó", it) }
-                    .getOrElse { getString(R.string.clase_no_arranca) }
-                // Su chat sale el primero al sincronizar (§11.6).
-                com.forge.pixpin.sincro.BalizaDelMovil.guardada(elProyecto)
+                val r = runCatching {
+                    val m4a = laNota?.let { GuardarLaGrabacion.cerrarLaNota(it, bienLaNota) }
+                    val partes = GuardarLaGrabacion.juntarVideo(losTramos, m4a) { File(carpeta, "reunion_${laMarca}_video$it.mp4") }
+                    val r = GuardarLaGrabacion.reunion(app, m4a, null, elProyecto, elNombre, System.currentTimeMillis(), lasPicos, lasFotos, losClips, partes, d?.reloj())
+                    notaGuardada = r.notaId
+                    when (r.que) {
+                        GuardarLaGrabacion.Que.LISTA, GuardarLaGrabacion.Que.SIN_NOTA -> {
+                            laNota?.let { RespaldoWav.rutaDelRespaldo(it).delete(); GuardarLaGrabacion.parteDe(it).delete() }
+                            if (r.que == GuardarLaGrabacion.Que.SIN_NOTA) m4a?.delete()
+                            d?.cerrar(borrar = true)
+                        }
+                        GuardarLaGrabacion.Que.MUY_CORTA -> {
+                            d?.cerrar(borrar = false)
+                            d?.let { GrabacionAMedias.descartar(it.dir, it.diario) }
+                            m4a?.delete()
+                        }
+                        GuardarLaGrabacion.Que.NADA -> d?.cerrar(borrar = false)
+                    }
+                    r
+                }.onFailure {
+                    android.util.Log.e("PixPinReunion", "la reunión no se guardó: queda en su diario", it)
+                    d?.cerrar(borrar = false)
+                }.getOrNull()
+                val dicho = when (r?.que) {
+                    GuardarLaGrabacion.Que.LISTA -> getString(
+                        if (r!!.conTexto) R.string.reunion_lista_con_texto else R.string.reunion_lista_sin_texto, r.capturas, r.clips
+                    )
+                    GuardarLaGrabacion.Que.SIN_NOTA -> getString(R.string.reunion_sin_nota)
+                    GuardarLaGrabacion.Que.MUY_CORTA -> getString(R.string.voz_muy_corta)
+                    else -> getString(R.string.sin_perder_quedo_para_recuperar)
+                }
                 withContext(Dispatchers.Main) {
                     toast(dicho)
                     notaGuardada?.let { avisarParaEstudiar(it) }
@@ -647,109 +844,6 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 }
             }
         }
-    }
-
-    /**
-     * **Mete la reunión en el chat**: la nota, el vídeo, las fotos y los clips enlazados
-     * ([Presencial.mensajes]) y todo en su carpeta. Devuelve lo que se le dice al usuario.
-     */
-    private fun guardar(
-        context: Context, bien: Boolean, laForma: Presencial.Forma, laNota: File?, losTramos: List<TramoGrabado>,
-        proyecto: String?, picos: List<Int>, lasFotos: List<FotoHecha>, losClips: List<ClipHecho>
-    ): String {
-        val almacen = MensajesStore(context)
-        val ahora = System.currentTimeMillis()
-        val nombre = context.getString(R.string.reunion_nombre, GrabarClase.fechaDelNombre(ahora))
-        // La nota: la grabada, o la pista de audio del vídeo (de sus tramos, seguidos).
-        val m4a = when {
-            laForma == Presencial.Forma.AUDIO -> laNota?.takeIf { bien && it.exists() }
-            losTramos.isNotEmpty() -> File(carpeta, "reunion_$ahora.m4a").takeIf { Mp4DeLaReunion.unirAudio(losTramos.map { it.archivo }, it) }
-            else -> null
-        }
-        val duracion = m4a?.let { Voz.duracion(it.absolutePath) } ?: 0
-        val conNota = m4a != null && duracion >= Voz.MINIMO_MS
-        val vozId = UUID.randomUUID().toString()
-        // Los tramos del vídeo en la línea de la nota: uno detrás de otro, lo que dura cada fichero.
-        var desde = 0L
-        val enLaNota = losTramos.map { t ->
-            val d = Voz.duracion(t.archivo.absolutePath).toLong().coerceAtLeast(0)
-            Presencial.Tramo(desde, d).also { desde += d }
-        }
-
-        // Los clips: recortados del vídeo de la reunión, o con el sonido de la nota puesto.
-        val clipsListos = losClips.mapIndexedNotNull { i, c ->
-            val final = File(carpeta, "${ahora}_${nombreConExtension(Presencial.nombreDelClip(nombre, i + 1), "mp4")}")
-            val hecho = if (c.archivo == null) {
-                val (k, dentro, dura) = Presencial.tramoDelClip(enLaNota, c.ms, c.duracionMs) ?: return@mapIndexedNotNull null
-                Mp4DeLaReunion.recortar(losTramos[k].archivo, dentro, dura, final)
-            } else {
-                val conSonido = m4a != null && Mp4DeLaReunion.ponerSonido(c.archivo, m4a, c.ms, final)
-                if (conSonido) c.archivo.delete() else c.archivo.renameTo(final)
-                final.exists()
-            }
-            if (!hecho) return@mapIndexedNotNull null
-            val dura = Voz.duracion(final.absolutePath).toLong().takeIf { it > 0 } ?: c.duracionMs
-            Presencial.ClipGuardado(UUID.randomUUID().toString(), c.ms, dura, final.absolutePath, Presencial.nombreDelClip(nombre, i + 1), final.length())
-        }
-        // Las fotos: con su nombre del PC (`foto-<hora>-<n>.jpg`), los bytes tal cual.
-        val fotosListas = lasFotos.mapIndexedNotNull { i, f ->
-            val fichero = Presencial.nombreDeLaFoto(true, ahora, i + 1, "jpg")
-            val final = File(carpeta, "${ahora}_$fichero")
-            if (!f.archivo.renameTo(final)) return@mapIndexedNotNull null
-            Presencial.FotoGuardada(UUID.randomUUID().toString(), Presencial.msDeLaFoto(f.ms, duracion.toLong().takeIf { conNota }), final.absolutePath, fichero, final.length())
-        }
-        // El vídeo de la reunión: el primer tramo; los siguientes (720p pasada la hora), como clips.
-        val primero = losTramos.firstOrNull()?.archivo?.takeIf { it.exists() && it.length() > 0 }
-        val video = primero?.let { v ->
-            val n = GrabarClase.nombreDelVideo(nombre)
-            val final = File(carpeta, "${ahora}_${nombreConExtension(n, "mp4")}")
-            val ruta = if (v.renameTo(final)) final else v
-            Presencial.VideoGuardado(UUID.randomUUID().toString(), ruta.absolutePath, n, ruta.length(), Voz.duracion(ruta.absolutePath))
-        }
-        val otrosTramos = losTramos.drop(1).zip(enLaNota.drop(1)).mapIndexedNotNull { i, (t, tr) ->
-            if (!t.archivo.exists() || t.archivo.length() == 0L) return@mapIndexedNotNull null
-            val n = "$nombre · parte ${i + 2}.mp4"
-            val final = File(carpeta, "${ahora}_${nombreConExtension(n, "mp4")}")
-            val ruta = if (t.archivo.renameTo(final)) final else t.archivo
-            Presencial.ClipGuardado(UUID.randomUUID().toString(), tr.desdeMs, tr.duracionMs, ruta.absolutePath, n, ruta.length())
-        }
-        val todosLosClips = (clipsListos + otrosTramos).sortedBy { it.ms }
-
-        if (!conNota) {
-            // Sin nota no hay reunión que enlazar: lo de la cámara entra suelto, como el PC.
-            m4a?.delete()
-            var cuando = ahora
-            fun suelto(m: Mensaje) = almacen.anadir(m)
-            video?.let { suelto(Mensaje(id = it.id, cuando = cuando++, clase = Clase.ARCHIVO, ruta = it.ruta, nombre = it.nombre, bytes = it.bytes, duracionMs = it.duracionMs, proyecto = proyecto)) }
-            for (f in fotosListas) suelto(Mensaje(id = f.id, cuando = cuando++, clase = Clase.IMAGEN, ruta = f.ruta, nombre = f.nombre, bytes = f.bytes, proyecto = proyecto, fuente = Presencial.DE_CAMARA))
-            for (c in todosLosClips) suelto(Mensaje(id = c.id, cuando = cuando++, clase = Clase.ARCHIVO, ruta = c.ruta, nombre = c.nombre, bytes = c.bytes, duracionMs = c.duracionMs.toInt(), proyecto = proyecto, fuente = Presencial.DE_CAMARA))
-            return context.getString(if (video != null || fotosListas.isNotEmpty() || todosLosClips.isNotEmpty()) R.string.reunion_sin_nota else R.string.voz_muy_corta)
-        }
-        val elM4a = m4a!!
-        val final = File(carpeta, "${ahora}_${nombreConExtension(GrabarClase.nombreDeLaNota(nombre), "m4a")}")
-        val rutaVoz = if (elM4a.renameTo(final)) final else elM4a
-        notaGuardada = vozId
-        val mensajes = Presencial.mensajes(
-            vozId, nombre, ahora, proyecto, rutaVoz.absolutePath, rutaVoz.length(), duracion, picos,
-            video, fotosListas, todosLosClips
-        )
-        // En orden y con números seguidos, como el PC: la nota, el vídeo, las fotos y los clips.
-        mensajes.forEach { almacen.anadir(it) }
-        // Y todo dentro de su carpeta (§3.2): una tarjeta en el chat, las fotos con «⏱» y los clips con «▶».
-        runCatching {
-            val doc = Presencial.carpeta(vozId, duracion.toLong(), video?.id, fotosListas, todosLosClips)
-            val cuando = CarpetaDePaginas.cuandoLibre(System.currentTimeMillis(), almacen.leer())
-            almacen.anadir(CarpetaDePaginas.mensajeNuevo(nombre, cuando, proyecto, doc))
-        }.onFailure { android.util.Log.w("PixPinReunion", "la reunión quedó sin su carpeta", it) }
-        // **Y se pasa a texto, siempre**, como la clase: `[m:ss]` cada trozo. Por la cola ([ColaDeTexto]):
-        // en primer plano, aunque la app esté fuera, y retomada si el proceso muere (28-oct-2026; antes
-        // se lanzaba en un hilo suelto y, con el servicio ya parado, Android congelaba el proceso).
-        val conTexto = Transcriptor.disponible(context)
-        if (conTexto && ColaDeTexto.entraSola(mensajes.first(), hayAudio = true, grabadoAqui = true)) almacen.transcribir(mensajes.first())
-        return context.getString(
-            if (conTexto) R.string.reunion_lista_con_texto else R.string.reunion_lista_sin_texto,
-            fotosListas.size, todosLosClips.size
-        )
     }
 
     // --- La burbuja ---------------------------------------------------------------------------

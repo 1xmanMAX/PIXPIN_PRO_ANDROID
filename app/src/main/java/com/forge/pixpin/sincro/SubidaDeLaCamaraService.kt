@@ -89,7 +89,10 @@ class SubidaDeLaCamaraService : Service() {
                 vivo?.poner(ColaDeLaCamara.aviso(pendientes))
                 var algo = false
                 var falta = false
-                for (pc in pendientes.map { it.pc }.distinct()) {
+                // Lo que va por su hora (sin PC sabido, §12.4) sale a cualquier PC del grupo con dirección.
+                val pcs = pendientes.map { it.pc }.distinct().flatMap { if (it.isEmpty()) pcsDelGrupo(app) else listOf(it) }.distinct()
+                if (pcs.isEmpty()) falta = true
+                for (pc in pcs) {
                     val r = runCatching { subirA(app, cola, pc, buscar = fallos >= 2 && fallos % 3 == 2) }
                     val p = r.getOrNull()
                     if (p == null) { falta = true; continue }
@@ -103,6 +106,14 @@ class SubidaDeLaCamaraService : Service() {
                 Thread.sleep(ColaDeLaCamara.espera(fallos))
             }
             cola.limpiar(System.currentTimeMillis())
+        }
+
+        /** Los aparatos del grupo (menos este) de los que se sabe dónde escuchan. */
+        private fun pcsDelGrupo(app: Context): List<String> {
+            val disco = Disco(app.filesDir)
+            val id = disco.identidad.leer()
+            val dirs = disco.direcciones()
+            return id.miembros.map { it.id }.filter { it.isNotBlank() && it != id.yo.id && dirs[it] != null }.distinct()
         }
 
         /** Una pasada con [pc]: su dirección de siempre o, con [buscar], la que diga la red. */

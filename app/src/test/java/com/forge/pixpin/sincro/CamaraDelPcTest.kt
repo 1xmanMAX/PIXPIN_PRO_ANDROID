@@ -120,12 +120,12 @@ class CamaraDelPcTest {
         ConexionDeCamara.abrir(so.getInputStream(), out, movil.identidad.leer(), ahora = ::ahoraMovil)
 
     /** Una toma en la cola, como la deja la pantalla de cámara en el disparo. */
-    private fun toma(nombre: String, bytes: ByteArray, ms: Long, duracionMs: Long = 0, grabacion: String = "g-1", reloj: Long = adelanto): ColaDeLaCamara.Toma {
+    private fun toma(nombre: String, bytes: ByteArray, ms: Long, duracionMs: Long = 0, grabacion: String = "g-1", reloj: Long = adelanto, tomadaEn: Long = ahoraMovil()): ColaDeLaCamara.Toma {
         val clip = nombre.endsWith(".mp4")
         val f = cola.ficheroNuevo(if (clip) "mp4" else "jpg").apply { writeBytes(bytes) }
         val t = ColaDeLaCamara.Toma(
             clave = "toma-$nombre-${System.nanoTime()}", fichero = f.name, nombre = nombre, mime = AlGrupo.mimeDe(nombre),
-            grabacion = grabacion, pc = "id-pc", ms = ms, tomadaEn = ahoraMovil(), reloj = reloj, duracionMs = duracionMs,
+            grabacion = grabacion, pc = "id-pc", ms = ms, tomadaEn = tomadaEn, reloj = reloj, duracionMs = duracionMs,
             creada = System.nanoTime()
         )
         cola.poner(t)
@@ -232,9 +232,9 @@ class CamaraDelPcTest {
             assertEquals(22 * s, empezo)
             aLas(57)
             toma("VID_0001.mp4", mp4(), empezo, duracionMs = 5 * s)
-            // Caso negativo: de una grabación que el PC no tiene. Se niega para siempre y la
-            // conexión sigue sana.
-            toma("IMG_9.jpg", jpeg(9), 1, grabacion = "no-existe")
+            // Caso negativo: de una grabación que el PC no tiene, y sin su hora (con ella, desde el PC
+            // de 995fd94b, entraría por su hora: §12.4). Se niega para siempre y la conexión sigue sana.
+            toma("IMG_9.jpg", jpeg(9), 1, grabacion = "no-existe", tomadaEn = 0)
 
             val pasada = SubidaALaGrabacion.pasar(con, cola, "id-pc", ::ahoraMovil)
             assertEquals(3, pasada.subidas)

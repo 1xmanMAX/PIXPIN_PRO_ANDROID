@@ -146,6 +146,9 @@ class MensajesStore(private val context: Context) {
         if (apuntado.clase == Clase.VOZ && apuntado.estadoDelTexto == null && apuntado.ruta != null && pareceMusica(apuntado.ruta)) {
             apuntado = apuntado.copy(estadoDelTexto = TEXTO_LETRA)
         }
+        // **La hora de la foto** (28-oct-2026, las fotos por su hora): la que no la trae (de la galería,
+        // compartida, recibida) la saca de su EXIF, si lo dice con su zona. Ver [HoraDeLaFoto].
+        apuntado = HoraDeLaFoto.conHora(apuntado)
         val escrito = runCatching {
             synchronized(CERROJO) {
                 archivo.appendText(json.encodeToString(Mensaje.serializer(), apuntado) + "\n")

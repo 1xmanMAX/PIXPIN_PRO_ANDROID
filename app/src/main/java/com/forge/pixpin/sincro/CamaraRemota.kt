@@ -102,6 +102,34 @@ object CamaraRemota {
         val clipMaximo: Long get() = if (clipMaximoMs > 0) clipMaximoMs else CLIP_MAXIMO_MS
     }
 
+    /**
+     * **La pregunta `camara_remota` de quien conduce** (28-oct-2026, `Pregunta` de `camara.rs` del PC).
+     * Sola (`{"t":"camara_remota","reloj":t0}`) es la de siempre: «¿cómo va tu grabación?». Con
+     * [suya], quien pregunta **también graba** y dice cómo va la suya (el teléfono que graba, para que
+     * el PC le mande capturas, §13). Va metida en `suya` y no suelta porque la petición también se lee
+     * como una `Peticion` de sincronizar, cuyo `desde` es otra cosa. Un aparato de antes la contesta
+     * igual y no pasa nada.
+     */
+    @OptIn(ExperimentalSerializationApi::class)
+    @Serializable
+    data class Pregunta(
+        @EncodeDefault val t: String = PETICION,
+        val reloj: Long = 0,
+        val suya: Anuncio? = null
+    )
+
+    fun aTexto(p: Pregunta): String = Protocolo.json.encodeToString(Pregunta.serializer(), p)
+    fun preguntaDe(t: String): Pregunta? = runCatching { Protocolo.json.decodeFromString(Pregunta.serializer(), t) }.getOrNull()
+
+    /**
+     * **Lo que contesta quien graba a una foto cuya hora no cae en ninguna de sus grabaciones**
+     * (§12.4): el teléfono la deja como una foto normal (y la sincroniza como siempre).
+     */
+    const val NINGUNA = "La foto no cae en ninguna grabación de este equipo"
+
+    /** Si es la respuesta [NINGUNA]. */
+    fun esNinguna(error: String): Boolean = error.contains("no cae en ninguna")
+
     fun aTexto(a: Anuncio): String = Protocolo.json.encodeToString(Anuncio.serializer(), a)
     fun deTexto(t: String): Anuncio = Protocolo.json.decodeFromString(Anuncio.serializer(), t)
 
@@ -157,8 +185,57 @@ object CamaraRemota {
      */
     fun esNoParaSiempre(error: String): Boolean =
         error.contains("ya no está en el PC") || error.startsWith("Solo se aceptan") ||
-            error.contains("demasiado grande") || error.contains("no dice de qué grabación")
+            error.contains("demasiado grande") || error.contains("no dice de qué grabación") || esNinguna(error)
+
+    // ------------------------------------------------------------ quien graba (§13)
+
+    /**
+     * **Antes del «vale», en quien graba** (`camara::aceptar` del PC): que diga de qué grabación es (o
+     * traiga su hora, §12.4), que sea una foto o un clip de los que se saben enseñar y de un tamaño
+     * razonable. El motivo del «no», o null.
+     */
+    fun aceptar(grabacion: String?, tomadaEn: Long, mime: String, bytes: Long): String? = when {
+        grabacion.isNullOrBlank() && tomadaEn <= 0 -> "La foto no dice de qué grabación es"
+        !tipoAceptado(mime) -> SOLO_FOTOS_Y_CLIPS
+        bytes !in 1..(if (esClip(mime)) TOPE_DE_CLIP else TOPE_DE_FOTO) -> "La foto o el clip es demasiado grande"
+        else -> null
+    }
+
+    /**
+     * **El minuto de la grabación de una foto que llega a quien graba** (`ms_de_la_foto` del PC): con
+     * [ms] (lo calculó quien la hizo), ese; sin él y con [tomadaEn], su hora pasada a este reloj con el
+     * desfase ([reloj] el que mandó, o [medido]); sin nada, el minuto en que llega. Siempre dentro de
+     * `[0, lo que lleva o duró]`; [duracion], si se sabe la de verdad, manda.
+     */
+    fun msDeLaFoto(r: RelojDeGrabacion, ahora: Long, duracion: Long?, ms: Long?, tomadaEn: Long, reloj: Long, medido: Long?): Long {
+        val tope = (duracion ?: r.duracion(ahora)).coerceAtLeast(0)
+        val m = when {
+            ms != null -> ms
+            tomadaEn > 0 -> r.msEn(tomadaEn - if (reloj != 0L) reloj else (medido ?: 0L))
+            else -> r.msEn(ahora)
+        }
+        return m.coerceIn(0, tope)
+    }
+
+    /** **Lo que dura un clip** en la grabación (`duracion_del_clip` del PC). */
+    fun duracionDelClip(duracionMs: Long, ms: Long, tope: Long): Long =
+        minOf(duracionMs.coerceIn(0, 2 * CLIP_MAXIMO_MS), (tope - ms).coerceAtLeast(0))
 
     /** Si es el «No sé qué es» de un PixPin de antes. */
     fun esSinSoporte(error: String): Boolean = error.startsWith("No sé qué es")
+}
+
+/**
+ * **Quien graba en este aparato** (28-oct-2026, §13: el teléfono graba y el PC le manda capturas; el
+ * `Camara` de `camara.rs` del PC). Lo da quien atiende al grupo ([Respondedor]): con él, la
+ * `camara_remota` se contesta con el anuncio de la grabación de aquí y un `suelto` con `destino:
+ * "grabacion"` entra en ella. Ver [GrabacionesDelMovil].
+ */
+interface QuienGraba {
+    /** La grabación de aquí, para contestar a `camara_remota`; null sin ninguna. */
+    fun anuncio(): CamaraRemota.Anuncio?
+    /** **Antes del «vale»**: el motivo del «no», o null si se acepta. */
+    fun aceptar(p: Protocolo.Peticion): String?
+    /** La foto llegó entera a [fichero] (temporal: se copia o se mueve). Su minuto; lanza con el motivo si no entra. */
+    fun guardar(p: Protocolo.Peticion, fichero: java.io.File, otro: Aparato): Long
 }

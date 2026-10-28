@@ -75,6 +75,7 @@ import java.time.LocalDate
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
@@ -166,8 +167,15 @@ class TodasLasTareasActivity : ComponentActivity() {
         // Al día con el chat: lo que se tacha allí, lo que llega del PC o lo que se cambia aquí.
         LaunchedEffect(proyectos) {
             val nombres = proyectos.associate { it.id to it.nombre }
-            suspend fun leer() { listas = withContext(Dispatchers.IO) { TodasLasTareas.reunir(almacen.leer(), nombres) } }
+            // Con Jev (28-oct-2026), la prioridad de cada tarea por su contexto; sin clave, nada cambia.
+            suspend fun leer() {
+                listas = withContext(Dispatchers.IO) {
+                    com.forge.pixpin.jev.UrgenciaEnLaApp.aplicar(this@TodasLasTareasActivity, TodasLasTareas.reunir(almacen.leer(), nombres))
+                }
+            }
             leer()
+            // Al acabar una tanda de prioridades, se relee.
+            launch { com.forge.pixpin.jev.UrgenciaEnLaApp.novedades.drop(1).collect { leer() } }
             MensajesStore.cambios.debounce(250).collect { leer() }
         }
 
@@ -814,7 +822,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                         textDecoration = if (f.hecha) TextDecoration.LineThrough else null
                     )
                 }
-                FilaDeChapitas(marcas.urgencia, marcas.etiquetas, Cristal.tinta, apagada = f.hecha)
+                FilaDeChapitas(marcas.urgencia, marcas.etiquetas, Cristal.tinta, apagada = f.hecha, prioridad = f.prioridad.takeIf { !f.hecha })
                 marcas.nota?.let {
                     Text(
                         "${TareaInteligente.NOTA} $it", color = Cristal.tinta.copy(alpha = 0.6f),

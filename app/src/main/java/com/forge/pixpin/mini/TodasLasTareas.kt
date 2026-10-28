@@ -55,7 +55,13 @@ object TodasLasTareas {
          * limpio, la urgencia (`⏫`/`🔼`), las `#etiquetas` y la nota (`💬`). La tarjeta enseña esto;
          * buscar sigue mirando [texto] entero, así que «#casa» o «⏫» también encuentran.
          */
-        val marcas: TareaInteligente.Frase = TareaInteligente.marcas(texto)
+        val marcas: TareaInteligente.Frase = TareaInteligente.marcas(texto),
+        /**
+         * **Su prioridad según su contexto** (28-oct-2026, Jev; [com.forge.pixpin.jev.UrgenciaEnLaApp]).
+         * null: sin Jev, o aún no se sabe; entonces todo va como siempre. Se calcula en cada aparato y
+         * no se guarda ni viaja.
+         */
+        val prioridad: com.forge.pixpin.jev.Urgencia.Prioridad? = null
     )
 
     /** Una lista de tareas de un chat. */
@@ -98,11 +104,14 @@ object TodasLasTareas {
     }
 
     /**
-     * Cómo se ordena lo pendiente: primero lo que tiene fecha, de la más vieja a la más nueva (lo
-     * que más lleva esperando); detrás lo que no la tiene. A igualdad, el orden del documento.
+     * Cómo se ordena lo pendiente: **con Jev, primero por su prioridad** (urgente, alta, normal, baja;
+     * lo que aun no se sabe cuenta como normal; 28-oct-2026, `orden_de_pendiente` del PC); luego lo que
+     * tiene fecha, de la más vieja a la más nueva (lo que más lleva esperando); detrás lo que no la
+     * tiene. A igualdad, el orden del documento. Sin Jev todas son «normal» y el orden es el de siempre.
      */
     val ORDEN_DE_PENDIENTE: Comparator<Fila> =
-        compareBy<Fila> { it.creada == null }.thenBy { it.creada }.thenBy { it.indice }
+        compareBy<Fila> { (it.prioridad ?: com.forge.pixpin.jev.Urgencia.Prioridad.NORMAL).ordinal }
+            .thenBy { it.creada == null }.thenBy { it.creada }.thenBy { it.indice }
 
     private val BLANCOS = Regex("""\s+""")
 

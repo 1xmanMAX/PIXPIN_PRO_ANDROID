@@ -488,6 +488,16 @@ object Agente {
                     historial += MensajeIa.resultado(cruda.id, duplicado)
                     continue
                 }
+                // **La guarda de la web** (28-oct-2026, `web::guarda` del PC): una dirección armada
+                // por el modelo que no salió en la conversación no se abre (una página no puede
+                // hacerle mandar datos del usuario dentro de una URL).
+                val armada = com.forge.pixpin.asistente.web.Web.guarda(historial, validada.llamada)
+                if (armada != null) {
+                    algunaMal = true
+                    if (alEvento(Evento.Reintento(armada)) == Seguir.PARAR) cortado = true
+                    historial += MensajeIa.resultado(cruda.id, armada)
+                    continue
+                }
                 val llamada = when (val l = validada.llamada) {
                     is Llamada.Dibujar -> l.copy(figuras = Herramientas.coloresDelPedido(l.figuras, pedido))
                     is Llamada.Calcar -> l.copy(parametros = Calcar.ajustarAlPedido(l.parametros, pedido))
@@ -499,7 +509,9 @@ object Agente {
                 val dicho = r.getOrElse { "ERROR: ${it.message ?: "no se pudo"}" }
                 if (ok) hechas++
                 alEvento(Evento.Resultado(llamada.nombre, ok, dicho))
-                var paraElModelo = recortarResultado(dicho)
+                // Una parte de página web cabe entera (con sus enlaces).
+                var paraElModelo = if (com.forge.pixpin.asistente.web.Web.esDeLaWeb(llamada.nombre)) recortarResultado(dicho, com.forge.pixpin.asistente.web.Web.LETRAS_RESULTADO)
+                else recortarResultado(dicho)
                 if (validada.avisos.isNotEmpty()) paraElModelo += " (avisos: ${validada.avisos.joinToString("; ")})"
                 historial += MensajeIa.resultado(cruda.id, paraElModelo)
             }
@@ -551,9 +563,9 @@ object Agente {
         return if (cierre >= 0) t.substring(cierre + "</think>".length).trimStart() else t
     }
 
-    fun recortarResultado(texto: String): String {
-        if (texto.codePointCount(0, texto.length) <= RESULTADO_MAXIMO) return texto
-        val cps = texto.codePoints().limit(RESULTADO_MAXIMO.toLong()).toArray()
+    fun recortarResultado(texto: String, maximo: Int = RESULTADO_MAXIMO): String {
+        if (texto.codePointCount(0, texto.length) <= maximo) return texto
+        val cps = texto.codePoints().limit(maximo.toLong()).toArray()
         return String(cps, 0, cps.size) + "\n[...recortado: el usuario tiene el resultado entero]"
     }
 

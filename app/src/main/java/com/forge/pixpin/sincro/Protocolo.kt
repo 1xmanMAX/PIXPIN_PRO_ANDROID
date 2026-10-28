@@ -410,7 +410,13 @@ class Respondedor(
      * y la hora de aquí al llegar. Se le contesta siempre con la hora de aquí (para que mida el
      * desfase), haya esto o no. Ver [CamaraRemota].
      */
-    private val alAvisoDeCamara: ((CamaraRemota.Anuncio, Aparato, Long) -> Unit)? = null
+    private val alAvisoDeCamara: ((CamaraRemota.Anuncio, Aparato, Long) -> Unit)? = null,
+    /**
+     * **Quien graba aquí** (28-oct-2026, §13 de la guía del PC): con él, la `camara_remota` se contesta
+     * con la grabación de este teléfono y las capturas del PC (`suelto` con `destino: "grabacion"`)
+     * entran en ella. Sin él, como antes. Ver [QuienGraba].
+     */
+    private val quienGraba: QuienGraba? = null
 ) {
     fun atender(entrada: InputStream, salida: OutputStream) {
         val id = disco.identidad.leer()
@@ -458,6 +464,8 @@ class Respondedor(
             throw e
         } finally {
             Protocolo.soltar(disco)
+            // Las fotos con hora que trajo, a su grabación (28-oct-2026). Ver [FotosPorSuHora].
+            FotosPorSuHora.repasarEnFondo(disco)
         }
     }
 
@@ -507,6 +515,8 @@ class Respondedor(
             throw e
         } finally {
             Protocolo.soltar(disco)
+            // Las fotos de los colaboradores, a su grabación por su hora.
+            FotosPorSuHora.repasarEnFondo(disco)
         }
     }
 
@@ -557,6 +567,7 @@ class Respondedor(
      * quieren decir «lo que esté abierto».
      */
     private fun recibirSuelto(canal: Canal, p: Protocolo.Peticion, otro: Aparato) {
+        if (p.destino == CamaraRemota.DESTINO) return recibirParaLaGrabacion(canal, p, otro)
         val recibir = alRecibirSuelto
         val carpeta = cache
         if (recibir == null || carpeta == null) {
@@ -600,6 +611,50 @@ class Respondedor(
     }
 
     /**
+     * **Una captura del PC para la grabación de este teléfono** (28-oct-2026, §13: `responder` de
+     * `al_lienzo.rs` del PC con `destino: "grabacion"`): se niega antes del «vale» lo que no es para una
+     * grabación de aquí, llega a un temporal, se mira que de verdad sea una foto (o un MP4) y entra con
+     * [QuienGraba.guardar]: `{"t":"listo","donde":"grabacion","ms":N}`. Sin quien graba, «No sé qué es».
+     */
+    private fun recibirParaLaGrabacion(canal: Canal, p: Protocolo.Peticion, otro: Aparato) {
+        val q = quienGraba
+        val carpeta = cache
+        if (q == null || carpeta == null || CamaraRemota.CAPACIDAD !in capacidades) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${CamaraRemota.PETICION}»"))
+            return
+        }
+        if (p.bytes < 0 || p.bytes > Protocolo.TOPE_DE_SUELTO) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = "El archivo es demasiado grande"))
+            return
+        }
+        runCatching { q.aceptar(p) }.getOrElse { it.message ?: "No se pudo" }?.let { e ->
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = e))
+            return
+        }
+        carpeta.mkdirs()
+        val fichero = File(carpeta, "grabacion_${System.nanoTime()}_${Envio.nombreSano(p.nombre ?: "captura")}")
+        try {
+            Protocolo.enviar(canal, Protocolo.Respuesta())
+            estado("Recibiendo una captura de ${otro.nombre} para la grabación")
+            val entero = fichero.outputStream().use { Protocolo.recibirTrozos(canal, p.bytes, it) {} } != null
+            if (!entero) {
+                Protocolo.enviar(canal, Protocolo.Respuesta(error = "El archivo cambió mientras se mandaba"))
+                return
+            }
+            val cabeza = ByteArray(16).let { b -> val n = fichero.inputStream().use { it.read(b) }.coerceAtLeast(0); b.copyOf(n) }
+            val valida = if (CamaraRemota.esClip(p.mime.orEmpty())) CamaraRemota.esMp4(cabeza) else CamaraRemota.esImagen(cabeza)
+            val r = if (!valida) Protocolo.Respuesta(error = CamaraRemota.SOLO_FOTOS_Y_CLIPS) else try {
+                Protocolo.Respuesta(t = "listo", donde = CamaraRemota.DONDE, ms = q.guardar(p, fichero, otro))
+            } catch (e: Exception) {
+                Protocolo.Respuesta(error = e.message ?: e.javaClass.simpleName)
+            }
+            Protocolo.enviar(canal, r)
+        } finally {
+            fichero.delete()
+        }
+    }
+
+    /**
      * **`camara_remota` del PC** (28-oct-2026, `docs/movil-como-camara.md` §2.1 del PC): al
      * empezar, pausar, seguir o acabar su grabación, el PC manda su anuncio con su reloj (`t0`) y
      * aquí se contesta `{"t":"camara_remota","reloj":t1}` con la hora de este teléfono, que es
@@ -613,7 +668,9 @@ class Respondedor(
         }
         val llego = ahora()
         val aviso = runCatching { CamaraRemota.deTexto(crudo) }.getOrNull()
-        canal.enviar(Protocolo.JSON_, CamaraRemota.aTexto(CamaraRemota.Anuncio(reloj = llego)).toByteArray())
+        // Si este teléfono graba (§13), la contestación es su anuncio, como la del PC.
+        val mio = runCatching { quienGraba?.anuncio() }.getOrNull() ?: CamaraRemota.Anuncio()
+        canal.enviar(Protocolo.JSON_, CamaraRemota.aTexto(mio.copy(t = CamaraRemota.PETICION, reloj = llego, error = null)).toByteArray())
         if (aviso != null && aviso.error == null) runCatching { alAvisoDeCamara?.invoke(aviso, otro, llego) }
     }
 
@@ -896,6 +953,12 @@ class Sesion private constructor(
     /** Lo que el otro dijo saber hacer ([Protocolo.CAPACIDADES]); vacío en el PC de hoy. */
     val susCapacidades: Set<String> = emptySet()
 ) {
+    init {
+        // **Lo que va adelantado su reloj, por su código** (28-oct-2026, las fotos por su hora): en
+        // cada saludo, con el grupo y con las personas. Ver [FotosPorSuHora.medido].
+        FotosPorSuHora.medido(disco.filesDir, otro.id, desfase)
+    }
+
     /** Con el otro se habla de diarios ([Protocolo.DIARIO]): `novedades` y `entero`. */
     private val conDiario: Boolean get() = Protocolo.DIARIO in susCapacidades && Diario.activo
     private val reanudable: Boolean get() = Protocolo.REANUDAR in susCapacidades
@@ -1677,6 +1740,8 @@ class Sesion private constructor(
             }
         } finally {
             Protocolo.soltar(disco)
+            // Las fotos con hora que trajo, a su grabación (28-oct-2026). Ver [FotosPorSuHora].
+            FotosPorSuHora.repasarEnFondo(disco)
         }
     }
 
@@ -1685,6 +1750,7 @@ class Sesion private constructor(
         if (terminada) return
         terminada = true
         Protocolo.soltar(disco)
+        FotosPorSuHora.repasarEnFondo(disco)
     }
 
     @Volatile private var terminada = false

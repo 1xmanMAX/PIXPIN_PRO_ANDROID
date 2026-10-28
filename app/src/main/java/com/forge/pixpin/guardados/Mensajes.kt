@@ -426,7 +426,43 @@ data class Mensaje(
     val versionDe: String? = null,
     /** Qué versión es de su original (1, 2…), para nombrarla: «Versión 2». Solo una etiqueta: dos aparatos pueden dar el mismo número. */
     @EncodeDefault(EncodeDefault.Mode.NEVER)
-    val versionN: Int? = null
+    val versionN: Int? = null,
+
+    /**
+     * **Lo importante de una clase o reunión** (28-oct-2026, Jev de TypeSafe, PC `df8884e2`/`d8ddb756`,
+     * `docs/manual-sincronizar-lo-nuevo.md` §14 del PC): en la nota de voz, `importantes: [{ms, tipo,
+     * p}]` (con `quien`/`cuando`/`enTareas` en las tareas) y `importantesDe` el modelo que lo halló.
+     * **Sin la clave: nunca se miró; `[]`: se miró y no hay nada** (por eso un `[]` se escribe y se
+     * conserva). Lo escribe el PC o este teléfono con su propia clave; se conservan tal cual al
+     * reescribir el mensaje. Las cuentas, en [Importantes].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val importantes: kotlinx.serialization.json.JsonArray? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val importantesDe: String? = null,
+
+    /**
+     * **Las fotos por su hora** (28-oct-2026, PC `por_su_hora.rs`, `docs/movil-como-camara.md` §12-§14
+     * del PC). En la nota de voz de una clase: `reloj` (la ventana de la grabación en la hora de pared
+     * de quien grabó, `{aparato, inicio, fin, pausas, vistoEn, huecos, grabacion}`, ver [RelojDePared]) y
+     * `colaboradores` (`["K7Q2", …]` o `["*"]`: quién más puede aportar fotos). En cada foto:
+     * `tomadaEnExif` + `desfaseExif` (la hora del EXIF, si falta [tomadaEn]), `paraGrabacion` (para
+     * qué grabación era, si se sabía) y, en la copia que hizo la cámara en directo, `fotoUid` (el uid
+     * de la foto en su aparato). **Se conservan tal cual**: al reescribir el mensaje aquí se
+     * perderían, y la fusión lo tomaría por un borrado. Ver [PorSuHora].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val reloj: kotlinx.serialization.json.JsonObject? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val colaboradores: kotlinx.serialization.json.JsonArray? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val tomadaEnExif: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val desfaseExif: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val paraGrabacion: String? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val fotoUid: String? = null
 )
 
 /**

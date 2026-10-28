@@ -209,7 +209,7 @@ object Mp4DeLaReunion {
     }
 
     /** El giro apuntado en un MP4 (0, 90, 180 o 270), o null si no se sabe. */
-    private fun giroDe(mp4: File): Int? {
+    internal fun giroDe(mp4: File): Int? {
         val r = MediaMetadataRetriever()
         return try {
             r.setDataSource(mp4.absolutePath)

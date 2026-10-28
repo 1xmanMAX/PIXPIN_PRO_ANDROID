@@ -41,6 +41,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.NoteAdd
 import androidx.compose.material.icons.filled.FileDownload
@@ -1164,6 +1165,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             loMandado = nota.id
                             refrescar()
                         }
+                        // El modelo que eligió Jev para el último pedido («Claude Sonnet · Jev», 28-oct-2026).
+                        com.forge.pixpin.jev.PastillaDelModelo(chatDe, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 4.dp))
                         // «Conversación nueva»: lo de arriba ya no se le manda (asistente/Asistente.kt).
                         com.forge.pixpin.asistente.ConversacionNueva(chatDe, Modifier.padding(horizontal = MARGEN_DE_LA_ISLA)) { loMandado = System.currentTimeMillis().toString(); refrescar() }
                     }
@@ -3380,7 +3383,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                           puedeEstudiar = acciones.estudiar != null,
                           hayHilo = acciones.cuantosComentarios > 0,
                           puedeUnir = acciones.unir != null,
-                          puedeDevolver = acciones.devolver != null && UnirAlProyecto.sePuedeDevolver(m, proyectosAhora)
+                          puedeDevolver = acciones.devolver != null && UnirAlProyecto.sePuedeDevolver(m, proyectosAhora),
+                          puedeInvitar = true,
+                          puedeAdjuntarALaGrabacion = quien == null || quien.esMio
                       )
                   )
               }
@@ -6458,6 +6463,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             OpcionesDelMensaje.Opcion.UNIR_AL_PROYECTO -> acciones.unir?.let { u -> DelMenu(com.forge.pixpin.R.string.guardados_unir_al_proyecto, Icons.Filled.LibraryAdd) { cerrar(); u() } }
             OpcionesDelMensaje.Opcion.DEVOLVER_AL_PROYECTO -> acciones.devolver?.let { d -> DelMenu(com.forge.pixpin.R.string.guardados_devolver_al_proyecto, Icons.Filled.LibraryAdd) { cerrar(); d() } }
             OpcionesDelMensaje.Opcion.RESCATAR -> acciones.rescatar?.let { r -> DelMenu(com.forge.pixpin.R.string.guardados_rescatar, Icons.Filled.BookmarkBorder) { cerrar(); r() } }
+            // Las fotos por su hora (28-oct-2026): invitar a los del chat y adjuntar a mano. Ver [FotosALaGrabacion].
+            OpcionesDelMensaje.Opcion.APORTAN_TODOS -> DelMenu(
+                if (PorSuHora.abiertaATodos(m)) com.forge.pixpin.R.string.clase_solo_mis_fotos else com.forge.pixpin.R.string.clase_todos_aportan, Icons.Filled.Groups
+            ) { cerrar(); FotosALaGrabacion.alternarTodos(this@MensajesActivity, m) }
+            OpcionesDelMensaje.Opcion.ADJUNTAR_A_LA_GRABACION -> DelMenu(com.forge.pixpin.R.string.foto_adjuntar_a_la_grabacion, Icons.Filled.Schedule) {
+                cerrar(); FotosALaGrabacion.adjuntar(this@MensajesActivity, m)
+            }
         }
     }
 

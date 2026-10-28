@@ -65,7 +65,7 @@ class AjustesV2Test {
             "plano_avanzado", "palabras_magicas",
             "motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas",
             "asistente_motor", "asistente_pensar", "asistente_documentos_nube",
-            "asistente_revisar_dicho", "asistente_leer_respuestas",
+            "asistente_revisar_dicho", "asistente_leer_respuestas", "asistente_web",
             "maxima_fluidez", "modo_noche", "oled_negro", "pin_font"
         )
         assertEquals(conocidas, CatalogoDeAjustes.CLAVES)

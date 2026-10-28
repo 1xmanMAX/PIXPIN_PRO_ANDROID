@@ -67,7 +67,13 @@ object OpcionesDelMensaje {
         // Las de «Más».
         FIJAR, ETIQUETAR, ELEGIR,
         ABRIR_CON, ALIGERAR, SOLO_LA_FOTO, FOTO_DEL_CHAT, INSERTAR_EN_NOTA,
-        VER_HILO, UNIR_AL_PROYECTO, DEVOLVER_AL_PROYECTO, RESCATAR
+        VER_HILO, UNIR_AL_PROYECTO, DEVOLVER_AL_PROYECTO, RESCATAR,
+        /**
+         * **Las fotos por su hora** (28-oct-2026, §12-§14 de la guía del PC): en la nota de una clase,
+         * «Que todos los del chat aporten fotos» / «Solo mis fotos en esta grabación»; en una foto que
+         * aún no es de ninguna, «Adjuntar a la grabación».
+         */
+        APORTAN_TODOS, ADJUNTAR_A_LA_GRABACION
     }
 
     /**
@@ -86,7 +92,11 @@ object OpcionesDelMensaje {
         /** Se puede meter en las hojas de su proyecto. */
         val puedeUnir: Boolean = false,
         /** Se quitó de su proyecto y se puede devolver. */
-        val puedeDevolver: Boolean = false
+        val puedeDevolver: Boolean = false,
+        /** Se puede invitar a los del chat a aportar fotos a esta grabación (§14). */
+        val puedeInvitar: Boolean = false,
+        /** Se puede adjuntar esta foto a una grabación del chat (§12, a mano). */
+        val puedeAdjuntarALaGrabacion: Boolean = false
     )
 
     /** El menú de un mensaje: lo que se ve al abrirlo y lo de «Más». Borrar va siempre aparte. */
@@ -195,6 +205,8 @@ object OpcionesDelMensaje {
         if (contexto.puedeUnir) mas += Opcion.UNIR_AL_PROYECTO
         if (contexto.puedeDevolver) mas += Opcion.DEVOLVER_AL_PROYECTO
         if (m.enBuzon) mas += Opcion.RESCATAR
+        if (contexto.puedeInvitar && tipo == Tipo.GRABACION && !contexto.ajeno) mas += Opcion.APORTAN_TODOS
+        if (contexto.puedeAdjuntarALaGrabacion && tipo == Tipo.FOTO && m.enGrabacion == null) mas += Opcion.ADJUNTAR_A_LA_GRABACION
         return Menu(v.distinct(), mas.distinct().filterNot { it in v })
     }
 }

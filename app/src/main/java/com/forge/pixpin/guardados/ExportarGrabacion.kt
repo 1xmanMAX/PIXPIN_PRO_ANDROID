@@ -122,7 +122,8 @@ object ExportarGrabacion {
                 Compartible.Salida(destino("$base.txt").also { it.writeText(ClaseExportar.texto(g, r)) }, "text/plain", "La transcripción con sus minutos")
             }))
             if (g.capturas.isNotEmpty()) add(Compartible.Formato("anki", Icons.Filled.School, "Anki", Compartible.NINGUNA, generar = {
-                val zip = anki(g, AnkiDelMensaje.mazoDe(chat), base) ?: return@Formato null
+                // Con Jev (28-oct-2026), solo las tarjetas que valen la pena; sin clave, todas.
+                val zip = anki(g, AnkiDelMensaje.mazoDe(chat), base, com.forge.pixpin.jev.AnkiEnLaApp.valer(c, g.titulo)) ?: return@Formato null
                 Compartible.Salida(destino("$base (Anki).zip").also { it.writeBytes(zip) }, "application/zip", "Una tarjeta por captura: en Anki, Archivo → Importar")
             }))
             addAll(extras)
@@ -206,15 +207,21 @@ object ExportarGrabacion {
         return Compartible.Salida(f, "application/zip", "La página y, al lado, el vídeo y lo que no cabe dentro")
     }
 
-    /** **Anki**: las tarjetas de la grabación (una por captura) y sus imágenes, en un ZIP. Null sin tarjetas. */
-    fun anki(g: ClaseExportar.Datos, mazo: String, base: String): ByteArray? {
+    /**
+     * **Anki**: las tarjetas de la grabación (una por captura) y sus imágenes, en un ZIP. Null sin
+     * tarjetas. [valer] (Jev, 28-oct-2026) dice cuáles quedan por lo dicho en su tramo; null, todas.
+     */
+    fun anki(g: ClaseExportar.Datos, mazo: String, base: String, valer: ((List<Pair<Long, String>>) -> List<Boolean>?)? = null): ByteArray? {
         val trozos = g.lineas.mapNotNull { (ms, t) -> ms?.let { it to t } }
         val prefijo = base.replace(' ', '-')
         val capturas = g.capturas.filter { File(it.second).isFile }.map { (ms, ruta) ->
             val ext = ruta.substringAfterLast('.', "png").lowercase()
             ms to Tarjetas.Imagen("pixpin-$prefijo-$ms.$ext", ruta)
         }
-        val tarjetas = Tarjetas.deLaClase(g.titulo, AnkiDelMensaje.PREGUNTA_CLASE, trozos, capturas)
+        val todas = Tarjetas.deLaClase(g.titulo, AnkiDelMensaje.PREGUNTA_CLASE, trozos, capturas)
+        val tiempos = capturas.map { it.first }.sorted()
+        val quedan = valer?.invoke(tiempos.zip(Tarjetas.loDichoPorCaptura(trozos, tiempos)))
+        val tarjetas = (if (quedan != null) Tarjetas.quedarseCon(todas, quedan) else todas)
             .map { it.copy(etiquetas = listOf("pixpin")) }
         if (tarjetas.isEmpty()) return null
         val salida = ByteArrayOutputStream()

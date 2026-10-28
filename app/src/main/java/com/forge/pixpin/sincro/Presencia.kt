@@ -35,7 +35,17 @@ object Presencia {
         private set
     private val principal = Handler(Looper.getMainLooper())
     private var aLaVista = 0
-    private val apagar = Runnable { if (aLaVista == 0) { red.cerrar(); SincronizacionAutomatica.alaVista(false); BalizaDelMovil.aLaVista(false) } }
+    private val apagar = Runnable { if (aLaVista == 0 && !GrabacionDelMovil.grabando) { red.cerrar(); SincronizacionAutomatica.alaVista(false); BalizaDelMovil.aLaVista(false) } }
+
+    /**
+     * **Mientras el teléfono graba, se sigue escuchando** (28-oct-2026, §13): el PC le manda capturas a
+     * su grabación aunque PixPin esté fuera. Al acabar, lo de siempre: se apaga un minuto después si no
+     * hay ninguna pantalla a la vista.
+     */
+    fun grabacion(enMarcha: Boolean) {
+        if (!::red.isInitialized) return
+        if (enMarcha) encender() else principal.post { if (aLaVista == 0) { principal.removeCallbacks(apagar); principal.postDelayed(apagar, 60_000) } }
+    }
 
     fun identidadCambio() { version.value = version.value + 1 }
 
@@ -94,7 +104,9 @@ object Presencia {
                             alAceptarSuelto = { _, mime -> LoAbierto.aceptar(delante(), mime, id.yo.nombre) },
                             alRecibirSuelto = { f, nombre, mime, otro -> alLoAbierto(f, nombre, mime, otro, id.yo.nombre) },
                             cache = java.io.File(app.cacheDir, "suelto"),
-                            alAvisoDeCamara = { anuncio, otro, cuando -> CamaraDelPc.alAviso(anuncio, otro, cuando) }
+                            alAvisoDeCamara = { anuncio, otro, cuando -> CamaraDelPc.alAviso(anuncio, otro, cuando) },
+                            // Si este teléfono graba, las capturas del PC entran en su grabación (§13).
+                            quienGraba = GrabacionDelMovil.recepcion(app)
                         )
                         if (persona) r.atenderPersona(entrada, socket.getOutputStream())
                         else r.atender(entrada, socket.getOutputStream())

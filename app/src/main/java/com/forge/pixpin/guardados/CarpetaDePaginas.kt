@@ -124,6 +124,20 @@ data class CarpetaDePaginas(
     fun anadirAlMinuto(id: String, titulo: String, ms: Long): CarpetaDePaginas? =
         anadir(id, titulo)?.let { c -> c.copy(paginas = c.paginas.dropLast(1) + c.paginas.last().copy(ms = ms.coerceAtLeast(0))) }
 
+    /**
+     * **Una pieza en su minuto, en su sitio** (28-oct-2026, `anadir_en_su_minuto` del PC, para lo que
+     * llega tarde por su hora): antes de la primera página con un minuto mayor o de lo adjuntado; si
+     * no hay, al final. Null si ya estaba.
+     */
+    fun anadirEnSuMinuto(id: String, titulo: String, ms: Long): CarpetaDePaginas? {
+        val c = anadirAlMinuto(id, titulo, ms) ?: return null
+        val nueva = c.paginas.last()
+        val antes = c.paginas.dropLast(1)
+        val m = ms.coerceAtLeast(0)
+        val sitio = antes.indexOfFirst { it.adjunto || (it.ms != null && it.ms > m) }.let { if (it < 0) antes.size else it }
+        return c.copy(paginas = antes.subList(0, sitio) + nueva + antes.subList(sitio, antes.size))
+    }
+
     val size: Int get() = paginas.size
     fun isEmpty() = paginas.isEmpty()
 

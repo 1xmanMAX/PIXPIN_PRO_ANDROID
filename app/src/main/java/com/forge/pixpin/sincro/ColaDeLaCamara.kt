@@ -32,9 +32,13 @@ class ColaDeLaCamara(val carpeta: File) {
         /** Con qué nombre llega al PC («IMG_20261028_100512.jpg»). */
         val nombre: String,
         val mime: String,
-        /** El id de la grabación del PC. */
+        /**
+         * El id de la grabación del PC. **Vacío: por su hora** (28-oct-2026, §12.4): la foto se hizo sin
+         * saber de ninguna grabación (sin conexión); ya está en el chat como una foto normal, su
+         * [clave] es su uid, y el PC la pone donde caiga su hora o contesta que no cae en ninguna.
+         */
         val grabacion: String,
-        /** El id del PC (para saber a quién llamar) y su nombre, para enseñarlo. */
+        /** El id del PC (para saber a quién llamar) y su nombre, para enseñarlo. Vacío: cualquier PC del grupo. */
         val pc: String,
         val pcNombre: String = "",
         val titulo: String = "",
@@ -60,6 +64,8 @@ class ColaDeLaCamara(val carpeta: File) {
         val esClip: Boolean get() = CamaraRemota.esClip(mime)
         val pendiente: Boolean get() = estado == PENDIENTE
         val lista: Boolean get() = estado == LISTA
+        /** Si va por su hora (sin grabación sabida, §12.4). */
+        val porSuHora: Boolean get() = grabacion.isEmpty()
     }
 
     private val tomas get() = File(carpeta, "tomas")

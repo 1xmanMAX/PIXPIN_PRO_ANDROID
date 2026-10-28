@@ -92,10 +92,11 @@ grupo: ni se calcula la firma) → firma en tiempo constante
   datagrama** y el puerto, avisa a la automática de que está, contesta si
   pregunta y, si el PC graba con cámara, pinta la tira
   (`CamaraDelPc.alOirBaliza`) y aviva la conexión caliente.
-- `GrabacionParaLaBaliza.kt`: el enganche de `GrabarClaseService` y
-  `ReunionPresencialService` (empezó / pausa o sigue / acabó / guardada). El id
-  de la grabación del teléfono es `m-<hora de empezar>`. La bandera «cámara» va
-  apagada: el teléfono aún no recibe fotos en su grabación por este camino.
+- `GrabacionParaLaBaliza.kt`: lo que la baliza lee de la grabación del
+  teléfono. Se engancha en `GrabacionDelMovil` (empezar / pausa / acabar / tirar
+  / guardada), por donde ya pasan «Grabar clase» y la reunión presencial: los
+  servicios no se tocan. El id es el mismo `m-…` que va en
+  `camara_remota.suya` (§13). La bandera «cámara» va apagada por ahora.
 - `ConexionCaliente.kt` (§11.7): `PlanCaliente` (puro) y la conexión con el PC
   que graba: `hola` con `camara1`, `camara_remota` cada 3 s (keepalive y reloj,
   `CamaraDelPc.alResponder`), cada foto un `suelto` más por la misma conexión,

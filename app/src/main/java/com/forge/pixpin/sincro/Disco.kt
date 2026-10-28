@@ -177,6 +177,22 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
         return puestos
     }
 
+    /**
+     * **Cambia el chat entero de una vez** (28-oct-2026, para las fotos por su hora): [cambio] recibe
+     * lo que hay y devuelve lo que tiene que quedar, o null si no hay nada que cambiar. Se apunta en el
+     * [diario] como cualquier escritura, así que viaja. Devuelve si se escribió.
+     */
+    fun cambiarMensajes(cambio: (List<Mensaje>) -> List<Mensaje>?): Boolean {
+        synchronized(Cerrojos.chat) {
+            val lista = leerMensajes()
+            val nueva = cambio(lista) ?: return false
+            if (nueva == lista) return false
+            escribirMensajes(nueva, lista)
+        }
+        alCambiar(Cambio.MENSAJES)
+        return true
+    }
+
     fun chats(): List<Chat> {
         val todos = leerMensajes()
         val mensajes = todos.groupingBy { chatDe(it) }.eachCount()

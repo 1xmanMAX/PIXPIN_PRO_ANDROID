@@ -165,6 +165,8 @@ class RecibirActivity : ComponentActivity() {
             if (ahora - ultimo > 120 || hechos == total) { ultimo = ahora; estado = Estado.Recibiendo(oferta.de, hechos, total) }
         }
         val guardados = llegados.mapNotNull { (e, archivo) -> Recepcion.guardar(this@RecibirActivity, e, archivo, oferta, comoNuevo = comoNuevo[e.identidad] == true) }
+        // Lo que llegó con hora, a su grabación (28-oct-2026, las fotos por su hora).
+        FotosPorSuHora.repasarEnFondo(Red.disco(this@RecibirActivity))
         estado = Estado.Hecho(oferta.de, guardados)
     }
 

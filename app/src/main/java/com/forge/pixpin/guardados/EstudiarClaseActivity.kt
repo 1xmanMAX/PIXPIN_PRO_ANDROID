@@ -282,6 +282,10 @@ class EstudiarClaseActivity : ComponentActivity() {
         val todos = remember(version) { almacen.leer() }
         val m = remember(todos) { todos.firstOrNull { it.id == id } }
         val capturas = remember(todos, m) { m?.let { capturasDeLaLetra(it, todos) }.orEmpty() }
+        // De quién es cada captura (un colaborador) y si su hora no se comprobó (28-oct-2026, §14).
+        val autores = remember(todos, m) {
+            m?.let { v -> autoresDeLaLetra(v, todos, runCatching { v.proyecto?.let { chatsCompartidosDentro(this@EstudiarClaseActivity)[it]?.lados } }.getOrNull()) }.orEmpty()
+        }
         // El mensaje de cada captura (el mismo orden): para su lienzo anotado.
         val fotos = remember(todos, m) {
             val porId = todos.associateBy { it.id }
@@ -309,7 +313,24 @@ class EstudiarClaseActivity : ComponentActivity() {
                 }).sortedBy { it.ms }
         }
         val tiemposDeLineas = remember(lineas) { lineas.map { it.ms } }
-        val filas = remember(lineas, senales) { EstudiarClase.mezclar(tiemposDeLineas, senales.map { it.ms }) }
+        // **Lo importante de la clase** (28-oct-2026, Jev; lo halla el PC o este teléfono con su clave):
+        // un punto de color por tipo bajo el minuto, el filtro y «+N tareas a Tareas». Ver [Importantes].
+        val importantes = remember(m?.importantes, esCancion) { if (esCancion) emptyList() else Importantes.de(m).orEmpty() }
+        var filtroImportante by rememberSaveable(id) { mutableStateOf<String?>(null) }
+        val tipoFiltrado = Importantes.Tipo.deId(filtroImportante)?.takeIf { t -> importantes.any { it.tipo == t } }
+        val buscandoImportante = id in com.forge.pixpin.jev.ReunionEnLaApp.enMarcha.collectAsState().value
+        // Con clave, una nota aún sin mirar se mira al abrirla (sin clave no pasa nada).
+        LaunchedEffect(m?.id, m?.transcripcion) {
+            if (m != null && !esCancion && m.importantes == null && !m.transcripcion.isNullOrBlank()) {
+                com.forge.pixpin.jev.ReunionEnLaApp.lanzar(this@EstudiarClaseActivity, m.id, forzar = false)
+            }
+        }
+        // Con el filtro puesto, solo los renglones de ese tipo (sin capturas ni marcadores, como la página del PC).
+        val filas = remember(lineas, senales, importantes, tipoFiltrado) {
+            val todas = EstudiarClase.mezclar(tiemposDeLineas, senales.map { it.ms })
+            if (tipoFiltrado == null) todas
+            else todas.filter { f -> f is EstudiarClase.Fila.Linea && Importantes.seVeConFiltro(importantes, lineas[f.i].ms, tipoFiltrado) }
+        }
         val tiemposDeFilas = remember(filas) { EstudiarClase.tiemposDeFilas(filas, tiemposDeLineas, senales.map { it.ms }) }
         val tiemposDeCapturas = remember(capturas) { capturas.map { it.first } }
 
@@ -592,13 +613,13 @@ class EstudiarClaseActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(6.dp), horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = PaddingValues(vertical = 6.dp)
             ) {
-                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r) { irA(ms) } }
+                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r, autores.getOrNull(i)) { irA(ms) } }
             } else LazyRow(
                 state = tira, modifier = Modifier.fillMaxWidth().height((r.altoMiniatura + EstudiarClase.ALTO_DEL_MINUTO).dp),
                 horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically,
                 contentPadding = PaddingValues(horizontal = 8.dp)
             ) {
-                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r) { irA(ms) } }
+                itemsIndexed(capturas) { i, (ms, ruta) -> Miniatura(ruta, ms, i == capturaActual, r, autores.getOrNull(i)) { irA(ms) } }
             }
         }
 
@@ -606,6 +627,16 @@ class EstudiarClaseActivity : ComponentActivity() {
         @Composable
         fun Texto(modifier: Modifier) {
             Column(modifier) {
+                if (sincronizando == null && lineas.isNotEmpty()) FiltroDeImportantes(
+                    importantes, tipoFiltrado, buscandoImportante,
+                    alElegir = { filtroImportante = it?.id },
+                    alApuntar = {
+                        Thread {
+                            val n = runCatching { com.forge.pixpin.jev.ReunionEnLaApp.aTareas(this@EstudiarClaseActivity, id) }.getOrDefault(0)
+                            runOnUiThread { Toast.makeText(this@EstudiarClaseActivity, "$n tareas apuntadas en el Inbox de Tareas", Toast.LENGTH_SHORT).show() }
+                        }.start()
+                    }
+                )
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val sinc = sincronizando
                     if (sinc != null) ListaParaSincronizar(sinc, toques, tamano)
@@ -664,6 +695,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                                         l.ms?.let {
                                             Text(Transcriptor.marcaDeTiempo(it.toInt()), fontSize = (tamano * 0.7f).sp,
                                                 color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                            // Lo importante de este renglón: un punto de color por tipo (Jev).
+                                            PuntosDeImportantes(Importantes.tiposEn(importantes, it))
                                         }
                                         // Un renglón en blanco de una letra separa estrofas; un silencio del LRC, «♪».
                                         if (l.texto.isNotEmpty() || l.ms != null) Text(
@@ -1312,7 +1345,7 @@ class EstudiarClaseActivity : ComponentActivity() {
      * que encima de una tan pequeña la taparía.
      */
     @Composable
-    private fun Miniatura(ruta: String, ms: Long, actual: Boolean, r: EstudiarClase.Reparto, alTocar: () -> Unit) {
+    private fun Miniatura(ruta: String, ms: Long, actual: Boolean, r: EstudiarClase.Reparto, autor: AutorDeCaptura? = null, alTocar: () -> Unit) {
         var imagen by remember(ruta) { mutableStateOf<ImageBitmap?>(null) }
         LaunchedEffect(ruta) { imagen = leer(ruta, 240) }
         val (w, h) = EstudiarClase.medidaDeMiniatura(
@@ -1326,6 +1359,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                 contentAlignment = Alignment.Center
             ) {
                 imagen?.let { Image(it, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize()) }
+                autor?.let { ChapaDeAutor(it, Modifier.align(Alignment.TopStart)) }
             }
             Text(
                 Transcriptor.marcaDeTiempo(ms.toInt()), fontSize = 10.sp, lineHeight = 12.sp, maxLines = 1,

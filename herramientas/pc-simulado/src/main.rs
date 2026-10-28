@@ -191,7 +191,89 @@ fn responder(raiz: &Path, archivo_del_puerto: &str) {
         // Con su galeria, como el PC desde c493abb (`atender_con_galeria`).
         let g = EnCarpeta::de(raiz);
         if let Err(e) = r.atender_con_galeria(flujo, nonce(), Some(&g)) { eprintln!("PC: {e:?}"); }
+        // Como `sincronizar::responder` del PC desde 71e36b67: las fotos con hora, a su grabacion.
+        repasar(raiz);
     }
+}
+
+// ------------------------------------------------------------ las fotos por su hora (28-oct-2026)
+
+/// `<raiz>/sincro/desfases.json`, como `sincronizar::por_su_hora` del PC.
+fn fichero_de_desfases(raiz: &Path) -> PathBuf {
+    raiz.join("sincro").join("desfases.json")
+}
+
+/// El codigo del PC y los de sus aparatos (los del grupo), como `por_su_hora::yo_y_mios` del PC.
+fn yo_y_mios(raiz: &Path) -> (String, std::collections::HashSet<String>) {
+    use pixpin_sincro::disco::Disco;
+    let yo = aparato();
+    let mut mios: std::collections::HashSet<String> = DiscoPc::nuevo(raiz).identidad()
+        .map(|i| i.miembros.iter().map(|m| pixpin_proyecto::codigos::de_aparato(&m.id)).collect())
+        .unwrap_or_default();
+    mios.insert(yo.clone());
+    (yo, mios)
+}
+
+/// **El repaso del PC** (`por_su_hora::repasar` de la app, sin hilo): lo que haya llegado con hora
+/// entra en su grabacion. Escribe en el registro lo que entro.
+fn repasar(raiz: &Path) -> Vec<(String, usize)> {
+    let (yo, mios) = yo_y_mios(raiz);
+    let d = pixpin_proyecto::por_su_hora::Desfases::leer(&fichero_de_desfases(raiz));
+    let hechas = pixpin_proyecto::por_su_hora::repasar_todos(raiz, &yo, &mios, &d);
+    if !hechas.is_empty() { eprintln!("PC: por su hora {hechas:?}"); }
+    hechas
+}
+
+/// Apunta lo que va adelantado el reloj del aparato `id` (como `por_su_hora::medido` del PC).
+fn medido(raiz: &Path, id: &str, desfase: i64) {
+    let f = fichero_de_desfases(raiz);
+    let mut d = pixpin_proyecto::por_su_hora::Desfases::leer(&f);
+    d.medir(&pixpin_proyecto::codigos::de_aparato(id), ahora(), desfase);
+    d.guardar(&f).unwrap();
+}
+
+/// **Una clase grabada en el PC con su reloj de pared** (`resto.reloj`, aparato = el PC): la nota de
+/// `duracion` ms y su carpeta, en el proyecto `nombre`. Graba de `inicio` a `fin` (ms desde 1970 en
+/// el reloj del PC) con una pausa `[pausa_desde, pausa_hasta]` (0 0: sin pausa). Con `todos`, abierta a
+/// los colaboradores (`["*"]`). Escribe `{proyecto, voz, carpeta}`.
+fn clase_con_reloj(raiz: &Path, a: &[String]) {
+    let n = |i: usize| a[i].parse::<i64>().unwrap();
+    let f = proyecto_llamado(raiz, &a[0]);
+    let (inicio, fin, pd, ph, duracion) = (n(1), n(2), n(3), n(4), n(5));
+    let ruta = almacen::guardar_adjunto(raiz, &f.id, "Clase.m4a", b"m4a").unwrap();
+    let mut voz = Mensaje::adjunto(Clase::Voz, "Clase.m4a", &ruta, 3, &sello(&f, 1));
+    voz.duracion_ms = duracion;
+    voz.resto.insert("grabacion".into(), serde_json::json!("clase"));
+    voz.resto.insert("capturas".into(), serde_json::json!([]));
+    let reloj = pixpin_proyecto::por_su_hora::RelojDeGrabacion {
+        aparato: aparato(), inicio, fin,
+        pausas: if pd > 0 { vec![[pd, ph]] } else { Vec::new() },
+        ..Default::default()
+    };
+    reloj.poner(&mut voz.resto);
+    if a.get(6).is_some_and(|t| t == "todos") {
+        pixpin_proyecto::por_su_hora::invitar(&mut voz.resto, pixpin_proyecto::por_su_hora::TODOS, true);
+    }
+    poner(raiz, &f, &voz);
+    let mut c = Carpeta::grabacion(&voz.id, duracion);
+    c.anadir_al_minuto(&voz.id, "", 0);
+    let car = carpeta_de_paginas::mensaje_de_grabacion("Clase con reloj", &c, &sello(&f, 2));
+    poner(raiz, &f, &car);
+    println!("{}", serde_json::json!({"proyecto": f.id, "voz": voz.id, "carpeta": car.id}));
+}
+
+/// **Una foto del PC con su hora** (`tomadaEn`, en el reloj del PC; `aparato` el del PC salvo que
+/// se diga otro) en el proyecto `nombre`. Escribe `{id, uid}`.
+fn foto_con_hora(raiz: &Path, nombre: &str, tomada_en: i64, de: Option<&String>) {
+    let f = proyecto_llamado(raiz, nombre);
+    let fichero = format!("foto-{tomada_en}.png");
+    let ruta = almacen::guardar_adjunto(raiz, &f.id, &fichero, b"\x89PNG foto del PC").unwrap();
+    let mut s = sello(&f, 9);
+    if let Some(a) = de { s.aparato = a.clone(); }
+    let mut m = Mensaje::adjunto(Clase::Imagen, &fichero, &ruta, 18, &s);
+    m.resto.insert("tomadaEn".into(), serde_json::json!(tomada_en));
+    poner(raiz, &f, &m);
+    println!("{}", serde_json::json!({"id": m.id, "uid": m.codigo_unico()}));
 }
 
 fn dirigir(raiz: &Path, puerto: u16) {
@@ -202,8 +284,11 @@ fn dirigir(raiz: &Path, puerto: u16) {
     // La vuelta del PC lleva la galeria (`vuelta::una` llama a `s.galeria` si `tiene_galeria`).
     s.con_galeria(&g);
     let mut hecho = Hecho::default();
+    // Lo que va adelantado su reloj, para poner sus fotos por su hora (`hacer_una_vuelta` del PC).
+    medido(raiz, &s.otro.id, s.desfase);
     let v = pixpin_sincro::vuelta::una(&mut s, None, &mut hecho, "", &ahora, &mut |_| {}).unwrap();
     s.adios();
+    repasar(raiz);
     println!("{:?}", v.avisos);
     println!("capturas={} tiradas={}", hecho.capturas, hecho.capturas_tiradas);
 }
@@ -397,6 +482,10 @@ fn main() {
         // Aqui `raiz` es el codigo del grupo: no hace falta disco.
         "suelto" => suelto(&a[2], a[3].parse().unwrap(), &a[4..]),
         "camara" => camara::escuchar(raiz, &a[3]),
+        // Las fotos por su hora (28-oct-2026).
+        "clase-reloj" => clase_con_reloj(raiz, &a[3..]),
+        "foto-hora" => foto_con_hora(raiz, &a[3], a[4].parse().unwrap(), a.get(5)),
+        "repasar" => println!("{}", serde_json::json!(repasar(raiz))),
         // Aqui `a[2]` es lo que se pide a la baliza: tampoco hace falta disco.
         "baliza" => baliza::orden(&a[2..]),
         _ => panic!("orden desconocida"),
@@ -444,6 +533,12 @@ mod camara {
         RELOJ.store(super::ahora(), Ordering::SeqCst);
         HORA.store(super::ahora() + 10_000_000, Ordering::SeqCst);
         let camaras = Arc::new(Mutex::new(Camaras::nuevas(raiz.join("sincro").join("camara-movil"), "Portátil")));
+        // Como el PC desde da9eab86: su codigo y su almacen, para lo que llega por su hora (§12.4).
+        {
+            let mut c = camaras.lock().unwrap();
+            c.codigo = super::aparato();
+            c.almacen = Some((raiz.to_path_buf(), hora_sin_repetir));
+        }
         let escucha = TcpListener::bind(("127.0.0.1", 0)).unwrap();
         let puerto = escucha.local_addr().unwrap().port();
         {
@@ -515,6 +610,38 @@ mod camara {
                         Err(e) => serde_json::json!({"error": e}).to_string(),
                     }
                 }
+                // La grabacion del movil que el PC conoce (§13): `{grabacion, de, desfase, ms}` o null.
+                "ajena" => con(&mut |c| match c.ajena(ahora_pc()) {
+                    Some(a) => serde_json::json!({"grabacion": a.anuncio.grabacion, "de": a.de_id, "desfase": a.desfase,
+                        "ms": a.reloj.ms_en(ahora_pc()), "titulo": a.anuncio.titulo}).to_string(),
+                    None => "null".into(),
+                }),
+                // «Captura para la grabacion del movil»: el PC le manda `fichero` al movil que escucha
+                // en `puerto`, con el minuto de su grabacion (`aporte::enviar_nueva` del PC).
+                "al-movil" => {
+                    let ajena = con(&mut |c| c.ajena(ahora_pc()).map(|a| serde_json::to_string(&(a.anuncio.grabacion.clone(), a.desfase, a.reloj.ms_en(ahora_pc()))).unwrap()).unwrap_or_default());
+                    if ajena.is_empty() { serde_json::json!({"error": "no hay grabacion del movil"}).to_string() } else {
+                        let (grabacion, desfase, ms): (String, i64, i64) = serde_json::from_str(&ajena).unwrap();
+                        let foto = pixpin_sincro::camara::FotoDeCamara {
+                            grabacion, ms: Some(ms), tomada_en: ahora_pc(), reloj: -desfase,
+                            clave: format!("pc-{}-{}", super::aparato(), ahora_pc()), ..Default::default()
+                        };
+                        match al_movil(raiz, partes[1].parse().unwrap(), Path::new(partes[2]), &foto) {
+                            Ok(ms) => serde_json::json!({"ms": ms, "enviado": foto.ms, "clave": foto.clave}).to_string(),
+                            Err(e) => serde_json::json!({"error": e}).to_string(),
+                        }
+                    }
+                }
+                // Una foto sin grabacion (§12.4) del PC al movil: solo con su hora (`tomada_en <ms>`).
+                "por-su-hora-al-movil" => {
+                    let foto = pixpin_sincro::camara::FotoDeCamara {
+                        tomada_en: partes[3].parse().unwrap(), clave: format!("pc-hora-{}", ahora_pc()), ..Default::default()
+                    };
+                    match al_movil(raiz, partes[1].parse().unwrap(), Path::new(partes[2]), &foto) {
+                        Ok(ms) => serde_json::json!({"ms": ms}).to_string(),
+                        Err(e) => serde_json::json!({"error": e}).to_string(),
+                    }
+                }
                 "fin" => break,
                 _ => format!("error: no sé qué es «{orden}»"),
             };
@@ -548,6 +675,27 @@ mod camara {
         let d = c.anunciar_camara(&anuncio, &ahora_pc).map_err(|e| e.to_string())?;
         c.adios();
         Ok((otro, true, Some(d)))
+    }
+
+    /// **El PC manda una captura a la grabacion del movil** (`aporte::mandar` del PC): saluda con
+    /// `camara1` y la manda por el `suelto` de la camara. El minuto donde quedo, o el error.
+    fn al_movil(raiz: &Path, puerto: u16, fichero: &Path, foto: &pixpin_sincro::camara::FotoDeCamara) -> Result<i64, String> {
+        use pixpin_sincro::disco::Disco;
+        let id = DiscoPc::nuevo(raiz).identidad().map_err(|e| e.to_string())?;
+        let hola = m::Hola {
+            yo: id.yo.clone(),
+            miembros: id.miembros.clone(),
+            reloj: ahora_pc(),
+            capacidades: pixpin_sincro::CAPACIDADES_CON_CAMARA.iter().map(|c| c.to_string()).collect(),
+            ..Default::default()
+        };
+        let flujo = TcpStream::connect(("127.0.0.1", puerto)).map_err(|e| e.to_string())?;
+        let mut c = Conexion::abrir(flujo, id.codigo.as_deref().unwrap_or_default(), super::nonce(), hola).map_err(|e| e.to_string())?;
+        if !c.sabe_de_camara() { c.adios(); return Err("el movil no sabe de la camara".into()) }
+        let nombre = fichero.file_name().unwrap().to_string_lossy().into_owned();
+        let r = c.mandar_foto(fichero, &nombre, foto).map_err(|e| e.to_string());
+        c.adios();
+        r
     }
 
     /// Lo que hace `grabar_clase::guardar` al «Terminar»: la nota de voz y su carpeta (como
