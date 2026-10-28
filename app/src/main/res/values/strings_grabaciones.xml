@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Las grabaciones (28-oct-2026): la cola de pasar a texto, la reunión presencial que se nota y se
+  termina, la letra con tiempos y «Estudiar la clase» para todo lo grabado. En su propio archivo para
+  no pisar lo que otros cambios añaden al final de strings.xml.
+-->
+<resources>
+    <!-- La cola de pasar a texto. Ver guardados/ColaDeTexto.kt y guardados/PasarATexto.kt. -->
+    <string name="pasar_a_texto_titulo">Pasando a texto…</string>
+    <string name="pasar_a_texto_de">Pasando a texto «%1$s»</string>
+    <string name="pasar_a_texto_letra">Poniendo los tiempos a la letra de «%1$s»</string>
+    <string name="pasar_a_texto_canal">Pasar a texto: avisos</string>
+    <string name="pasar_a_texto_falta_el_modelo_titulo">Grabaciones esperando a pasarse a texto: %1$d</string>
+    <string name="pasar_a_texto_falta_el_modelo">Falta el modelo de voz (Whisper, unos 160 MB, solo la primera vez) y no se pudo bajar porque no hay conexión. En cuanto haya internet se baja y se pasa a texto solo. También puedes bajarlo ya en Ajustes › Voz › «Bajar», o importarlo allí si lo bajaste en otro aparato.</string>
+    <string name="pasar_a_texto_reintentar">Reintentar</string>
+    <string name="pasar_a_texto_abrir_ajustes">Abrir Ajustes</string>
+    <string name="pasar_a_texto_en_cola">En cola para pasar a texto…</string>
+    <string name="pasar_a_texto_en_curso">Pasando a texto… %1$d %%</string>
+    <string name="pasar_a_texto_esperando_modelo">Esperando el modelo de voz: se pasará a texto en cuanto haya internet. Ajustes › Voz › «Bajar».</string>
+    <string name="pasar_a_texto_ahora">Pasar a texto</string>
+
+    <!-- La letra con tiempos. Ver guardados/AlinearLetra.kt. -->
+    <string name="letra_no_se_alineo">No se pudieron poner los tiempos: lo que se oye no se parece a la letra. Prueba «Sincronizar la letra» a toques.</string>
+    <string name="letra_no_se_oye">No se oye nada que pasar a texto en esta canción.</string>
+    <string name="letra_con_tiempos_lista">La letra de «%1$s» ya tiene sus tiempos. Ábrela para revisarla.</string>
+    <string name="letra_poner_tiempos">Poner los tiempos a la letra</string>
+    <string name="letra_poniendo_tiempos">Escuchando la canción… %1$d %%</string>
+    <string name="letra_propuesta_titulo">La letra con sus tiempos</string>
+    <string name="letra_propuesta_texto">La letra es la tuya, tal cual; los tiempos salen de lo que se oye. Revísala: puedes aceptarla, seguir editándola o sincronizarla a toques.</string>
+    <string name="letra_propuesta_de_lo_oido">No había letra pegada: esto es lo que se oye, con sus tiempos.</string>
+    <string name="letra_aceptar">Aceptar</string>
+    <string name="letra_seguir_editando">Seguir editando</string>
+    <string name="letra_editar_titulo">Escribir o pegar la letra</string>
+    <string name="letra_sincronizar">Sincronizar la letra</string>
+    <string name="letra_copiar_lrc">Copiar como LRC</string>
+    <string name="letra_mas_grande">Letra más grande</string>
+    <string name="letra_mas_pequena">Letra más pequeña</string>
+    <string name="letra_sin_letra">Esta canción aún no tiene letra</string>
+    <string name="letra_sincronizar_primero">Primero escribe o pega la letra</string>
+    <string name="letra_sincronizar_pista">Toca «Marcar» justo cuando empiece cada línea</string>
+    <string name="letra_sincronizada">Letra sincronizada</string>
+    <string name="letra_copiada_lrc">Letra copiada en LRC</string>
+    <string name="estudiar_mas">Más</string>
+    <string name="estudiar_editar_texto">Editar el texto</string>
+    <string name="estudiar_volver_a_pasar">Volver a pasar a texto</string>
+
+    <!-- La reunión presencial: se nota y se termina. Ver guardados/ReunionPresencialService.kt. -->
+    <string name="reunion_notif_pausa">Reunión en pausa</string>
+    <string name="reunion_sigue">Sigue grabando</string>
+    <string name="reunion_ya_no">La reunión ya terminó</string>
+    <string name="reunion_en_curso">Reunión presencial</string>
+    <string name="reunion_sin_mirilla">Este teléfono no da la vista previa a la vez que graba: las fotos y los clips se hacen igual (mira el contador).</string>
+    <string name="reunion_foto_en_curso">foto en camino…</string>
+</resources>

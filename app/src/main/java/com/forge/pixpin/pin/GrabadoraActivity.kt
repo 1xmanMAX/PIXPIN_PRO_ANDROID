@@ -256,7 +256,8 @@ class GrabadoraActivity : ComponentActivity() {
             nombre = "Nota de voz " + String.format(java.util.Locale.ROOT, "%tH:%<tM", ahora),
             duracionMs = Voz.duracion(archivo.absolutePath), picos = picos?.lista().orEmpty()
         )
-        MensajesStore(this).anadir(m)
+        // Lo grabado se pasa a texto siempre (28-oct-2026). Ver [com.forge.pixpin.guardados.ColaDeTexto].
+        MensajesStore(this).anadir(m, transcribir = true)
         guardado = m
         fase = Fase.GUARDADA
     }

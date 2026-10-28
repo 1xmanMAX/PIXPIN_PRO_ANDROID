@@ -781,6 +781,12 @@
             android:name=".guardados.EstudiarClaseActivity"
             android:exported="false"
             android:theme="@style/Theme.PixPin" />
+        <!-- La reunión presencial en marcha, con su mirilla (28-oct-2026). Ver guardados/ReunionEnCursoActivity. -->
+        <activity
+            android:name=".guardados.ReunionEnCursoActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.PixPin" />
         <activity
             android:name=".guardados.BibliotecaDeAudioActivity"
             android:exported="false"

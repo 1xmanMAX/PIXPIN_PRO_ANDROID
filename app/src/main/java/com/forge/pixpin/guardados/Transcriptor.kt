@@ -229,7 +229,13 @@ object Transcriptor {
         class Texto(
             val texto: String, val avisos: Int = 0, val segmentos: List<Segmento> = emptyList(),
             /** El texto ya puesto por párrafos con su minuto y, por tramos, con su nombre delante. Null: se arma con [conTiempos]. */
-            val porParrafos: String? = null
+            val porParrafos: String? = null,
+            /**
+             * **Los trozos tal como los dio el motor**, antes de juntarlos en líneas de 15 s
+             * (28-oct-2026): palabras de Vosk, tandas de Whisper. Es lo que usa [AlinearLetra] para
+             * ponerle tiempos a una letra: cuanto más finos, mejor cae cada línea.
+             */
+            val trozos: List<Segmento> = segmentos
         ) : Resultado()
         /** El modelo del idioma no está en el aparato y no se pudo bajar (sin red). */
         object DescargandoIdioma : Resultado()
@@ -270,7 +276,13 @@ object Transcriptor {
         val principal = Handler(Looper.getMainLooper())
         val app = context.applicationContext
         Thread {
-            val r = runCatching { transcribirAqui(app, archivo, idioma ?: idiomaElegido(app), avance, tramos) }.getOrElse { e ->
+            // **En primer plano** (28-oct-2026): con la app fuera, sin un servicio delante, Android
+            // congela o mata el proceso a media transcripción. Ver [PasarATextoService] y [ColaDeTexto].
+            val r = runCatching {
+                PasarATextoService.mientras(app, app.getString(com.forge.pixpin.R.string.pasar_a_texto_titulo), descarga = false) { aviso ->
+                    transcribirAqui(app, archivo, idioma ?: idiomaElegido(app), { avance(it); aviso(it) }, tramos)
+                }
+            }.getOrElse { e ->
                 android.util.Log.e("PixPinVoz", "transcribir: " + e, e)
                 Resultado.Fallo(if (e is UnsatisfiedLinkError || e is NoClassDefFoundError) SIN_MOTOR else FALLO_INTERNO, resumenDe(e))
             }
@@ -395,7 +407,7 @@ object Transcriptor {
             // `Transcripcion.segmentos` del PC): palabras de Vosk o tandas de Whisper juntadas en
             // líneas de hasta 15 s. Juntar lo ya juntado no cambia nada, así que [conTiempos] y los
             // turnos dan lo mismo.
-            return Resultado.Texto(segmentos.joinToString(" ") { it.texto }, 0, lineas(segmentos))
+            return Resultado.Texto(segmentos.joinToString(" ") { it.texto }, 0, lineas(segmentos), trozos = segmentos)
         }
     }
 

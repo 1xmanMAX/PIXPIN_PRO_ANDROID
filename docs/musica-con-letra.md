@@ -96,9 +96,37 @@ corchetes) hasta que se abra y se guarde en el teléfono, que lo convierte.
 |---|---|
 | Adjuntar → **Música** (elegir audio + letra, «Pegar la letra copiada») | `guardados/CancionNuevaActivity.kt` |
 | Tarjeta de música en el chat (portada, título, artista) | `guardados/TarjetaDeMusica.kt` |
-| Karaoke, editor de letra y «Sincronizar la letra» | `guardados/MusicaActivity.kt` |
+| Cantarla: **«Estudiar la clase»** con su cartel (la línea que suena en grande), el tamaño de la letra, editarla, «Sincronizar la letra», «Poner los tiempos a la letra» y «Copiar como LRC» (28-oct-2026) | `guardados/EstudiarClaseActivity.kt` |
+| El editor de la letra y el sincronizador a toques | `guardados/LetraEnPantalla.kt` |
+| `MusicaActivity` (el karaoke del 27-oct): ahora solo un desvío a la pantalla de estudiar | `guardados/MusicaActivity.kt` |
 | Leer LRC / guardar / línea actual / sincronizador (puro) | `guardados/LetraDeCancion.kt` |
-| Biblioteca de audio: la música abre el karaoke | `guardados/BibliotecaDeAudioActivity.kt` |
+| **Poner los tiempos con lo que se oye** (alineación de la letra pegada con la transcripción, puro) | `guardados/AlinearLetra.kt` |
+| La cola que oye la canción en segundo plano | `guardados/ColaDeTexto.kt`, `guardados/PasarATexto.kt` |
+| Biblioteca de audio: la música abre la pantalla de estudiar | `guardados/BibliotecaDeAudioActivity.kt` |
+
+### Los tiempos, con lo que se oye (28-oct-2026)
+
+El usuario: «para la música, que también la transcriba, pero con un sistema inteligente: yo pego la
+letra (el texto bueno); la transcripción da los tiempos; que compare las dos y las fusione en una letra
+con tiempos».
+
+- Al guardar una canción sin tiempos (Adjuntar → Música) entra en la cola de pasar a texto: se oye
+  entera con el motor de voz elegido (Whisper por defecto) y **se alinea lo oído con la letra pegada**.
+  En «Estudiar la clase», ⋮ → «Poner los tiempos a la letra» hace lo mismo a mano y enseña la propuesta
+  para aceptarla, seguir editándola o dejarla; «Sincronizar la letra» a toques sigue ahí para afinar.
+- **La alineación** (`AlinearLetra`): palabras normalizadas (minúsculas, sin tildes ni signos) de los
+  dos lados, Needleman–Wunsch semiglobal (+3 iguales, +2 suenan igual —b/v, c/s/z, ll/y, h muda—, +1
+  parecidas, −2 distintas, −1 saltarse una; los huecos de los extremos gratis). Cada línea toma el
+  tiempo de su primera palabra bien alineada (iguales de 3+ letras o que suenan igual de 4+), menos las
+  de delante a ritmo de canto; las que no tienen ninguna se reparten entre sus vecinas por palabras.
+  Aguanta palabras mal oídas, estribillos repetidos, estrofas saltadas o de más y una intro hablada.
+  Determinista y sin red; el asistente en la nube no hace falta.
+- **El texto de la letra no cambia ni una letra**: solo se le ponen los minutos. Lo que se guarda es el
+  formato de siempre (`[m:ss] línea`, un renglón en blanco entre líneas, `estadoDelTexto: "letra"`), así
+  que **el PC no tiene que cambiar nada**: lo lee como cualquier letra con tiempos.
+- Sin letra pegada, lo oído se guarda como letra con tiempos (frases de unos 6 s).
+- Una letra que el usuario cambió mientras se oía la canción no se pisa: los tiempos solo se guardan si
+  la letra sigue igual que cuando se empezó.
 
 En el chat, un audio es **tarjeta de música** cuando `esMusica` (lo anterior: lo marca solo
 `MensajesStore.anadir` si el archivo trae etiquetas de canción, o al entrar por Adjuntar → Música, o

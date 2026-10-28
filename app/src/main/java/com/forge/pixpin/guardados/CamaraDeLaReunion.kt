@@ -46,6 +46,16 @@ import kotlin.coroutines.resume
  * no deja elegir HEVC ni el sonido: aquí va **HEVC por hardware si el teléfono lo tiene, si no H.264**,
  * a 30 fps y a los bits de [Presencial.bitsDeLaReunion], con **AAC mono a 48 000 y 96 kb/s**, como el
  * PC. El giro del sensor se apunta en el MP4 ([MediaRecorder.setOrientationHint]), sin recomprimir.
+ *
+ * ## La mirilla: ver lo que se fotografía (28-oct-2026)
+ *
+ * El usuario: «puede ser un pequeño cuadro donde vea que estoy tomando fotos o grabando». Se ata un
+ * **segundo `Preview`, pequeño** ([vista], a lo más 640×480), cuya superficie la pone quien la
+ * enseña: la burbuja flotante o la pantalla de la reunión en la app ([ponerMirilla]); sin nadie
+ * mirando, se le quita la superficie y la cámara no la alimenta. Con la cámara de las fotos son dos
+ * flujos (PRIV + JPEG, lo que da cualquier Android); grabando vídeo, tres. **Si el teléfono no ata
+ * los tres**, se suelta la mirilla mientras dura el vídeo ([mirillaParada]) y vuelve al pararlo: el
+ * vídeo y las fotos mandan; la burbuja enseña entonces solo el contador.
  */
 class CamaraDeLaReunion(private val context: Context, private val duenio: LifecycleOwner) {
 
@@ -58,11 +68,23 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
     private var grabadora: MediaRecorder? = null
     private var superficieLibre: CompletableDeferred<Unit>? = null
 
+    /** La mirilla atada (null si el teléfono no la deja). */
+    private var vista: Preview? = null
+    private var proveedorDeLaVista: Preview.SurfaceProvider? = null
+
+    /** Si hay mirilla que enseñar ahora (atada y no parada por el vídeo). */
+    val conMirilla: Boolean get() = vista != null && !mirillaParada
+
+    /** Si se soltó la mirilla para poder grabar el vídeo (el teléfono no daba para los tres flujos). */
+    var mirillaParada = false
+        private set
+
     /** El giro de la pantalla al empezar (`Surface.ROTATION_*`): el del vídeo y el de las fotos. */
     var giro: Int = android.view.Surface.ROTATION_0
         set(v) {
             field = v
             runCatching { fotos?.targetRotation = v }
+            runCatching { vista?.targetRotation = v }
         }
 
     /** El id de la cámara que se usa (para recordarla), si hay. */
@@ -121,10 +143,45 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
             )
             .setTargetRotation(giro)
             .build()
-        return runCatching {
+        val bien = runCatching {
             p.bindToLifecycle(duenio, s, ic)
             fotos = ic
         }.onFailure { Log.w(TAG, "no se pudo atar la cámara de las fotos", it) }.isSuccess
+        if (bien) atarMirilla()
+        return bien
+    }
+
+    /** **La mirilla**, pequeña y al lado de las fotos. Si no se deja, sin ella (y nada más cambia). */
+    private fun atarMirilla(): Boolean {
+        val p = proveedor ?: return false
+        val s = selector ?: return false
+        val pv = vista ?: Preview.Builder()
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_4_3_FALLBACK_AUTO_STRATEGY)
+                    .setResolutionStrategy(ResolutionStrategy(Size(640, 480), ResolutionStrategy.FALLBACK_RULE_CLOSEST_LOWER_THEN_HIGHER))
+                    .build()
+            )
+            .setTargetRotation(giro)
+            .build()
+        val bien = runCatching {
+            p.bindToLifecycle(duenio, s, pv)
+            pv.setSurfaceProvider(principal, proveedorDeLaVista)
+        }.onFailure {
+            Log.w(TAG, "sin mirilla: el teléfono no la ata con lo demás", it)
+            runCatching { p.unbind(pv) }
+        }.isSuccess
+        vista = if (bien) pv else null
+        return bien
+    }
+
+    /**
+     * **Dónde se ve la mirilla**: la superficie de un `PreviewView` (la burbuja o la pantalla de la
+     * reunión), o null para que la cámara deje de alimentarla.
+     */
+    fun ponerMirilla(proveedor: Preview.SurfaceProvider?) {
+        proveedorDeLaVista = proveedor
+        runCatching { vista?.setSurfaceProvider(principal, proveedor) }
     }
 
     /**
@@ -202,16 +259,39 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
                 listo.complete(bien)
             }
         }
-        val atado = runCatching { p.bindToLifecycle(duenio, s, pv) }
+        var atado = runCatching { p.bindToLifecycle(duenio, s, pv) }
             .onFailure { Log.w(TAG, "no se pudo atar el vídeo con las fotos", it) }.isSuccess
-        if (!atado) return false
+        if (!atado && vista != null) {
+            // Tres flujos no caben en este teléfono: fuera la mirilla mientras se graba.
+            vista?.let { v -> runCatching { p.unbind(v) } }
+            mirillaParada = true
+            atado = runCatching { p.bindToLifecycle(duenio, s, pv) }
+                .onFailure { Log.w(TAG, "no se pudo atar el vídeo ni sin la mirilla", it) }.isSuccess
+        }
+        if (!atado) {
+            volverLaMirilla()
+            return false
+        }
         mirilla = pv
         val bien = withTimeoutOrNull(5_000) { listo.await() } ?: false
         if (!bien) {
             runCatching { p.unbind(pv) }
             mirilla = null
+            volverLaMirilla()
         }
         return bien
+    }
+
+    /** La mirilla, otra vez atada si se soltó para el vídeo. */
+    private fun volverLaMirilla() {
+        if (!mirillaParada) return
+        mirillaParada = false
+        val v = vista ?: return
+        val bien = runCatching {
+            proveedor?.bindToLifecycle(duenio, selector ?: return, v)
+            v.setSurfaceProvider(principal, proveedorDeLaVista)
+        }.isSuccess
+        if (!bien) vista = null
     }
 
     /**
@@ -229,6 +309,7 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
         altoDelVideo = 0
         val bien = runCatching { g.stop() }.isSuccess
         runCatching { g.release() }
+        volverLaMirilla()
         return bien
     }
 
@@ -243,9 +324,12 @@ class CamaraDeLaReunion(private val context: Context, private val duenio: Lifecy
 
     /** Suelta la cámara entera. Un vídeo a medias se para antes ([pararVideo]). */
     fun cerrar() {
+        runCatching { vista?.setSurfaceProvider(null) }
         runCatching { proveedor?.unbindAll() }
         fotos = null
         mirilla = null
+        vista = null
+        proveedorDeLaVista = null
     }
 
     /**

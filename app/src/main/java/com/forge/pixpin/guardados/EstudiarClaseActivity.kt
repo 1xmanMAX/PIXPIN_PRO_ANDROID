@@ -17,10 +17,23 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.TextDecrease
+import androidx.compose.material.icons.filled.TextIncrease
+import androidx.compose.material.icons.filled.Timer
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.ui.graphics.toArgb
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.SubtitlesOff
@@ -161,6 +174,35 @@ import java.io.File
  *   el cristal, y un toque los enseña o los esconde (sonando se van solos). Atrás sale de ella.
  *
  * El riel y lo de encima de la imagen van y vienen con **las barras visibles** (`barrasVisibles`).
+ *
+ * **Una sola pantalla para estudiar lo grabado** (28-oct-2026, el usuario: «en las grabaciones de mi
+ * clase hay dos interfaces que se ven y funcionan parecido pero son distintas, para la misma clase»).
+ * Esta es ya la única: la de la letra ([LetraActivity]) y el karaoke de la música ([MusicaActivity])
+ * son desvíos hasta aquí, así que la tarjeta de la carpeta, «Estudiar», dos toques en el texto de la
+ * nota, el título de la barra del reproductor del chat, «Letra» del menú, la tarjeta de música y la
+ * biblioteca de audio llegan todos a esta. La carpeta de la grabación ([CarpetaActivity] con
+ * «Abrir la carpeta») se queda como **lista de ficheros**: lo grabado y lo adjuntado, sin reproductor
+ * ni texto propios (tocar algo grabado lo abre aquí, en su minuto).
+ *
+ * - **Sin imagen** (una nota de voz suelta, una canción): arriba va **el cartel**, con la línea que
+ *   suena en grande y la siguiente debajo; con una canción, su portada, título y artista. A pantalla
+ *   entera es el karaoke.
+ * - **Una canción** (`estadoDelTexto: "letra"`, ver [LetraDeCancion]) trae lo del karaoke: el tamaño de
+ *   la letra, escribir o pegar la letra, «Sincronizar la letra» a toques, «Poner los tiempos a la
+ *   letra» (lo que se oye alineado con la letra pegada, [AlinearLetra], con la propuesta para aceptar o
+ *   seguir editando) y copiarla en LRC. Lo que no va con una canción se esconde solo: la tira de
+ *   capturas y los clips (no los tiene), el marcador, el lápiz de anotar y compartir la clase.
+ * - **Cada línea con su minuto se toca para ir ahí** y sonar. Mientras se pasa a texto se dice por dónde
+ *   va (o si espera al modelo de voz, y cómo bajarlo): ver [ColaDeTexto].
+ *
+ * **De borde a borde** (28-oct-2026, el usuario: «su color debe llegar hasta la cámara; ahora hay una
+ * franja blanca, absurdo»). La franja era la ventana: se escondía la barra de estado pero la ventana
+ * no tenía permiso para entrar en el hueco de la cámara (`layoutInDisplayCutoutMode` por defecto), y
+ * Android rellenaba ese hueco con el fondo del tema, blanco. Ahora la ventana entra en el hueco
+ * ([deBordeABorde]), el fondo de la pantalla (la imagen negra o el color del tema) llega arriba del
+ * todo, la barra de estado se ve transparente encima con los iconos claros u oscuros según lo que haya
+ * debajo ([barrasDelSistema]) y lo que se toca se aparta de la muesca, la barra de estado y la de
+ * navegación (`WindowInsets.safeDrawing`). Tumbado y a pantalla entera, las barras se esconden.
  */
 class EstudiarClaseActivity : ComponentActivity() {
 
@@ -168,7 +210,7 @@ class EstudiarClaseActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         val id = intent.getStringExtra(LA_NOTA).orEmpty()
         val inicio = intent.getLongExtra(EL_MINUTO, 0L)
-        aPantallaCompleta()
+        deBordeABorde()
         setContent {
             // **Claro u oscuro, el mismo de los visores y recordado** (27-oct-2026, pedido del
             // usuario). Antes arrancaba con lo de los Ajustes (`null`), que con el tema Cosmos era el
@@ -193,6 +235,44 @@ class EstudiarClaseActivity : ComponentActivity() {
         val clip: Mensaje? = null, val duracionMs: Long = 0, val delMovil: Boolean = false
     )
 
+    /**
+     * **La ventana de borde a borde** (28-oct-2026): dibuja detrás de las barras del sistema y **dentro
+     * del hueco de la cámara** (sin esto Android dejaba ahí una franja con el fondo del tema, blanca), con
+     * las barras transparentes. Quién se aparta de qué lo dice cada pieza con `WindowInsets.safeDrawing`.
+     */
+    private fun deBordeABorde() {
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        @Suppress("DEPRECATION")
+        run {
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+        }
+        runCatching { window.isStatusBarContrastEnforced = false; window.isNavigationBarContrastEnforced = false }
+        window.attributes = window.attributes.apply {
+            layoutInDisplayCutoutMode = if (android.os.Build.VERSION.SDK_INT >= 30)
+                android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+            else android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        }
+    }
+
+    /**
+     * **Las barras del sistema según lo que haya debajo**: escondidas (salen con un deslizamiento) si
+     * [esconder] —tumbado o a pantalla entera—; si no, a la vista y transparentes, con **iconos claros
+     * sobre lo oscuro** ([oscuroArriba]: la imagen negra, o el tema de noche) y oscuros sobre lo claro.
+     * La de navegación, sobre el fondo del tema ([oscuroAbajo]). Y el fondo de la ventana, el de la
+     * pantalla: nada blanco asoma al girar.
+     */
+    private fun barrasDelSistema(esconder: Boolean, oscuroArriba: Boolean, oscuroAbajo: Boolean, fondo: Int) {
+        val c = WindowInsetsControllerCompat(window, window.decorView)
+        c.isAppearanceLightStatusBars = !oscuroArriba
+        c.isAppearanceLightNavigationBars = !oscuroAbajo
+        if (esconder) {
+            c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            c.hide(WindowInsetsCompat.Type.systemBars())
+        } else c.show(WindowInsetsCompat.Type.systemBars())
+        window.decorView.setBackgroundColor(fondo)
+    }
+
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun Pantalla(id: String, inicio: Long, alCambiarTema: (Boolean) -> Unit) {
@@ -208,7 +288,14 @@ class EstudiarClaseActivity : ComponentActivity() {
             m?.let { n -> GrabarClase.capturasDe(n).mapNotNull { e -> porId[e.id]?.takeIf { it.ruta?.let { r -> File(r).exists() } == true } } }.orEmpty()
         }
         val video = remember(todos, m) { m?.let { videoDeLaLetra(it, todos) } }
-        val lineas = remember(m?.transcripcion) { EstudiarClase.lineasDe(m?.transcripcion) }
+        // **Una canción se estudia aquí también** (28-oct-2026): su letra, renglón a renglón. Ver [EstudiarClase.lineasDeLaNota].
+        val esCancion = m?.esMusica == true
+        val lineas = remember(m?.transcripcion, esCancion) { EstudiarClase.lineasDeLaNota(m) }
+        val letra = remember(m?.transcripcion, esCancion) { if (esCancion) LetraDeCancion.leer(m?.transcripcion.orEmpty()) else null }
+        // Sin vídeo ni capturas no hay imagen: arriba va el cartel con la línea que suena.
+        val datosDeCancion by androidx.compose.runtime.produceState<DatosDeCancion.Datos?>(null, m?.ruta, esCancion) {
+            value = if (esCancion) m?.ruta?.let { r -> withContext(Dispatchers.IO) { runCatching { DatosDeCancion.de(r, 512) }.getOrNull() } } else null
+        }
         // Los marcadores y las banderitas, juntos y en orden: la ventana del PC enseña los dos.
         // Y los clips de la clase (`clips` de la nota), con ▶ en su minuto: los de la cámara
         // (`fuente: "camara"`, la reunión presencial de aquí o del PC) y los del móvil (`"movil"`).
@@ -227,7 +314,29 @@ class EstudiarClaseActivity : ComponentActivity() {
         val tiemposDeCapturas = remember(capturas) { capturas.map { it.first } }
 
         val estado by Reproductor.estado.collectAsState()
-        val titulo = m?.let { tituloDeAudio(this, it) }.orEmpty()
+        val titulo = m?.let { if (esCancion) DatosDeCancion.titulo(this, it, datosDeCancion) else tituloDeAudio(this, it) }.orEmpty()
+        // **Por dónde suena y con qué volumen**: por el auricular de llamadas, los botones del volumen
+        // son los de la llamada (como en el karaoke de antes). Ver [com.forge.pixpin.audio.SalidaDeAudio].
+        val salida by com.forge.pixpin.audio.SalidaDeAudio.ruta.collectAsState()
+        LaunchedEffect(salida) {
+            volumeControlStream = if (salida == com.forge.pixpin.audio.DecisionDeSalida.Ruta.OIDO) android.media.AudioManager.STREAM_VOICE_CALL
+            else android.media.AudioManager.STREAM_MUSIC
+        }
+        // Lo de pasar a texto: por dónde va y si está en la cola (o esperando al modelo). Ver [ColaDeTexto].
+        val avances by MensajesStore.avances.collectAsState()
+        val cola by PasarATexto.cola.collectAsState()
+        val avanceDelTexto = m?.let { avances[it.id] }
+        val enCola = m?.let { n -> cola.firstOrNull { it.id == n.id } }
+        // El tamaño del texto (el de la letra del karaoke y de la pantalla de la letra de antes).
+        var tamano by rememberSaveable { mutableIntStateOf(if (m?.esMusica == true) 22 else 17) }
+        var menu by remember { mutableStateOf(false) }
+        var editandoLetra by remember { mutableStateOf(false) }
+        var sincronizando by remember { mutableStateOf<SincronizadorDeLetra?>(null) }
+        var toques by remember { mutableIntStateOf(0) }
+        // «Poner los tiempos a la letra»: lo que lleva (null: no se está haciendo) y la propuesta.
+        var poniendoTiempos by remember { mutableStateOf<Float?>(null) }
+        var propuesta by remember { mutableStateOf<String?>(null) }
+        var textoParaEditar by remember { mutableStateOf<String?>(null) }
         val esta = m?.ruta != null && estado.ruta == m.ruta
         val posMs = if (esta) estado.posicionMs.toLong() else 0L
         val durMs = (if (esta && estado.duracionMs > 0) estado.duracionMs else m?.duracionMs ?: 0).toLong()
@@ -251,6 +360,13 @@ class EstudiarClaseActivity : ComponentActivity() {
         var compartiendo by remember { mutableStateOf<com.forge.pixpin.ui.Compartible?>(null) }
         val alcance = androidx.compose.runtime.rememberCoroutineScope()
         val irA: (Long) -> Unit = { ms -> m?.let { irA(it, ms) } }
+        /** Una línea tocada: a su minuto y sonando (para saltar de una a otra deprisa). */
+        val irYSonar: (Long) -> Unit = { ms ->
+            m?.let { n ->
+                this@EstudiarClaseActivity.irA(n, ms)
+                if (!Reproductor.estado.value.sonando) Reproductor.seguir()
+            }
+        }
         // Lo que se elige se guarda al girar el teléfono: girar rehace la actividad.
         var seguir by rememberSaveable { mutableStateOf(true) }
         var verVideo by rememberSaveable { mutableStateOf(true) }
@@ -273,6 +389,7 @@ class EstudiarClaseActivity : ComponentActivity() {
         // Lo que se ve: el vídeo callado siguiendo a la nota, o la captura del minuto (con lo
         // anotado encima). Se acerca como un lienzo; ver [com.forge.pixpin.ui.Encuadre].
         val conVideo = video != null && (verVideo || capturas.isEmpty())
+        val hayImagen = video != null || capturas.isNotEmpty()
         val capturaActual = EstudiarClase.ultimoAntes(tiemposDeCapturas, posMs)
         val fotoVista = if (conVideo) null else capturaActual?.let { fotos.getOrNull(it) }
         var imagen by remember { mutableStateOf<ImageBitmap?>(null) }
@@ -330,6 +447,40 @@ class EstudiarClaseActivity : ComponentActivity() {
             }
         }
 
+        /** «Poner los tiempos a la letra»: se oye la canción y se alinea con la letra; sale la propuesta. */
+        fun ponerTiempos() {
+            val n = m ?: return
+            if (poniendoTiempos != null) return
+            poniendoTiempos = 0f
+            menu = false
+            PasarATexto.proponerTiempos(
+                this@EstudiarClaseActivity, n, n.transcripcion,
+                avance = { a -> runOnUiThread { if (poniendoTiempos != null) poniendoTiempos = a } }
+            ) { p, porque ->
+                poniendoTiempos = null
+                if (p != null) propuesta = p
+                else Toast.makeText(this@EstudiarClaseActivity, porque ?: getString(R.string.letra_no_se_alineo), Toast.LENGTH_LONG).show()
+            }
+        }
+
+        /** «Sincronizar la letra»: desde el principio y sonando, un toque al empezar cada línea. */
+        fun empezarASincronizar() {
+            menu = false
+            val r = m?.ruta ?: return
+            val sinc = SincronizadorDeLetra.de(letra ?: LetraDeCancion.leer(m.transcripcion.orEmpty()))
+            if (sinc.textos.isEmpty()) {
+                Toast.makeText(this@EstudiarClaseActivity, R.string.letra_sincronizar_primero, Toast.LENGTH_SHORT).show()
+                editandoLetra = true
+                return
+            }
+            if (Reproductor.estado.value.ruta != r) Reproductor.cargar(r, titulo, arrancar = false)
+            Reproductor.irAMs(0)
+            if (!Reproductor.estado.value.sonando) Reproductor.seguir()
+            pantallaEntera = false
+            sincronizando = sinc
+            Toast.makeText(this@EstudiarClaseActivity, R.string.letra_sincronizar_pista, Toast.LENGTH_LONG).show()
+        }
+
         // Las piezas de la pantalla, como funciones de aquí (comparten el estado); [Imagen] la última, que usa las demás.
         @Composable
         fun BarraConHoras(sobreCristal: Boolean = false) {
@@ -385,7 +536,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                 }
                 com.forge.pixpin.audio.BotonDeSalida(tamano = 40.dp)
                 Box(Modifier.weight(1f))
-                IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
+                // Una canción no lleva marcadores (28-oct-2026): lo que no va con ella se esconde.
+                if (!esCancion) IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Filled.BookmarkAdd, getString(R.string.estudiar_marcador))
                 }
                 if (pantallaEntera) IconButton(onClick = { pantallaEntera = false }, modifier = Modifier.size(40.dp)) {
@@ -424,7 +576,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                     }
                     // Altavoz o auricular de llamadas (27-oct-2026). Ver [com.forge.pixpin.audio.SalidaDeAudio].
                     com.forge.pixpin.audio.BotonDeSalida(tamano = 40.dp)
-                    IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
+                    if (!esCancion) IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.BookmarkAdd, getString(R.string.estudiar_marcador))
                     }
                     BotonDelTexto(textoEnApaisada) { textoEnApaisada = !textoEnApaisada }
@@ -455,12 +607,48 @@ class EstudiarClaseActivity : ComponentActivity() {
         fun Texto(modifier: Modifier) {
             Column(modifier) {
                 Box(Modifier.weight(1f).fillMaxWidth()) {
-                    if (filas.isEmpty()) {
-                        Text(
-                            getString(if (capturas.isEmpty()) R.string.estudiar_sin_capturas else R.string.estudiar_sin_texto),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.align(Alignment.Center).padding(24.dp)
-                        )
+                    val sinc = sincronizando
+                    if (sinc != null) ListaParaSincronizar(sinc, toques, tamano)
+                    else if (filas.isEmpty()) {
+                        // **Sin texto aún**: por qué y qué hacer (28-oct-2026, ver [ColaDeTexto]).
+                        Column(
+                            Modifier.align(Alignment.Center).padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            val avance = avanceDelTexto ?: poniendoTiempos
+                            when {
+                                avance != null -> {
+                                    Text(
+                                        getString(if (esCancion) R.string.letra_poniendo_tiempos else R.string.pasar_a_texto_en_curso, (avance * 100).toInt()),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    androidx.compose.material3.LinearProgressIndicator(
+                                        progress = { avance.coerceIn(0f, 1f) }, modifier = Modifier.padding(top = 10.dp).width(200.dp)
+                                    )
+                                }
+                                enCola?.faltaElModelo == true -> {
+                                    Text(getString(R.string.pasar_a_texto_esperando_modelo), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    TextButton(onClick = { com.forge.pixpin.ConfiguracionActivity.abrir(this@EstudiarClaseActivity) }) {
+                                        Text(getString(R.string.pasar_a_texto_abrir_ajustes))
+                                    }
+                                }
+                                enCola != null -> Text(getString(R.string.pasar_a_texto_en_cola), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                esCancion -> {
+                                    Text(getString(R.string.letra_sin_letra), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    TextButton(onClick = { editandoLetra = true }) { Text(getString(R.string.letra_editar_titulo)) }
+                                    if (m?.ruta != null) TextButton(onClick = { ponerTiempos() }) { Text(getString(R.string.letra_poner_tiempos)) }
+                                }
+                                else -> {
+                                    Text(
+                                        getString(if (capturas.isEmpty()) R.string.estudiar_sin_capturas else R.string.estudiar_sin_texto),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    if (m?.ruta != null && File(m.ruta).exists()) TextButton(onClick = {
+                                        MensajesStore(this@EstudiarClaseActivity).transcribir(m)
+                                    }) { Text(getString(R.string.pasar_a_texto_ahora)) }
+                                }
+                            }
+                        }
                     } else LazyColumn(state = texto, modifier = Modifier.fillMaxSize()) {
                         itemsIndexed(filas) { k, f ->
                             when (f) {
@@ -470,15 +658,19 @@ class EstudiarClaseActivity : ComponentActivity() {
                                     Column(
                                         Modifier.fillMaxWidth()
                                             .background(if (activa) MaterialTheme.colorScheme.primary.copy(alpha = 0.10f) else Color.Transparent)
-                                            .clickable(enabled = l.ms != null) { l.ms?.let(irA) }
+                                            .clickable(enabled = l.ms != null) { l.ms?.let { irYSonar(it) } }
                                             .padding(horizontal = 16.dp, vertical = 6.dp)
                                     ) {
                                         l.ms?.let {
-                                            Text(Transcriptor.marcaDeTiempo(it.toInt()), fontSize = 12.sp,
+                                            Text(Transcriptor.marcaDeTiempo(it.toInt()), fontSize = (tamano * 0.7f).sp,
                                                 color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                                         }
-                                        Text(l.texto, fontSize = 17.sp, lineHeight = 24.sp,
-                                            fontWeight = if (activa) FontWeight.SemiBold else FontWeight.Normal)
+                                        // Un renglón en blanco de una letra separa estrofas; un silencio del LRC, «♪».
+                                        if (l.texto.isNotEmpty() || l.ms != null) Text(
+                                            l.texto.ifEmpty { "♪" }, fontSize = tamano.sp, lineHeight = (tamano * 1.42f).sp,
+                                            fontWeight = if (activa) FontWeight.SemiBold else FontWeight.Normal,
+                                            color = if (activa && esCancion) MaterialTheme.colorScheme.primary else androidx.compose.ui.graphics.Color.Unspecified
+                                        )
                                     }
                                 }
                                 is EstudiarClase.Fila.DeMarcador -> {
@@ -520,9 +712,125 @@ class EstudiarClaseActivity : ComponentActivity() {
                         }
                     }
                 }
-                if (senales.isNotEmpty()) Text(
+                sincronizando?.let { sinc ->
+                    PanelDeSincronizar(
+                        sinc, toques,
+                        alMarcar = { sinc.marcar(Reproductor.posicionAhora()); toques++ },
+                        alDeshacer = { sinc.deshacer()?.let { Reproductor.irAMs(it) }; toques++ },
+                        alGuardar = {
+                            guardarLaLetra(id, LetraDeCancion.aGuardar(sinc.letra()))
+                            sincronizando = null
+                            Toast.makeText(this@EstudiarClaseActivity, R.string.letra_sincronizada, Toast.LENGTH_SHORT).show()
+                        },
+                        alCancelar = { sincronizando = null }
+                    )
+                }
+                if (senales.isNotEmpty() && sincronizando == null) Text(
                     getString(R.string.estudiar_quitar_marcador), fontSize = 11.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)
+                )
+            }
+        }
+
+        /**
+         * **El menú ⋮** (28-oct-2026): el tamaño del texto y, con una canción, lo del karaoke —escribir
+         * o pegar la letra, sincronizarla a toques, ponerle los tiempos con lo que se oye y copiarla en
+         * LRC—; con una nota, editar su texto (el lápiz de la pantalla de la letra de antes) o pasarla a
+         * texto si aún no lo tiene.
+         */
+        @Composable
+        fun Menu() {
+            Box {
+                BotonDeCristal(Icons.Filled.MoreVert, getString(R.string.estudiar_mas)) { menu = true }
+                androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                    // El tamaño: el menú se queda abierto para tocar varias veces.
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
+                        IconButton(onClick = { if (tamano > 12) tamano -= 2 }) { Icon(Icons.Filled.TextDecrease, getString(R.string.letra_mas_pequena)) }
+                        Text("${tamano}", fontSize = 13.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                        IconButton(onClick = { if (tamano < 44) tamano += 2 }) { Icon(Icons.Filled.TextIncrease, getString(R.string.letra_mas_grande)) }
+                    }
+                    if (esCancion) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(getString(R.string.letra_editar_titulo)) },
+                            leadingIcon = { Icon(Icons.Filled.Edit, null) },
+                            onClick = { menu = false; editandoLetra = true }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(getString(R.string.letra_sincronizar)) },
+                            leadingIcon = { Icon(Icons.Filled.Timer, null) },
+                            enabled = m?.ruta != null && sincronizando == null,
+                            onClick = { empezarASincronizar() }
+                        )
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(getString(R.string.letra_poner_tiempos)) },
+                            leadingIcon = { Icon(Icons.Filled.Subtitles, null) },
+                            enabled = m?.ruta != null && poniendoTiempos == null,
+                            onClick = { ponerTiempos() }
+                        )
+                        if (letra?.conTiempos == true) androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(getString(R.string.letra_copiar_lrc)) },
+                            leadingIcon = { Icon(Icons.Filled.ContentCopy, null) },
+                            onClick = {
+                                menu = false
+                                letra.let { l -> copiarComoLrc(this@EstudiarClaseActivity, LetraDeCancion.aLrc(l, datosDeCancion?.titulo ?: titulo, datosDeCancion?.artista)) }
+                            }
+                        )
+                    } else if (m != null) {
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(getString(R.string.estudiar_editar_texto)) },
+                            leadingIcon = { Icon(Icons.Filled.Edit, null) },
+                            onClick = { menu = false; editarElTextoDelAudio(this@EstudiarClaseActivity, m) }
+                        )
+                        if (m.transcripcion.isNullOrBlank() && m.ruta != null && avanceDelTexto == null) androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(getString(R.string.pasar_a_texto_ahora)) },
+                            leadingIcon = { Icon(Icons.Filled.Subtitles, null) },
+                            onClick = { menu = false; MensajesStore(this@EstudiarClaseActivity).transcribir(m) }
+                        )
+                    }
+                }
+            }
+        }
+
+        /**
+         * **El cartel** (28-oct-2026), lo de arriba cuando no hay imagen (una nota de voz, una canción):
+         * con una canción, su portada, título y artista; y **la línea que suena en grande**, con la
+         * siguiente debajo, apagada. A pantalla entera es el karaoke.
+         */
+        @Composable
+        fun Cartel() {
+            val actualL = lineaActual
+            val ahora = actualL?.let { lineas.getOrNull(it) }
+            val siguiente = lineas.drop((actualL ?: -1) + 1).firstOrNull { it.texto.isNotBlank() }
+            Column(
+                Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                    .padding(start = 20.dp, end = 56.dp, top = 52.dp, bottom = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center
+            ) {
+                if (!pantallaEntera) Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 10.dp)) {
+                    if (esCancion) Box(
+                        Modifier.size(52.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.primaryContainer),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        val portada = datosDeCancion?.portada
+                        if (portada != null) Image(portada.asImageBitmap(), null, Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
+                        else Icon(Icons.Filled.MusicNote, null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                    }
+                    Column(Modifier.padding(start = if (esCancion) 12.dp else 0.dp)) {
+                        Text(titulo, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1)
+                        val debajo = listOfNotNull(datosDeCancion?.artista, datosDeCancion?.album).joinToString(" · ")
+                        if (debajo.isNotEmpty()) Text(debajo, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                    }
+                }
+                Text(
+                    ahora?.texto?.ifEmpty { "♪" } ?: lineas.firstOrNull { it.texto.isNotBlank() }?.texto.orEmpty(),
+                    fontSize = (tamano * 1.35f).sp, lineHeight = (tamano * 1.75f).sp, fontWeight = FontWeight.Bold,
+                    color = if (ahora != null) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 5
+                )
+                if (siguiente != null && ahora != null) Text(
+                    siguiente.texto, fontSize = (tamano * 0.95f).sp, lineHeight = (tamano * 1.3f).sp,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center, maxLines = 3, modifier = Modifier.padding(top = 10.dp)
                 )
             }
         }
@@ -536,7 +844,9 @@ class EstudiarClaseActivity : ComponentActivity() {
          */
         @Composable
         fun Imagen(modifier: Modifier) {
-            Box(modifier.clipToBounds().background(Color.Black), contentAlignment = Alignment.Center) {
+            // Sin imagen, el cartel sobre el color del tema (que llega hasta la cámara, arriba del todo).
+            val fondoDeArriba = if (hayImagen) Color.Black else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            Box(modifier.clipToBounds().background(fondoDeArriba), contentAlignment = Alignment.Center) {
                 var caja by remember { mutableStateOf(com.forge.pixpin.ui.Encuadre.Caja(0f, 0f, 1f, 1f)) }
                 // Sin medidas de la imagen (el vídeo se encaja solo), la caja entera hace de imagen.
                 val w = if (anchoImg > 0f) anchoImg else caja.ancho
@@ -556,7 +866,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                         },
                     contentAlignment = Alignment.Center
                 ) {
-                    if (conVideo) VideoQueSigue(video!!, posMs, sonando)
+                    if (!hayImagen) Cartel()
+                    else if (conVideo) VideoQueSigue(video!!, posMs, sonando)
                     else if (actual != null) Image(actual, null, contentScale = ContentScale.Fit, modifier = Modifier.fillMaxSize())
                     else Icon(Icons.Filled.Image, null, tint = Color.White.copy(alpha = 0.4f), modifier = Modifier.size(48.dp))
                 }
@@ -574,8 +885,9 @@ class EstudiarClaseActivity : ComponentActivity() {
                                 onDoubleTap = { encuadre = com.forge.pixpin.ui.Encuadre() }
                             )
                         }
-                        .pointerInput(w, h, caja, actual, conVideo) {
-                            detectTransformGestures { centro, mover, zoom, _ ->
+                        .pointerInput(w, h, caja, actual, conVideo, hayImagen) {
+                            // Sin imagen (el cartel) no hay nada que acercar.
+                            if (hayImagen) detectTransformGestures { centro, mover, zoom, _ ->
                                 var e = encuadre
                                 if (zoom != 1f) e = e.acercar(caja, w, h, zoom, centro.x, centro.y)
                                 encuadre = e.mover(caja, w, h, mover.x, mover.y)
@@ -588,7 +900,9 @@ class EstudiarClaseActivity : ComponentActivity() {
                             }
                         }
                 )
-                AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.TopStart), enter = fadeIn(), exit = fadeOut()) {
+                // Lo de encima se aparta de la barra de estado y de la muesca (la imagen sí llega hasta arriba).
+                val aSalvo = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.TopStart).then(aSalvo), enter = fadeIn(), exit = fadeOut()) {
                     Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
                         BotonDeCristal(Icons.AutoMirrored.Filled.ArrowBack, getString(R.string.cancel)) { finish() }
                         // El vídeo o las capturas, si hay las dos cosas.
@@ -601,9 +915,9 @@ class EstudiarClaseActivity : ComponentActivity() {
                 }
                 // Claro u oscuro, como los visores.
                 // Y compartir la clase (27-oct-2026): la misma hoja que en el chat y en su carpeta. Ver [ExportarGrabacion].
-                AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.TopEnd), enter = fadeIn(), exit = fadeOut()) {
+                AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.TopEnd).then(aSalvo), enter = fadeIn(), exit = fadeOut()) {
                     Row(Modifier.padding(6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        if (m != null) BotonDeCristal(com.forge.pixpin.ui.IconoDeCompartir, getString(R.string.guardados_compartir)) {
+                        if (m != null && !esCancion) BotonDeCristal(com.forge.pixpin.ui.IconoDeCompartir, getString(R.string.guardados_compartir)) {
                             alcance.launch {
                                 compartiendo = withContext(Dispatchers.IO) {
                                     runCatching { val todos = almacen.leer(); ExportarGrabacion.compartible(this@EstudiarClaseActivity, ExportarGrabacion.notaDe(m, todos) ?: m, todos) }
@@ -612,16 +926,18 @@ class EstudiarClaseActivity : ComponentActivity() {
                             }
                         }
                         BotonDeCristal(if (oscuroAhora) Icons.Filled.LightMode else Icons.Filled.DarkMode, if (oscuroAhora) "Claro" else "Oscuro") { alCambiarTema(!oscuroAhora) }
+                        Menu()
                     }
                 }
                 if (m == null || m.ruta == null || !File(m.ruta).exists()) Text(
                     getString(R.string.estudiar_sin_sonido), color = Color.White, fontSize = 12.sp,
-                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 52.dp).clip(RoundedCornerShape(8.dp))
+                    modifier = Modifier.align(Alignment.TopCenter).then(aSalvo).padding(top = 52.dp).clip(RoundedCornerShape(8.dp))
                         .background(MaterialTheme.colorScheme.error.copy(alpha = 0.85f)).padding(horizontal = 10.dp, vertical = 5.dp)
                 )
                 // El riel de todos los visores: el marcador y el lápiz (anotar lo que se ve). Va y viene
                 // con las barras.
-                com.forge.pixpin.ui.RielDelVisor(
+                // Sin imagen (una nota, una canción) no hay nada que anotar ni marcadores que poner aquí.
+                if (hayImagen) com.forge.pixpin.ui.RielDelVisor(
                     poniendoMarca = poniendo != null, anotando = anotando != null, marcando = false,
                     onMarcador = { if (m != null) poniendo = posMs },
                     onLapiz = alLapiz,
@@ -634,7 +950,11 @@ class EstudiarClaseActivity : ComponentActivity() {
                     // A pantalla entera, los mandos van encima de la imagen, abajo, en el cristal.
                     AnimatedVisibility(barrasVisibles, Modifier.align(Alignment.BottomCenter).fillMaxWidth(), enter = fadeIn(), exit = fadeOut()) {
                         CompositionLocalProvider(LocalContentColor provides Color.White) {
-                            Column(Modifier.fillMaxWidth().background(com.forge.pixpin.ui.CRISTAL_DE_VISOR).padding(vertical = 2.dp)) {
+                            Column(
+                                Modifier.fillMaxWidth().background(com.forge.pixpin.ui.CRISTAL_DE_VISOR)
+                                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                                    .padding(vertical = 2.dp)
+                            ) {
                                 BarraConHoras(sobreCristal = true)
                                 MandosEnFila()
                             }
@@ -647,13 +967,25 @@ class EstudiarClaseActivity : ComponentActivity() {
         }
 
 
-        Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            // Tumbado, que una muesca de la cámara no se coma los mandos de su lado.
-            BoxWithConstraints(Modifier.fillMaxSize().then(if (pantallaEntera) Modifier else Modifier.windowInsetsPadding(WindowInsets.displayCutout))) {
-                // **El reparto** ([EstudiarClase.reparto]): de pie, tumbado o a pantalla entera.
+        val fondo = MaterialTheme.colorScheme.background
+        Surface(Modifier.fillMaxSize(), color = fondo) {
+            // **De borde a borde** (28-oct-2026): nada de márgenes aquí; cada pieza se aparta de la muesca y
+            // de las barras con `WindowInsets.safeDrawing`, y el fondo (la imagen o el cartel) llega arriba.
+            BoxWithConstraints(Modifier.fillMaxSize()) {
+                // **El reparto** ([EstudiarClase.reparto]): de pie, tumbado o a pantalla entera. Sincronizando
+                // la letra, el texto se ve siempre (es donde se marca).
                 val r = EstudiarClase.reparto(
-                    maxWidth.value, maxHeight.value, pantallaEntera, textoEnVertical, textoEnApaisada, capturas.isNotEmpty()
+                    maxWidth.value, maxHeight.value, pantallaEntera,
+                    textoEnVertical || sincronizando != null, textoEnApaisada || sincronizando != null, capturas.isNotEmpty(),
+                    conImagen = hayImagen
                 )
+                // Las barras del sistema: a la vista de pie (con iconos claros sobre la imagen negra o de
+                // noche), escondidas tumbado y a pantalla entera.
+                val oscuroArriba = hayImagen || oscuroAhora
+                val fondoArgb = fondo.toArgb()
+                LaunchedEffect(r.forma, oscuroArriba, oscuroAhora, fondoArgb) {
+                    barrasDelSistema(esconder = r.forma != EstudiarClase.Forma.VERTICAL, oscuroArriba = oscuroArriba, oscuroAbajo = oscuroAhora, fondo = fondoArgb)
+                }
                 // **Con «Seguir», el texto y la tira siguen a lo que suena** (también al volver a enseñarlos).
                 LaunchedEffect(filaActual, seguir, r.conTexto) {
                     if (seguir && r.conTexto && filaActual != null && !texto.isScrollInProgress) runCatching { texto.animateScrollToItem(filaActual) }
@@ -684,7 +1016,9 @@ class EstudiarClaseActivity : ComponentActivity() {
                 when (r.forma) {
                     EstudiarClase.Forma.ENTERA -> Imagen(Modifier.fillMaxSize())
                     // De pie: la imagen arriba; debajo, apretados, la barra, la tira y los mandos; el texto abajo.
-                    EstudiarClase.Forma.VERTICAL -> Column(Modifier.fillMaxSize()) {
+                    EstudiarClase.Forma.VERTICAL -> Column(
+                        Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))
+                    ) {
                         val alto = r.altoImagen
                         Imagen(if (alto != null) Modifier.fillMaxWidth().height(alto.dp) else Modifier.fillMaxWidth().weight(1f))
                         BarraConHoras()
@@ -693,11 +1027,17 @@ class EstudiarClaseActivity : ComponentActivity() {
                         if (r.conTexto) Texto(Modifier.weight(1f).fillMaxWidth())
                     }
                     // Tumbado: la imagen y, en el lado del riel, el texto (si se pide), la tira y los mandos en columna.
+                    // La imagen llega al borde (también bajo la muesca); lo de su lado se aparta de ella y de la barra de navegación.
                     EstudiarClase.Forma.APAISADA -> Row(Modifier.fillMaxSize()) {
                         Imagen(Modifier.weight(1f).fillMaxHeight())
-                        if (r.conTexto) Texto(Modifier.width(r.anchoTexto.dp).fillMaxHeight())
-                        if (r.conTira) Tira(true, r)
-                        MandosEnColumna()
+                        Row(
+                            Modifier.fillMaxHeight()
+                                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Bottom + WindowInsetsSides.End))
+                        ) {
+                            if (r.conTexto) Texto(Modifier.width(r.anchoTexto.dp).fillMaxHeight())
+                            if (r.conTira) Tira(true, r)
+                            MandosEnColumna()
+                        }
                     }
                 }
             }
@@ -705,6 +1045,69 @@ class EstudiarClaseActivity : ComponentActivity() {
         poniendo?.let { ms -> DialogoDelMarcador(ms, onCancelar = { poniendo = null }) { nota -> poniendo = null; poner(id, ms, nota) } }
         anotando?.let { f -> AnotarCaptura(f, oscuroAhora) { anotando = null } }
         compartiendo?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(c) { compartiendo = null } }
+        // **La letra**: escribirla o pegarla (texto o LRC), como en el karaoke de antes.
+        if (editandoLetra) {
+            androidx.compose.ui.window.Dialog(
+                onDismissRequest = { editandoLetra = false; textoParaEditar = null },
+                properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+            ) {
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                    Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing).padding(12.dp)) {
+                        Text(getString(R.string.letra_editar_titulo) + " · " + titulo, fontWeight = FontWeight.Bold, fontSize = 18.sp, modifier = Modifier.padding(bottom = 8.dp))
+                        var escrito by remember { mutableStateOf(textoParaEditar ?: m?.transcripcion.orEmpty()) }
+                        EditorDeLetra(escrito, { escrito = it })
+                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
+                            TextButton(onClick = { editandoLetra = false; textoParaEditar = null }) { Text(getString(R.string.cancel)) }
+                            androidx.compose.material3.Button(onClick = {
+                                guardarLaLetra(id, LetraDeCancion.aGuardar(LetraDeCancion.leer(escrito)))
+                                editandoLetra = false
+                                textoParaEditar = null
+                            }) { Text(getString(R.string.estudiar_guardar)) }
+                        }
+                    }
+                }
+            }
+        }
+        // **La propuesta de «Poner los tiempos a la letra»**: aceptarla, seguir editándola o dejarla.
+        propuesta?.let { p ->
+            AlertDialog(
+                onDismissRequest = { propuesta = null },
+                title = { Text(getString(R.string.letra_propuesta_titulo)) },
+                text = {
+                    Column {
+                        Text(
+                            getString(if (m?.transcripcion.isNullOrBlank()) R.string.letra_propuesta_de_lo_oido else R.string.letra_propuesta_texto),
+                            fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        LazyColumn(Modifier.padding(top = 8.dp).height(320.dp)) {
+                            itemsIndexed(LetraDeCancion.leer(p).lineas) { _, l ->
+                                Row(Modifier.padding(vertical = 3.dp)) {
+                                    Text(l.ms?.let { LetraDeCancion.marca(it) } ?: "", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Bold, modifier = Modifier.width(48.dp))
+                                    Text(l.texto, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { guardarLaLetra(id, p); propuesta = null }) { Text(getString(R.string.letra_aceptar)) }
+                },
+                dismissButton = {
+                    Row {
+                        TextButton(onClick = { propuesta = null }) { Text(getString(R.string.cancel)) }
+                        TextButton(onClick = { textoParaEditar = p; propuesta = null; editandoLetra = true }) { Text(getString(R.string.letra_seguir_editando)) }
+                    }
+                }
+            )
+        }
+    }
+
+    /** **La letra a la canción** (escrita, sincronizada o con los tiempos puestos): sigue siendo letra, como la lee el PC. */
+    private fun guardarLaLetra(id: String, texto: String) {
+        Thread {
+            MensajesStore(this).actualizar(id) { it.copy(transcripcion = texto.ifBlank { null }, estadoDelTexto = TEXTO_LETRA) }
+        }.start()
     }
 
     /** Un botón redondo en el cristal de los visores, para lo que va encima de la imagen. */

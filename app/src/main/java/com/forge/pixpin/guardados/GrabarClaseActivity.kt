@@ -103,7 +103,14 @@ class GrabarClaseActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         proyecto = intent.getStringExtra(EL_PROYECTO)
-        if (GrabarClaseService.enMarcha || ReunionPresencialService.enMarcha) {
+        // **Con una reunión presencial en marcha, su pantalla** (28-oct-2026): Foto, Clip, Pausa y Terminar
+        // con la mirilla, en vez de un «ya se está grabando» sin más. Ver [ReunionEnCursoActivity].
+        if (ReunionPresencialService.enMarcha) {
+            ReunionEnCursoActivity.abrir(this)
+            finish()
+            return
+        }
+        if (GrabarClaseService.enMarcha) {
             Toast.makeText(this, R.string.clase_ya, Toast.LENGTH_SHORT).show()
             finish()
             return

@@ -61,7 +61,12 @@ import kotlinx.coroutines.withContext
  * letra copiada»): es lo normal, copiarla de una web y venir aquí. Al guardar entra en el chat como
  * cualquier audio ([AlChat]) y queda marcado como música con su letra ([TEXTO_LETRA] y
  * [Mensaje.transcripcion], ver [LetraDeCancion]), que es lo que el PC ya entiende. En el chat sale
- * como tarjeta de música ([TarjetaDeMusica]) y se canta en [MusicaActivity].
+ * como tarjeta de música ([TarjetaDeMusica]) y se canta en «Estudiar la clase» ([EstudiarClaseActivity]).
+ *
+ * **Y se le ponen los tiempos sola** (28-oct-2026, el usuario: «para la música, que también la
+ * transcriba… yo pego la letra, que es el texto bueno; la transcripción da los tiempos»): una letra
+ * sin tiempos (o ninguna) entra en la cola de pasar a texto ([PasarATexto]), que oye la canción y
+ * alinea lo oído con la letra ([AlinearLetra]); sin letra, se queda lo oído como letra.
  */
 class CancionNuevaActivity : ComponentActivity() {
 
@@ -188,6 +193,8 @@ class CancionNuevaActivity : ComponentActivity() {
                 finish()
             } else {
                 Toast.makeText(this@CancionNuevaActivity, "Canción guardada", Toast.LENGTH_SHORT).show()
+                // Los tiempos de la letra, con lo que se oye (si no los trae ya). Ver [ColaDeTexto].
+                if (!LetraDeCancion.leer(letra).conTiempos) PasarATexto.encolar(this@CancionNuevaActivity, m.id)
                 finish()
             }
         }

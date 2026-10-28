@@ -261,6 +261,25 @@ object EstudiarClase {
     }
 
     /**
+     * **Las líneas de una canción** (28-oct-2026, la música se estudia en esta misma pantalla): las de
+     * su letra ([LetraDeCancion.leer]), con su minuto si lo llevan. Una letra sin tiempos va renglón a
+     * renglón (no por párrafos: una estrofa entera sería una sola línea) y sus renglones en blanco se
+     * quedan, que separan las estrofas. Una marca sin texto (un silencio del LRC) es una línea vacía con
+     * su minuto: la que sonaba deja de resaltarse.
+     */
+    fun lineasDeLaCancion(letra: String?): List<Linea> {
+        if (letra.isNullOrBlank()) return emptyList()
+        return LetraDeCancion.leer(letra).lineas.map { Linea(it.ms?.toLong(), it.texto) }
+    }
+
+    /**
+     * **Las líneas de lo que se estudia**: la letra si es una canción ([lineasDeLaCancion]), la
+     * transcripción si no ([lineasDe]).
+     */
+    fun lineasDeLaNota(m: Mensaje?): List<Linea> =
+        if (m?.esMusica == true) lineasDeLaCancion(m.transcripcion) else lineasDe(m?.transcripcion)
+
+    /**
      * **Las señales de la barra**: los marcadores y las banderitas del móvil juntos y en orden, como
      * la ventana del PC, que enseña las dos cosas a la vez. (Cada una se quita de su campo.)
      */
@@ -344,13 +363,22 @@ object EstudiarClase {
     /** La parte del alto que se lleva la imagen de pie y con texto: casi la mitad, más que antes (260 dp). */
     const val PARTE_DE_LA_IMAGEN = 0.48f
 
+    /** Lo mismo para el cartel de la línea que suena (sin imagen): un tercio largo. */
+    const val PARTE_DEL_CARTEL = 0.34f
+
     /**
      * **El reparto para una pantalla de [ancho]×[alto] dp.** Tumbada si es más ancha que alta;
      * [pantallaEntera] gana a todo.
      */
     fun reparto(
         ancho: Float, alto: Float, pantallaEntera: Boolean,
-        textoEnVertical: Boolean, textoEnApaisada: Boolean, hayCapturas: Boolean
+        textoEnVertical: Boolean, textoEnApaisada: Boolean, hayCapturas: Boolean,
+        /**
+         * Si arriba va una imagen (el vídeo o las capturas). Sin ella (una nota de voz, una canción)
+         * arriba va **el cartel con la línea que suena en grande**, que no necesita tanto sitio:
+         * [PARTE_DEL_CARTEL] en vez de [PARTE_DE_LA_IMAGEN] (28-oct-2026).
+         */
+        conImagen: Boolean = true
     ): Reparto {
         val forma = when {
             pantallaEntera -> Forma.ENTERA
@@ -366,7 +394,7 @@ object EstudiarClase {
                 val altoImagen = if (!conTexto) null else {
                     val fijo = ALTO_DE_LOS_MANDOS + (if (conTira) miniatura + ALTO_DEL_MINUTO else 0f)
                     val maximo = (alto - fijo - ALTO_MINIMO_DEL_TEXTO).coerceAtLeast(120f)
-                    (alto * PARTE_DE_LA_IMAGEN).coerceIn(minOf(160f, maximo), maximo)
+                    (alto * (if (conImagen) PARTE_DE_LA_IMAGEN else PARTE_DEL_CARTEL)).coerceIn(minOf(160f, maximo), maximo)
                 }
                 Reparto(forma, conTexto, conTira, altoImagen, 0f, miniatura, 96f, 26f)
             }
