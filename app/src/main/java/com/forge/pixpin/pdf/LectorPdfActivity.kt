@@ -171,70 +171,6 @@ class LectorPdfActivity : ComponentActivity() {
         }
     }
 
-    /**
-     * **El engranaje del PDF**, con los mismos apartados que el del lector de Word
-     * ([com.forge.pixpin.ui.VisorHtmlActivity]): Vista, Lectura, Voz y Documento. La letra no, que
-     * un PDF de hojas no se puede cambiar; para eso está «Ver como texto».
-     */
-    @Composable
-    private fun EngranajeDelPdf(
-        onCerrar: () -> Unit,
-        sinLado: Boolean, onSinLado: (Boolean) -> Unit,
-        invertido: Boolean, onInvertido: (Boolean) -> Unit,
-        izquierda: Boolean, derecha: Boolean, onIzquierda: () -> Unit, onDerecha: () -> Unit,
-        comoTexto: (escuchar: Boolean) -> Unit,
-        onExportar: () -> Unit, onAlProyecto: (() -> Unit)?, onQuitarMarcadores: (() -> Unit)?,
-        /** Lo de un Word o un PowerPoint maquetado: su «Modo lectura» (null, no hay), sin voz si es un PowerPoint. */
-        comoTextoRotulo: Pair<String, String?>? = "Ver como texto" to "como un Word",
-        conVoz: Boolean = true,
-        onPresentar: (() -> Unit)? = null,
-        onImprimir: (() -> Unit)? = null,
-        onCopiarHoja: (() -> Unit)? = null,
-        /** «Lectura veloz» (null, no se puede) y por dónde va allí, para la chapa. */
-        onLecturaVeloz: (() -> Unit)? = null,
-        porcentajeEnLecturaVeloz: Int? = null
-    ) {
-        val prefs = remember { getSharedPreferences("lectura", MODE_PRIVATE) }
-        com.forge.pixpin.ui.EngranajeDeLector(onCerrar) {
-            com.forge.pixpin.ui.ApartadoDeLector("Vista")
-            comoTextoRotulo?.let { (r, d) -> com.forge.pixpin.ui.FilaDeLector(r, d) { comoTexto(false) } }
-            onPresentar?.let { com.forge.pixpin.ui.FilaDeLector("Presentar", "Las diapositivas a pantalla completa", it) }
-            onCopiarHoja?.let { com.forge.pixpin.ui.FilaDeLector("Copiar el texto de esta hoja", "Mantener el dedo sobre un renglón copia ese renglón", it) }
-
-            com.forge.pixpin.ui.ApartadoDeLector("Lectura")
-            com.forge.pixpin.ui.InterruptorDeLector("Bloquear el desplazamiento de lado", "El dedo solo sube y baja; a lo ancho se queda donde lo dejes", sinLado, onSinLado)
-            if (PUEDE_INVERTIR) com.forge.pixpin.ui.InterruptorDeLector("Invertir colores", "Hojas oscuras para leer de noche; los colores conservan su tono", invertido, onInvertido)
-            com.forge.pixpin.ui.InterruptorDeLector("Espacio a la izquierda", "Papel en blanco para anotar", izquierda) { onIzquierda() }
-            com.forge.pixpin.ui.InterruptorDeLector("Espacio a la derecha", null, derecha) { onDerecha() }
-            onLecturaVeloz?.let { com.forge.pixpin.ui.FilaDeLector("Lectura veloz", porcentajeEnLecturaVeloz?.let { p -> "$p %" }, it) }
-
-            if (conVoz) {
-                com.forge.pixpin.ui.ApartadoDeLector("Voz")
-                com.forge.pixpin.ui.FilaDeLector(if (comoTextoRotulo?.first == "Ver como texto") "Escuchar este PDF" else "Escuchar", null) { comoTexto(true) }
-                var enLinea by remember { mutableStateOf(prefs.getBoolean("voz:enLinea", false)) }
-                com.forge.pixpin.ui.InterruptorDeLector("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", enLinea) {
-                    enLinea = it; prefs.edit().putBoolean("voz:enLinea", it).apply()
-                }
-                var microsoft by remember { mutableStateOf(prefs.getBoolean("voz:edge", false)) }
-                com.forge.pixpin.ui.InterruptorDeLector("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", microsoft) {
-                    microsoft = it; prefs.edit().putBoolean("voz:edge", it).apply()
-                }
-                var auricular by remember { mutableStateOf(prefs.getBoolean("voz:auricular", false)) }
-                com.forge.pixpin.ui.InterruptorDeLector("Por el auricular de las llamadas", "Para sitios con ruido: el teléfono a la oreja", auricular) {
-                    auricular = it; prefs.edit().putBoolean("voz:auricular", it).apply()
-                }
-            }
-
-            com.forge.pixpin.ui.ApartadoDeLector("Documento")
-            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
-                com.forge.pixpin.ui.BotonDeTextoDeLector("Exportar", onExportar)
-                if (onAlProyecto != null) com.forge.pixpin.ui.BotonDeTextoDeLector("Al proyecto", onAlProyecto)
-                if (onImprimir != null) com.forge.pixpin.ui.BotonDeTextoDeLector("Imprimir", onImprimir)
-                if (onQuitarMarcadores != null) com.forge.pixpin.ui.BotonDeTextoDeLector("Quitar marcadores", onQuitarMarcadores)
-            }
-        }
-    }
-
     // ---- Lo de un Word o un PowerPoint maquetado (11-oct-2026). Ver [com.forge.pixpin.office.DocumentoOffice]. ----
 
     /** El «Modo lectura»: el Word como texto en el visor de documentos (el lector de antes), con su voz y su tinta. */
@@ -537,14 +473,18 @@ class LectorPdfActivity : ComponentActivity() {
 
         // ---- **Lo mismo que el lector de Word y libros** (23-sep-2026, pedido por el usuario: «todos
         // son visores rápidos: la misma interfaz y las mismas funciones»). La pastilla de arriba
-        // que sale al tocar y se va sola, el engranaje por apartados, los mandos de los lados con el
-        // candado, un dedo que lleva el documento de lado y la página que sube sola. Las piezas son
-        // las comunes de [com.forge.pixpin.ui.MandosDeLector]; los ajustes, los mismos (`lectura`). ----
+        // que sale al tocar y se va sola, los mandos de los lados con el candado, un dedo que lleva
+        // el documento de lado y la página que sube sola. Las piezas son las comunes de
+        // [com.forge.pixpin.ui.MandosDeLector]; los ajustes, los mismos (`lectura`).
+        // **Sin engranaje** (28-oct-2026, el usuario: «la app tiene que ser simple e intuitiva, no
+        // 100 000 opciones repetidas»): todo lo suyo ya estaba a la vista —el candado y los espacios
+        // abajo, oscuro y escuchar y compartir arriba, «Al proyecto» con el lápiz— o tiene su sitio:
+        // las voces, en la barra de escuchar del texto; quitar marcadores, manteniendo el marcador del
+        // riel; «Lectura veloz», manteniendo el archivo en el chat. ----
         var aLaVista by remember { mutableStateOf(true) }
         var toques by remember { mutableStateOf(0) }
         LaunchedEffect(aLaVista, toques) { if (aLaVista) { kotlinx.coroutines.delay(3500); aLaVista = false } }
         LaunchedEffect(estado.isScrollInProgress) { if (estado.isScrollInProgress) aLaVista = false }
-        var conElEngranaje by remember { mutableStateOf(false) }
         var quitandoMarcas by remember { mutableStateOf(false) }
         var sinLado by remember { mutableStateOf(prefsDelLector.getBoolean("sinLado", false)) }
         // Invertir los colores de las hojas (PC 11bd1f6, la «N» de los lectores), que es **el modo
@@ -605,31 +545,17 @@ class LectorPdfActivity : ComponentActivity() {
             marcas = lista
             guardarLasMarcas()
         }
-        // **Lectura veloz** (27-oct-2026, lo pidió el usuario): el documento en la app «Lectura Veloz»,
-        // desde el 🟢; mientras se lee allí, el 🟢 se mueve solo. Al volver se lee otra vez, y la
-        // chapa del engranaje dice por dónde va allí. Solo un adjunto del chat: su código es el que
-        // reconoce al volver. Ver [com.forge.pixpin.guardados.LecturaVeloz].
-        var codigoParaLecturaVeloz by remember(rutaPedida) { mutableStateOf<String?>(null) }
-        var porcentajeEnLecturaVeloz by remember(rutaPedida) { mutableStateOf<Int?>(null) }
+        // **El 🟢 que movió Lectura veloz** (27-oct-2026): mientras se lee allí, el verde de un adjunto
+        // del chat se mueve solo; al volver a esta pantalla se leen otra vez los marcadores. Lectura
+        // veloz se abre desde el chat (28-oct-2026), no desde aquí. Ver [com.forge.pixpin.guardados.LecturaVeloz].
         LaunchedEffect(rutaPedida, vueltas) {
-            val codigo = withContext(Dispatchers.IO) { capas.codigo?.takeIf { com.forge.pixpin.guardados.LecturaVeloz.admite(nombre, rutaPedida) } }
-            codigoParaLecturaVeloz = codigo
-            if (codigo == null) return@LaunchedEffect
-            porcentajeEnLecturaVeloz = withContext(Dispatchers.IO) { com.forge.pixpin.guardados.LecturaVelozEnElTelefono.porcentaje(this@LectorPdfActivity, codigo) }
             val archivo = archivoDeMarcas
-            if (vueltas > 1 && !esOffice && archivo != null) {
-                val leidas = withContext(Dispatchers.IO) { com.forge.pixpin.motor.Marcas.deTexto(com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(archivo)) }
-                if (leidas != marcas) marcas = leidas
+            if (vueltas <= 1 || esOffice || archivo == null) return@LaunchedEffect
+            val leidas = withContext(Dispatchers.IO) {
+                if (capas.codigo == null || !com.forge.pixpin.guardados.LecturaVeloz.admite(nombre, rutaPedida)) null
+                else com.forge.pixpin.motor.Marcas.deTexto(com.forge.pixpin.sincro.AnotacionesDelAdjunto.leer(archivo))
             }
-        }
-        fun abrirEnLecturaVeloz() {
-            val codigo = codigoParaLecturaVeloz ?: return
-            val hojas = if (esOffice) 0 else cuantas.coerceAtLeast(0)
-            com.forge.pixpin.guardados.LecturaVelozEnElTelefono.abrir(this@LectorPdfActivity, {
-                com.forge.pixpin.guardados.LecturaVelozEnElTelefono.deArchivo(
-                    this@LectorPdfActivity, java.io.File(rutaPedida), nombre.ifBlank { java.io.File(rutaPedida).name }, codigo, hojas
-                )
-            }) { que -> android.widget.Toast.makeText(this@LectorPdfActivity, com.forge.pixpin.guardados.LecturaVelozEnElTelefono.avisoCorto(que), android.widget.Toast.LENGTH_LONG).show() }
+            if (leidas != null && leidas != marcas) marcas = leidas
         }
         /** Qué página se está mirando y por dónde va, para plantar ahí el marcador. */
         fun dondeEstoy(): Pair<Int, Double> {
@@ -996,8 +922,7 @@ class LectorPdfActivity : ComponentActivity() {
                             invertido = !invertido
                             com.forge.pixpin.office.Oscuro.poner(this@LectorPdfActivity, invertido)
                             toques++
-                        } else null,
-                        com.forge.pixpin.ui.BotonDeLector(androidx.compose.material.icons.Icons.Filled.Settings, "Ajustes") { conElEngranaje = true }
+                        } else null
                     ).filterNotNull(),
                     modifier = Modifier.align(Alignment.TopCenter)
                 )
@@ -1036,14 +961,7 @@ class LectorPdfActivity : ComponentActivity() {
                     if (!enProyecto) Text(
                         "Al proyecto", color = Color.White.copy(alpha = 0.85f),
                         modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50)).clickable {
-                            alcance.launch {
-                                val bien = withContext(Dispatchers.IO) { capas.pasarAProyecto(nombre.substringBeforeLast('.').ifBlank { "PDF" }, cuantas) }
-                                enProyecto = bien
-                                android.widget.Toast.makeText(
-                                    this@LectorPdfActivity, if (bien) "Ya está en proyectos, con lo anotado" else "No se pudo crear el proyecto",
-                                    android.widget.Toast.LENGTH_SHORT
-                                ).show()
-                            }
+                            alProyecto { bien -> enProyecto = bien }
                         }.padding(horizontal = 12.dp, vertical = 9.dp)
                     )
                 }
@@ -1072,6 +990,8 @@ class LectorPdfActivity : ComponentActivity() {
                     onMarco = { if (anotando) dejarDeAnotar(); poniendoMarca = false; marcosDoc.alternar() },
                     marcas = if (anotando) 0 else marcas.size, emojiDe = { i -> marcas[i].emoji },
                     alElegirMarca = { i -> marcas.getOrNull(i)?.let { m -> alcance.launch { irALaMarca(m) } } },
+                    // Quitar marcadores: mantener el del riel (antes, en el engranaje).
+                    alMantenerMarcador = if (marcas.isEmpty()) null else ({ quitandoMarcas = true }),
                     imprimirMarcos = if (marcosDoc.lista.isEmpty()) null else ({ imprimirLosMarcos() }),
                     imprimirTodo = {
                         capas.guardarTodo()
@@ -1130,42 +1050,7 @@ class LectorPdfActivity : ComponentActivity() {
                     }
                 ) { compartiendo = false }
             }
-            // ---- El engranaje, la lista para quitar marcadores y la página que sube sola. ----
-            if (conElEngranaje) EngranajeDelPdf(
-                onCerrar = { conElEngranaje = false },
-                sinLado = sinLado, onSinLado = { sinLado = it; prefsDelLector.edit().putBoolean("sinLado", it).apply() },
-                invertido = invertido, onInvertido = { invertido = it; com.forge.pixpin.office.Oscuro.poner(this@LectorPdfActivity, it) },
-                izquierda = hayIzquierda, derecha = hayDerecha,
-                onIzquierda = { ponerEspacios(espacios xor ESPACIO_IZQUIERDA) }, onDerecha = { ponerEspacios(espacios xor ESPACIO_DERECHA) },
-                comoTexto = { escuchar ->
-                    conElEngranaje = false
-                    if (esOffice) { modoLectura(rutaPedida, nombre, escuchar); return@EngranajeDelPdf }
-                    val verde = if (escuchar) marcas.firstOrNull { it.emoji == Lectura.EMOJI_DE_VOZ } else null
-                    com.forge.pixpin.ui.VisorHtmlActivity.abrirPdfComoTexto(
-                        this@LectorPdfActivity, rutaPedida, nombre, escuchar = escuchar,
-                        desdeHoja = verde?.let { com.forge.pixpin.motor.Marcas.paginaDe(it) + 1 } ?: 0
-                    )
-                },
-                onExportar = { conElEngranaje = false; capas.guardarTodo(); compartiendo = true },
-                onAlProyecto = if (capas.esDeUnProyecto()) null else ({ conElEngranaje = false; alProyecto() }),
-                onQuitarMarcadores = if (marcas.isEmpty()) null else ({ conElEngranaje = false; quitandoMarcas = true }),
-                // Un Word: su «Modo lectura» es el Word como texto (con su voz); un PowerPoint no tiene.
-                comoTextoRotulo = if (!esOffice) "Ver como texto" to "como un Word" else if (esPresentacion) null else "Modo lectura" to "El Word como texto, con su letra y su voz",
-                conVoz = !(esOffice && esPresentacion),
-                onPresentar = if (esOffice && esPresentacion) ({ conElEngranaje = false; presentando = dondeEstoy().first }) else null,
-                onLecturaVeloz = if (codigoParaLecturaVeloz == null) null else ({ conElEngranaje = false; abrirEnLecturaVeloz() }),
-                porcentajeEnLecturaVeloz = porcentajeEnLecturaVeloz,
-                // Imprimir: mantener el marco del riel (25-oct-2026).
-                onImprimir = null,
-                onCopiarHoja = if (esOffice) ({
-                    conElEngranaje = false
-                    val hoja = dondeEstoy().first
-                    alcance.launch {
-                        val texto = withContext(Dispatchers.IO) { com.forge.pixpin.office.HojasOffice.yaAbierto(rutaPedida)?.texto(hoja).orEmpty() }
-                        copiar(texto, "Texto de la hoja ${hoja + 1} copiado")
-                    }
-                }) else null
-            )
+            // ---- La lista para quitar marcadores (mantener el marcador del riel) y la página que sube sola. ----
             if (quitandoMarcas) androidx.compose.material3.AlertDialog(
                 onDismissRequest = { quitandoMarcas = false },
                 title = { Text("Quitar marcadores") },

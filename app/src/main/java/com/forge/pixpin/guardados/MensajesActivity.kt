@@ -3367,238 +3367,32 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 onDismissRequest = { menuAbierto = false; verMas = false },
                 offset = dondeElDedo
             ) {
+              // **Lo de cada tipo** (28-oct-2026, el usuario: «en un PDF, "recordatorio", "llamada
+              // falsa"… es absurdo»): qué entra, en qué orden y qué va a «Más» lo decide
+              // [OpcionesDelMensaje], sin Android y con sus pruebas. Aquí solo se pinta. Se mira al
+              // abrir el menú, que es cuando importa (devolver al proyecto mira los proyectos de ahora).
+              val opciones = remember(m, menuAbierto, acciones.cuantosComentarios) {
+                  val proyectosAhora = (application as? PixPinApp)?.proyectos?.proyectos?.value.orEmpty()
+                  OpcionesDelMensaje.para(
+                      m, OpcionesDelMensaje.Contexto(
+                          ajeno = quien != null && !quien.esMio,
+                          puedeTranscribir = acciones.transcribir != null,
+                          puedeEstudiar = acciones.estudiar != null,
+                          hayHilo = acciones.cuantosComentarios > 0,
+                          puedeUnir = acciones.unir != null,
+                          puedeDevolver = acciones.devolver != null && UnirAlProyecto.sePuedeDevolver(m, proyectosAhora)
+                      )
+                  )
+              }
+              val cerrar = { menuAbierto = false; verMas = false }
               if (!verMas) {
-                // **Cambiar el nombre, lo primero** (4-oct-2026): de cualquier archivo, audios
-                // incluidos. Lo pidió el usuario así, «que sea notorio».
-                if (Renombrar.sePuede(m)) {
-                    DelMenu(com.forge.pixpin.R.string.guardados_cambiar_nombre, Icons.Filled.Edit) {
-                        menuAbierto = false; renombrandoMensaje = m
-                    }
-                }
-                // **Editar en el escáner** (23-oct-2026): lo escaneado vuelve a ese documento del
-                // escáner, para recortar, cambiar el filtro, reordenar o añadir hojas.
-                if (EscanerProMax.esEscaneo(m)) {
-                    DelMenu(com.forge.pixpin.R.string.guardados_escaner_editar, Icons.Filled.DocumentScanner) {
-                        menuAbierto = false; escaneoPorEditar = m
-                    }
-                }
-                // **Lectura veloz** (27-oct-2026): un PDF, un Word, un libro, una página o un texto, en
-                // la app de lectura rápida, desde el marcador verde. Ver [abrirEnLecturaVeloz].
-                if (LecturaVelozEnElTelefono.sePuede(m)) {
-                    DelMenu(com.forge.pixpin.R.string.guardados_lectura_veloz, Icons.Filled.Speed) {
-                        menuAbierto = false; abrirEnLecturaVeloz(m)
-                    }
-                }
-                DelMenu(com.forge.pixpin.R.string.guardados_responder,
-                        Icons.AutoMirrored.Filled.Reply) {
-                    menuAbierto = false; acciones.responder()
-                }
-                acciones.copiar?.let { copiar ->
-                    DelMenu(com.forge.pixpin.R.string.guardados_copiar,
-                            Icons.Filled.ContentCopy) {
-                        menuAbierto = false; copiar()
-                    }
-                }
-                // **Solo lo que la burbuja no tiene ya a mano** (22-sep-2026, pedido por el
-                // usuario: «muchas de esas opciones ya están repetidas»). Una foto, una hoja, un
-                // archivo y un lienzo llevan su botón de pinear en la propia burbuja
-                // ([AtajoEnLaEsquina], [FilaDeArchivo]); la nota de voz, el de pasarla a texto
-                // ([BotonDeTexto]). Ahí el menú calla: dos caminos al mismo sitio no ayudan,
-                // alargan la lista. Pinear queda para lo que no lleva botón: una nota
-                // de texto y una nota de voz.
-                if (!tieneBotonDePinear(m)) DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) {
-                    menuAbierto = false; acciones.pinear()
-                }
-                // **La descripción de una foto o un archivo** (lo del PC del 4-oct): el texto
-                // de debajo, en el propio mensaje. Ver [Descripcion].
-                if (Descripcion.sePuede(m)) {
-                    DelMenu(
-                        if (m.texto.isBlank()) com.forge.pixpin.R.string.guardados_describir
-                        else com.forge.pixpin.R.string.guardados_describir_editar,
-                        Icons.Filled.Subtitles
-                    ) { menuAbierto = false; describiendo = m }
-                }
-                // Pasar a texto solo si ya lo tiene —entonces es **volver** a pasarlo—: sin texto,
-                // el botón de la burbuja hace justo esto. Ver arriba.
-                acciones.transcribir?.let { transcribir ->
-                    if (!m.transcripcion.isNullOrBlank()) DelMenu(com.forge.pixpin.R.string.guardados_transcribir,
-                            Icons.Filled.Subtitles) {
-                        menuAbierto = false; transcribir()
-                    }
-                }
-                DelMenu(com.forge.pixpin.R.string.guardados_reenviar,
-                        Icons.AutoMirrored.Filled.Forward) {
-                    menuAbierto = false; acciones.reenviar()
-                }
-                // **Añadir a carpeta…** (25-oct-2026, del PC): una hoja del chat a un cuaderno. Ver [CarpetasDelChat].
-                if (CarpetaDePaginas.puedeIr(m) && m.clase != Clase.VOZ) {
-                    DelMenu(com.forge.pixpin.R.string.guardados_anadir_a_carpeta, Icons.AutoMirrored.Filled.MenuBook) {
-                        menuAbierto = false
-                        CarpetasDelChat.preguntarDonde(this@MensajesActivity, m)
-                    }
-                }
-                // **La carpeta de una grabación** (25-oct-2026, PC e1150e8): tocarla estudia la clase;
-                // lo grabado y lo adjuntado, aquí. Ver [CarpetaActivity].
-                if (CarpetaDePaginas.esGrabacion(m)) {
-                    DelMenu(com.forge.pixpin.R.string.guardados_abrir_la_carpeta, Icons.Filled.FolderCopy) {
-                        menuAbierto = false
-                        CarpetaActivity.abrir(this@MensajesActivity, m.id, entera = true)
-                    }
-                }
-                // **Guardar como receta** (§4.7): la pregunta que contestó, como botón del chat «Asistente».
-                if (m.clase == Clase.NOTA && com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m)) {
-                    DelMenu(com.forge.pixpin.R.string.asistente_guardar_receta, Icons.Filled.Star) {
-                        menuAbierto = false
-                        val contexto = this@MensajesActivity
-                        lifecycleScope.launch(Dispatchers.IO) {
-                            val todos = MensajesStore(contexto).leer()
-                            val pregunta = m.respondeA?.let { id -> todos.firstOrNull { it.id == id } }
-                                ?: todos.filter { it.proyecto == m.proyecto && it.cuando < m.cuando && it.clase == Clase.NOTA && !com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(it) }.maxByOrNull { it.cuando }
-                            val pedido = pregunta?.texto?.let { com.forge.pixpin.asistente.ChatDelAsistente.sinMencion(it) }.orEmpty()
-                            val aviso = runCatching {
-                                com.forge.pixpin.asistente.RecetasDelTelefono.cambiar(contexto) { com.forge.pixpin.ia.Automatizaciones.anadirReceta(it, "", "", pedido, System.currentTimeMillis()) }
-                            }.fold({ "Receta «${it.nombre}» guardada" }, { "No se pudo: ${it.message}" })
-                            withContext(Dispatchers.Main) { android.widget.Toast.makeText(contexto, aviso, android.widget.Toast.LENGTH_SHORT).show() }
-                        }
-                    }
-                }
-                DelMenu(com.forge.pixpin.R.string.guardados_compartir, com.forge.pixpin.ui.IconoDeCompartir) {
-                    menuAbierto = false
-                    // Siempre la hoja de compartir de toda la aplicación. Ver [compartibleDe].
-                    acciones.compartirComo()
-                }
-                DelMenu(
-                    // En una nota de voz, recordar es **llamarse**: a esa hora suena como una
-                    // llamada y la nota se oye por el auricular. Ver [com.forge.pixpin.pin.LlamadaSecretaActivity].
-                    if (m.recuerdaEn != null) com.forge.pixpin.R.string.guardados_recordar_quitar
-                    else if (m.clase == Clase.VOZ) com.forge.pixpin.R.string.guardados_llamada
-                    else com.forge.pixpin.R.string.guardados_recordar,
-                    if (m.clase == Clase.VOZ && m.recuerdaEn == null) Icons.Filled.Call else Icons.Filled.Alarm
-                ) { menuAbierto = false; acciones.recordar() }
-                // **De un mensaje, una lección** (3-oct-2026): lo que pasó suele estar ya en el
-                // chat —la foto del error, la nota de voz contándolo—. La lección sale con su
-                // texto y queda enlazada a él, en el mismo chat.
-                if (!com.forge.pixpin.lecciones.LeccionesStore.esLeccion(m)) {
-                    DelMenu(com.forge.pixpin.R.string.guardados_hacer_leccion, androidx.compose.material.icons.Icons.Filled.Lightbulb) {
-                        menuAbierto = false
-                        com.forge.pixpin.lecciones.LeccionActivity.nueva(
-                            this@MensajesActivity,
-                            texto = (m.transcripcion ?: m.texto).ifBlank { m.nombre }.takeIf { it.isNotBlank() },
-                            mensaje = m.id, proyecto = m.proyecto
-                        )
-                    }
-                }
-                // **Enviar a Anki** (25-oct-2026, como el PC): una clase grabada, una foto o una nota
-                // con preguntas, en tarjetas. Ver [com.forge.pixpin.anki.EnviarAAnkiActivity].
-                if (com.forge.pixpin.anki.AnkiDelMensaje.sePuede(m)) {
-                    DelMenu(com.forge.pixpin.R.string.guardados_enviar_anki, Icons.Filled.School) {
-                        menuAbierto = false
-                        com.forge.pixpin.anki.EnviarAAnkiActivity.abrir(this@MensajesActivity, m.id)
-                    }
-                }
-                DelMenu(com.forge.pixpin.R.string.guardados_etiquetar,
-                        Icons.Filled.EmojiEmotions) {
-                    menuAbierto = false; acciones.etiquetar()
-                }
-                DelMenu(com.forge.pixpin.R.string.guardados_elegir, Icons.Filled.CheckBox) {
-                    menuAbierto = false; acciones.seleccionar()
-                }
+                for (o in opciones.visibles) EntradaDelMenu(o, m, acciones, cerrar)
                 // Sin cerrar: cambia lo de dentro por lo raro.
-                DelMenu(com.forge.pixpin.R.string.guardados_menu_mas, Icons.Filled.MoreHoriz) { verMas = true }
+                if (opciones.enMas.isNotEmpty()) DelMenu(com.forge.pixpin.R.string.guardados_menu_mas, Icons.Filled.MoreHoriz) { verMas = true }
               } else {
                 DelMenu(com.forge.pixpin.R.string.guardados_atras, Icons.AutoMirrored.Filled.ArrowBack) { verMas = false }
                 androidx.compose.material3.HorizontalDivider()
-                DelMenu(
-                    if (m.fijado) com.forge.pixpin.R.string.guardados_soltar
-                    else com.forge.pixpin.R.string.guardados_fijar,
-                    Icons.Filled.PushPin
-                ) { menuAbierto = false; verMas = false; acciones.fijar() }
-                // **Abrir con otra aplicación** (o instalar, si es un APK). Ver [com.forge.pixpin.ui.AbrirCon].
-                m.ruta?.let { ruta ->
-                    DelMenu(com.forge.pixpin.R.string.guardados_abrir_con, Icons.Filled.Launch) {
-                        menuAbierto = false; verMas = false
-                        com.forge.pixpin.ui.AbrirCon.abrir(this@MensajesActivity, File(ruta))
-                    }
-                    // **Aligerar un PDF que ya estaba aquí.** Lo que entra se aligera solo, pero
-                    // los documentos de antes se quedaron como entraron, y volver a compartirlos
-                    // uno a uno para que pasen por la puerta es absurdo (usuario, 14-sep-2026).
-                    if (ruta.endsWith(".pdf", ignoreCase = true)) {
-                        DelMenu(com.forge.pixpin.R.string.guardados_aligerar, Icons.Filled.Compress) {
-                            menuAbierto = false; verMas = false
-                            aAligerar = m to ruta
-                        }
-                    }
-                }
-                DelMenu(com.forge.pixpin.R.string.guardados_insertar_en_nota, Icons.Filled.NoteAdd) {
-                    menuAbierto = false; verMas = false
-                    insertandoEnNota = m
-                }
-                acciones.rescatar?.let { rescatar ->
-                    DelMenu(com.forge.pixpin.R.string.guardados_rescatar,
-                            Icons.Filled.BookmarkBorder) {
-                        menuAbierto = false; verMas = false; rescatar()
-                    }
-                }
-                if (m.clase == Clase.IMAGEN && m.referencia != null) {
-                    DelMenu(
-                        if (m.soloLaFoto) com.forge.pixpin.R.string.guardados_ver_todo
-                        else com.forge.pixpin.R.string.guardados_solo_la_foto,
-                        Icons.Filled.Crop
-                    ) {
-                        menuAbierto = false; verMas = false
-                        acciones.alternarRecorte()
-                    }
-                }
-                // **El hilo, y solo cuando lo hay.** Un mensaje con cinco comentarios
-                // repartidos por la conversación no se lee: están intercalados con todo
-                // lo demás y en el orden en que llegaron, no en el de la discusión.
-                // Juntos y con su mensaje arriba, se leen de un tirón.
-                if (acciones.cuantosComentarios > 0) {
-                    DelMenu(
-                        com.forge.pixpin.R.string.guardados_ver_hilo,
-                        Icons.Filled.Forum
-                    ) { menuAbierto = false; verMas = false; acciones.verHilo() }
-                }
-                // **Unir al proyecto.** Lo que se guardó en la conversación de una obra
-                // acaba siendo parte de la obra: una foto es una hoja, una nota es una
-                // nota, y el PDF del cliente es el documento.
-                acciones.unir?.let { unir ->
-                    DelMenu(com.forge.pixpin.R.string.guardados_unir_al_proyecto,
-                            Icons.Filled.LibraryAdd) {
-                        menuAbierto = false; verMas = false; unir()
-                    }
-                }
-                // **Volver a añadir al proyecto** lo que se quitó de él: la misma hoja, con lo que
-                // se hizo mientras estuvo fuera. Se mira al abrir el menú, que es cuando importa.
-                acciones.devolver?.let { devolver ->
-                    val proyectosAhora = (application as? PixPinApp)?.proyectos?.proyectos?.value.orEmpty()
-                    if (UnirAlProyecto.sePuedeDevolver(m, proyectosAhora)) {
-                        DelMenu(com.forge.pixpin.R.string.guardados_devolver_al_proyecto,
-                                Icons.Filled.LibraryAdd) {
-                            menuAbierto = false; verMas = false; devolver()
-                        }
-                    }
-                }
-                acciones.estudiar?.let { estudiar ->
-                    DelMenu(com.forge.pixpin.R.string.estudiar_titulo, Icons.Filled.School) {
-                        menuAbierto = false; verMas = false; estudiar()
-                    }
-                }
-                acciones.letra?.let { letra ->
-                    DelMenu(com.forge.pixpin.R.string.letra_ver, Icons.Filled.Lyrics) {
-                        menuAbierto = false; verMas = false; letra()
-                    }
-                }
-                // **Una foto del chat de un proyecto, de foto del chat** (4-oct-2026 como logo; desde
-                // el 25-oct, la foto del chat que viaja): abre la hoja de la foto con ella puesta, para
-                // recortarla. Quitarla es «Como siempre» en la hoja. Ver [HojaDeLaFotoDelChat].
-                val delProyecto = m.proyecto
-                if (delProyecto != null && m.clase == Clase.IMAGEN && m.ruta != null && !m.enBuzon) {
-                    DelMenu(com.forge.pixpin.R.string.guardados_logo_poner, Icons.Filled.AccountCircle) {
-                        menuAbierto = false; verMas = false
-                        fotoDelChatCon = delProyecto to File(m.ruta)
-                    }
-                }
+                for (o in opciones.enMas) EntradaDelMenu(o, m, acciones, cerrar)
               }
                 // Borrar, en rojo y **aparte**: es la única que no se deshace.
                 androidx.compose.material3.HorizontalDivider()
@@ -6569,6 +6363,104 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         )
     }
 
+    /**
+     * **Una entrada del menú del mensaje**: el rótulo, el icono y qué hace cada
+     * [OpcionesDelMensaje.Opcion] (28-oct-2026). Cuáles salen y en qué orden no se decide aquí,
+     * sino en [OpcionesDelMensaje.para]. [cerrar] cierra el menú antes de hacerlo.
+     */
+    @Composable
+    private fun EntradaDelMenu(o: OpcionesDelMensaje.Opcion, m: Mensaje, acciones: Acciones, cerrar: () -> Unit) {
+        when (o) {
+            OpcionesDelMensaje.Opcion.RENOMBRAR -> DelMenu(com.forge.pixpin.R.string.guardados_cambiar_nombre, Icons.Filled.Edit) { cerrar(); renombrandoMensaje = m }
+            OpcionesDelMensaje.Opcion.COPIAR -> acciones.copiar?.let { copiar -> DelMenu(com.forge.pixpin.R.string.guardados_copiar, Icons.Filled.ContentCopy) { cerrar(); copiar() } }
+            OpcionesDelMensaje.Opcion.RESPONDER -> DelMenu(com.forge.pixpin.R.string.guardados_responder, Icons.AutoMirrored.Filled.Reply) { cerrar(); acciones.responder() }
+            OpcionesDelMensaje.Opcion.PINEAR -> DelMenu(com.forge.pixpin.R.string.guardados_pinear, Icons.Filled.OpenInNew) { cerrar(); acciones.pinear() }
+            // Lo escaneado vuelve a ese documento del escáner (23-oct-2026).
+            OpcionesDelMensaje.Opcion.EDITAR_EN_ESCANER -> DelMenu(com.forge.pixpin.R.string.guardados_escaner_editar, Icons.Filled.DocumentScanner) { cerrar(); escaneoPorEditar = m }
+            // En la app de lectura rápida, desde el marcador verde (27-oct-2026). Ver [abrirEnLecturaVeloz].
+            OpcionesDelMensaje.Opcion.LECTURA_VELOZ -> DelMenu(com.forge.pixpin.R.string.guardados_lectura_veloz, Icons.Filled.Speed) { cerrar(); abrirEnLecturaVeloz(m) }
+            // La descripción de una foto o un archivo: el texto de debajo. Ver [Descripcion].
+            OpcionesDelMensaje.Opcion.DESCRIBIR -> DelMenu(
+                if (m.texto.isBlank()) com.forge.pixpin.R.string.guardados_describir else com.forge.pixpin.R.string.guardados_describir_editar, Icons.Filled.Subtitles
+            ) { cerrar(); describiendo = m }
+            OpcionesDelMensaje.Opcion.TRANSCRIBIR -> acciones.transcribir?.let { t -> DelMenu(com.forge.pixpin.R.string.guardados_transcribir, Icons.Filled.Subtitles) { cerrar(); t() } }
+            OpcionesDelMensaje.Opcion.LETRA -> acciones.letra?.let { l -> DelMenu(com.forge.pixpin.R.string.letra_ver, Icons.Filled.Lyrics) { cerrar(); l() } }
+            OpcionesDelMensaje.Opcion.ESTUDIAR -> acciones.estudiar?.let { e -> DelMenu(com.forge.pixpin.R.string.estudiar_titulo, Icons.Filled.School) { cerrar(); e() } }
+            // La carpeta de una grabación (25-oct-2026): tocarla estudia la clase; lo grabado y lo adjuntado, aquí.
+            OpcionesDelMensaje.Opcion.ABRIR_CARPETA -> DelMenu(com.forge.pixpin.R.string.guardados_abrir_la_carpeta, Icons.Filled.FolderCopy) {
+                cerrar(); CarpetaActivity.abrir(this@MensajesActivity, m.id, entera = true)
+            }
+            OpcionesDelMensaje.Opcion.REENVIAR -> DelMenu(com.forge.pixpin.R.string.guardados_reenviar, Icons.AutoMirrored.Filled.Forward) { cerrar(); acciones.reenviar() }
+            // Siempre la hoja de compartir de toda la aplicación. Ver [compartibleDe].
+            OpcionesDelMensaje.Opcion.COMPARTIR -> DelMenu(com.forge.pixpin.R.string.guardados_compartir, com.forge.pixpin.ui.IconoDeCompartir) { cerrar(); acciones.compartirComo() }
+            // En una nota de voz, recordar es **llamarse**. Ver [com.forge.pixpin.pin.LlamadaSecretaActivity].
+            OpcionesDelMensaje.Opcion.RECORDAR -> DelMenu(
+                if (m.recuerdaEn != null) com.forge.pixpin.R.string.guardados_recordar_quitar
+                else if (m.clase == Clase.VOZ) com.forge.pixpin.R.string.guardados_llamada
+                else com.forge.pixpin.R.string.guardados_recordar,
+                if (m.clase == Clase.VOZ && m.recuerdaEn == null) Icons.Filled.Call else Icons.Filled.Alarm
+            ) { cerrar(); acciones.recordar() }
+            // De un mensaje, una lección (3-oct-2026), enlazada a él y en el mismo chat.
+            OpcionesDelMensaje.Opcion.HACER_LECCION -> DelMenu(com.forge.pixpin.R.string.guardados_hacer_leccion, Icons.Filled.Lightbulb) {
+                cerrar()
+                com.forge.pixpin.lecciones.LeccionActivity.nueva(
+                    this@MensajesActivity,
+                    texto = (m.transcripcion ?: m.texto).ifBlank { m.nombre }.takeIf { it.isNotBlank() },
+                    mensaje = m.id, proyecto = m.proyecto
+                )
+            }
+            // Una hoja del chat a un cuaderno (25-oct-2026). Ver [CarpetasDelChat].
+            OpcionesDelMensaje.Opcion.ANADIR_A_CARPETA -> DelMenu(com.forge.pixpin.R.string.guardados_anadir_a_carpeta, Icons.AutoMirrored.Filled.MenuBook) {
+                cerrar(); CarpetasDelChat.preguntarDonde(this@MensajesActivity, m)
+            }
+            OpcionesDelMensaje.Opcion.ENVIAR_A_ANKI -> DelMenu(com.forge.pixpin.R.string.guardados_enviar_anki, Icons.Filled.School) {
+                cerrar(); com.forge.pixpin.anki.EnviarAAnkiActivity.abrir(this@MensajesActivity, m.id)
+            }
+            // **Guardar como receta** (§4.7): la pregunta que contestó, como botón del chat «Asistente».
+            OpcionesDelMensaje.Opcion.GUARDAR_RECETA -> DelMenu(com.forge.pixpin.R.string.asistente_guardar_receta, Icons.Filled.Star) {
+                cerrar()
+                val contexto = this@MensajesActivity
+                lifecycleScope.launch(Dispatchers.IO) {
+                    val todos = MensajesStore(contexto).leer()
+                    val pregunta = m.respondeA?.let { id -> todos.firstOrNull { it.id == id } }
+                        ?: todos.filter { it.proyecto == m.proyecto && it.cuando < m.cuando && it.clase == Clase.NOTA && !com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(it) }.maxByOrNull { it.cuando }
+                    val pedido = pregunta?.texto?.let { com.forge.pixpin.asistente.ChatDelAsistente.sinMencion(it) }.orEmpty()
+                    val aviso = runCatching {
+                        com.forge.pixpin.asistente.RecetasDelTelefono.cambiar(contexto) { com.forge.pixpin.ia.Automatizaciones.anadirReceta(it, "", "", pedido, System.currentTimeMillis()) }
+                    }.fold({ "Receta «${it.nombre}» guardada" }, { "No se pudo: ${it.message}" })
+                    withContext(Dispatchers.Main) { android.widget.Toast.makeText(contexto, aviso, android.widget.Toast.LENGTH_SHORT).show() }
+                }
+            }
+            OpcionesDelMensaje.Opcion.FIJAR -> DelMenu(if (m.fijado) com.forge.pixpin.R.string.guardados_soltar else com.forge.pixpin.R.string.guardados_fijar, Icons.Filled.PushPin) { cerrar(); acciones.fijar() }
+            OpcionesDelMensaje.Opcion.ETIQUETAR -> DelMenu(com.forge.pixpin.R.string.guardados_etiquetar, Icons.Filled.EmojiEmotions) { cerrar(); acciones.etiquetar() }
+            OpcionesDelMensaje.Opcion.ELEGIR -> DelMenu(com.forge.pixpin.R.string.guardados_elegir, Icons.Filled.CheckBox) { cerrar(); acciones.seleccionar() }
+            // Abrir con otra aplicación (o instalar, si es un APK). Ver [com.forge.pixpin.ui.AbrirCon].
+            OpcionesDelMensaje.Opcion.ABRIR_CON -> m.ruta?.let { ruta ->
+                DelMenu(com.forge.pixpin.R.string.guardados_abrir_con, Icons.Filled.Launch) { cerrar(); com.forge.pixpin.ui.AbrirCon.abrir(this@MensajesActivity, File(ruta)) }
+            }
+            // Aligerar un PDF que ya estaba aquí (14-sep-2026): lo que entra se aligera solo, lo de antes no.
+            OpcionesDelMensaje.Opcion.ALIGERAR -> m.ruta?.let { ruta ->
+                DelMenu(com.forge.pixpin.R.string.guardados_aligerar, Icons.Filled.Compress) { cerrar(); aAligerar = m to ruta }
+            }
+            OpcionesDelMensaje.Opcion.SOLO_LA_FOTO -> DelMenu(
+                if (m.soloLaFoto) com.forge.pixpin.R.string.guardados_ver_todo else com.forge.pixpin.R.string.guardados_solo_la_foto, Icons.Filled.Crop
+            ) { cerrar(); acciones.alternarRecorte() }
+            // La foto del chat de un proyecto (25-oct-2026). Ver [HojaDeLaFotoDelChat].
+            OpcionesDelMensaje.Opcion.FOTO_DEL_CHAT -> {
+                val delProyecto = m.proyecto
+                val ruta = m.ruta
+                if (delProyecto != null && ruta != null) DelMenu(com.forge.pixpin.R.string.guardados_logo_poner, Icons.Filled.AccountCircle) {
+                    cerrar(); fotoDelChatCon = delProyecto to File(ruta)
+                }
+            }
+            OpcionesDelMensaje.Opcion.INSERTAR_EN_NOTA -> DelMenu(com.forge.pixpin.R.string.guardados_insertar_en_nota, Icons.Filled.NoteAdd) { cerrar(); insertandoEnNota = m }
+            OpcionesDelMensaje.Opcion.VER_HILO -> DelMenu(com.forge.pixpin.R.string.guardados_ver_hilo, Icons.Filled.Forum) { cerrar(); acciones.verHilo() }
+            OpcionesDelMensaje.Opcion.UNIR_AL_PROYECTO -> acciones.unir?.let { u -> DelMenu(com.forge.pixpin.R.string.guardados_unir_al_proyecto, Icons.Filled.LibraryAdd) { cerrar(); u() } }
+            OpcionesDelMensaje.Opcion.DEVOLVER_AL_PROYECTO -> acciones.devolver?.let { d -> DelMenu(com.forge.pixpin.R.string.guardados_devolver_al_proyecto, Icons.Filled.LibraryAdd) { cerrar(); d() } }
+            OpcionesDelMensaje.Opcion.RESCATAR -> acciones.rescatar?.let { r -> DelMenu(com.forge.pixpin.R.string.guardados_rescatar, Icons.Filled.BookmarkBorder) { cerrar(); r() } }
+        }
+    }
+
     @Composable
     private fun Opcion(texto: Int, onClick: () -> Unit) {
         androidx.compose.material3.TextButton(
@@ -7203,14 +7095,6 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             else -> fechaDe(cuando) + " " + hora
         }
     }
-
-    /**
-     * Si la burbuja de este mensaje ya lleva su botón de sacar a la pantalla: la foto y la hoja
-     * lo tienen en su esquina ([AtajoEnLaEsquina]) y lo demás con archivo, en su fila
-     * ([FilaDeArchivo]). La nota de texto y la de voz son las únicas sin él.
-     */
-    private fun tieneBotonDePinear(m: Mensaje): Boolean =
-        m.clase != Clase.NOTA && m.clase != Clase.VOZ && m.clase != Clase.MINIAPP
 
     private fun pinear(m: Mensaje, avisar: Boolean = true) {
         val gestor = (application as? PixPinApp)?.overlayManager ?: return

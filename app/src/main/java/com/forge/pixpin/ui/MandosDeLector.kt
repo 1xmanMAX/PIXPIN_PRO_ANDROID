@@ -8,7 +8,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -37,9 +36,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -62,7 +59,12 @@ import androidx.compose.ui.semantics.contentDescription
  * «todos son visores rápidos: tienen que llevar el mismo lenguaje de diseño y las mismas
  * funciones»). El de Word y libros ([VisorHtmlActivity]) y el de PDF
  * ([com.forge.pixpin.pdf.LectorPdfActivity]) se hacen con estas piezas: la pastilla de arriba,
- * el engranaje por apartados, los mandos de los lados y la barra de la página que sube sola.
+ * los mandos de los lados y la barra de la página que sube sola.
+ *
+ * **Sin engranaje** (28-oct-2026, el usuario: «la app tiene que ser simple e intuitiva, no 100 000
+ * opciones repetidas»): la hoja de ajustes por apartados se fue, y con ella sus interruptores, filas
+ * y botones de texto. Lo que no estaba ya a la vista tiene su sitio; de la hoja queda
+ * [HojaDeLector], que el lector de Word usa para la letra.
  *
  * El criterio del rediseño: lo que es sí o no, **interruptor**; lo que es cuánto, **deslizador**;
  * elegir entre pocas, **fichas**; hacer algo, **botón de texto**. Todo de tamaño mesurado.
@@ -141,10 +143,10 @@ fun PastillaDeLector(
     }
 }
 
-/** **El engranaje**: una hoja de abajo, oscura, que se desplaza si no cabe. Dentro van los apartados. */
+/** **Una hoja de abajo**, oscura, que se desplaza si no cabe (la de la letra del lector de Word). */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EngranajeDeLector(onCerrar: () -> Unit, contenido: @Composable ColumnScope.() -> Unit) {
+fun HojaDeLector(onCerrar: () -> Unit, contenido: @Composable ColumnScope.() -> Unit) {
     ModalBottomSheet(
         onDismissRequest = onCerrar,
         containerColor = Color(0xF214182B),
@@ -160,7 +162,7 @@ fun EngranajeDeLector(onCerrar: () -> Unit, contenido: @Composable ColumnScope.(
     }
 }
 
-/** El título de un apartado del engranaje: pequeño, en gris, con aire encima. */
+/** El título de un apartado de la hoja: pequeño, en gris, con aire encima. */
 @Composable
 fun ApartadoDeLector(titulo: String) {
     Text(
@@ -186,57 +188,6 @@ fun DeslizadorDeLector(nombre: String, valor: String, actual: Float, ultimo: Int
         )
         Text(valor, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium, maxLines = 1,
             modifier = Modifier.width(62.dp).padding(start = 8.dp))
-    }
-}
-
-/** Sí o no: el nombre, una línea pequeña de qué hace, y el interruptor (algo menor que el de serie). */
-@Composable
-fun InterruptorDeLector(nombre: String, nota: String?, puesto: Boolean, onCambio: (Boolean) -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { onCambio(!puesto) }.padding(vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(Modifier.weight(1f)) {
-            Text(nombre, style = MaterialTheme.typography.bodyMedium)
-            if (nota != null) Text(nota, color = Color.White.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall)
-        }
-        Switch(checked = puesto, onCheckedChange = onCambio, modifier = Modifier.graphicsLayer { scaleX = 0.8f; scaleY = 0.8f })
-    }
-}
-
-/** Una fila que abre o hace algo: el nombre, lo que hay puesto y una flechita. */
-@Composable
-fun FilaDeLector(nombre: String, valor: String?, onToque: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().height(40.dp).clip(RoundedCornerShape(10.dp)).clickable(onClick = onToque),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(nombre, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-        if (valor != null) Text(valor, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
-        Text("  ›", color = Color.White.copy(alpha = 0.6f))
-    }
-}
-
-/** Un − y un + con el nombre y cuántos pasos hay; el − solo si hay algo que quitar, el + apagado en el tope. */
-@Composable
-fun MasMenosDeLector(nombre: String, pasos: Int, tope: Int, onMenos: () -> Unit, onMas: () -> Unit) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(nombre, color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.labelMedium)
-        IconButton(onClick = onMenos, enabled = pasos > 0, modifier = Modifier.size(34.dp)) {
-            Icon(Icons.Filled.Remove, contentDescription = "Menos espacio a la ${nombre.lowercase()}", modifier = Modifier.size(18.dp))
-        }
-        Text("$pasos", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
-        IconButton(onClick = onMas, enabled = pasos < tope, modifier = Modifier.size(34.dp)) {
-            Icon(Icons.Filled.Add, contentDescription = "Más espacio a la ${nombre.lowercase()}", modifier = Modifier.size(18.dp))
-        }
-    }
-}
-
-/** Un botón que hace algo, solo texto, con el tamaño justo. */
-@Composable
-fun BotonDeTextoDeLector(texto: String, onToque: () -> Unit) {
-    TextButton(onClick = onToque, contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)) {
-        Text(texto, color = AZUL, style = MaterialTheme.typography.labelLarge)
     }
 }
 

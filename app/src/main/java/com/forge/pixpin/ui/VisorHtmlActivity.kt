@@ -35,7 +35,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Description
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.FormatSize
 import androidx.compose.material.icons.filled.BookmarkAdd
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -447,25 +447,9 @@ class VisorHtmlActivity : ComponentActivity() {
         marcaDeVoz = com.forge.pixpin.motor.Lectura.vozDeTexto(ExportarDocumentoAnotado.vozDe(this, claveDelDocumento))
     }
 
-    // ---- **Lectura veloz** (27-oct-2026, lo pidió el usuario): este documento en la app «Lectura
-    // Veloz», desde el marcador verde. Ver [com.forge.pixpin.guardados.LecturaVeloz]. ----
-
-    /** Lo que lleva la chapa del engranaje: por dónde va en Lectura Veloz, o null si nunca se leyó allí. */
-    private var porcentajeEnLecturaVeloz by mutableStateOf<Int?>(null)
-
-    /** Solo un adjunto del chat: su código es el que reconoce Lectura Veloz al devolver el punto. */
-    private val paraLecturaVeloz: Boolean
-        get() = esDocumento && baseDelMensaje != null && com.forge.pixpin.guardados.LecturaVeloz.admite(elDocumento?.name)
-
-    private fun mirarLecturaVeloz() {
-        val doc = elDocumento?.takeIf { paraLecturaVeloz } ?: return
-        lifecycleScope.launch {
-            porcentajeEnLecturaVeloz = withContext(Dispatchers.IO) {
-                com.forge.pixpin.sincro.AnotacionesDelAdjunto.uidDe(filesDir, doc.absolutePath)
-                    ?.let { com.forge.pixpin.guardados.LecturaVelozEnElTelefono.porcentaje(this@VisorHtmlActivity, it) }
-            }
-        }
-    }
+    // ---- **Lectura veloz** (27-oct-2026): el visor ya no la abre (28-oct-2026, el usuario: «se abre
+    // manteniendo pulsado el archivo en el chat → Lectura veloz, y ya»), pero sigue contando los
+    // párrafos de la voz, que es con lo que el verde pasa a Lectura Veloz y vuelve. ----
 
     /**
      * **Los párrafos de la voz, contados**, para pasar del verde a Lectura Veloz y volver
@@ -485,23 +469,6 @@ class VisorHtmlActivity : ComponentActivity() {
         lifecycleScope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.guardados.LecturaVelozEnElTelefono.guardarMapa(this@VisorHtmlActivity, base, mapa) } }
     }
 
-    /** «Lectura veloz»: se cuentan los párrafos (para convertir el verde) y se abre allí. */
-    private fun abrirEnLecturaVeloz() {
-        val doc = elDocumento ?: return
-        val nombre = intent?.getStringExtra(EXTRA_NOMBRE).orEmpty().ifBlank { doc.name }
-        val seguir = {
-            com.forge.pixpin.guardados.LecturaVelozEnElTelefono.abrir(this, {
-                com.forge.pixpin.guardados.LecturaVelozEnElTelefono.deArchivo(this, doc, nombre)
-            }) { que -> Toast.makeText(this, com.forge.pixpin.guardados.LecturaVelozEnElTelefono.avisoCorto(que), Toast.LENGTH_LONG).show() }
-        }
-        val vista = web
-        if (vista == null) { seguir(); return }
-        vista.evaluateJavascript(com.forge.pixpin.motor.VozAlta.PREPARAR) { crudo ->
-            runCatching { guardarElMapa(org.json.JSONObject(org.json.JSONTokener(crudo).nextValue() as String)) }
-            // El mapa se escribe en otro hilo: se le da un momento antes de leerlo para el enlace.
-            vista.postDelayed({ seguir() }, 150)
-        }
-    }
     /** Voces en línea de Google (mejores, pero el texto sale del teléfono); se recuerda. */
     private var vocesEnLinea by mutableStateOf(false)
 
@@ -1147,9 +1114,6 @@ class VisorHtmlActivity : ComponentActivity() {
         }
     }
 
-    /** Si lo que se lee es un PDF pasado a texto ([com.forge.pixpin.motor.PdfAHtml]): entonces su «en hojas» es el PDF mismo. */
-    private val vinoDeUnPdf: Boolean get() = com.forge.pixpin.motor.PdfAHtml.esPdf((comparte ?: elOriginal)?.name)
-
     /** A qué altura de lado volver tras recargar por [anadirEspacio], o −1. */
     private var xTrasRecargar = -1
 
@@ -1217,7 +1181,6 @@ class VisorHtmlActivity : ComponentActivity() {
         super.onResume()
         if (esDocumento && elOriginal != null) {
             leerLaMarcaDeVoz()
-            mirarLecturaVeloz()
         }
     }
 
@@ -1356,7 +1319,13 @@ class VisorHtmlActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxSize().onGloballyPositioned { cajaDelVisor = it.boundsInWindow() }
                     )
                 }
-                if (anotando) MandosDeAnotar()
+                // «Al proyecto», con el lápiz, como en el lector de PDF (28-oct-2026; antes, en el engranaje).
+                if (anotando) MandosDeAnotar(alProyecto = if (!esDocumento) null else ({
+                    anotando = false; guardarLaCapa(); cambiosEnLaCapa++; ponerLaTintaEnLaPagina()
+                    ocupado = "Pasándolo a PDF…"
+                    // Un momento para que la tinta entre en la página antes de imprimirla.
+                    web?.postDelayed({ comoPdf(suNombre, alProyecto = true) { ocupado = null } }, 300) ?: run { ocupado = null }
+                }))
                 if (esDocumento) BucleDeAutoDesplazar()
                 if (!presentando) androidx.compose.animation.AnimatedVisibility(
                     visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo,
@@ -1399,10 +1368,14 @@ class VisorHtmlActivity : ComponentActivity() {
                             )
                         }
                         // **En una página web, solo el nombre**: sus botones son los de la propia
-                        // página. **En un Word o un libro, el nombre, el marcador y el engranaje**
-                        // (tercera vuelta del usuario, 19-sep-2026): los tres puntos se fueron, y
-                        // con ellos imprimir y compartir —se comparte desde el chat—. Los dos
-                        // botones van con la pastilla: salen al tocar y se van al mover.
+                        // página. **En un Word o un libro, el nombre y sus botones** (tercera vuelta
+                        // del usuario, 19-sep-2026): los tres puntos se fueron. Van con la pastilla:
+                        // salen al tocar y se van al mover.
+                        // **Sin engranaje** (28-oct-2026, el usuario: «la app tiene que ser simple e
+                        // intuitiva, no 100 000 opciones repetidas»): lo que llevaba ya estaba a la
+                        // vista —el candado y los espacios abajo, la voz y el auricular en su barra,
+                        // compartir aquí— salvo la letra, que vuelve a ser lo que fue al principio:
+                        // un botón «Letra» con su tamaño, su grosor y su tipo, y nada más.
                         if (!esDocumento) androidx.compose.foundation.layout.Spacer(Modifier.size(width = 10.dp, height = 1.dp))
                         else {
                             // El lápiz (anotar) y el marcador van en el riel de la derecha, como en el PC. Ver [RielDelVisor].
@@ -1418,7 +1391,7 @@ class VisorHtmlActivity : ComponentActivity() {
                                 Icon(IconoDeCompartir, contentDescription = "Compartir", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
                             IconButton(onClick = { conLaLetra = true; poniendoMarcador = false }, modifier = Modifier.size(38.dp)) {
-                                Icon(Icons.Filled.Settings, contentDescription = "Letra", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
+                                Icon(Icons.Filled.FormatSize, contentDescription = "Letra", tint = blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp))
                             }
                         }
                     }
@@ -1454,6 +1427,8 @@ class VisorHtmlActivity : ComponentActivity() {
                             if (anotando) salir()
                             marcosDoc.activo = false; conLaLetra = false; poniendoMarcador = !poniendoMarcador
                         }),
+                        // Quitar marcadores: mantener el del riel (antes, en el engranaje).
+                        alMantenerMarcador = if (marcadores.isEmpty()) null else ({ quitandoMarcadores = true }),
                         onLapiz = ({
                             if (anotando) salir()
                             else { marcosDoc.activo = false; conLaLetra = false; poniendoMarcador = false; empezarAAnotar() }
@@ -1498,13 +1473,7 @@ class VisorHtmlActivity : ComponentActivity() {
                             }
                         ) { compartiendo = false }
                     }
-                    if (conLaLetra) PanelDeLetra(
-                        onCerrar = { conLaLetra = false },
-                        onImpresion = { conLaLetra = false; ocupado = "Preparando las páginas…"; comoPdf(suNombre, alProyecto = false) { ocupado = null } },
-                        onAlProyecto = { conLaLetra = false; ocupado = "Pasándolo a PDF…"; comoPdf(suNombre, alProyecto = true) { ocupado = null } },
-                        onQuitarMarcadores = { conLaLetra = false; quitandoMarcadores = true },
-                        onVoces = { conLaLetra = false; abrirLasVoces() }
-                    )
+                    if (conLaLetra) PanelDeLetra(onCerrar = { conLaLetra = false })
                     if (escuchando && !poniendoMarcador) BarraDeEscuchar(Modifier.align(Alignment.BottomCenter))
                     if (autoDesplazando && !escuchando && !poniendoMarcador) BarraDeAutoDesplazar(Modifier.align(Alignment.BottomCenter))
                     // Con la pastilla, y si abajo no hay otra barra: espacio a cada lado y el candado del lado.
@@ -1641,7 +1610,7 @@ class VisorHtmlActivity : ComponentActivity() {
 
     /** «Listo», la barra de herramientas y el cuadro del texto: **fuera** de la capa que se estira. */
     @Composable
-    private fun androidx.compose.foundation.layout.BoxScope.MandosDeAnotar() {
+    private fun androidx.compose.foundation.layout.BoxScope.MandosDeAnotar(alProyecto: (() -> Unit)? = null) {
         val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
         @Suppress("UNUSED_EXPRESSION") tickDeAnotar
         EscribirEnElLienzo(laCapa, tickDeAnotar) { tickDeAnotar++; cambiosEnLaCapa++ }
@@ -1662,6 +1631,14 @@ class VisorHtmlActivity : ComponentActivity() {
                 modifier = Modifier
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
                     .clickable { conLapiz = !conLapiz; lapizAutomatico = conLapiz }
+                    .padding(horizontal = 12.dp, vertical = 9.dp)
+            )
+            // **Al proyecto**: el documento, en hojas, a un proyecto nuevo para anotarlo en los lienzos.
+            if (alProyecto != null) Text(
+                "Al proyecto", color = androidx.compose.ui.graphics.Color.White.copy(alpha = 0.85f),
+                modifier = Modifier
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                    .clickable(onClick = alProyecto)
                     .padding(horizontal = 12.dp, vertical = 9.dp)
             )
         }
@@ -1794,113 +1771,105 @@ class VisorHtmlActivity : ComponentActivity() {
                         }
                     }
                     val donde = if (e.cuantos > 0 && e.parrafo >= 0) " · ${e.parrafo + 1} de ${e.cuantos}" else ""
-                    Text(
-                        e.voz + donde, color = tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(bottom = 6.dp, start = 10.dp, end = 10.dp)
-                    )
+                    // **La voz que lee, tocándola, las voces** (28-oct-2026; estaban en el engranaje).
+                    var conLasVoces by remember { mutableStateOf(false) }
+                    Box {
+                        Text(
+                            e.voz + donde + "  ▾", color = tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelSmall,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                                .clickable(onClickLabel = "Elegir las voces") { conLasVoces = true }
+                                .padding(bottom = 6.dp, top = 2.dp, start = 10.dp, end = 10.dp)
+                        )
+                        MenuDeVoces(conLasVoces) { conLasVoces = false }
+                    }
                 }
             }
         }
     }
 
     /**
-     * **El engranaje**: una hoja que se despliega desde abajo, con todo a la vista y a un toque.
-     * El tamaño y el grosor son **una barra de puntos** cada uno —cada punto, un valor; se toca o
-     * se pasa el dedo y vibra al cambiar—, el tipo de letra son fichas, y debajo lo demás.
+     * **La letra**: una hoja que se despliega desde abajo con el tamaño y el grosor —un deslizador
+     * cada uno— y el tipo de letra en fichas.
+     *
+     * Fue **el engranaje** (23-sep-2026), con cuatro apartados: Vista, Letra, Lectura, Voz y
+     * Documento. **Se quedó en la letra** (28-oct-2026, el usuario: «muchas repiten lo que ya está
+     * en la pantalla»): el candado y los espacios están abajo ([MandosDeLosLados]); el auricular, en
+     * la barra de escuchar, y las voces, tocando la voz en esa barra ([BarraDeEscuchar]); quitar
+     * marcadores, manteniendo el marcador del riel; «Al proyecto», con el lápiz, como en el lector de
+     * PDF; «Lectura veloz», en el chat; ver el PDF original, con atrás; y «Ver como PDF, en hojas»,
+     * fuera (imprimir está en el marco del riel, y un Word ya tiene su lector de hojas).
      */
-    @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
     @Composable
-    private fun PanelDeLetra(onCerrar: () -> Unit, onImpresion: () -> Unit, onAlProyecto: () -> Unit, onQuitarMarcadores: () -> Unit, onVoces: () -> Unit) {
-        // **Rediseñado** (23-sep-2026, pedido por el usuario: «más simple y fácil; no todo tiene que
-        // ser botones: interruptores, deslizadores… con un tamaño mesurado»). Cuatro apartados
-        // cortos —Letra, Lectura, Voz, Documento—: lo que es sí o no, interruptor; lo que es
-        // cuánto, deslizador; elegir entre pocas, fichas; y lo que es hacer algo, un botón de texto.
+    private fun PanelDeLetra(onCerrar: () -> Unit) {
         val lectura = com.forge.pixpin.motor.Lectura
         val fijada = hayAnotaciones
-        val blanco = androidx.compose.ui.graphics.Color.White
-        val gris = blanco.copy(alpha = 0.6f)
-        EngranajeDeLector(onCerrar) {
-            run {
-                // ---- Vista: el mismo documento en hojas, como un PDF ----
-                ApartadoDeLector("Vista")
-                if (vinoDeUnPdf) FilaDeLector("Ver el PDF original, en hojas", null) {
-                    onCerrar()
-                    (comparte ?: elOriginal)?.let { com.forge.pixpin.pdf.LectorPdfActivity.abrir(this@VisorHtmlActivity, it.absolutePath, intent?.getStringExtra(EXTRA_NOMBRE).orEmpty()) }
-                    finish()
-                } else FilaDeLector("Ver como PDF, en hojas", null, onImpresion)
-
-                // ---- Letra ----
-                ApartadoDeLector("Letra")
-                if (fijada) Text(
-                    "Fijada: el documento tiene anotaciones y, si la letra cambiara, se quedarían en el aire.",
-                    color = androidx.compose.ui.graphics.Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall,
-                    modifier = Modifier.padding(bottom = 4.dp)
-                )
-                val indiceDeTamano = lectura.TAMANOS.indexOfFirst { it >= tamanoDeLetra }.let { if (it < 0) lectura.TAMANOS.lastIndex else it }
-                var tamano by remember(indiceDeTamano) { mutableStateOf(indiceDeTamano.toFloat()) }
-                DeslizadorDeLector(
-                    "Tamaño", "${lectura.TAMANOS[tamano.toInt()]} %", tamano, lectura.TAMANOS.lastIndex, !fijada,
-                    onCambio = { tamano = it }, onSoltar = { ponerElTamano(lectura.TAMANOS[tamano.toInt()]) }
-                )
-                var grosor by remember(grosorDeLetra) { mutableStateOf(grosorDeLetra.toFloat()) }
-                DeslizadorDeLector(
-                    "Grosor", lectura.GROSORES.getOrElse(grosor.toInt()) { lectura.GROSORES[1] }.second, grosor, lectura.GROSORES.lastIndex, !fijada,
-                    onCambio = { grosor = it }, onSoltar = { if (grosor.toInt() != grosorDeLetra) ponerLaLetra(grosor.toInt(), tipoDeLetra) }
-                )
-                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    lectura.LETRAS.forEachIndexed { i, (_, nombre) -> FichaDeLetra(nombre, i == tipoDeLetra) { if (!fijada) ponerLaLetra(grosorDeLetra, i) } }
-                }
-
-                // ---- Lectura ----
-                ApartadoDeLector("Lectura")
-                InterruptorDeLector("Bloquear el desplazamiento de lado", "El dedo solo sube y baja; a lo ancho se queda donde lo dejes", sinLado) {
-                    sinLado = it
-                    prefsDeLectura.edit().putBoolean("sinLado", it).apply()
-                }
-                Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Text("Espacio para anotar", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                }
-                Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                    MasMenosDeLector("Izquierda", pasosDe(espacioIzq), topeDePasos(), { anadirEspacio(izquierda = true, mas = false) }) { anadirEspacio(izquierda = true) }
-                    androidx.compose.foundation.layout.Spacer(Modifier.weight(1f))
-                    MasMenosDeLector("Derecha", pasosDe(espacioDer), topeDePasos(), { anadirEspacio(izquierda = false, mas = false) }) { anadirEspacio(izquierda = false) }
-                }
-                // **Lectura veloz**: en la app de lectura rápida, desde el verde; a la derecha, por dónde va allí.
-                if (paraLecturaVeloz) FilaDeLector("Lectura veloz", porcentajeEnLecturaVeloz?.let { "$it %" }) { onCerrar(); abrirEnLecturaVeloz() }
-
-                // ---- Voz ----
-                ApartadoDeLector("Voz")
-                InterruptorDeLector("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", vocesEnLinea) {
-                    vocesEnLinea = it
-                    prefsDeLectura.edit().putBoolean("voz:enLinea", it).apply()
-                    lector.ponerEnLinea(it)
-                }
-                InterruptorDeLector("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", vocesDeMicrosoft) {
-                    vocesDeMicrosoft = it
-                    prefsDeLectura.edit().putBoolean("voz:edge", it).apply()
-                    if (!it) lector.usarEdge(null)
-                    else if (lector.estado.value.listo) lifecycleScope.launch { ponerLaVozDeMicrosoft(idiomaDeAhora()) }
-                }
-                if (vocesDeMicrosoft) {
-                    val puesta = (lector.vozDeEdge ?: prefsDeLectura.getString(claveDeVozDeMicrosoft(idiomaDeAhora()), null))
-                        ?.let { n -> n.substringAfter('-').substringAfter('-').removeSuffix("Neural") } ?: "la del país"
-                    FilaDeLector("Voz de Microsoft", puesta) { eligiendoVozDeMicrosoft = true }
-                }
-                val voz by lector.estado.collectAsState()
-                val auricular = if (voz.listo) voz.auricular else prefsDeLectura.getBoolean("voz:auricular", false)
-                InterruptorDeLector("Por el auricular de las llamadas", "Para sitios con ruido: el teléfono a la oreja", auricular) {
-                    prefsDeLectura.edit().putBoolean("voz:auricular", it).apply()
-                    lector.porElAuricular(it)
-                }
-                FilaDeLector("Bajar voces sin conexión", null, onVoces)
-
-                // ---- Documento ----
-                ApartadoDeLector("Documento")
-                Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
-                    BotonDeTextoDeLector("Al proyecto", onAlProyecto)
-                    if (marcadores.isNotEmpty()) BotonDeTextoDeLector("Quitar marcadores", onQuitarMarcadores)
-                }
+        HojaDeLector(onCerrar) {
+            ApartadoDeLector("Letra")
+            if (fijada) Text(
+                "Fijada: el documento tiene anotaciones y, si la letra cambiara, se quedarían en el aire.",
+                color = androidx.compose.ui.graphics.Color(0xFFFFD27A), style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.padding(bottom = 4.dp)
+            )
+            val indiceDeTamano = lectura.TAMANOS.indexOfFirst { it >= tamanoDeLetra }.let { if (it < 0) lectura.TAMANOS.lastIndex else it }
+            var tamano by remember(indiceDeTamano) { mutableStateOf(indiceDeTamano.toFloat()) }
+            DeslizadorDeLector(
+                "Tamaño", "${lectura.TAMANOS[tamano.toInt()]} %", tamano, lectura.TAMANOS.lastIndex, !fijada,
+                onCambio = { tamano = it }, onSoltar = { ponerElTamano(lectura.TAMANOS[tamano.toInt()]) }
+            )
+            var grosor by remember(grosorDeLetra) { mutableStateOf(grosorDeLetra.toFloat()) }
+            DeslizadorDeLector(
+                "Grosor", lectura.GROSORES.getOrElse(grosor.toInt()) { lectura.GROSORES[1] }.second, grosor, lectura.GROSORES.lastIndex, !fijada,
+                onCambio = { grosor = it }, onSoltar = { if (grosor.toInt() != grosorDeLetra) ponerLaLetra(grosor.toInt(), tipoDeLetra) }
+            )
+            Row(Modifier.horizontalScroll(androidx.compose.foundation.rememberScrollState())) {
+                lectura.LETRAS.forEachIndexed { i, (_, nombre) -> FichaDeLetra(nombre, i == tipoDeLetra) { if (!fijada) ponerLaLetra(grosorDeLetra, i) } }
             }
+        }
+    }
+
+    /**
+     * **Las voces**, desde la barra de escuchar tocando la voz que lee (28-oct-2026: antes, en el
+     * engranaje): las de Google en línea, las de Microsoft y cuál de ellas, y bajar voces sin conexión.
+     */
+    @Composable
+    private fun MenuDeVoces(abierto: Boolean, onCerrar: () -> Unit) {
+        androidx.compose.material3.DropdownMenu(expanded = abierto, onDismissRequest = onCerrar) {
+            @Composable
+            fun Casilla(nombre: String, nota: String, puesta: Boolean, alCambiar: (Boolean) -> Unit) =
+                androidx.compose.material3.DropdownMenuItem(
+                    text = {
+                        Column {
+                            Text(nombre)
+                            Text(nota, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    },
+                    trailingIcon = { androidx.compose.material3.Checkbox(checked = puesta, onCheckedChange = null) },
+                    onClick = { alCambiar(!puesta) }
+                )
+            Casilla("Voces en línea de Google", "Suenan mejor; el texto se manda a Google", vocesEnLinea) {
+                vocesEnLinea = it
+                prefsDeLectura.edit().putBoolean("voz:enLinea", it).apply()
+                lector.ponerEnLinea(it)
+            }
+            Casilla("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", vocesDeMicrosoft) {
+                vocesDeMicrosoft = it
+                prefsDeLectura.edit().putBoolean("voz:edge", it).apply()
+                if (!it) lector.usarEdge(null)
+                else if (lector.estado.value.listo) lifecycleScope.launch { ponerLaVozDeMicrosoft(idiomaDeAhora()) }
+            }
+            if (vocesDeMicrosoft) {
+                val puesta = (lector.vozDeEdge ?: prefsDeLectura.getString(claveDeVozDeMicrosoft(idiomaDeAhora()), null))
+                    ?.let { n -> n.substringAfter('-').substringAfter('-').removeSuffix("Neural") } ?: "la del país"
+                androidx.compose.material3.DropdownMenuItem(
+                    text = { Text("Voz de Microsoft: $puesta") },
+                    onClick = { onCerrar(); eligiendoVozDeMicrosoft = true }
+                )
+            }
+            androidx.compose.material3.DropdownMenuItem(
+                text = { Text("Bajar voces sin conexión") },
+                onClick = { onCerrar(); abrirLasVoces() }
+            )
         }
     }
 

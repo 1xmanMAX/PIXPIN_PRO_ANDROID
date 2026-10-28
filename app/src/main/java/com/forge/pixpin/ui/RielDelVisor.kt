@@ -59,6 +59,9 @@ import androidx.compose.ui.unit.sp
  *
  * Un visor que no tiene una de las tres —un pin no tiene sitio al que volver— pasa null.
  *
+ * **Mantener el marcador quita marcadores** (28-oct-2026), en los visores que pasan
+ * [alMantenerMarcador]: era del engranaje de los lectores, que se fue.
+ *
  * **Mantener el marco imprime** (25-oct-2026, el usuario: «que al mantener presionado ese botón un
  * segundo me mande a imprimir los marcos, o si no, el documento entero»): con marcos puestos salen
  * las dos opciones; sin ninguno, el documento entero directamente. Así no hace falta otro botón de
@@ -93,7 +96,12 @@ fun RielDelVisor(
     /** Los botones propios del formato, debajo de los tres y tras una raya. */
     extras: (@Composable () -> Unit)? = null,
     /** Cada toque en el riel (un botón o un marcador): el visor vuelve a contar para esconder las barras. */
-    alUsar: () -> Unit = {}
+    alUsar: () -> Unit = {},
+    /**
+     * **Mantener el marcador** (28-oct-2026): quitar marcadores, que estaba en el engranaje de los
+     * lectores. Null, mantenerlo solo dice su nombre.
+     */
+    alMantenerMarcador: (() -> Unit)? = null
 ) {
     var eligiendoQueImprimir by remember { mutableStateOf(false) }
     var globo by remember { mutableStateOf<String?>(null) }
@@ -120,7 +128,10 @@ fun RielDelVisor(
                             alUsar()
                             if (alMantener != null) alMantener() else globo = nombre
                         }, al = { alUsar(); al() })
-                    if (onMarcador != null) Boton(Icons.Filled.BookmarkAdd, "Marcador", poniendoMarca, al = onMarcador)
+                    if (onMarcador != null) Boton(
+                        Icons.Filled.BookmarkAdd, if (alMantenerMarcador != null) "Marcador (mantener: quitar)" else "Marcador", poniendoMarca,
+                        alMantenerMarcador, al = onMarcador
+                    )
                     if (onLapiz != null) Boton(Icons.Filled.Edit, rotuloDelLapiz, anotando, al = onLapiz)
                     if (onMarco != null) Box {
                         val alMantener: (() -> Unit)? = when {
