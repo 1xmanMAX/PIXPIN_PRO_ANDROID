@@ -167,3 +167,20 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 ### Compartir
 - [x] 51. Compartir un cuaderno con todos los formatos (PDF, HTML, PixPin, fotos…), con la misma hoja
       de compartir de siempre.
+
+## Tanda del 28-oct (3): lo nuevo del PC (origin/main 995fd94b, 49 commits)
+
+- [ ] 53. Grabar sin perder nada (`docs/grabar-sin-perder-nada.md` del PC, §Android): respaldo WAV de
+      la nota, vídeo en trozos, diario de la grabación en disco, «Se cortó una grabación —
+      Recuperar / Descartar», guarda de espacio, huecos al suspender, auriculares que se van.
+- [ ] 54. Descubrir rápido y prioridad al grabar (`movil-como-camara.md` §11): baliza UDP firmada,
+      multidifusión, barrido, conexión caliente para las fotos, no sincronizar mientras alguien graba.
+- [ ] 55. Fotos por su hora (§12): `resto.reloj` en la nota, `tomadaEn`/EXIF en cada foto, la regla de
+      dónde va cada foto, `desfases.json`, la cámara en directo sin saber la grabación.
+- [ ] 56. De la PC a la grabación del móvil (§13: `camara_remota` con `suya`) y colaboradores (§14).
+- [ ] 57. Jev (`docs/jev.md`): lo importante de una clase (puntos de color, filtro, «+N tareas») en
+      Estudiar la clase, la letra y la página compartida; con clave propia, preguntar a Jev igual que el PC
+      (importantes, tarjetas de Anki que valen la pena, urgencia de las tareas, elegir el modelo);
+      interruptores en Ajustes › Asistente.
+- [ ] 58. El asistente en la web (`manual-asistente-android.md` §2.6): buscar y leer páginas, con las
+      mismas reglas de seguridad que el PC.
