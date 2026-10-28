@@ -254,10 +254,12 @@ class CamaraDelPcTest {
         val nuevas = Json.parseToJsonElement(barra("nuevas")).jsonArray.map { it.jsonObject["ms"]!!.jsonPrimitive.long to it.jsonObject["clip"]!!.jsonPrimitive.content }
         assertEquals(listOf(12 * s to "false", 20 * s to "false", 22 * s to "true"), nuevas)
 
-        // --- A los 60 s un clip de 3 MB: la Wi-Fi se va a mitad y luego sigue desde ahí -----------
+        // --- De los 60 a los 75 s un clip de 3 MB: la Wi-Fi se va a mitad y luego sigue desde ahí --
         aLas(60)
+        val empiezaEn = reloj.ms(ahoraMovil())
+        aLas(75)
         val grande = mp4(3_000_000)
-        val cortado = toma("VID_0002.mp4", grande, reloj.ms(ahoraMovil()), duracionMs = 20 * s)
+        val cortado = toma("VID_0002.mp4", grande, empiezaEn, duracionMs = 15 * s)
         assertEquals(30 * s, cortado.ms)
         conectar({ Cortar(it, 2_500_000) {} }) { so, out ->
             val p = SubidaALaGrabacion.subir(so.getInputStream(), out, movil.identidad.leer(), cola, "id-pc", ahora = ::ahoraMovil)
@@ -267,8 +269,17 @@ class CamaraDelPcTest {
         val trasElCorte = cola.pendientes().single()
         assertEquals(cortado.clave, trasElCorte.clave)
         assertEquals(1, trasElCorte.intentos)
-        // El PC guarda lo llegado en su `.parcial` al ver el corte.
-        Thread.sleep(500)
+        // El PC guarda lo llegado en su `.parcial` al ver el corte (`camara::parcial`, en la carpeta
+        // temporal del PC): se espera a que esté y no crezca.
+        val limpia = cortado.clave.map { if (it.isLetterOrDigit() && it.code < 128 || it == '-' || it == '_') it else '_' }.take(80).joinToString("")
+        val parcial = File(System.getenv("TMPDIR") ?: "/tmp", "pixpin-suelto/parciales/$limpia-${grande.size}.parcial")
+        var antes = -1L
+        val hasta = System.currentTimeMillis() + 10_000
+        while (System.currentTimeMillis() < hasta && !(parcial.length() >= (1 shl 20) && parcial.length() == antes)) {
+            antes = parcial.length()
+            Thread.sleep(200)
+        }
+        assertTrue("lo llegado espera en ${parcial.path}: ${parcial.length()}", parcial.length() >= (1 shl 20))
         var segundaVez = 0L
         conectar({ o -> object : FilterOutputStream(o) {
             override fun write(b: ByteArray, off: Int, len: Int) { segundaVez += len; out.write(b, off, len) }
@@ -314,7 +325,7 @@ class CamaraDelPcTest {
         assertEquals(
             listOf(
                 Triple(12 * s, null, "Imagen"), Triple(20 * s, null, "Imagen"), Triple(22 * s, 5 * s, "Archivo"),
-                Triple(30 * s, 20 * s, "Archivo"), Triple(45 * s, null, "Imagen")
+                Triple(30 * s, 15 * s, "Archivo"), Triple(45 * s, null, "Imagen")
             ),
             vistos
         )
@@ -330,7 +341,7 @@ class CamaraDelPcTest {
         val nota = mensajes.first { it["id"]!!.jsonPrimitive.content == voz }["resto"]!!.jsonObject
         assertEquals(listOf(12 * s, 20 * s, 45 * s), nota["capturas"]!!.jsonArray.map { it.jsonObject["ms"]!!.jsonPrimitive.long })
         assertEquals(
-            listOf(22 * s to 5 * s, 30 * s to 20 * s),
+            listOf(22 * s to 5 * s, 30 * s to 15 * s),
             nota["clips"]!!.jsonArray.map { it.jsonObject["ms"]!!.jsonPrimitive.long to it.jsonObject["duracionMs"]!!.jsonPrimitive.long }
         )
         // Y en su carpeta, en el orden de la grabación.

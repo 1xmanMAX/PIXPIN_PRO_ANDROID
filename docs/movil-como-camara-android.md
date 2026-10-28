@@ -95,7 +95,7 @@ compartido recibe «No sé qué es «camara_remota»» (`SOLO_DEL_GRUPO`).
   `Camaras`/`Recepcion` y un reloj que mueve la prueba). Es
   `tests/movil_como_camara.rs` del PC con el teléfono de aquí: el PC avisa y
   mide 7 s de adelanto; el teléfono pregunta, hace una foto a los 12 s, otra
-  en la pausa (minuto 20), un clip de 5 s en el 22 y otro de 3 MB en el 30 que
+  en la pausa (minuto 20), un clip de 5 s en el 22 y otro de 15 s y 3 MB en el 30 que
   se corta a 2,5 MB y sigue desde `desdeByte`; el PC termina (50 s) y entran 4
   en la clase; luego una tarde (minuto 45). Se comprueba con los ojos del PC
   (`ver`): `enGrabacion`, `fuente:"movil"`, `deAparato`, `tomadaEn`, la nota
