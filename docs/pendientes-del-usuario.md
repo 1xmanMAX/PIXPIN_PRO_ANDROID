@@ -142,3 +142,24 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
       → Hecho y probado contra el PC de verdad (`CamaraDelPcTest`, `docs/movil-como-camara-android.md`); falta probarlo con el PC y el teléfono en la misma Wi-Fi (la cámara, los clips y la subida en segundo plano).
 - [x] 43. Reunión presencial: grabar en segundo plano con Foto y Clip, todo en su minuto, a resolución completa.
       → Hecho, falta probar en el teléfono: modo «Presencial» en Grabar clase (vídeo de la sala o solo audio), notificación «Grabando…» con Foto/Clip/Terminar y burbuja, fotos y clips con `fuente: "camara"` y `clips` como el PC; ver `docs/reunion-presencial-android.md`.
+
+## Tanda del 28-oct (2)
+
+### Lectura veloz y el menú del mensaje
+- [ ] 44. Quitar el engranaje ⚙ de los visores (PDF, Word…): sus opciones repetían las de la pantalla
+      (bloquear desplazamiento, voz…). Lectura veloz se abre solo desde el menú del mensaje.
+- [ ] 45. Menú al mantener pulsado: solo lo que tiene sentido para cada tipo (archivo, texto, audio,
+      imagen…); fuera lo absurdo (p. ej. recordatorio o llamada falsa en un PDF).
+
+### Grabaciones, música y Estudiar la clase
+- [ ] 46. Una sola interfaz para una misma clase grabada (hoy hay dos parecidas pero distintas).
+- [ ] 47. Toda grabación se transcribe siempre (también la reunión presencial), con marcas de tiempo
+      para saltar entre ellas.
+- [ ] 48. Música: transcribirla y fusionar la letra pegada (la buena) con la transcripción (los
+      tiempos) en una letra con marcas de tiempo.
+- [ ] 49. Estudiar la clase a pantalla completa: su color sube hasta la cámara, sin franja blanca.
+- [ ] 50. La pantalla de la música con su letra, unificada con Estudiar la clase.
+
+### Compartir
+- [ ] 51. Compartir un cuaderno con todos los formatos (PDF, HTML, PixPin, fotos…), con la misma hoja
+      de compartir de siempre.
