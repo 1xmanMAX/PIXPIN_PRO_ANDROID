@@ -314,6 +314,8 @@ object Asistente {
         // Las preguntas Sí/No y las dudas contestadas quedan en el texto de la nota (`❓ … → ✅ Sí`).
         val preguntas = java.util.Collections.synchronizedList(mutableListOf<String>())
         val pedido = pedido0
+        // «🌐 leyendo ugr.es…» mientras el ejecutor baja cada página (se conecta a la burbuja abajo).
+        var alLeerLaWeb: (String) -> Unit = {}
         val ejecutor = EjecutorDelChat(
             app, almacen, pregunta.proyecto, motor, parar,
             confirmar = { q ->
@@ -339,7 +341,8 @@ object Asistente {
                 val c = preguntarDuda(respuesta.id, p)
                 preguntas += com.forge.pixpin.ia.Preguntar.lineaContestada(p, c)
                 c
-            }
+            },
+            alLeerLaWeb = { dominio -> alLeerLaWeb(dominio) }
         )
         // La memoria del turno (§2.5): la hoja de trabajo del chat, el contexto medido y, si ya se
         // reinició alguna vez, buscar en lo guardado. A la nube va el catálogo entero. **Desde la
@@ -348,7 +351,9 @@ object Asistente {
         val anteriores = delChat.filter { it.cuando <= pregunta.cuando && it.id != pregunta.id && it.id != respuesta.id }
         val hoja = PensadoDelChat.hojaDelChat(app, anteriores)
         val ventana = Nube.VENTANA
-        val herramientas = Herramientas.catalogo()
+        // **La web** (28-oct-2026): si está encendida en Ajustes, `buscar_en_la_web` y `abrir_pagina`
+        // (con Claude, `Nube.Claude.cuerpo` las cambia por `web_search` y `web_fetch` de la API).
+        val herramientas = Herramientas.catalogo() + if (ajustes.asistenteWeb) com.forge.pixpin.asistente.web.Web.herramientas() else emptyList()
         // **El lienzo destino** pegado al pedido (`edicion::anadir_resumen` del PC): lo que ya hay,
         // con sus #id, para editarlo en vez de dibujar otro al lado.
         val paraElModelo = (if (com.forge.pixpin.ia.LienzoDestino.vieneACuento(pedido0)) ejecutor.resumenDelLienzo() else null)
@@ -399,6 +404,10 @@ object Asistente {
                 ultimoGuardado = ahora
                 runCatching { escribir(ChatDelAsistente.conPreguntas(preguntas, ChatDelAsistente.mostrar(ChatDelAsistente.sinPensado(texto.toString()), estado, escribiendo = false))) }
             }
+        }
+        alLeerLaWeb = { dominio ->
+            estado = ChatDelAsistente.rotuloDe("${com.forge.pixpin.asistente.web.Web.ABRIR}:$dominio")
+            pintar(forzar = true)
         }
         val final = try {
             Agente.turno(motor, historial, herramientas, ejecutor, ventana, opciones) { e ->

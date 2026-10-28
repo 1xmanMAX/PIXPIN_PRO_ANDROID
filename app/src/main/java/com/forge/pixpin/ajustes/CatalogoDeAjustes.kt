@@ -194,6 +194,13 @@ object CatalogoDeAjustes {
             ),
             "ia inteligencia artificial modelo chat claude deepseek nube clave api pensar voz"
         ) { listOf(it.asistenteMotor, it.asistentePensar, it.asistenteDocumentosNube, it.asistenteRevisarDicho, it.asistenteLeerRespuestas) },
+        // La web del asistente (28-oct-2026): su propia tarjeta, debajo de la del asistente.
+        Opcion(
+            "asistente-web", Seccion.ASISTENTE, "La web del asistente",
+            "Buscar en internet y leer páginas para contestarte («mira el horario en la web de la universidad»). La clave opcional de Brave Search.",
+            listOf("asistente_web"),
+            "internet web pagina paginas buscar buscador url navegador duckduckgo brave"
+        ) { listOf(it.asistenteWeb) },
         Opcion(
             "fluidez", Seccion.ASPECTO, "Máxima fluidez",
             "Pide a la pantalla su tasa más alta (90 o 120 Hz). Más suave, algo más de batería.",
