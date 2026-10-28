@@ -235,3 +235,19 @@ simulado pasan. Lo que el PC tendría que adoptar para ir a la par está en esta
   global, Estudiar la clase, el riel que se esconde con las barras, notas Markdown como los visores,
   hoja de compartir única, reordenar páginas arrastrando, auricular de llamadas, abrir archivos de
   fuera sin guardarlos, la chapa «compartido» en las tareas y Whisper «base» por defecto.
+
+## v0.148.0: reunión presencial, el móvil como cámara del PC y tinta del plano (28-oct)
+
+Probado contra el PC de `origin/main` bb4c0a2d (que ya sincroniza por diario): las 12 pruebas de
+sincronización y las 2 de la cámara del PC pasan con el PC simulado de esa versión.
+
+- **Reunión presencial** (novedades §3.3 del PC): mismo formato que el PC — `capturas`, `video`,
+  `clips` en la nota; `enGrabacion` y `fuente:"camara"` en cada foto y clip. Nunca `origen` en
+  `resto`; las líneas viejas del PC con `origen` repetido se rescatan como hace el PC. Ver
+  `docs/reunion-presencial-android.md`.
+- **El móvil como cámara del PC** (`docs/movil-como-camara.md` del PC): capacidad `camara1`,
+  `camara_remota`, `suelto` con `destino:"grabacion"` y reanudación por `clave`/`desdeByte`. Los
+  clips van siempre en H.264. Ver `docs/movil-como-camara-android.md`.
+- **Tinta del plano**: el teléfono pinta con los papeles del plano del PC y la misma regla (solo se
+  adapta sobre papel de noche), y lee los puntos como pares `[x, y]` además de `{x, y}`.
+- **Markdown y texto** (v0.147.0): `md`, `markdown`, `txt`, `log`, `ini`, `cfg`, `srt`, `vtt`.

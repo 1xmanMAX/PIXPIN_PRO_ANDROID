@@ -9,6 +9,8 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [x] v0.143.0 — Grabaciones y carpetas: se ven y se sincronizan; tarjetas e iconos como el PC.
 - [x] v0.144.0 — OCR con Indra en el teléfono; Whisper como motor de voz por defecto.
 - [x] v0.145.0 — Fuera la pantalla de Proyectos; atrás: visor → chat → lista → salir.
+- [x] v0.147.0 — Markdown y formatos de texto; Lectura Veloz 0.3.1 abre los archivos (puntos 37–39).
+- [x] v0.148.0 — Tinta del plano, reunión presencial y el móvil como cámara del PC (puntos 40–43).
 - [x] v0.146.0 — Toda la tanda del 27-oct (puntos 1–36, abajo). Probado con pruebas JVM y el PC
       simulado; falta verlo en el teléfono.
 
@@ -119,24 +121,24 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 
 ## Tanda del 27-oct (2)
 
-- [~] 37. Abrir archivos Markdown.
+- [x] 37. Abrir archivos Markdown.
       → Hecho, falta probar en el teléfono: un `.md` del chat iba a otra app (no tenía rama); ahora abre en la nota, y de fuera se lee por su ruta (el texto entero en el intento no cabía).
-- [~] 38. Formatos de texto como el PC (txt, …): `md`, `markdown` (compuestos) y `txt`, `log`, `ini`, `cfg`, `srt`, `vtt` (tal cual).
+- [x] 38. Formatos de texto como el PC (txt, …): `md`, `markdown` (compuestos) y `txt`, `log`, `ini`, `cfg`, `srt`, `vtt` (tal cual).
       → Hecho, falta probar en el teléfono: la lista del visor y la familia «Texto» del PC; desde el chat (solo mirar y anotar) y desde fuera (de paso).
-- [~] 39. Lectura Veloz no abría el archivo. → Causa: Lectura Veloz pedía su comando nativo como
+- [x] 39. Lectura Veloz no abría el archivo. → Causa: Lectura Veloz pedía su comando nativo como
       `plugin:lv-tts|copyUri` y Tauri 2 lo rechaza por permisos (solo deja `copy_uri`); arreglado en
       Lectura Veloz 0.3.1 (en su `main`). PixPin ahora dice el motivo y lo apunta (`PixPinLecturaVeloz`).
 
 ## Tanda del 27-oct (3)
 
-- [~] 40. Tinta blanca del plano (PC, modo noche) llega negra al teléfono.
+- [x] 40. Tinta blanca del plano (PC, modo noche) llega negra al teléfono.
       → Causa: la capa del plano no trae papel y el teléfono adaptaba la tinta contra el blanco de serie (el blanco, un gris, se daba la vuelta a negro); ahora se pinta contra el papel del plano y solo se adapta de noche, como el PC (`TintaDelPlano`). Falta verlo en el teléfono.
-- [~] 41. Una capa del plano hecha solo en el PC no aparecía en el teléfono. → El PC escribe los puntos
+- [x] 41. Una capa del plano hecha solo en el PC no aparecía en el teléfono. → El PC escribe los puntos
       como pares `[x, y]` y el teléfono solo leía `{x, y}`: ahora lee los dos (y escribe objetos).
 
 ## Tanda del 28-oct
 
-- [~] 42. El móvil como cámara de la reunión que graba el PC (fotos y clips en su minuto).
+- [x] 42. El móvil como cámara de la reunión que graba el PC (fotos y clips en su minuto).
       → Hecho y probado contra el PC de verdad (`CamaraDelPcTest`, `docs/movil-como-camara-android.md`); falta probarlo con el PC y el teléfono en la misma Wi-Fi (la cámara, los clips y la subida en segundo plano).
-- [~] 43. Reunión presencial: grabar en segundo plano con Foto y Clip, todo en su minuto, a resolución completa.
+- [x] 43. Reunión presencial: grabar en segundo plano con Foto y Clip, todo en su minuto, a resolución completa.
       → Hecho, falta probar en el teléfono: modo «Presencial» en Grabar clase (vídeo de la sala o solo audio), notificación «Grabando…» con Foto/Clip/Terminar y burbuja, fotos y clips con `fuente: "camara"` y `clips` como el PC; ver `docs/reunion-presencial-android.md`.
