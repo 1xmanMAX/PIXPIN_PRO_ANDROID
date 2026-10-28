@@ -126,6 +126,8 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.5.0")
     implementation("androidx.camera:camera-lifecycle:1.5.0")
     implementation("androidx.camera:camera-view:1.5.0")
+    // Los clips de la cámara para la reunión del PC (28-oct-2026). Ver sincro/CamaraDelPcActivity.
+    implementation("androidx.camera:camera-video:1.5.0")
     // El QR del envío por Wi-Fi: dibujarlo y leerlo. Solo el núcleo de ZXing, sin servicios de Google.
     implementation("com.google.zxing:core:3.5.3")
     // Las voces de Microsoft Edge para leer en alto: hablan por WebSocket. Ver ui/VozDeEdge.kt.

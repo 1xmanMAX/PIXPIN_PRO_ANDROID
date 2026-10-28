@@ -104,6 +104,7 @@ import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Category
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Apps
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.CheckBox
@@ -2501,6 +2502,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     }
                     // Una figura, eligiéndola viéndola (25-oct-2026, como el PC). Ver [AdjuntarFigura].
                     OpcionesDeAdjuntar.Adjunto.FIGURA -> adjuntandoFigura = true
+                    // La cámara para la reunión que graba el PC (28-oct-2026): si ninguno graba, lo dice.
+                    OpcionesDeAdjuntar.Adjunto.CAMARA_PC -> com.forge.pixpin.sincro.CamaraDelPcActivity.abrir(this@MensajesActivity)
                 }
             }
             androidx.compose.material3.ModalBottomSheet(
@@ -6386,6 +6389,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         OpcionesDeAdjuntar.Adjunto.PRONUNCIAR -> Icons.Filled.Hearing
         OpcionesDeAdjuntar.Adjunto.MUSICA -> Icons.Filled.MusicNote
         OpcionesDeAdjuntar.Adjunto.MINIAPPS -> Icons.Filled.Apps
+        OpcionesDeAdjuntar.Adjunto.CAMARA_PC -> Icons.Filled.PhotoCamera
     }
 
     /**

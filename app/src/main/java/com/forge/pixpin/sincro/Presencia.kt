@@ -43,6 +43,8 @@ object Presencia {
         app = aplicacion
         red = Red(aplicacion)
         SincronizacionAutomatica.instalar(aplicacion)
+        // La cámara para la reunión del PC: pregunta con PixPin a la vista (28-oct-2026).
+        CamaraDelPc.instalar(aplicacion)
         aplicacion.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 aLaVista++
@@ -88,7 +90,8 @@ object Presencia {
                             alSaludar = { otro, puerto -> disco.apuntarDireccion(otro.id, quien, puerto) },
                             alAceptarSuelto = { _, mime -> LoAbierto.aceptar(delante(), mime, id.yo.nombre) },
                             alRecibirSuelto = { f, nombre, mime, otro -> alLoAbierto(f, nombre, mime, otro, id.yo.nombre) },
-                            cache = java.io.File(app.cacheDir, "suelto")
+                            cache = java.io.File(app.cacheDir, "suelto"),
+                            alAvisoDeCamara = { anuncio, otro, cuando -> CamaraDelPc.alAviso(anuncio, otro, cuando) }
                         )
                         if (persona) r.atenderPersona(entrada, socket.getOutputStream())
                         else r.atender(entrada, socket.getOutputStream())

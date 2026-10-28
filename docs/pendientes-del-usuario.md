@@ -133,3 +133,8 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
       → Causa: la capa del plano no trae papel y el teléfono adaptaba la tinta contra el blanco de serie (el blanco, un gris, se daba la vuelta a negro); ahora se pinta contra el papel del plano y solo se adapta de noche, como el PC (`TintaDelPlano`). Falta verlo en el teléfono.
 - [~] 41. Una capa del plano hecha solo en el PC no aparecía en el teléfono. → El PC escribe los puntos
       como pares `[x, y]` y el teléfono solo leía `{x, y}`: ahora lee los dos (y escribe objetos).
+
+## Tanda del 28-oct
+
+- [~] 42. El móvil como cámara de la reunión que graba el PC (fotos y clips en su minuto).
+      → Hecho y probado contra el PC de verdad (`CamaraDelPcTest`, `docs/movil-como-camara-android.md`); falta probarlo con el PC y el teléfono en la misma Wi-Fi (la cámara, los clips y la subida en segundo plano).

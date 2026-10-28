@@ -187,6 +187,8 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                     IconoDeSincronizar(Cristal.tinta, MaterialTheme.colorScheme.background)
                 }
             }
+            // La cámara para la reunión que graba el PC (28-oct-2026): solo con un PC grabando.
+            com.forge.pixpin.sincro.AvisoDeCamaraDelPc()
             if (consulta != null && !enFunciones) {
                 val foco = remember { androidx.compose.ui.focus.FocusRequester() }
                 androidx.compose.material3.OutlinedTextField(

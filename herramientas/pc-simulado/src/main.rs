@@ -223,6 +223,7 @@ fn ver(raiz: &Path) {
             let carpeta = Carpeta::de_mensaje(m).map(|c| serde_json::json!({
                 "grabacion": c.es_grabacion(), "voz": c.voz, "video": c.video, "duracionMs": c.duracion_ms,
                 "paginas": c.paginas.iter().map(|p| p.id.clone()).collect::<Vec<_>>(),
+                "minutos": c.paginas.iter().map(|p| p.ms).collect::<Vec<_>>(),
                 "capturas": c.capturas().map(|p| p.id.clone()).collect::<Vec<_>>(),
                 "adjuntos": c.adjuntos().map(|p| p.id.clone()).collect::<Vec<_>>(),
             }));
@@ -395,6 +396,176 @@ fn main() {
         "clase" => clase(raiz, &a[3], a.get(4).map(|m| m.parse().unwrap()).unwrap_or(5)),
         // Aqui `raiz` es el codigo del grupo: no hace falta disco.
         "suelto" => suelto(&a[2], a[3].parse().unwrap(), &a[4..]),
+        "camara" => camara::escuchar(raiz, &a[3]),
         _ => panic!("orden desconocida"),
+    }
+}
+
+/// **El PC grabando una reunion con la camara del movil** (28-oct-2026, `docs/movil-como-camara.md`
+/// del PC): su `Respondedor` de verdad con `Camaras` y `Recepcion` de `pixpin-proyecto` y diciendo
+/// `camara1` (`CAPACIDADES_CON_CAMARA`), como `crates/pixpin-proyecto/tests/movil_como_camara.rs`.
+/// El reloj del PC lo mueve la prueba (`hora <ms>`), y lo demas que hace la barra de «Grabar clase»
+/// llega por la entrada, una orden por linea, cada una contestada con una linea:
+///
+/// - `hora <ms>`: el reloj del PC.
+/// - `empezar <id> <titulo…>`, `seguir <ms> <pausa 0|1>` (lo que dice la grabadora), `apagar`,
+///   `encender`, `codecs h264,hevc`.
+/// - `anuncio`: lo que se le contesta al movil (JSON). `nuevas`: lo llegado desde la ultima vez.
+/// - `terminar <duracion>`: «Terminar»; la clase se guarda (la nota y su carpeta) y entra lo de la
+///   cola. Escribe `{proyecto, voz, carpeta, hechas}`.
+/// - `avisar <puerto>`: el PC avisa al movil que escucha ahi (`anunciar_camara`) y mide su reloj.
+mod camara {
+    use std::io::BufRead;
+    use std::net::{TcpListener, TcpStream};
+    use std::path::Path;
+    use std::sync::atomic::{AtomicI64, Ordering};
+    use std::sync::{Arc, Mutex};
+
+    use pixpin_proyecto::almacen::{self, Ficha, Indice};
+    use pixpin_proyecto::camara_del_movil::{Camaras, Destino, Recepcion};
+    use pixpin_proyecto::carpeta_de_paginas::{self, Carpeta};
+    use pixpin_proyecto::cuaderno::{self, Clase, Mensaje, Sello};
+    use pixpin_proyecto::vista::DiscoPc;
+    use pixpin_sincro::al_lienzo::{Conexion, Recibe};
+    use pixpin_sincro::mensajes as m;
+    use pixpin_sincro::protocolo::Respondedor;
+
+    static RELOJ: AtomicI64 = AtomicI64::new(0);
+    static HORA: AtomicI64 = AtomicI64::new(0);
+
+    fn ahora_pc() -> i64 { RELOJ.load(Ordering::SeqCst) }
+
+    /// La hora de un mensaje nuevo, sin repetir (el id de un mensaje es su hora).
+    fn hora_sin_repetir() -> i64 { HORA.fetch_add(1, Ordering::SeqCst) }
+
+    pub fn escuchar(raiz: &Path, archivo_del_puerto: &str) {
+        RELOJ.store(super::ahora(), Ordering::SeqCst);
+        HORA.store(super::ahora() + 10_000_000, Ordering::SeqCst);
+        let camaras = Arc::new(Mutex::new(Camaras::nuevas(raiz.join("sincro").join("camara-movil"), "Portátil")));
+        let escucha = TcpListener::bind(("127.0.0.1", 0)).unwrap();
+        let puerto = escucha.local_addr().unwrap().port();
+        {
+            let raiz = raiz.to_path_buf();
+            let camaras = camaras.clone();
+            std::thread::spawn(move || {
+                for flujo in escucha.incoming() {
+                    let Ok(flujo) = flujo else { continue };
+                    let raiz = raiz.clone();
+                    let camaras = camaras.clone();
+                    std::thread::spawn(move || {
+                        let disco = DiscoPc::nuevo(&raiz);
+                        let fabrica = |otro: &m::Aparato| -> Box<dyn Recibe> {
+                            Box::new(Recepcion { camaras: camaras.clone(), de_id: otro.id.clone(), de_nombre: otro.nombre.clone(), ahora: ahora_pc })
+                        };
+                        let r = Respondedor { disco: &disco, estado: &|_| {}, ahora: &ahora_pc, mi_puerto: 0, al_saludar: &|_, _| {}, suelto: Some(&fabrica) };
+                        if let Err(e) = r.atender_con(flujo, super::nonce(), None, &pixpin_sincro::CAPACIDADES_CON_CAMARA) {
+                            eprintln!("PC: {e:?}");
+                        }
+                    });
+                }
+            });
+        }
+        std::fs::write(archivo_del_puerto, puerto.to_string()).unwrap();
+        let con = |f: &mut dyn FnMut(&mut Camaras) -> String| -> String {
+            let mut c = camaras.lock().unwrap_or_else(|e| e.into_inner());
+            f(&mut c)
+        };
+        for linea in std::io::stdin().lock().lines() {
+            let Ok(linea) = linea else { break };
+            let partes: Vec<&str> = linea.split_whitespace().collect();
+            let Some(orden) = partes.first() else { continue };
+            let salida = match *orden {
+                "hora" => { RELOJ.store(partes[1].parse().unwrap(), Ordering::SeqCst); "ok".to_string() }
+                "empezar" => {
+                    let titulo = partes[2..].join(" ");
+                    con(&mut |c| { c.empezar(partes[1], &titulo, ahora_pc(), 0); "ok".into() })
+                }
+                "seguir" => con(&mut |c| { c.seguir_a(ahora_pc(), partes[1].parse().unwrap(), partes[2] == "1"); "ok".into() }),
+                "apagar" => con(&mut |c| { c.encendida = false; "ok".into() }),
+                "encender" => con(&mut |c| { c.encendida = true; "ok".into() }),
+                "codecs" => con(&mut |c| { c.codecs = partes.get(1).map(|l| l.split(',').map(String::from).collect()).unwrap_or_default(); "ok".into() }),
+                "anuncio" => con(&mut |c| serde_json::to_string(&c.anuncio(ahora_pc())).unwrap()),
+                "nuevas" => con(&mut |c| {
+                    let n: Vec<_> = c.tomar_nuevas().iter().map(|n| serde_json::json!({"ms": n.ms, "clip": n.clip, "de": n.de})).collect();
+                    serde_json::json!(n).to_string()
+                }),
+                "terminar" => {
+                    let duracion: i64 = partes[1].parse().unwrap();
+                    con(&mut |c| {
+                        c.acabar(ahora_pc());
+                        let (proyecto, voz, carpeta) = guardar_la_clase(raiz, duracion);
+                        let destino = Destino {
+                            raiz: raiz.to_path_buf(), proyecto: proyecto.clone(), voz: Some(voz.clone()),
+                            carpeta: Some(carpeta.clone()), aparato: super::aparato(), hora: hora_sin_repetir,
+                        };
+                        let hechas = c.guardada(destino, Some(duracion), ahora_pc());
+                        serde_json::json!({"proyecto": proyecto, "voz": voz, "carpeta": carpeta, "hechas": hechas}).to_string()
+                    })
+                }
+                "avisar" => {
+                    let anuncio = con(&mut |c| serde_json::to_string(&c.anuncio(ahora_pc())).unwrap());
+                    let anuncio: Option<pixpin_sincro::camara::Anuncio> = serde_json::from_str(&anuncio).unwrap();
+                    match avisar(raiz, partes[1].parse().unwrap(), anuncio) {
+                        Ok((id, sabe, desfase)) => {
+                            if let Some(d) = desfase { con(&mut |c| { c.medir(&id, d); String::new() }); }
+                            serde_json::json!({"sabe": sabe, "desfase": desfase}).to_string()
+                        }
+                        Err(e) => serde_json::json!({"error": e}).to_string(),
+                    }
+                }
+                "fin" => break,
+                _ => format!("error: no sé qué es «{orden}»"),
+            };
+            println!("{salida}");
+            use std::io::Write;
+            let _ = std::io::stdout().flush();
+        }
+    }
+
+    /// **El PC avisa al movil** como `sincronizar::camara::avisar_a` del PC: el `hola` con
+    /// `camara1` y, si el otro tambien lo dice, el anuncio. Devuelve el id del otro, si sabe de la
+    /// camara y lo que va adelantado su reloj.
+    fn avisar(raiz: &Path, puerto: u16, anuncio: Option<pixpin_sincro::camara::Anuncio>) -> Result<(String, bool, Option<i64>), String> {
+        use pixpin_sincro::disco::Disco;
+        let id = DiscoPc::nuevo(raiz).identidad().map_err(|e| e.to_string())?;
+        let hola = m::Hola {
+            yo: id.yo.clone(),
+            miembros: id.miembros.clone(),
+            reloj: ahora_pc(),
+            capacidades: pixpin_sincro::CAPACIDADES_CON_CAMARA.iter().map(|c| c.to_string()).collect(),
+            ..Default::default()
+        };
+        let flujo = TcpStream::connect(("127.0.0.1", puerto)).map_err(|e| e.to_string())?;
+        let mut c = Conexion::abrir(flujo, id.codigo.as_deref().unwrap_or_default(), super::nonce(), hola).map_err(|e| e.to_string())?;
+        let otro = c.otro.id.clone();
+        if !c.sabe_de_camara() {
+            c.adios();
+            return Ok((otro, false, None));
+        }
+        let anuncio = anuncio.unwrap_or_else(pixpin_sincro::camara::Anuncio::nada);
+        let d = c.anunciar_camara(&anuncio, &ahora_pc).map_err(|e| e.to_string())?;
+        c.adios();
+        Ok((otro, true, Some(d)))
+    }
+
+    /// Lo que hace `grabar_clase::guardar` al «Terminar»: la nota de voz y su carpeta (como
+    /// `guardar_la_clase` de `movil_como_camara.rs`).
+    fn guardar_la_clase(raiz: &Path, duracion: i64) -> (String, String, String) {
+        let f = Ficha::nueva("Reunion", ahora_pc(), &super::aparato());
+        let mut i = Indice::leer(raiz);
+        i.proyectos.push(f.clone());
+        i.guardar(raiz).unwrap();
+        let carpeta = almacen::carpeta(raiz, &f.id);
+        let sello = |n| Sello { cuando: hora_sin_repetir(), numero: n, aparato: super::aparato(), proyecto: f.id.clone() };
+        let ruta = almacen::guardar_adjunto(raiz, &f.id, "Clase.m4a", b"m4a").unwrap();
+        let mut voz = Mensaje::adjunto(Clase::Voz, "Clase.m4a", &ruta, 3, &sello(1));
+        voz.duracion_ms = duracion;
+        voz.resto.insert("grabacion".into(), serde_json::json!("clase"));
+        cuaderno::anadir(&carpeta, &voz).unwrap();
+        let mut c = Carpeta::grabacion(&voz.id, duracion);
+        c.anadir_al_minuto(&voz.id, "", 0);
+        let m = carpeta_de_paginas::mensaje_de_grabacion("Clase", &c, &sello(2));
+        cuaderno::anadir(&carpeta, &m).unwrap();
+        (f.id, voz.id, m.id)
     }
 }

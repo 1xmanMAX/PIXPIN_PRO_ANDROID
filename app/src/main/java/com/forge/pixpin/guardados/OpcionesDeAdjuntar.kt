@@ -41,7 +41,9 @@ object OpcionesDeAdjuntar {
         MUSICA("Música", "musica cancion letra karaoke lrc mp3 song lyrics", 0xFF5B6B7F),
         TELEPRONTER("Teleprónter", "teleprompter leer en voz alta", 0xFF5B6B7F),
         PRONUNCIAR("Pronunciar", "pronunciar ingles pronounce", 0xFF5B6B7F),
-        MINIAPPS("Mini apps", "mini-app cronometro temporizador contador ruleta gastos alarma", 0xFF5B6B7F);
+        MINIAPPS("Mini apps", "mini-app cronometro temporizador contador ruleta gastos alarma", 0xFF5B6B7F),
+        /** El teléfono como cámara de la reunión que graba el PC (28-oct-2026). Ver `sincro/CamaraDelPc`. */
+        CAMARA_PC("Cámara para la reunión del PC", "camara movil pc reunion clase grabacion fotos clips", 0xFF5B6B7F);
 
         /** Donde busca el buscador: el nombre y sus sinónimos, sin tildes. */
         val buscable: String = sinAcentos("$rotulo $palabras")
@@ -56,7 +58,7 @@ object OpcionesDeAdjuntar {
     )
     private val MAS = listOf(
         Adjunto.FIGURA, Adjunto.PAGINA, Adjunto.PROYECTO, Adjunto.CARPETA,
-        Adjunto.CROQUIS, Adjunto.MUSICA, Adjunto.TELEPRONTER, Adjunto.PRONUNCIAR, Adjunto.MINIAPPS
+        Adjunto.CROQUIS, Adjunto.MUSICA, Adjunto.TELEPRONTER, Adjunto.PRONUNCIAR, Adjunto.MINIAPPS, Adjunto.CAMARA_PC
     )
 
     /** Lo del asistente delante, en este orden (como `para_el_asistente` del PC). */

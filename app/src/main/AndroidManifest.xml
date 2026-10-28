@@ -724,6 +724,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|mediaProcessing" />
 
+        <!-- Sube al PC las fotos y los clips de su grabación. Ver sincro/SubidaDeLaCamaraService. -->
+        <service
+            android:name=".sincro.SubidaDeLaCamaraService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <service
             android:name=".capture.CaptureService"
             android:exported="false"
@@ -810,6 +816,13 @@
             android:exported="false"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:windowSoftInputMode="adjustResize"
+            android:theme="@style/Theme.PixPin" />
+        <!-- El teléfono como cámara de la reunión que graba el PC. Ver sincro/CamaraDelPc. -->
+        <activity
+            android:name=".sincro.CamaraDelPcActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@style/Theme.PixPin" />
         <!-- Sincronizar con los otros aparatos del grupo. Ver sincro/SincronizarActivity. -->
         <activity

@@ -53,10 +53,13 @@ object Protocolo {
      *   `base` (los dos quedaron idénticos: apunta el cursor).
      * - [REANUDAR]: un archivo grande cortado a medias sigue donde se quedó (`desdeByte`, y `pon`
      *   con `reanudar`, que contesta antes de los trozos).
+     * - [CamaraRemota.CAPACIDAD] (`camara1`, 28-oct-2026): **el móvil como cámara de la reunión que
+     *   graba el PC** (`camara_remota` y el `suelto` con `destino: "grabacion"`). Va también en el
+     *   saludo del [Respondedor]: el PC solo avisa al móvil que la dice. Ver [CamaraRemota].
      */
     const val DIARIO = "diario1"
     const val REANUDAR = "reanudar1"
-    val CAPACIDADES = listOf(DIARIO, REANUDAR)
+    val CAPACIDADES = listOf(DIARIO, REANUDAR, CamaraRemota.CAPACIDAD)
 
     /** Desde aquí, un archivo se reanuda en vez de volver a mandarse entero. */
     const val REANUDAR_DESDE = 1L shl 20
@@ -152,7 +155,20 @@ object Protocolo {
         /** [REANUDAR] — `pon`: contesta cuánto tienes ya antes de que salgan los trozos. */
         val reanudar: Boolean = false,
         /** [DIARIO] — `base`: los dos lados quedaron idénticos en este chat; apunta tu cursor. */
-        val entero: Boolean = false
+        val entero: Boolean = false,
+        /**
+         * **La cámara del móvil** (`suelto` con `destino: "grabacion"`, 28-oct-2026, ver
+         * [CamaraRemota]): de qué grabación del PC es la foto o el clip, su minuto calculado aquí
+         * ([ms], en el disparo; un clip, donde empezó), la hora de este teléfono al hacerla, lo que va
+         * adelantado su reloj sobre el del PC, lo que dura un clip y el id fijo de la toma (con él,
+         * un clip cortado sigue desde `desdeByte`). En cualquier otra petición, sin escribir.
+         */
+        val grabacion: String? = null,
+        val ms: Long? = null,
+        @kotlinx.serialization.SerialName("tomada_en") val tomadaEn: Long = 0,
+        val reloj: Long = 0,
+        val duracionMs: Long = 0,
+        val clave: String? = null
     )
 
     @Serializable
@@ -196,7 +212,9 @@ object Protocolo {
          * [DIARIO] — `novedades`: los chats que siguen **exactamente** como quedaron la última vez
          * que los dos estuvieron idénticos. Los demás (y los que no salen) se miran.
          */
-        val quietos: List<String> = emptyList()
+        val quietos: List<String> = emptyList(),
+        /** El «listo» de una foto o un clip de la cámara: el minuto de la grabación donde quedó. */
+        val ms: Long? = null
     )
 
     /**
@@ -215,10 +233,21 @@ object Protocolo {
     internal fun enviar(c: Canal, p: Peticion) = c.enviar(JSON_, json.encodeToString(Peticion.serializer(), p).toByteArray())
     internal fun enviar(c: Canal, r: Respuesta) = c.enviar(JSON_, json.encodeToString(Respuesta.serializer(), r).toByteArray())
 
-    internal fun leerPeticion(c: Canal): Peticion {
+    internal fun leerPeticion(c: Canal): Peticion = leerPeticionCruda(c).first
+
+    /**
+     * La petición y su JSON tal cual llegó: `camara_remota` trae el anuncio del PC entero
+     * ([CamaraRemota.Anuncio]), que la [Peticion] no sabe leer.
+     */
+    internal fun leerPeticionCruda(c: Canal): Pair<Peticion, String> {
         val (tipo, datos) = c.recibir()
         if (tipo != JSON_) throw IOException("Se esperaba una petición")
-        return json.decodeFromString(Peticion.serializer(), datos.decodeToString())
+        val texto = datos.decodeToString()
+        // El anuncio del PC trae campos que en la [Peticion] son otra cosa (`desde` es un número):
+        // de ese solo se mira el `t`, y lo lee entero quien lo atiende.
+        val t = runCatching { json.parseToJsonElement(texto).let { it as? kotlinx.serialization.json.JsonObject }?.get("t")?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content } }.getOrNull()
+        if (t == CamaraRemota.PETICION) return Peticion(t) to texto
+        return json.decodeFromString(Peticion.serializer(), texto) to texto
     }
 
     /** Una respuesta, con su error dentro en vez de lanzarlo: para lo opcional del protocolo. */
@@ -375,7 +404,13 @@ class Respondedor(
     /** Dónde dejar lo suelto mientras llega. */
     private val cache: File? = null,
     /** Lo que se dice saber hacer ([Protocolo.CAPACIDADES]); las pruebas fingen un PixPin de antes con nada. */
-    private val capacidades: List<String> = Protocolo.CAPACIDADES
+    private val capacidades: List<String> = Protocolo.CAPACIDADES,
+    /**
+     * **El PC avisa de su grabación** (`camara_remota`, 28-oct-2026): el anuncio, quién lo manda
+     * y la hora de aquí al llegar. Se le contesta siempre con la hora de aquí (para que mida el
+     * desfase), haya esto o no. Ver [CamaraRemota].
+     */
+    private val alAvisoDeCamara: ((CamaraRemota.Anuncio, Aparato, Long) -> Unit)? = null
 ) {
     fun atender(entrada: InputStream, salida: OutputStream) {
         val id = disco.identidad.leer()
@@ -564,6 +599,24 @@ class Respondedor(
         }
     }
 
+    /**
+     * **`camara_remota` del PC** (28-oct-2026, `docs/movil-como-camara.md` §2.1 del PC): al
+     * empezar, pausar, seguir o acabar su grabación, el PC manda su anuncio con su reloj (`t0`) y
+     * aquí se contesta `{"t":"camara_remota","reloj":t1}` con la hora de este teléfono, que es
+     * con lo que él mide el desfase. Después, el anuncio va a quien lleve la cámara
+     * ([alAvisoDeCamara]). Sin `camara1` (las pruebas de un PixPin de antes), «No sé qué es».
+     */
+    private fun atenderCamara(canal: Canal, crudo: String, otro: Aparato) {
+        if (CamaraRemota.CAPACIDAD !in capacidades) {
+            Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${CamaraRemota.PETICION}»"))
+            return
+        }
+        val llego = ahora()
+        val aviso = runCatching { CamaraRemota.deTexto(crudo) }.getOrNull()
+        canal.enviar(Protocolo.JSON_, CamaraRemota.aTexto(CamaraRemota.Anuncio(reloj = llego)).toByteArray())
+        if (aviso != null && aviso.error == null) runCatching { alAvisoDeCamara?.invoke(aviso, otro, llego) }
+    }
+
     private fun responderGaleria(canal: Canal, p: Protocolo.Peticion) {
         val c = disco.capturas
         if (c == null) {
@@ -634,7 +687,7 @@ class Respondedor(
         // los lienzos. Lo que se escribe aquí se olvida.
         val conocidos = HashMap<String, ArchivoInfo>()
         while (true) {
-            val p = runCatching { Protocolo.leerPeticion(canal) }.getOrElse { if (it is java.io.EOFException) return else throw it }
+            val (p, crudo) = runCatching { Protocolo.leerPeticionCruda(canal) }.getOrElse { if (it is java.io.EOFException) return else throw it }
             // A una persona, lo del aparato entero no se le contesta: como un PixPin de antes.
             if (acceso != null && p.t in SOLO_DEL_GRUPO) {
                 Protocolo.enviar(canal, Protocolo.Respuesta(error = "No sé qué es «${p.t}»"))
@@ -790,6 +843,7 @@ class Respondedor(
                         estado("«${nombreDe(p.chat)}» al día con ${otro.nombre}")
                     }
                     "suelto" -> recibirSuelto(canal, p, otro)
+                    CamaraRemota.PETICION -> atenderCamara(canal, crudo, otro)
                     // **La galería** (8-oct-2026). Sin capturas en este disco, como un aparato de antes.
                     GaleriaQueViaja.PETICION, "galeriajunta", "damecaptura", "poncaptura" -> responderGaleria(canal, p)
                     // **Las listas de los chats compartidos, entre aparatos del grupo** (13-oct-2026):
@@ -822,7 +876,7 @@ class Respondedor(
 
     private companion object {
         /** Lo que es del aparato entero y no de un chat: a una persona no se le contesta. */
-        val SOLO_DEL_GRUPO = setOf("suelto", GaleriaQueViaja.PETICION, "galeriajunta", "damecaptura", "poncaptura", "compartidos", "borrarchat")
+        val SOLO_DEL_GRUPO = setOf("suelto", CamaraRemota.PETICION, GaleriaQueViaja.PETICION, "galeriajunta", "damecaptura", "poncaptura", "compartidos", "borrarchat")
     }
 }
 
