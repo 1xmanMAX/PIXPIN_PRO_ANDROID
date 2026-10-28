@@ -158,6 +158,8 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [ ] 48. Música: transcribirla y fusionar la letra pegada (la buena) con la transcripción (los
       tiempos) en una letra con marcas de tiempo.
 - [ ] 49. Estudiar la clase a pantalla completa: su color sube hasta la cámara, sin franja blanca.
+- [ ] 52. Reunión presencial: se nota al tomar una foto o un clip, y siempre hay un botón visible
+      para terminar (notificación, burbuja y una barra dentro de PixPin).
 - [ ] 50. La pantalla de la música con su letra, unificada con Estudiar la clase.
 
 ### Compartir
