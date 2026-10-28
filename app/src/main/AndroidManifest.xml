@@ -29,7 +29,8 @@
     <!-- Instalar un APK recibido por Wi-Fi o guardado en el chat. Ver ui/AbrirCon.kt. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Sincronizar entre aparatos por la Wi-Fi: saber la dirección propia y oír los anuncios
-         de los demás (mDNS). Ver sincro/Red.kt. -->
+         de los demás (mDNS). Ver sincro/Red.kt. CHANGE_WIFI_MULTICAST_STATE también para oír la
+         baliza UDP 47475 con la pantalla apagada (28-oct-2026). Ver sincro/BalizaDelMovil.kt. -->
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE" />

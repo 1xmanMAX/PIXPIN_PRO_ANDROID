@@ -107,6 +107,13 @@ class SubidaDeLaCamaraService : Service() {
 
         /** Una pasada con [pc]: su dirección de siempre o, con [buscar], la que diga la red. */
         private fun subirA(app: Context, cola: ColaDeLaCamara, pc: String, buscar: Boolean): SubidaALaGrabacion.Pasada? {
+            // Por la conexión caliente si está abierta con ese PC (28-oct-2026, §11.7); si no, una
+            // propia, de una en una con ella ([ConexionCaliente.SUBIDA]).
+            ConexionCaliente.subir(pc, cola)?.let { return it }
+            return synchronized(ConexionCaliente.SUBIDA) { subirConLaSuya(app, cola, pc, buscar) }
+        }
+
+        private fun subirConLaSuya(app: Context, cola: ColaDeLaCamara, pc: String, buscar: Boolean): SubidaALaGrabacion.Pasada? {
             val disco = Disco(app.filesDir)
             val identidad = disco.identidad.leer()
             if (buscar) runCatching { kotlinx.coroutines.runBlocking { AlDia.aparatos(app) } }
@@ -127,6 +134,8 @@ class SubidaDeLaCamaraService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // Mientras sube, la baliza oye: si el PC cambia de dirección se sabe en un segundo (§11.8).
+        BalizaDelMovil.servicio(BalizaDelMovil.SUBIDA, true)
         getSystemService(NotificationManager::class.java).createNotificationChannel(
             NotificationChannel(CANAL, "Cámara para el PC", NotificationManager.IMPORTANCE_LOW).apply {
                 setShowBadge(false)
@@ -150,6 +159,7 @@ class SubidaDeLaCamaraService : Service() {
 
     override fun onDestroy() {
         parado = true
+        BalizaDelMovil.servicio(BalizaDelMovil.SUBIDA, false)
         if (vivo === this) vivo = null
         runCatching { despierto?.release() }
         super.onDestroy()

@@ -35,7 +35,7 @@ object Presencia {
         private set
     private val principal = Handler(Looper.getMainLooper())
     private var aLaVista = 0
-    private val apagar = Runnable { if (aLaVista == 0) { red.cerrar(); SincronizacionAutomatica.alaVista(false) } }
+    private val apagar = Runnable { if (aLaVista == 0) { red.cerrar(); SincronizacionAutomatica.alaVista(false); BalizaDelMovil.aLaVista(false) } }
 
     fun identidadCambio() { version.value = version.value + 1 }
 
@@ -45,10 +45,13 @@ object Presencia {
         SincronizacionAutomatica.instalar(aplicacion)
         // La cámara para la reunión del PC: pregunta con PixPin a la vista (28-oct-2026).
         CamaraDelPc.instalar(aplicacion)
+        // La baliza UDP y la conexión caliente con el PC que graba (28-oct-2026, §11 de la guía del PC).
+        BalizaDelMovil.instalar(aplicacion)
+        ConexionCaliente.instalar(aplicacion)
         aplicacion.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 aLaVista++
-                if (aLaVista == 1) { encender(); SincronizacionAutomatica.alaVista(true) }
+                if (aLaVista == 1) { encender(); SincronizacionAutomatica.alaVista(true); BalizaDelMovil.aLaVista(true) }
             }
             override fun onActivityStopped(activity: Activity) {
                 aLaVista = (aLaVista - 1).coerceAtLeast(0)

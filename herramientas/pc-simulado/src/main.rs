@@ -397,6 +397,8 @@ fn main() {
         // Aqui `raiz` es el codigo del grupo: no hace falta disco.
         "suelto" => suelto(&a[2], a[3].parse().unwrap(), &a[4..]),
         "camara" => camara::escuchar(raiz, &a[3]),
+        // Aqui `a[2]` es lo que se pide a la baliza: tampoco hace falta disco.
+        "baliza" => baliza::orden(&a[2..]),
         _ => panic!("orden desconocida"),
     }
 }
@@ -567,5 +569,111 @@ mod camara {
         let m = carpeta_de_paginas::mensaje_de_grabacion("Clase", &c, &sello(2));
         cuaderno::anadir(&carpeta, &m).unwrap();
         (f.id, voz.id, m.id)
+    }
+}
+
+/// **La baliza UDP** (28-oct-2026, `pixpin_sincro::baliza` de verdad, §11 de
+/// `docs/movil-como-camara.md` del PC), para que `BalizaContraElPcTest` de Android compruebe su
+/// cable contra el del PC en los dos sentidos. Cada orden escribe una linea:
+///
+/// - `escribir <codigo> <id> <puerto> <reloj> <secuencia> <banderas> <grabacion|-> <ms_actual>`:
+///   los bytes de `Baliza::escribir`, en hex. Los textos, tal cual o `hex:<utf-8 en hex>`.
+/// - `leer <codigo> <hex>`: lo que dice `Baliza::leer`, en JSON (`{"rechazo":"Firma"}` si no vale).
+/// - `mandar <codigo> <puerto udp> <id> <reloj> <secuencia> <banderas> <grabacion|-> <ms_actual>`:
+///   con `Emisor::a`, directa a `127.0.0.1:<puerto udp>`.
+/// - `oir <codigo> <puerto udp> <segundos>`: con `Oyente`, la primera del grupo que llegue, en JSON
+///   con la IP de origen, o `{"nada":true}`.
+/// - `barrido <ip> <prefijo> <conocidas separadas por comas|->`: las IP de `barrido`, por comas.
+mod baliza {
+    use std::net::Ipv4Addr;
+    use std::time::{Duration, Instant};
+
+    use pixpin_sincro::baliza::{self as b, Baliza, Emisor, Interfaz, Oyente};
+    use pixpin_sincro::codigo::clave_de_grupo;
+
+    fn hex(bytes: &[u8]) -> String { bytes.iter().map(|x| format!("{x:02x}")).collect() }
+
+    fn de_hex(t: &str) -> Vec<u8> {
+        (0..t.len() / 2).map(|i| u8::from_str_radix(&t[2 * i..2 * i + 2], 16).unwrap()).collect()
+    }
+
+    /// Un texto de la linea de ordenes: `hex:<utf-8 en hex>` para lo que no es ASCII (la JVM de
+    /// las pruebas pasa los argumentos en el juego de caracteres del sistema, que puede no ser UTF-8).
+    fn texto(t: &str) -> String {
+        match t.strip_prefix("hex:") {
+            Some(h) => String::from_utf8(de_hex(h)).unwrap(),
+            None => t.to_string(),
+        }
+    }
+
+    /// `<id> <reloj> <secuencia> <banderas> <grabacion|-> <ms_actual>` con el puerto aparte.
+    fn de_partes(clave: &[u8; 32], puerto: u16, a: &[String]) -> Baliza {
+        Baliza {
+            etiqueta: b::etiqueta_cruda(clave),
+            id: texto(&a[0]),
+            puerto,
+            reloj: a[1].parse().unwrap(),
+            secuencia: a[2].parse().unwrap(),
+            banderas: a[3].parse().unwrap(),
+            grabacion: if a[4] == "-" { String::new() } else { texto(&a[4]) },
+            ms_actual: a[5].parse().unwrap(),
+        }
+    }
+
+    fn json(x: &Baliza) -> serde_json::Value {
+        serde_json::json!({
+            "etiqueta": hex(&x.etiqueta), "id": x.id, "puerto": x.puerto, "reloj": x.reloj,
+            "secuencia": x.secuencia, "banderas": x.banderas, "grabacion": x.grabacion, "ms_actual": x.ms_actual,
+        })
+    }
+
+    pub fn orden(a: &[String]) {
+        let salida = match a[0].as_str() {
+            "escribir" => {
+                let clave = clave_de_grupo(&a[1]);
+                let x = Baliza { puerto: a[3].parse().unwrap(), ..de_partes(&clave, 0, &[a[2].clone(), a[4].clone(), a[5].clone(), a[6].clone(), a[7].clone(), a[8].clone()]) };
+                hex(&x.escribir(&clave))
+            }
+            "leer" => match Baliza::leer(&de_hex(&a[2]), &clave_de_grupo(&a[1])) {
+                Ok(x) => json(&x).to_string(),
+                Err(r) => serde_json::json!({"rechazo": format!("{r:?}")}).to_string(),
+            },
+            "mandar" => {
+                let clave = clave_de_grupo(&a[1]);
+                let puerto: u16 = a[2].parse().unwrap();
+                let x = de_partes(&clave, 47474, &a[3..]);
+                let e = Emisor::nuevo(puerto, &[]).unwrap();
+                e.a(&x.escribir(&clave), &[Ipv4Addr::LOCALHOST]).to_string()
+            }
+            "oir" => {
+                let clave = clave_de_grupo(&a[1]);
+                let o = Oyente::abrir(a[2].parse().unwrap(), &[]).unwrap();
+                // Ya se oye: quien lo lanzo puede mandar.
+                println!("oyendo");
+                use std::io::Write;
+                let _ = std::io::stdout().flush();
+                let hasta = Instant::now() + Duration::from_secs(a[3].parse().unwrap());
+                let mut buf = [0u8; b::TOPE];
+                let mut dicho = serde_json::json!({"nada": true});
+                while Instant::now() < hasta {
+                    if let Ok(Some((n, de))) = o.oir(&mut buf)
+                        && let Ok(x) = Baliza::leer(&buf[..n], &clave)
+                    {
+                        let mut j = json(&x);
+                        j["de"] = serde_json::json!(de.ip().to_string());
+                        dicho = j;
+                        break;
+                    }
+                }
+                dicho.to_string()
+            }
+            "barrido" => {
+                let red = Interfaz { ip: a[1].parse().unwrap(), prefijo: a[2].parse().unwrap() };
+                let conocidas: Vec<Ipv4Addr> = if a[3] == "-" { Vec::new() } else { a[3].split(',').map(|x| x.parse().unwrap()).collect() };
+                b::barrido(&red, &conocidas).iter().map(|x| x.to_string()).collect::<Vec<_>>().join(",")
+            }
+            otra => panic!("la baliza no sabe «{otra}»"),
+        };
+        println!("{salida}");
     }
 }

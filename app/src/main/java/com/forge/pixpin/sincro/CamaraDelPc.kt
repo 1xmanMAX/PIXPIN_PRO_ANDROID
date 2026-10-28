@@ -192,5 +192,39 @@ object CamaraDelPc {
         despertar.trySend(Unit)
     }
 
+    /**
+     * **La baliza dice que [pc] graba** (28-oct-2026, §11.5 de la guía del PC, desde
+     * [BalizaDelMovil]): la tira sale al momento, con el minuto de la baliza («● 12:34») mientras
+     * llega la respuesta de `camara_remota`, que se pregunta ya en la dirección de la baliza (ya
+     * apuntada). El reloj bueno sigue siendo el de `camara_remota`.
+     */
+    fun alOirBaliza(pc: String, pcNombre: String, grabacion: String, enPausa: Boolean, msActual: Long) {
+        conCamara += pc
+        val antes = visto.value
+        if (antes != null && antes.pc == pc && antes.grabando && antes.anuncio.grabacion == grabacion) return
+        val a = CamaraRemota.Anuncio(grabacion = grabacion, activa = true, enPausa = enPausa, msActual = msActual)
+        val ahora = SystemClock.elapsedRealtime()
+        visto.value = Visto(a, pc, pcNombre, adelantos[pc] ?: 0L, RelojDelMovil.de(a, ahora), ahora)
+        despertar.trySend(Unit)
+    }
+
+    /**
+     * **Lo que contestó el PC por la conexión caliente** ([ConexionCaliente], §11.7): lo mismo que al
+     * [preguntar], sin abrir otra conexión.
+     */
+    fun alResponder(pc: String, pcNombre: String, resp: ConexionDeCamara.Respuesta) {
+        adelantos[pc] = resp.adelanto
+        val antes = visto.value
+        if (resp.anuncio.grabacion.isEmpty()) {
+            if (antes?.pc == pc) visto.value = null
+            return
+        }
+        conCamara += pc
+        val ahora = SystemClock.elapsedRealtime()
+        val reloj = antes?.takeIf { it.pc == pc }?.reloj?.alDia(resp.anuncio, ahora, resp.ida)
+            ?: RelojDelMovil.de(resp.anuncio, ahora, resp.ida)
+        visto.value = Visto(resp.anuncio, pc, pcNombre, resp.adelanto, reloj, ahora)
+    }
+
     private fun miPuerto(): Int = runCatching { Presencia.red.puerto }.getOrDefault(0)
 }

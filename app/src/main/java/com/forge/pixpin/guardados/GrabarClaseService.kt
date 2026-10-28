@@ -195,6 +195,8 @@ class GrabarClaseService : Service() {
     private var conVideo = false
     private var proyecto: String? = null
     private var cronometro: GrabarClase.Cronometro? = null
+    /** Lo que dice la baliza de esta clase (28-oct-2026): el PC sabe en un segundo que se graba. */
+    private val paraLaBaliza = com.forge.pixpin.sincro.GrabacionParaLaBaliza.de(com.forge.pixpin.sincro.GrabacionParaLaBaliza.idNuevo()) { cronometro }
     private val picos = Picos()
     private val hechas = mutableListOf<Hecha>()
     private var fotografiando = false
@@ -277,6 +279,7 @@ class GrabarClaseService : Service() {
         val c = GrabarClase.Cronometro()
         cronometro = c
         enMarcha = true
+        com.forge.pixpin.sincro.BalizaDelMovil.empezo(paraLaBaliza)
         ensenarLaBarra()
         // El mismo bucle que el chat para la onda; y el reloj de la barra.
         scope.launch {
@@ -296,6 +299,7 @@ class GrabarClaseService : Service() {
         if (!terminado && grabador != null) terminar()
         quitarVentanas()
         enMarcha = false
+        com.forge.pixpin.sincro.BalizaDelMovil.acabo(paraLaBaliza)
         scope.cancel()
         super.onDestroy()
     }
@@ -386,6 +390,7 @@ class GrabarClaseService : Service() {
         c.pausar(p)
         grabador?.pausar(p)
         barra.update { it.copy(enPausa = p) }
+        com.forge.pixpin.sincro.BalizaDelMovil.cambio()
         if (p) avisar(getString(R.string.clase_en_pausa))
     }
 
@@ -408,6 +413,7 @@ class GrabarClaseService : Service() {
     private fun descartar() {
         terminado = true
         enMarcha = false
+        com.forge.pixpin.sincro.BalizaDelMovil.acabo(paraLaBaliza)
         quitarVentanas()
         val g = grabador
         grabador = null
@@ -430,6 +436,7 @@ class GrabarClaseService : Service() {
         if (terminado) return
         terminado = true
         enMarcha = false
+        com.forge.pixpin.sincro.BalizaDelMovil.acabo(paraLaBaliza)
         quitarVentanas()
         val g = grabador
         grabador = null
@@ -458,6 +465,8 @@ class GrabarClaseService : Service() {
                 }
             }
                 .getOrElse { getString(R.string.clase_no_arranca) }
+            // Su chat sale el primero al sincronizar (§11.6).
+            com.forge.pixpin.sincro.BalizaDelMovil.guardada(elProyecto)
             withContext(Dispatchers.Main) {
                 if (cerrarLaSesion) CaptureService.stopSession(app)
                 toast(dicho)

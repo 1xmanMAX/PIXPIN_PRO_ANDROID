@@ -70,13 +70,21 @@ class VueltaCallada(private val disco: Disco, private val miPuerto: Int = 0, pri
  * - **Periodo**: cada [PERIODO] mientras haya alguno, que es como llega lo hecho en el otro.
  */
 class RelojDeSincro {
-    enum class Motivo { APARECIO, CAMBIO, PERIODO }
+    /** [TRAS_GRABAR]: acabó una grabación y lo aplazado sale ya ([acaboDeGrabar]). */
+    enum class Motivo { APARECIO, CAMBIO, PERIODO, TRAS_GRABAR }
 
     private var presentes: Set<String> = emptySet()
     private var firma: Firma? = null
     private var cambioEn = 0L
     private var pendiente = false
     private var ultima = 0L
+    private var trasGrabar = false
+
+    /**
+     * **Acabó una grabación** (aquí o en otro del grupo, 28-oct-2026, `acabo_de_grabar` del PC): lo
+     * que se aplazó mientras tanto ([ModoPrioritario]) sale ya, sin esperar al [PERIODO].
+     */
+    fun acaboDeGrabar() { trasGrabar = true }
 
     /** Lo que se mira de los chats: cuántos archivos, cuánto pesan y la suma de sus fechas. */
     data class Firma(val ficheros: Long, val bytes: Long, val tocados: Long)
@@ -96,11 +104,13 @@ class RelojDeSincro {
         if (presentesAhora.isEmpty()) return null
         val r = when {
             nuevos.isNotEmpty() -> Motivo.APARECIO to nuevos
+            trasGrabar -> Motivo.TRAS_GRABAR to presentesAhora
             pendiente && ahora - cambioEn >= QUIETO -> Motivo.CAMBIO to presentesAhora
             ahora - ultima >= PERIODO -> Motivo.PERIODO to presentesAhora
             else -> return null
         }
-        if (r.first != Motivo.APARECIO) pendiente = false
+        // «Apareció» va solo con los nuevos: lo de tras grabar sigue pendiente para los demás.
+        if (r.first != Motivo.APARECIO) { pendiente = false; trasGrabar = false }
         ultima = ahora
         return r
     }
@@ -231,6 +241,8 @@ object SincronizacionAutomatica {
     private const val LATIDO = 5_000L
     private const val LATIDOS_POR_SONDEO = 3
     private const val PREFS = "sincro_automatica"
+    /** Grabando alguien (o con una grabación esperando a salir): se mira cada segundo si acabó. */
+    private const val GRABANDO_MIRAR = 1_000L
 
     private lateinit var app: Application
     private val principal by lazy { Handler(Looper.getMainLooper()) }
@@ -281,6 +293,23 @@ object SincronizacionAutomatica {
 
     private val cola = ColaDeTareas()
     private val despertar = java.util.concurrent.Semaphore(0)
+    /** **El modo prioritario mientras se graba** (28-oct-2026, §11.6). Ver [ModoPrioritario]. */
+    private val modo = ModoPrioritario()
+
+    /** La baliza oyó a uno del grupo que aparece o cambió de sitio ([BalizaDelMovil]): se sondea ya. */
+    fun aparecio() { sondearYa = true; despertar.release() }
+
+    /** Acabó una grabación (aquí o en otro): se mira ya, sin esperar al latido. */
+    fun despertarYa() { despertar.release() }
+
+    /**
+     * **Se guardó una grabación** en [chat] ([BalizaDelMovil.guardada]): en cuanto nadie del grupo
+     * grabe, ese chat sale antes que nada (`grabacion_guardada` del PC).
+     */
+    fun grabacionGuardada(chat: String) {
+        modo.grabacionGuardada(chat)
+        despertar.release()
+    }
     @Volatile private var suelta: Thread? = null
 
     /**
@@ -315,8 +344,22 @@ object SincronizacionAutomatica {
                 val id = disco.identidad.leer()
                 val ahora = System.currentTimeMillis()
                 if (sondearYa) { sondearYa = false; sondeado = 0L; sondeadas = 0L }
-                if (!id.enGrupo || !encendida(app)) {
+                // **Qué va primero** (28-oct-2026, `baliza::que_toca` del PC): mientras alguien del
+                // grupo graba, nada de esto (la cámara va por su lado, [ConexionCaliente]) y lo que
+                // espera se queda; al acabar, el chat de la grabación antes que nada y lo demás ya.
+                val grabando = BalizaDelMovil.grabandoAlguien()
+                if (modo.mirar(grabando)) {
+                    reloj.acaboDeGrabar(); relojDePersonas.acaboDeGrabar()
+                    sondeado = 0L; sondeadas = 0L
+                }
+                val toca = modo.queToca(grabando, tareas = true, vuelta = true, personas = true)
+                if (toca == null) {
+                    // Grabando: solo la cámara.
+                } else if (!id.enGrupo || !encendida(app)) {
                     cola.tomar()
+                    modo.tomarGrabadas()
+                } else if (toca == Baliza.Trabajo.ARCHIVOS_DE_LA_GRABACION && !laGrabacionPrimero(disco, id)) {
+                    // No salió: se reintenta enseguida, y lo demás espera detrás.
                 } else {
                     // **Los que fallaron y ya toca reintentar** ([Reintentos]), sin esperar al periodo.
                     for (otroId in reintentos.tocan(ahora, presentes.keys)) {
@@ -342,14 +385,14 @@ object SincronizacionAutomatica {
                     }
                     mandarTareas(disco, presentes, dirs)
                 }
-                if (encendida(app) && ahora - sondeadas >= LATIDO * LATIDOS_POR_SONDEO) {
+                if (toca != null && !modo.hayGrabadas() && encendida(app) && ahora - sondeadas >= LATIDO * LATIDOS_POR_SONDEO) {
                     sondeadas = ahora
                     conPersonas(disco, id, relojDePersonas)
                 }
             } catch (_: Throwable) {
             }
             // Lo justo para mandar las tareas a tiempo; si ya tocaban y no se pudo, se reintenta pronto.
-            val espera = when (val e = cola.espera(System.currentTimeMillis())) {
+            val espera = if (BalizaDelMovil.grabandoAlguien() || modo.hayGrabadas()) GRABANDO_MIRAR else when (val e = cola.espera(System.currentTimeMillis())) {
                 null -> LATIDO
                 0L -> ColaDeTareas.REINTENTO
                 else -> e.coerceAtMost(LATIDO)
@@ -412,6 +455,8 @@ object SincronizacionAutomatica {
                         val espera = cola.espera(System.currentTimeMillis()) ?: return@Thread
                         if (espera > 0) { Thread.sleep(espera); continue }
                         if (hilo?.isAlive == true) return@Thread
+                        // Grabando alguien del grupo: esperan a que acabe (no cuenta como intento).
+                        if (BalizaDelMovil.grabandoAlguien()) { intentos--; Thread.sleep(GRABANDO_MIRAR); continue }
                         val disco = Red.disco(app)
                         val id = disco.identidad.leer()
                         val dirs = disco.direcciones()
@@ -425,6 +470,33 @@ object SincronizacionAutomatica {
                 }
             }, "sincro-tareas").apply { isDaemon = true; start() }
         }
+    }
+
+    /**
+     * **El chat de la grabación, primero** (§11.6): una vuelta solo con esos chats con cada uno del
+     * grupo que conteste. True si salió con todos (o no había nadie: entonces la lleva la vuelta de
+     * «apareció», como el PC); false si no, y los chats vuelven a esperar.
+     */
+    private fun laGrabacionPrimero(disco: Disco, id: Identidad): Boolean {
+        val dirs = disco.direcciones()
+        val presentes = id.miembros.filter { it.id != id.yo.id }
+            .filter { m -> dirs[m.id]?.let { (h, p) -> Red.sondear(h, p) } == true }
+        val chats = modo.tomarGrabadas()
+        if (presentes.isEmpty() || chats.isEmpty()) return true
+        var bien = true
+        for (m in presentes) {
+            val (host, puerto) = dirs.getValue(m.id)
+            val r = runCatching {
+                Red.conectar(InetAddress.getByName(host), puerto).use { s ->
+                    VueltaCallada(disco, Presencia.red.puerto).con(s.getInputStream(), s.getOutputStream(), soloEstos = chats)
+                }
+            }
+            r.onSuccess { VueltasEnMarcha.apuntar(true); Presencia.apuntar("Grabación sincronizada con ${m.nombre}") }
+                .onFailure { VueltasEnMarcha.apuntarSiFallo(it) }
+            bien = r.isSuccess && bien
+        }
+        if (!bien) modo.noSalieron(chats)
+        return bien
     }
 
     private fun vuelta(disco: Disco, otroId: String, nombre: String, host: String, puerto: Int) {

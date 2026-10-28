@@ -256,6 +256,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     private val tramos = mutableListOf<TramoGrabado>()
     private var cambiandoDeTramo = false
     private var cronometro: GrabarClase.Cronometro? = null
+    /** Lo que dice la baliza de esta reunión (28-oct-2026): el PC sabe en un segundo que se graba. */
+    private val paraLaBaliza = com.forge.pixpin.sincro.GrabacionParaLaBaliza.de(com.forge.pixpin.sincro.GrabacionParaLaBaliza.idNuevo()) { cronometro }
     private val picos = Picos()
     private val fotos = mutableListOf<FotoHecha>()
     private val clips = mutableListOf<ClipHecho>()
@@ -384,6 +386,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
         val c = GrabarClase.Cronometro()
         cronometro = c
+        com.forge.pixpin.sincro.BalizaDelMovil.empezo(paraLaBaliza)
         estado.update { it.copy(lista = true, conCamara = camara != null, video = forma == Presencial.Forma.VIDEO, mirilla = camara?.conMirilla == true) }
         actualizarAviso()
         if (conBurbuja) ensenarLaBurbuja()
@@ -413,6 +416,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         quitarLaBurbuja()
         orientacion?.disable()
         enMarcha = false
+        com.forge.pixpin.sincro.BalizaDelMovil.acabo(paraLaBaliza)
         if (vivo === this) vivo = null
         runCatching { sonidos.release() }
         registro.currentState = Lifecycle.State.DESTROYED
@@ -541,6 +545,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         grabador?.pausar(p)
         camara?.pausar(p)
         estado.update { it.copy(enPausa = p) }
+        com.forge.pixpin.sincro.BalizaDelMovil.cambio()
         sentir(null)
         avisar(getString(if (p) R.string.clase_en_pausa else R.string.reunion_sigue))
         actualizarAviso()
@@ -587,6 +592,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
         terminado = true
         enMarcha = false
+        com.forge.pixpin.sincro.BalizaDelMovil.acabo(paraLaBaliza)
         sentir(MediaActionSound.STOP_VIDEO_RECORDING)
         estado.update { it.copy(terminando = true) }
         quitarLaBurbuja()
@@ -629,6 +635,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     guardar(app, bienLaNota, laForma, laNota, losTramos, elProyecto, lasPicos, lasFotos, losClips)
                 }.onFailure { android.util.Log.e("PixPinReunion", "la reunión no se guardó", it) }
                     .getOrElse { getString(R.string.clase_no_arranca) }
+                // Su chat sale el primero al sincronizar (§11.6).
+                com.forge.pixpin.sincro.BalizaDelMovil.guardada(elProyecto)
                 withContext(Dispatchers.Main) {
                     toast(dicho)
                     notaGuardada?.let { avisarParaEstudiar(it) }

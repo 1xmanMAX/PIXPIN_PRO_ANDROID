@@ -112,3 +112,56 @@ object Prioridad {
             when (it) { in conTareas -> 0; in compartidos -> 1; else -> 2 }
         }, { peso(it) }, { it }))
 }
+
+/**
+ * **El modo prioritario mientras se graba** (28-oct-2026, §11.6 de `docs/movil-como-camara.md` del
+ * PC; `automatica.rs` con `baliza::que_toca`). El usuario: «cuando el PC grabe, que active un modo de
+ * sincronización PRIORITARIO para la grabación y sus fotos… perder algo sería perder una reunión».
+ *
+ * Mientras **cualquier** aparato del grupo graba (este, o uno oído con «grabando» hace menos de
+ * [Baliza.VIGENCIA_GRABANDO_MS]: [BalizaDelMovil.grabandoAlguien]), la sincronización automática
+ * **no arranca nada**: ni la vuelta entera, ni las tareas, ni las personas. Solo va la cámara, que
+ * tiene su propia conexión ([ConexionCaliente]). Al acabar, **el chat de la grabación primero** (la
+ * voz, el vídeo, la nota y sus fotos), en una vuelta solo con ese chat; si no sale, se reintenta
+ * (nunca se da por hecha sin acabar bien); y después lo demás, ya, sin esperar al periodo
+ * ([RelojDeSincro.acaboDeGrabar]).
+ *
+ * Puro: lo prueba `ModoPrioritarioTest`.
+ */
+class ModoPrioritario {
+    private val grabadas = LinkedHashSet<String>()
+    private var estabaGrabando = false
+
+    /** Se guardó una grabación en [chat] ([Disco.chatDe]): sale antes que nada en cuanto nadie grabe. */
+    @Synchronized fun grabacionGuardada(chat: String) { grabadas += chat }
+
+    @Synchronized fun hayGrabadas(): Boolean = grabadas.isNotEmpty()
+
+    /** Si alguien graba ahora. Devuelve true si **acaba de acabar** (lo aplazado sale ya). */
+    @Synchronized fun mirar(grabandoAlguien: Boolean): Boolean {
+        val acabo = estabaGrabando && !grabandoAlguien
+        estabaGrabando = grabandoAlguien
+        return acabo
+    }
+
+    /**
+     * **Qué toca ahora** ([Baliza.queToca]): [tareas] esperando, [vuelta] (el reloj dice que toca),
+     * [personas] (las de los chats compartidos). La cámara no pasa por aquí: va siempre.
+     */
+    @Synchronized fun queToca(grabandoAlguien: Boolean, tareas: Boolean, vuelta: Boolean, personas: Boolean): Baliza.Trabajo? =
+        Baliza.queToca(
+            buildList {
+                if (grabadas.isNotEmpty()) add(Baliza.Trabajo.ARCHIVOS_DE_LA_GRABACION)
+                if (tareas) add(Baliza.Trabajo.TAREAS)
+                if (vuelta) add(Baliza.Trabajo.VUELTA_ENTERA)
+                if (personas) add(Baliza.Trabajo.PERSONAS)
+            },
+            grabandoAlguien
+        )
+
+    /** Los chats de las grabaciones que esperan, y la lista vacía: van en la vuelta que sale ahora. */
+    @Synchronized fun tomarGrabadas(): Set<String> = LinkedHashSet(grabadas).also { grabadas.clear() }
+
+    /** No salieron (ocupado, un corte): vuelven a esperar, primeras. */
+    @Synchronized fun noSalieron(chats: Set<String>) { grabadas += chats }
+}
