@@ -281,3 +281,21 @@ Probado contra el PC de `origin/main` 995fd94b con el PC simulado de esa versió
 - **Jev**: `importantes` + `importantesDe` en la nota (claves en orden alfabético); la clave y las
   prioridades no viajan. Ver `docs/jev-android.md`.
 - **La web del asistente**: solo del teléfono. Ver `docs/manual-asistente-android.md`.
+
+## v0.151.0: lo nuevo del PC del 29-oct (29-oct)
+
+Al día con el PC de `origin/main` 50e87978. Las pruebas contra el PC simulado de 995fd94b siguen
+pasando (la sincronización no cambió en estos commits).
+
+- **Temas de la reunión y lo demás que oye Jev** (jev.md §5 y §8): `temas`, `temasLista`,
+  `decisiones`, `preguntasAbiertas`, `tiempoPorTema`, `propuestas`, `cambiosDeUrgencia` en la nota,
+  con el formato del PC; `temas`/`temas_lista` también en el diario de la grabación. Ver
+  `docs/reunion-con-jev-android.md`.
+- **Dictar al chat y repasar en voz alta** (§6 y §7): nada nuevo viaja. Ver
+  `docs/dictar-y-repasar-android.md`.
+- **La letra**: el alineador es el del PC, regla por regla; la letra se guarda igual (`[m:ss] línea`).
+  Ver `docs/musica-con-letra.md`.
+- `jev/Preguntas.kt` es copia exacta del `preguntas.rs` del PC (271 textos).
+- **Fallo del PC** (sin arreglar allí): en `al_lienzo.rs`, si el móvil reintenta una subida cortada
+  antes de que el PC acabe con la conexión cortada, lo que quedaba en el búfer se añade detrás del
+  reanudado. Un teléfono real reintenta segundos después, así que es improbable.

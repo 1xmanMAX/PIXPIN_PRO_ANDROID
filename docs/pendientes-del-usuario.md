@@ -10,6 +10,8 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [x] v0.144.0 — OCR con Indra en el teléfono; Whisper como motor de voz por defecto.
 - [x] v0.145.0 — Fuera la pantalla de Proyectos; atrás: visor → chat → lista → salir.
 - [x] v0.147.0 — Markdown y formatos de texto; Lectura Veloz 0.3.1 abre los archivos (puntos 37–39).
+- [x] v0.151.0 — Temas de la reunión con Jev, dictar al chat, repasar en voz alta y la letra como el
+      PC (puntos 59–61).
 - [x] v0.150.0 — Lo nuevo del PC del 28-oct: grabar sin perder nada, baliza, fotos por su hora,
       de la PC al móvil y colaboradores, Jev y la web del asistente (puntos 53–58).
 - [x] v0.149.0 — Sin ⚙ en los visores, menú por tipo, una pantalla por clase, transcripción
@@ -193,8 +195,8 @@ Se revisan todas las ramas del repo de Windows cada media hora
 (`scratchpad/vigia/revisar-windows.sh`, base en `visto.txt`) y todo lo nuevo se porta a Android,
 sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b).
 
-- [ ] 59. Temas de la reunión y lo demás que oye Jev (jev.md §5 y §8): agenda que Jev marca en vivo,
+- [x] 59. Temas de la reunión y lo demás que oye Jev (jev.md §5 y §8): agenda que Jev marca en vivo,
       decisiones, preguntas abiertas, tiempo por tema, propuestas, fichas en la barra y el acta.
-- [ ] 60. Dictar al chat (§6) y repasar en voz alta (§7) con Jev.
-- [ ] 61. La letra de las canciones como el PC: «Sincronizar sola», idioma de la letra, el alineador
+- [x] 60. Dictar al chat (§6) y repasar en voz alta (§7) con Jev.
+- [x] 61. La letra de las canciones como el PC: «Sincronizar sola», idioma de la letra, el alineador
       igual al del PC, karaoke sin tira y moverse por la letra.
