@@ -24,8 +24,8 @@ import kotlinx.coroutines.withTimeoutOrNull
  * `docs/movil-como-camara.md` del PC).
  *
  * - **Pregunta** (`camara_remota`) cada [CADA_CON_LA_CAMARA] con la pantalla de cámara abierta y
- *   cada [CADA_A_LA_VISTA] con PixPin a la vista, para la tira de la lista de chats
- *   ([AvisoDeCamaraDelPc]). Es el camino que siempre funciona.
+ *   cada [CADA_A_LA_VISTA] con PixPin a la vista, para el botón de la cámara junto al «+» de la
+ *   lista de chats (`ui/ListaDeChats`, 29-oct-2026). Es el camino que siempre funciona.
  * - **Atiende el aviso del PC** al empezar, pausar, seguir o acabar ([alAviso], desde el
  *   [Respondedor] de [Presencia]): llega antes que la siguiente pregunta.
  * - Con cada anuncio lleva **su propio reloj de la grabación** ([RelojDelMovil], con

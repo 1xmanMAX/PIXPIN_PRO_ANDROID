@@ -52,4 +52,17 @@ class OpcionesDeAdjuntarTest {
         val nada = OpcionesDeAdjuntar.filtrar(h, "zzz")
         assertTrue(nada.deSiempre.isEmpty() && nada.mas.isEmpty())
     }
+
+    /**
+     * **La cámara del PC ya no está en el clip** (29-oct-2026): va junto al «+» de la lista de
+     * chats mientras el PC graba. «cámara» solo encuentra Escanear.
+     */
+    @Test
+    fun `la camara para la reunion del PC ya no esta en el clip`() {
+        val h = OpcionesDeAdjuntar.hoja(conProyecto = true, asistente = false)
+        val camara = OpcionesDeAdjuntar.filtrar(h, "cámara")
+        assertEquals(listOf(Adjunto.ESCANEAR), camara.deSiempre)
+        assertTrue(camara.mas.isEmpty())
+        assertTrue(OpcionesDeAdjuntar.filtrar(h, "reunión del PC").let { it.deSiempre.isEmpty() && it.mas.isEmpty() })
+    }
 }

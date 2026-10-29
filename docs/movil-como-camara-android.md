@@ -7,12 +7,12 @@ una en el minuto de la grabación en que se hizo, y también clips cortos.
 
 ## Qué ve el usuario
 
-1. **Una tira discreta** arriba de la lista de chats mientras un PC del grupo
-   graba: «Cámara para la reunión del PC: «Clase 28-10 10h05»» con
-   **«Abrir cámara»**. Sin grabación, no ocupa nada.
-2. **«Cámara para la reunión del PC»** también en el «Más» de la hoja del clip
-   (adjuntar) de cualquier chat: abre la cámara; si ningún PC graba, lo dice
-   («Ningún PC está grabando» y cómo empezarlo en el PC).
+1. **El botón de la cámara junto al «+»** de la lista de chats (29-oct-2026):
+   mientras un PC del grupo graba sale, del mismo tamaño, a la izquierda del
+   «+» de chat nuevo, y los dos quedan centrados donde estaba el «+». Abre la
+   cámara. Sin grabación no está y el «+» queda como siempre.
+2. Ya no hay tira arriba de la lista ni entrada en el clip (adjuntar): la
+   entrada es el botón de arriba, que solo sale cuando sirve.
 3. **La pantalla de cámara**, a pantalla completa: la vista previa, un
    disparador grande, a su izquierda el de clip (solo si el PC recibe clips),
    y arriba «● 12:34 grabando en el PC» («‖ 12:34 en pausa»; al acabar,
@@ -36,8 +36,7 @@ una en el minuto de la grabación en que se hizo, y también clips cortos.
 | La subida en segundo plano: servicio en primer plano `dataSync` | `SubidaDeLaCamaraService.kt` |
 | La pantalla de cámara (CameraX: `ImageCapture`, `VideoCapture<Recorder>`) | `CamaraDelPcActivity.kt` |
 | HEIC (u otra cosa) a JPEG copiando el EXIF | `FotoEnJpeg.kt` |
-| La tira de la lista de chats | `AvisoDeCamaraDelPc.kt` (y una línea en `ui/ListaDeChats.kt`) |
-| La entrada en el «Más» del clip | `guardados/OpcionesDeAdjuntar.kt` (`CAMARA_PC`) y `MensajesActivity.kt` |
+| El botón de la cámara junto al «+» de la lista de chats | `ui/ListaDeChats.kt` |
 
 Los tipos desconocidos se siguen contestando `{"error":"No sé qué es «…»"}` sin
 cortar (`Respondedor.responder`, rama `else`); una persona de un chat
@@ -109,7 +108,7 @@ compartido recibe «No sé qué es «camara_remota»» (`SOLO_DEL_GRUPO`).
 
 - **Con aparatos de verdad** (PC y teléfono en la misma Wi-Fi, en el mismo
   grupo): empezar «Grabar clase» en el PC con «📱 Cámara del móvil» encendida;
-  ver la tira en la lista de chats; abrir la cámara, hacer fotos (una en
+  ver el botón de la cámara junto al «+» de la lista de chats; abrir la cámara, hacer fotos (una en
   pausa) y un clip; cerrar la pantalla a mitad de subida; terminar en el PC y
   mirar la clase. Y lo que esto no prueba: la orientación de las fotos, el
   sonido de los clips, el aviso del PC llegando con PixPin a la vista y la
