@@ -167,7 +167,10 @@ object PasarATexto {
             val r = oirLaCancion(app, m) { almacen.ponerAvance(m.id, it); avance(it) }
             return when (r) {
                 is Transcriptor.Resultado.Texto -> {
-                    val propuesta = AlinearLetra.propuesta(antes, r.trozos, m.duracionMs.takeIf { it > 0 })
+                    // Con letra pegada, cuántas líneas se oyeron (para decir si va a ojo, como el PC).
+                    val conTiempos = antes?.takeIf { AlinearLetra.lineasDeLaLetra(it).isNotEmpty() }
+                        ?.let { AlinearLetra.conTiempos(it, r.trozos, m.duracionMs.takeIf { d -> d > 0 }?.toLong()) }
+                    val propuesta = conTiempos?.texto ?: AlinearLetra.propuesta(antes, r.trozos, m.duracionMs.takeIf { it > 0 })
                     if (propuesta == null) {
                         avisar(app, app.getString(R.string.letra_no_se_alineo))
                         ColaDeTexto.Fin.HECHO
@@ -177,7 +180,15 @@ object PasarATexto {
                             if (it.transcripcion != antes) it
                             else { puesta = true; it.copy(transcripcion = propuesta, estadoDelTexto = TEXTO_LETRA) }
                         }
-                        if (puesta) avisar(app, app.getString(R.string.letra_con_tiempos_lista, tituloDeAudio(app, m)))
+                        if (puesta) avisar(
+                            app,
+                            conTiempos?.alineado?.let { a ->
+                                app.getString(
+                                    if (a.aOjo) R.string.letra_con_tiempos_lista_a_ojo else R.string.letra_con_tiempos_lista_de,
+                                    tituloDeAudio(app, m), a.ancladas, a.lineas.size
+                                )
+                            } ?: app.getString(R.string.letra_con_tiempos_lista, tituloDeAudio(app, m))
+                        )
                         ColaDeTexto.Fin.HECHO
                     }
                 }
@@ -190,11 +201,29 @@ object PasarATexto {
         }
     }
 
-    /** **Lo que se oye en una canción**, con el motor elegido (Whisper por defecto). En este hilo. */
+    /**
+     * **Lo que se oye en una canción**, con el motor elegido (Whisper por defecto). En este hilo.
+     *
+     * **Con Whisper, como el PC** (29-oct-2026, [OirCancion]): tanda a tanda de 8 s, en el idioma de la
+     * letra si se nota y sin anotaciones («[Música]»). Con otro motor, el de siempre, pero también en
+     * el idioma de la letra.
+     */
     fun oirLaCancion(app: Context, m: Mensaje, avance: (Float) -> Unit): Transcriptor.Resultado {
         val ruta = m.ruta ?: return Transcriptor.Resultado.Fallo(Transcriptor.NO_SE_LEE)
+        val lineas = m.transcripcion?.let { AlinearLetra.lineasDeLaLetra(it) }.orEmpty()
+        val elegido = (app.applicationContext as? com.forge.pixpin.PixPinApp)?.ajustes?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_POR_DEFECTO
+        if (Transcriptor.motorQueVa(elegido, MotorWhisper.soportado()) == com.forge.pixpin.data.MOTOR_WHISPER) {
+            return when (val o = OirCancion.oir(app, File(ruta), lineas, avance)) {
+                is OirCancion.Oido.Texto -> Transcriptor.Resultado.Texto(o.trozos.joinToString(" ") { it.texto }, 0, o.trozos, trozos = o.trozos)
+                OirCancion.Oido.SinModelo -> Transcriptor.Resultado.DescargandoIdioma
+                OirCancion.Oido.Nada -> Transcriptor.Resultado.Fallo(Transcriptor.NADA)
+                OirCancion.Oido.Cancelada -> Transcriptor.Resultado.Fallo(Transcriptor.FALLO_INTERNO, "parada")
+                is OirCancion.Oido.Fallo -> Transcriptor.Resultado.Fallo(o.codigo, o.detalle)
+            }
+        }
+        val idioma = AlinearLetra.idiomaDeLaLetra(lineas) ?: Transcriptor.idiomaElegido(app)
         return runCatching {
-            Transcriptor.transcribirAqui(app, File(ruta), Transcriptor.idiomaElegido(app), avance)
+            Transcriptor.transcribirAqui(app, File(ruta), idioma, avance)
         }.getOrElse { Transcriptor.Resultado.Fallo(Transcriptor.FALLO_INTERNO, Transcriptor.resumenDe(it)) }
     }
 

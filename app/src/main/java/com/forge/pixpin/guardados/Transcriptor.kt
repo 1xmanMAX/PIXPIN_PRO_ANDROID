@@ -394,7 +394,7 @@ object Transcriptor {
                     if (!MotorWhisper.modeloListo(context)) {
                         MotorWhisper.asegurarModelo(context) { avance(0.05f + 0.3f * it) } ?: return Resultado.DescargandoIdioma
                     }
-                    MotorWhisper.reconocer(context, pcm, idioma, segundoIdioma(context), todoEnUno(context)) { avance(0.35f + 0.65f * it) }
+                    MotorWhisper.reconocer(context, pcm, idioma, segundoIdioma(context), todoEnUno(context), avance = { avance(0.35f + 0.65f * it) })
                 }
             } else {
                 if (!MotorVosk.modeloListo(context, idioma)) {
@@ -485,6 +485,16 @@ object Transcriptor {
         val s = silencios(pcm)
         return agruparEnPausas(cortes(pcm, s), TANDA_SEGUNDOS, TANDA_MINIMA_SEGUNDOS, pausasLargas(s, PAUSA_DE_TANDA_MS))
     }
+
+    /**
+     * Lo que dura como mucho una tanda de **una canción** (29-oct-2026, `TANDA_CANCION_SEGUNDOS` del
+     * PC): frases juntas hasta 8 s, y no 15 como una nota, para que el tiempo repartido de cada palabra
+     * caiga cerca de cuando se canta.
+     */
+    const val TANDA_CANCION_SEGUNDOS = 8
+
+    /** **Las tandas de una canción** (`oir_cancion_pcm` del PC): frases ([cortes]) juntas hasta [TANDA_CANCION_SEGUNDOS]. */
+    internal fun tandasDeCancion(pcm: File): List<List<LongRange>> = agrupar(cortes(pcm), TANDA_CANCION_SEGUNDOS)
 
     /**
      * **Dónde hay una pausa de [ms] o más** (bytes): la mitad de cada silencio largo, que es justo

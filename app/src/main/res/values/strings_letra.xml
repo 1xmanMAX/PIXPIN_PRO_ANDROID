@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  La letra de una canción (29-oct-2026): «Sincronizar sola» y el karaoke sin la tira de arriba, como
+  el PC (058ae2b7, 0cc0a0a5: los textos `musica-sola-*` de su catálogo). En su propio archivo para no
+  pisar lo que otros cambios añaden a los demás. Ver guardados/SincronizarSola.kt y
+  guardados/KaraokeDeLaCancion.kt.
+-->
+<resources>
+    <string name="letra_sola">Sincronizar sola</string>
+    <string name="letra_sola_empieza">Sincronizando la letra sola: oyendo la canción…</string>
+    <string name="letra_sola_avance">Sincronizando la letra… %1$d %%</string>
+    <string name="letra_sola_bajando">Bajando el reconocedor de voz… %1$d %%</string>
+    <string name="letra_sola_parada">Sincronización parada</string>
+    <string name="letra_sola_ocupada">Ya se está sincronizando otra canción</string>
+    <string name="letra_sola_sin_reconocedor">Este teléfono no puede oír la canción con Whisper. Sincronízala a toques con el reloj</string>
+    <string name="letra_sola_falta_modelo">Para poner los tiempos solo, toca «Sincronizar sola» (los subtítulos): baja una vez el reconocedor de voz (unos %1$d MB)</string>
+    <string name="letra_sola_sin_red">No se pudo bajar el reconocedor de voz: mira la conexión y vuelve a tocar «Sincronizar sola»</string>
+    <string name="letra_sola_no_se_oye">No se reconoció la letra en la canción. Sincronízala a toques con el reloj</string>
+    <string name="letra_sola_fallo">No se pudo sincronizar la letra</string>
+    <string name="letra_sola_cambio">La letra cambió mientras se sincronizaba: vuelve a tocar «Sincronizar sola»</string>
+    <string name="letra_sola_hecha">Letra sincronizada sola (%1$d de %2$d líneas oídas). Si alguna va mal, corrígela con el reloj</string>
+    <string name="letra_sola_hecha_poca">Letra sincronizada a ojo: solo se oyeron %1$d de %2$d líneas. Corrígela con el reloj</string>
+    <string name="letra_con_tiempos_lista_de">La letra de «%1$s» ya tiene sus tiempos (%2$d de %3$d líneas oídas). Ábrela para revisarla.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">La letra de «%1$s» tiene tiempos a ojo: solo se oyeron %2$d de %3$d líneas. Corrígela con el reloj.</string>
+    <string name="letra_volver">Volver</string>
+    <string name="letra_tema_claro">Tema claro</string>
+    <string name="letra_tema_oscuro">Tema oscuro</string>
+</resources>
