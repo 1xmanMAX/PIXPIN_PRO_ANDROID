@@ -299,3 +299,19 @@ pasando (la sincronización no cambió en estos commits).
 - **Fallo del PC** (sin arreglar allí): en `al_lienzo.rs`, si el móvil reintenta una subida cortada
   antes de que el PC acabe con la conexión cortada, lo que quedaba en el búfer se añade detrás del
   reanudado. Un teléfono real reintenta segundos después, así que es improbable.
+
+## v0.152.0: una sola grabación y la barra sin amontonar (29-oct)
+
+- **Una sola opción «Grabar»** para la clase en línea, la presencial y la reunión (ver
+  `grabacion-unica-android.md`): el audio siempre; en la barra, Foto, Captura (mantener: un trozo),
+  Pantalla (el vídeo de la pantalla, encendido y apagado a voluntad mientras el audio sigue) y Clip. El
+  vídeo de la sala, en «Más opciones». `GrabarClaseService` se quita: todo es `ReunionPresencialService`.
+- **La barra**: el reloj pausa con un toque (el punto rojo pasa a «❚❚») y termina si se mantiene; las
+  acciones en su fila, con su nombre.
+- **Pantalla completa**: los mandos arriba, la lista de lo que voy a decir en medio y la transcripción en
+  vivo abajo (`EscuchaDeLaReunion.Vuelta.Frase`), con A−/A+ y «Descartar».
+- **La foto para la grabación del PC**, junto al «+» de la lista de chats mientras el PC graba; fuera de
+  «Adjuntar».
+- **Formato**: el mismo del PC (`grabacion: "clase"`, `capturas`, `video`, `clips`). En la misma
+  grabación hay fotos con `fuente: "camara"` y capturas y trozos de la pantalla sin `fuente`. Prueba nueva
+  en `PresencialTest`. 4246 pruebas.
