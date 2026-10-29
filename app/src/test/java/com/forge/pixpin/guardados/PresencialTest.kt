@@ -311,6 +311,39 @@ class PresencialTest {
         assertFalse("el vídeo de la reunión es como el del §3, sin fuente", linea(ms[1]).contains("fuente"))
     }
 
+    /**
+     * **La grabación única** (29-oct-2026): en la misma reunión hay fotos de la cámara (`fuente: "camara"`)
+     * y capturas de la pantalla y trozos de su vídeo (sin `fuente`, como las de la clase del PC).
+     */
+    @Test
+    fun `en la grabacion unica las capturas y la pantalla van sin fuente y las fotos con la suya`() {
+        val fotos = listOf(
+            Presencial.FotoGuardada("f1", 5_000, "/a/f1.jpg", Presencial.nombreDeLaFoto(true, 7, 1, "jpg"), 10),
+            Presencial.FotoGuardada("k1", 9_000, "/a/k1.png", Presencial.nombreDeLaFoto(false, 7, 2, "png"), 10, deCamara = false)
+        )
+        val clips = listOf(
+            Presencial.ClipGuardado("c1", 30_000, 12_000, "/a/c1.mp4", Presencial.nombreDelClip("Clase", 1), 99),
+            Presencial.ClipGuardado("p2", 60_000, 20_000, "/a/p2.mp4", Presencial.nombreDeLaPantalla("Clase", 1), 99, deCamara = false)
+        )
+        val ms = Presencial.mensajes("voz", "Clase", 1_000, null, "/a/voz.m4a", 500, 90_000, emptyList(), null, fotos, clips)
+        assertEquals(listOf("voz", "f1", "k1", "c1", "p2"), ms.map { it.id })
+        assertEquals(Presencial.DE_CAMARA, ms[1].fuente)
+        assertNull("la captura de la pantalla no es de la cámara", ms[2].fuente)
+        assertEquals("clase-7-2.png", ms[2].nombre)
+        assertEquals(Presencial.DE_CAMARA, ms[3].fuente)
+        assertNull("el trozo de la pantalla no es de la cámara", ms[4].fuente)
+        assertEquals("Clase · pantalla 1.mp4", ms[4].nombre)
+        val voz = linea(ms[0])
+        assertTrue(voz, voz.contains(""""capturas":[{"id":"f1","ms":5000},{"id":"k1","ms":9000}]"""))
+        assertTrue(voz, voz.contains(""""clips":[{"duracionMs":12000,"id":"c1","ms":30000},{"duracionMs":20000,"id":"p2","ms":60000}]"""))
+        assertFalse(linea(ms[2]), linea(ms[2]).contains("fuente"))
+        // Los trozos del vídeo de la pantalla, en sus grupos, aparte de los del vídeo de la sala.
+        assertTrue(Presencial.esDePantalla(Presencial.GRUPO_DE_PANTALLA))
+        assertTrue(Presencial.esDePantalla(Presencial.GRUPO_DE_PANTALLA + 3))
+        assertFalse(Presencial.esDePantalla(0))
+        assertFalse(Presencial.esDePantalla(1))
+    }
+
     // --- La ida y vuelta con el PC ------------------------------------------------------------
 
     /** Una clase escrita por el PC con fotos y clips de la cámara y un clip del móvil, como su cuaderno. */

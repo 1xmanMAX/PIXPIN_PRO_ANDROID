@@ -76,12 +76,16 @@ object ReunionConJev {
         /** La lista de los temas, abierta debajo de la barra. */
         val abierta: Boolean = false,
         /** Lo que se está oyendo ahora (un parcial del reconocedor). */
-        val parcial: String = ""
+        val parcial: String = "",
+        /** **Lo ya oído**, frase a frase con su minuto (29-oct-2026): la transcripción de la pantalla completa. */
+        val frases: List<Pair<Long, String>> = emptyList()
     )
 
     /** Las fichas que se ven a la vez y las que se guardan como mucho. */
     const val FICHAS_A_LA_VISTA = 3
     private const val MAXIMO_FICHAS = 12
+    /** Las frases de la transcripción en vivo que se guardan para enseñar. */
+    private const val MAXIMO_FRASES = 200
     /** Las tareas que ya existen que pueden cambiar de urgencia en la reunión. */
     private const val TAREAS = 8
     /** Lo que espera Jev a una petición de los temas (3 preguntas por tema) y a una frase de la reunión. */
@@ -254,6 +258,7 @@ object ReunionConJev {
             }
             is EscuchaDeLaReunion.Vuelta.Reunion -> deLaReunion(s, v.sucesos)
             is EscuchaDeLaReunion.Vuelta.Parcial -> _estado.update { it.copy(parcial = v.texto) }
+            is EscuchaDeLaReunion.Vuelta.Frase -> _estado.update { it.copy(frases = (it.frases + (v.ms to v.texto)).takeLast(MAXIMO_FRASES)) }
         }
     }
 

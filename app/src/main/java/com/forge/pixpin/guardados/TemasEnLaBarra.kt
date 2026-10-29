@@ -45,8 +45,9 @@ import androidx.compose.ui.unit.sp
  *   **las tres fichas más nuevas**: tareas y eventos propuestos (✓ y ✕), los cambios de urgencia ya
  *   aplicados («Deshacer») y el tema olvidado.
  *
- * Lo mismo en la barra flotante de [GrabarClaseService], en la de la reunión en la app ([ReunionEnLaApp]) y
- * en la pantalla de la reunión presencial ([ReunionEnCursoActivity]). Sin reunión con Jev no pinta nada.
+ * Lo mismo en la burbuja flotante de [ReunionPresencialService], en la barra de la grabación en la app
+ * ([ReunionEnLaApp]) y, en grande ([ListaGrande]), en la pantalla completa ([ReunionEnCursoActivity]). Sin
+ * reunión con Jev no pinta nada.
  * Sin `return` antes de tiempo (R8).
  */
 object TemasEnLaBarra {
@@ -98,26 +99,45 @@ object TemasEnLaBarra {
         }
     }
 
+    /**
+     * **La lista en grande** (29-oct-2026, la pantalla completa de la grabación: «que me aparezca lo que voy a
+     * decir, la lista… de forma que sea más grande»): todos los temas con su casilla, a [escala] (A−/A+), la
+     * cabecera de la escucha y las fichas de Jev. Sin temas, [vacio].
+     */
     @Composable
-    private fun Fila(t: TemasDeLaReunion.Tema, brilla: Boolean) {
+    fun ListaGrande(escala: Float, vacio: String, modifier: Modifier = Modifier) {
+        val e by ReunionConJev.estado.collectAsState()
+        val claro = Color.White
+        Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            e.cabecera?.let { Text(it, color = claro.copy(alpha = 0.7f), fontSize = (12 * escala).sp) }
+            if (e.temas.isEmpty()) Text(vacio, color = claro.copy(alpha = 0.6f), fontSize = (14 * escala).sp)
+            LazyColumn(Modifier.weight(1f, fill = false)) {
+                items(e.temas, key = { it.id }) { t -> Fila(t, e.brillo == t.id, escala) }
+            }
+            for (f in e.fichas.asReversed().take(ReunionConJev.FICHAS_A_LA_VISTA)) Ficha(f)
+        }
+    }
+
+    @Composable
+    private fun Fila(t: TemasDeLaReunion.Tema, brilla: Boolean, escala: Float = 1f) {
         val claro = Color.White
         Row(
             Modifier.clip(RoundedCornerShape(8.dp)).background(if (brilla) VERDE.copy(alpha = 0.35f) else Color.Transparent)
-                .clickable { ReunionConJev.marcar(t.id) }.padding(horizontal = 4.dp, vertical = 2.dp),
+                .clickable { ReunionConJev.marcar(t.id) }.padding(horizontal = 4.dp, vertical = (2 * escala).dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Icon(
                 if (t.hecho) Icons.Filled.CheckBox else Icons.Filled.CheckBoxOutlineBlank, contentDescription = null,
-                tint = if (t.hecho) VERDE else claro.copy(alpha = 0.8f), modifier = Modifier.size(20.dp)
+                tint = if (t.hecho) VERDE else claro.copy(alpha = 0.8f), modifier = Modifier.size((20 * escala).dp)
             )
             Text(
-                t.texto, color = if (t.hecho) claro.copy(alpha = 0.6f) else claro, fontSize = 13.sp,
-                modifier = Modifier.padding(start = 6.dp).weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis
+                t.texto, color = if (t.hecho) claro.copy(alpha = 0.6f) else claro, fontSize = (13 * escala).sp,
+                modifier = Modifier.padding(start = 6.dp).weight(1f), maxLines = if (escala > 1f) 4 else 2, overflow = TextOverflow.Ellipsis
             )
             val ms = t.ms
             if (t.hecho && ms != null) Text(
                 (if (t.porJev) "Jev · " else "") + GrabarClase.minuto(ms), color = if (t.porJev) VERDE else claro.copy(alpha = 0.6f),
-                fontSize = 11.sp, modifier = Modifier.padding(start = 6.dp)
+                fontSize = (11 * escala).sp, modifier = Modifier.padding(start = 6.dp)
             )
         }
     }

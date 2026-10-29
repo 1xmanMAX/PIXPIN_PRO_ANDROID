@@ -308,6 +308,27 @@ object Presencial {
     /** **El nombre de un clip**: «Reunión 28-10 10h05 · clip 2.mp4», como el PC. */
     fun nombreDelClip(nombre: String, numero: Int): String = "$nombre · clip $numero.mp4"
 
+    /**
+     * **El nombre de un trozo del vídeo de la pantalla** que no es el vídeo de la reunión (29-oct-2026, la
+     * grabación única: se encendió «Pantalla» a media reunión): «Clase 29-10 10h05 · pantalla 2.mp4».
+     */
+    fun nombreDeLaPantalla(nombre: String, numero: Int): String = "$nombre · pantalla $numero.mp4"
+
+    /**
+     * Hasta cuándo el vídeo de la pantalla «empezó con la grabación» y es el vídeo de la reunión (en su
+     * minuto 0): lo que tarda el permiso de Android en contestar.
+     */
+    const val PANTALLA_DESDE_EL_PRINCIPIO_MS = 5_000L
+
+    /**
+     * **El grupo de los trozos del vídeo de la pantalla** en el diario (29-oct-2026): desde aquí, para no
+     * juntarlos con los del vídeo de la sala (grupos 0, 1…). Cada vez que se enciende «Pantalla», uno más.
+     */
+    const val GRUPO_DE_PANTALLA = 1000
+
+    /** Si un trozo del diario es del vídeo de la pantalla y no del de la sala. */
+    fun esDePantalla(grupo: Int): Boolean = grupo >= GRUPO_DE_PANTALLA
+
     // --- fuente -------------------------------------------------------------------------------
 
     /** **La clave de dónde salió** una imagen o un clip. No `origen`: ver [rescatar]. */
@@ -393,12 +414,16 @@ object Presencial {
     data class FotoGuardada(
         val id: String, val ms: Long, val ruta: String, val nombre: String, val bytes: Long,
         /** La hora de pared del disparo (28-oct-2026, las fotos por su hora: `tomadaEn`). 0: no se sabe. */
-        val tomadaEn: Long = 0
+        val tomadaEn: Long = 0,
+        /** De la cámara (`fuente: "camara"`) o una captura de la pantalla, sin `fuente` (29-oct-2026). */
+        val deCamara: Boolean = true
     )
 
     /** Un clip ya en la carpeta de adjuntos. */
     data class ClipGuardado(
-        val id: String, val ms: Long, val duracionMs: Long, val ruta: String, val nombre: String, val bytes: Long
+        val id: String, val ms: Long, val duracionMs: Long, val ruta: String, val nombre: String, val bytes: Long,
+        /** De la cámara (`fuente: "camara"`) o un trozo del vídeo de la pantalla, sin `fuente` (29-oct-2026). */
+        val deCamara: Boolean = true
     )
 
     /** El vídeo de la reunión ya en la carpeta de adjuntos. */
@@ -446,7 +471,7 @@ object Presencial {
             Mensaje(
                 id = f.id, cuando = cuando++, clase = Clase.IMAGEN, texto = GrabarClase.pie(f.ms, nombre),
                 ruta = f.ruta, nombre = f.nombre, bytes = f.bytes, proyecto = proyecto,
-                enGrabacion = GrabarClase.enGrabacion(vozId, f.ms), fuente = DE_CAMARA,
+                enGrabacion = GrabarClase.enGrabacion(vozId, f.ms), fuente = DE_CAMARA.takeIf { f.deCamara },
                 tomadaEn = f.tomadaEn.takeIf { it > 0 }
             )
         }
@@ -454,7 +479,7 @@ object Presencial {
             Mensaje(
                 id = c.id, cuando = cuando++, clase = Clase.ARCHIVO, ruta = c.ruta, nombre = c.nombre,
                 bytes = c.bytes, duracionMs = c.duracionMs.coerceIn(0, Int.MAX_VALUE.toLong()).toInt(), proyecto = proyecto,
-                enGrabacion = enlaceDelClip(vozId, c.ms, c.duracionMs), fuente = DE_CAMARA
+                enGrabacion = enlaceDelClip(vozId, c.ms, c.duracionMs), fuente = DE_CAMARA.takeIf { c.deCamara }
             )
         }
         return listOf(voz) + listOfNotNull(v) + imagenes + deVideo

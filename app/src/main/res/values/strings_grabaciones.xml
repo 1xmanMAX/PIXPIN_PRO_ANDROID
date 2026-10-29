@@ -48,7 +48,31 @@
     <string name="reunion_notif_pausa">Reunión en pausa</string>
     <string name="reunion_sigue">Sigue grabando</string>
     <string name="reunion_ya_no">La reunión ya terminó</string>
-    <string name="reunion_en_curso">Reunión presencial</string>
+    <string name="reunion_en_curso">Grabando</string>
     <string name="reunion_sin_mirilla">Este teléfono no da la vista previa a la vez que graba: las fotos y los clips se hacen igual (mira el contador).</string>
     <string name="reunion_foto_en_curso">foto en camino…</string>
+
+    <!-- La grabación única (29-oct-2026): una sola opción para la clase, la reunión y la pantalla. -->
+    <string name="grabar_pantalla">Pantalla</string>
+    <string name="grabar_pantalla_empieza">Grabando la pantalla; el audio sigue aparte</string>
+    <string name="grabar_pantalla_parada">Pantalla parada; el audio sigue</string>
+    <string name="grabar_pantalla_con_sala">Con el vídeo de la sala no se graba la pantalla</string>
+    <string name="grabar_pantalla_completa">Pantalla completa</string>
+    <string name="grabar_reloj_pista">Toca el reloj: pausa · Mantenlo: terminar</string>
+    <string name="grabar_captura_pista">Captura (mantén: un trozo)</string>
+    <string name="grabar_descartar">Descartar</string>
+    <string name="grabar_descartar_pregunta">¿Descartar la grabación? Se borra todo lo grabado: el audio, el vídeo, las fotos y las capturas.</string>
+    <string name="grabar_transcripcion">Lo que se dice</string>
+    <string name="grabar_transcripcion_vacia">Aquí sale lo que se dice, frase a frase, con la clave de Jev y la escucha en vivo encendida (Ajustes › Jev). Sin ella, el texto sale igual al terminar.</string>
+    <string name="grabar_temas">Lo que voy a decir</string>
+    <string name="grabar_temas_vacios">Sin temas. Pon la lista en «Temas de la reunión» antes de empezar.</string>
+    <string name="grabar_ver_camara">Ver la cámara</string>
+    <string name="grabar_titulo">Grabar</string>
+    <string name="grabar_sub">Una sola grabación para la clase en línea, la presencial o la reunión</string>
+    <string name="grabar_explicacion">Graba el audio siempre. Mientras graba, la barra flotante tiene: «Foto» (la cámara), «Captura» (la pantalla al instante; mantén para elegir un trozo), «Pantalla» (enciende o apaga el vídeo de la pantalla; el audio sigue igual) y «Clip». Toca el reloj para pausar y mantenlo para terminar.</string>
+    <string name="grabar_con_pantalla">Empezar grabando la pantalla</string>
+    <string name="grabar_con_pantalla_sub">Puedes encenderla o apagarla cuando quieras desde la barra.</string>
+    <string name="grabar_mas_opciones">Más opciones</string>
+    <string name="grabar_sala">Vídeo de la sala con la cámara</string>
+    <string name="grabar_sala_sub">El vídeo entero de la reunión con la cámara de atrás. Con él no se graba la pantalla.</string>
 </resources>

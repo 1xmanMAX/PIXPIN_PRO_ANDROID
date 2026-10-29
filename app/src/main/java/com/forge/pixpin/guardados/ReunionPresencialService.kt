@@ -48,6 +48,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DragIndicator
+import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.PlayArrow
@@ -82,7 +83,12 @@ import com.forge.pixpin.motor.añadirVistaFluida
 import com.forge.pixpin.pin.OverlayComposeWindow
 import com.forge.pixpin.pin.Voz
 import com.forge.pixpin.sincro.GrabacionDelMovil
+import com.forge.pixpin.capture.CaptureFlow
+import com.forge.pixpin.capture.CaptureService
+import com.forge.pixpin.capture.ProjectionSession
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -175,6 +181,11 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         private const val ACCION_CLIP = "com.forge.pixpin.action.REUNION_CLIP"
         private const val ACCION_PAUSA = "com.forge.pixpin.action.REUNION_PAUSA"
         private const val ACCION_TERMINAR = "com.forge.pixpin.action.REUNION_TERMINAR"
+        private const val ACCION_CAPTURA = "com.forge.pixpin.action.REUNION_CAPTURA"
+        private const val ACCION_PANTALLA = "com.forge.pixpin.action.REUNION_PANTALLA"
+        private const val EL_CODIGO = "codigo_pantalla"
+        private const val LOS_DATOS = "datos_pantalla"
+        private const val EL_PERFIL = "perfil_video"
         private const val CANAL = "pixpin_reunion"
         private const val AVISO = 21
 
@@ -182,7 +193,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         private const val PREFS = "grabar_clase"
         private const val CAMARA = "camara_presencial"
 
-        /** Una sola grabación a la vez (con [GrabarClaseService]): se pelearían por el micrófono. */
+        /** Una sola grabación a la vez: dos se pelearían por el micrófono. */
         @Volatile
         var enMarcha = false
             private set
@@ -212,6 +223,28 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         fun terminar() { vivo?.terminar() }
 
         /**
+         * **Una captura de la pantalla** (29-oct-2026, la grabación única): la pantalla entera al instante o,
+         * con [cambiarZona], el recorte. [retrasoMs]: lo que se espera antes (desde la pantalla completa de
+         * la grabación, a que se vaya y se vea lo de debajo).
+         */
+        fun captura(cambiarZona: Boolean = false, retrasoMs: Long = 0) { vivo?.capturaLuego(cambiarZona, retrasoMs) }
+
+        /** **Abre la cámara** para ver la mirilla (en la pantalla completa, «Ver la cámara»). */
+        fun abrirLaCamara() { vivo?.let { s -> s.scope.launch { s.asegurarLaCamara() } } }
+
+        /** **Descarta** la grabación entera (borra lo grabado). */
+        fun descartar() { vivo?.descartar() }
+
+        /** **Enciende o apaga el vídeo de la pantalla**; el audio sigue siempre (29-oct-2026). */
+        fun pantalla() { vivo?.alternarLaPantalla() }
+
+        /**
+         * **El permiso de la pantalla recién concedido** (lo llama [PermisoDePantallaActivity] con su
+         * pantalla aún delante: Android 14 solo deja añadir el tipo `mediaProjection` así).
+         */
+        fun conPermisoDePantalla(codigo: Int, datos: Intent) { vivo?.empezarLaPantalla(codigo, datos) }
+
+        /**
          * **La mirilla en la pantalla de la reunión de la app** (su `PreviewView`), o null al irse: vuelve
          * a la burbuja si la hay.
          */
@@ -225,9 +258,14 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         fun intentoDeLaPantalla(context: Context): Intent =
             Intent(context, ReunionEnCursoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
 
-        /** Empieza la reunión en el chat [proyecto] (null, el general). Con la app a la vista. */
+        /**
+         * Empieza la grabación en el chat [proyecto] (null, el general). Con la app a la vista. Con [datos]
+         * (el permiso de la pantalla recién concedido, [codigo] su resultado) graba también el vídeo de la
+         * pantalla desde el principio, con la calidad [perfil].
+         */
         fun empezar(
-            context: Context, proyecto: String?, forma: Presencial.Forma, calidad: Presencial.Calidad, burbuja: Boolean
+            context: Context, proyecto: String?, forma: Presencial.Forma, calidad: Presencial.Calidad, burbuja: Boolean,
+            codigo: Int = 0, datos: Intent? = null, perfil: PerfilDeVideo = PerfilDeVideo.NORMAL
         ) {
             context.startForegroundService(
                 Intent(context, ReunionPresencialService::class.java)
@@ -235,13 +273,16 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     .putExtra(LA_FORMA, forma.clave)
                     .putExtra(LA_CALIDAD, calidad.clave)
                     .putExtra(LA_BURBUJA, burbuja)
+                    .putExtra(EL_CODIGO, codigo)
+                    .putExtra(EL_PERFIL, perfil.clave)
+                    .apply { if (datos != null) putExtra(LOS_DATOS, datos) }
             )
         }
     }
 
 
-    /** Una foto hecha: su minuto y el JPEG en la carpeta de adjuntos. */
-    private class FotoHecha(val ms: Long, val archivo: File, val cuando: Long = 0)
+    /** Una foto hecha (o una captura de la pantalla, sin [deCamara]): su minuto y su fichero. */
+    private class FotoHecha(val ms: Long, val archivo: File, val cuando: Long = 0, val deCamara: Boolean = true)
 
     /** Un clip: su minuto, lo que dura y su MP4 (null en la forma de vídeo: se recorta al terminar). */
     private class ClipHecho(val ms: Long, val duracionMs: Long, val archivo: File?)
@@ -291,6 +332,27 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     private var avisadoPocoSitio = false
     /** No se pudo poner en primer plano (Android no da el micrófono desde atrás). */
     private var sinPrimerPlano = false
+
+    // --- La pantalla (29-oct-2026, la grabación única) ---
+
+    /** **El vídeo de la pantalla** ([VideoDeLaClase]), sin sonido y en trozos; null si está apagado. */
+    private var pantalla: VideoDeLaClase? = null
+    private var perfil = PerfilDeVideo.NORMAL
+    /** Los trozos del vídeo de la pantalla (grupos desde [Presencial.GRUPO_DE_PANTALLA]). */
+    private val tramosDePantalla = mutableListOf<TramoGrabado>()
+    private var grupoDePantalla = Presencial.GRUPO_DE_PANTALLA - 1
+    private var numeroDePantalla = 0
+    private var pantallaDesde = 0L
+    /** El cierre del vídeo de la pantalla en curso (se espera al terminar). */
+    private var parandoLaPantalla: Job? = null
+    /** Los minutos de las capturas hechas con la pantalla grabándose: salen de sus fotogramas al terminar. */
+    private val minutosDelVideo = mutableListOf<Long>()
+    /** Las capturas de la pantalla ya en el disco. */
+    private val capturas = mutableListOf<FotoHecha>()
+    private var fotografiando = false
+    /** Si la sesión de [CaptureService] la abrió esta grabación (se cierra al acabar). */
+    private var abrimosLaSesion = false
+    private val zona by lazy { ZonaDeLaCaptura(this) }
 
     private var burbuja: OverlayComposeWindow? = null
     /** Dónde se ve la mirilla: la `PreviewView` de la burbuja o la de la pantalla de la reunión. */
@@ -360,6 +422,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
             ACCION_CLIP -> { clip(); return START_NOT_STICKY }
             ACCION_PAUSA -> { pausa(); return START_NOT_STICKY }
             ACCION_TERMINAR -> { terminar(); return START_NOT_STICKY }
+            ACCION_CAPTURA -> { captura(cambiarZona = false); return START_NOT_STICKY }
+            ACCION_PANTALLA -> { alternarLaPantalla(); return START_NOT_STICKY }
         }
         if (empezado || terminado) return START_STICKY
         empezado = true
@@ -368,7 +432,11 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         forma = Presencial.Forma.de(intent.getStringExtra(LA_FORMA))
         calidad = Presencial.Calidad.de(intent.getStringExtra(LA_CALIDAD))
         val conBurbuja = intent.getBooleanExtra(LA_BURBUJA, true)
-        scope.launch { arrancar(conBurbuja) }
+        perfil = PerfilDeVideo.deClave(intent.getStringExtra(EL_PERFIL))
+        @Suppress("DEPRECATION")
+        val datos = intent.getParcelableExtra<Intent>(LOS_DATOS)
+        val codigo = intent.getIntExtra(EL_CODIGO, 0)
+        scope.launch { arrancar(conBurbuja, datos?.let { codigo to it }) }
         // STICKY: si Android mata la app, al volver a crear el servicio se avisa de lo que quedó.
         return START_STICKY
     }
@@ -429,6 +497,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 avisar(getString(R.string.sin_perder_poco_sitio))
             }
             GrabacionAMedias.Espacio.CRITICO -> {
+                if (pantalla != null) pararLaPantalla(getString(R.string.sin_perder_disco_lleno))
                 val cam = camara
                 if (forma == Presencial.Forma.VIDEO && cam != null && cam.grabando && !videoCortado && estado.value.clipDesde == null) {
                     videoCortado = true
@@ -445,27 +514,51 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
     }
 
-    private suspend fun arrancar(conBurbuja: Boolean) {
+    /**
+     * **La cámara, cuando hace falta** (29-oct-2026, la grabación única): ya no se abre al empezar (en una
+     * clase por pantalla no se usa, y abierta gasta y enciende el punto verde de Android), sino con la
+     * primera foto o el primer clip, o al empezar si se graba el vídeo de la sala. El servicio ya está en
+     * primer plano con el tipo `camera`, así que Android deja abrirla con la app fuera.
+     */
+    private suspend fun asegurarLaCamara(): CamaraDeLaReunion? {
+        camara?.let { return it }
+        if (!conCamara || terminado) return null
+        val a = abriendo ?: scope.async { abrirLaCamara() }.also { abriendo = it }
+        return a.await()
+    }
+
+    private var abriendo: Deferred<CamaraDeLaReunion?>? = null
+
+    private suspend fun abrirLaCamara(): CamaraDeLaReunion? {
         val prefs = getSharedPreferences(PREFS, MODE_PRIVATE)
-        val cam = if (conCamara) CamaraDeLaReunion(this, this) else null
-        cam?.giro = giroDeLaPantalla()
-        val abierta = cam != null && cam.abrir(runCatching { prefs.getString(CAMARA, null) }.getOrNull())
+        val cam = CamaraDeLaReunion(this, this)
+        cam.giro = giroDeLaPantalla()
+        val abierta = cam.abrir(runCatching { prefs.getString(CAMARA, null) }.getOrNull())
+        abriendo = null
+        if (!abierta || terminado) {
+            cam.cerrar()
+            if (!abierta) avisar(getString(R.string.reunion_sin_camara), fuera = true)
+            return null
+        }
+        camara = cam
+        cam.camaraId?.let { id -> runCatching { prefs.edit().putString(CAMARA, id).apply() } }
+        if (orientacion == null) vigilarElGiro()
+        elegirMirilla()
+        return cam
+    }
+
+    private suspend fun arrancar(conBurbuja: Boolean, permisoDePantalla: Pair<Int, Intent>?) {
+        val cam = if (forma == Presencial.Forma.VIDEO) asegurarLaCamara() else null
+        val abierta = cam != null
         if (terminado) {
             // Se terminó mientras se abría la cámara: no hay nada grabado.
             cam?.cerrar()
             return
         }
-        if (abierta) {
-            camara = cam
-            cam!!.camaraId?.let { id -> runCatching { prefs.edit().putString(CAMARA, id).apply() } }
-            vigilarElGiro()
-            elegirMirilla()
-        } else {
-            avisar(getString(R.string.reunion_sin_camara))
-        }
         val ahora = System.currentTimeMillis()
         marca = ahora
-        nombre = getString(R.string.reunion_nombre, GrabarClase.fechaDelNombre(ahora))
+        // «Reunión …» con el vídeo de la sala, como el PC; si no, «Clase …» (la grabación de siempre).
+        nombre = getString(if (forma == Presencial.Forma.VIDEO) R.string.reunion_nombre else R.string.clase_nombre, GrabarClase.fechaDelNombre(ahora))
         var empezoElVideo = false
         // **El disco antes de empezar** (como el PC): con menos de 500 MB, el vídeo ni empieza.
         val sitio = GrabacionAMedias.espacio(DiarioEnMarcha.libres(this))
@@ -518,10 +611,17 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         // **La reunión con Jev** (29-oct-2026): los temas de «Preparar» y la escucha en vivo, si toca.
         ReunionConJev.empezar(this, nombre, proyecto, g, diario) { msDeLaNota() }
         // El PC puede mandar capturas a esta grabación (§13 de la guía del PC). Ver [GrabacionDelMovil].
-        GrabacionDelMovil.empezar(this, getString(R.string.reunion_nombre, GrabarClase.fechaDelNombre(ahora))) { c.llevadoMs() to c.enPausa }
-        estado.update { it.copy(lista = true, conCamara = camara != null, video = forma == Presencial.Forma.VIDEO, mirilla = camara?.conMirilla == true) }
+        GrabacionDelMovil.empezar(this, nombre) { c.llevadoMs() to c.enPausa }
+        estado.update {
+            it.copy(
+                lista = true, conCamara = conCamara, video = forma == Presencial.Forma.VIDEO, mirilla = camara?.conMirilla == true,
+                sePuedePantalla = forma != Presencial.Forma.VIDEO
+            )
+        }
         actualizarAviso()
         if (conBurbuja) ensenarLaBurbuja()
+        // **La pantalla desde el principio**, si se pidió al empezar (el permiso ya concedido).
+        permisoDePantalla?.let { (codigo, datos) -> empezarLaPantalla(codigo, datos) }
         // El reloj, la onda y, con la calidad automática, el paso a 720p pasada la hora.
         scope.launch {
             var ultimoSegundo = -1L
@@ -552,6 +652,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     desdeElEspacio = 0
                     mirarElDisco()
                 }
+                if (pantalla != null && !c.enPausa && c.llevadoMs() - pantallaDesde >= TrozosDeVideo.TROZO_MS) cambiarDeTrozoDePantalla()
             }
         }
     }
@@ -560,6 +661,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         // Cerrar no es tirar: si el sistema nos para a media reunión, se guarda.
         if (!terminado && empezado) terminar()
         quitarLaBurbuja()
+        zona.quitar()
         orientacion?.disable()
         enMarcha = false
         if (vivo === this) vivo = null
@@ -578,9 +680,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     private fun foto() {
         val c = cronometro ?: return
         if (terminado) return
-        val cam = camara
-        if (cam == null) {
-            avisar(getString(R.string.reunion_sin_camara))
+        if (!conCamara) {
+            avisar(getString(R.string.reunion_sin_camara), fuera = true)
             return
         }
         val ms = Presencial.msDeLaFoto(c.llevadoMs())
@@ -597,7 +698,9 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         estado.update { it.copy(destellos = it.destellos + 1, fotosEnCurso = fotosPendientes) }
         scope.launch {
             try {
-                val bien = cam.foto(f) && withContext(Dispatchers.IO) { FotoDeLaCamara.enSuSitio(f) || f.length() > 0 }
+                // La primera foto abre la cámara (un momento); las demás salen al instante.
+                val cam = asegurarLaCamara()
+                val bien = cam != null && cam.foto(f) && withContext(Dispatchers.IO) { FotoDeLaCamara.enSuSitio(f) || f.length() > 0 }
                 if (bien) {
                     d?.cambiar { apuntarCaptura(ms, f.name, true) }
                     fotos += FotoHecha(ms, f, cuando)
@@ -634,12 +737,13 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 actualizarAviso()
                 return
             }
-            val cam = camara ?: return avisar(getString(R.string.reunion_sin_camara))
+            if (!conCamara) return avisar(getString(R.string.reunion_sin_camara), fuera = true)
             clipCambiando = true
             val mp4 = File(carpeta, "reunion_clip_${System.currentTimeMillis()}.mp4")
             scope.launch {
                 try {
-                    if (cam.empezarVideo(mp4, 1080, conSonido = false)) {
+                    val cam = asegurarLaCamara()
+                    if (cam != null && cam.empezarVideo(mp4, 1080, conSonido = false)) {
                         if (c.enPausa) cam.pausar(true)
                         clipArchivo = mp4
                         diario?.cambiar { empezarClip(ms, mp4.absolutePath) }
@@ -700,6 +804,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         c.pausar(p)
         grabador?.pausar(p)
         camara?.pausar(p)
+        pantalla?.pausar(p)
         GrabacionDelMovil.pausa(this)
         // La pausa, en el reloj de pared en el acto.
         diario?.latir(msDeLaNota(), p)
@@ -707,6 +812,245 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         sentir(null)
         avisar(getString(if (p) R.string.clase_en_pausa else R.string.reunion_sigue))
         actualizarAviso()
+    }
+
+    // --- La pantalla: capturas y vídeo (29-oct-2026, la grabación única) -----------------------
+
+    /** Los tipos del servicio en primer plano: el micrófono siempre, la cámara si hay permiso y la pantalla si se graba. */
+    private fun tipos(conLaPantalla: Boolean): Int =
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or
+            (if (conCamara) ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA else 0) or
+            (if (conLaPantalla) ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION else 0)
+
+    /** Una captura ahora o dentro de [retrasoMs], con el minuto de ahora (el del toque). */
+    fun capturaLuego(cambiarZona: Boolean, retrasoMs: Long) {
+        val ms = cronometro?.llevadoMs() ?: return
+        if (retrasoMs <= 0) captura(cambiarZona, ms) else scope.launch { delay(retrasoMs); captura(cambiarZona, ms) }
+    }
+
+    /**
+     * **Una captura de la pantalla** (como la barra de la clase del PC): la pantalla entera al instante y,
+     * con [cambiarZona], el recorte. Con la pantalla grabándose, el permiso de Android da para un solo
+     * `VirtualDisplay` (el del vídeo): se apunta el minuto y la imagen sale del vídeo al terminar.
+     */
+    private fun captura(cambiarZona: Boolean, alPulsar: Long? = null) {
+        val c = cronometro ?: return
+        if (fotografiando || terminado) return
+        val ms = alPulsar ?: c.llevadoMs()
+        if (pantalla != null) {
+            minutosDelVideo += ms
+            diario?.cambiar { capturasDelVideo += ms }
+            sentir(MediaActionSound.SHUTTER_CLICK)
+            estado.update { it.copy(capturas = capturas.size + minutosDelVideo.size, destellos = it.destellos + 1) }
+            avisar(getString(R.string.clase_captura_hecha, GrabarClase.minuto(ms)), fuera = true)
+            actualizarAviso()
+            return
+        }
+        if (!ProjectionSession.isAlive) abrimosLaSesion = true
+        CaptureFlow.conSesion(this) { fotografiar(ms, cambiarZona) }
+    }
+
+    private suspend fun fotografiar(ms: Long, cambiarZona: Boolean) {
+        if (fotografiando || terminado) return
+        fotografiando = true
+        try {
+            val app = applicationContext as PixPinApp
+            val foto = try {
+                // Ni la burbuja, ni la barra de la app, ni la bola en la foto.
+                burbuja?.isContentVisible = false
+                estado.update { it.copy(oculta = true) }
+                app.overlayManager.setOverlaysVisible(false)
+                // Lo que tarda el compositor en dejar de pintarlas (ver [CaptureFlow.captureNow]).
+                delay(150)
+                ProjectionSession.grab()
+            } finally {
+                app.overlayManager.setOverlaysVisible(true)
+            }
+            if (foto == null) {
+                mostrarLosMandos()
+                avisar(getString(R.string.clase_sin_zona), fuera = true)
+                return
+            }
+            val elegida = if (cambiarZona) {
+                val eleccion = zona.elegir(foto)
+                mostrarLosMandos()
+                if (eleccion == null || terminado) {
+                    foto.recycle()
+                    return
+                }
+                eleccion.zona
+            } else {
+                mostrarLosMandos()
+                null
+            }
+            // **En la carpeta del diario, en el acto**: si la app muere, la captura está.
+            val d = diario
+            val n = ++numeroDeFoto
+            val fichero = d?.diario?.ficheroDeCaptura(n, "png") ?: "captura-${System.currentTimeMillis()}-$ms.png"
+            val dir = d?.dir ?: File(cacheDir, "clase")
+            val archivo = withContext(Dispatchers.IO) { ZonaDeLaCaptura.recortarYGuardar(foto, elegida, File(dir, fichero)) }
+            if (archivo == null) {
+                avisar(getString(R.string.clase_sin_zona), fuera = true)
+                return
+            }
+            d?.cambiar { apuntarCaptura(ms, fichero, false) }
+            capturas += FotoHecha(ms, archivo, System.currentTimeMillis(), deCamara = false)
+            sentir(MediaActionSound.SHUTTER_CLICK)
+            estado.update { it.copy(capturas = capturas.size + minutosDelVideo.size) }
+            avisar(getString(R.string.clase_captura_hecha, GrabarClase.minuto(ms)), fuera = true)
+            actualizarAviso()
+        } finally {
+            fotografiando = false
+        }
+    }
+
+    private fun mostrarLosMandos() {
+        burbuja?.isContentVisible = true
+        estado.update { it.copy(oculta = false) }
+    }
+
+    /**
+     * **«Pantalla»: enciende o apaga el vídeo de la pantalla** (29-oct-2026, el usuario: «grabar la pantalla
+     * o pausar la grabación, pero se sigue grabando el audio»). El audio va siempre aparte; el vídeo,
+     * sin sonido y en trozos, y al terminar se le pone el de la nota. Encenderlo pide el permiso de Android
+     * ([PermisoDePantallaActivity]): uno cada vez, que Android 14 no deja guardarlo.
+     */
+    fun alternarLaPantalla() {
+        if (terminado || cronometro == null) return
+        if (pantalla != null) return pararLaPantalla(null)
+        if (forma == Presencial.Forma.VIDEO) return avisar(getString(R.string.grabar_pantalla_con_sala), fuera = true)
+        if (GrabacionAMedias.espacio(DiarioEnMarcha.libres(this)) == GrabacionAMedias.Espacio.CRITICO) {
+            return avisar(getString(R.string.sin_perder_sin_sitio_para_video), fuera = true)
+        }
+        runCatching { startActivity(Intent(this, PermisoDePantallaActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
+            .onFailure { avisar(getString(R.string.clase_sin_video), fuera = true) }
+    }
+
+    /** **Empieza el vídeo de la pantalla** con el permiso recién concedido. */
+    fun empezarLaPantalla(codigo: Int, datos: Intent) {
+        val c = cronometro ?: return
+        if (terminado || pantalla != null || forma == Presencial.Forma.VIDEO) return
+        // Un permiso de la pantalla a la vez: la sesión de las capturas (si la abrió esta grabación) se
+        // cierra; mientras se graba, las capturas salen del vídeo.
+        if (abrimosLaSesion) {
+            CaptureService.stopSession(applicationContext)
+            abrimosLaSesion = false
+        }
+        // Android 14: primero en primer plano con el tipo `mediaProjection`, luego el permiso.
+        val enPrimerPlano = runCatching { startForeground(AVISO, aviso(), tipos(true)) }.isSuccess
+        val ms = c.llevadoMs()
+        val g = ++grupoDePantalla
+        val trozo = File(carpeta, "reunion_${marca}_p${++numeroDePantalla}.mp4")
+        val v = if (enPrimerPlano) VideoDeLaClase.empezar(this, codigo, datos, trozo, perfil) {
+            // El sistema cortó la pantalla (el chip, bloquear): el vídeo acaba ahí y el audio sigue.
+            scope.launch { pararLaPantalla(getString(R.string.sin_perder_video_cortado)) }
+        } else null
+        if (v == null) {
+            trozo.delete()
+            runCatching { startForeground(AVISO, aviso(), tipos(false)) }
+            avisar(getString(R.string.clase_sin_video), fuera = true)
+            return
+        }
+        if (c.enPausa) v.pausar(true)
+        pantalla = v
+        pantallaDesde = ms
+        tramosDePantalla += TramoGrabado(trozo, ms, g)
+        val final = File(carpeta, "reunion_${marca}_pantalla.mp4").absolutePath
+        diario?.cambiar {
+            if (video == null) video = final
+            empezarTrozo(ms, trozo.absolutePath, g)
+        }
+        sentir(MediaActionSound.START_VIDEO_RECORDING)
+        estado.update { it.copy(pantalla = true) }
+        avisar(getString(R.string.grabar_pantalla_empieza), fuera = true)
+        actualizarAviso()
+    }
+
+    /** **Apaga el vídeo de la pantalla** (cierra el trozo en curso); el audio sigue. */
+    private fun pararLaPantalla(porQue: String?) {
+        val v = pantalla ?: return
+        pantalla = null
+        val ms = cronometro?.llevadoMs() ?: 0
+        val desde = pantallaDesde
+        val d = diario
+        parandoLaPantalla = (applicationContext as PixPinApp).scope.launch(Dispatchers.IO) {
+            runCatching { v.parar() }
+            d?.cambiar { cerrarTrozo(v.trozo.absolutePath, ms - desde) }
+        }
+        estado.update { it.copy(pantalla = false) }
+        if (terminado) return
+        // Sin la pantalla, el servicio vuelve a sus tipos de siempre (si Android no deja, se queda como está).
+        runCatching { startForeground(AVISO, aviso(), tipos(false)) }
+        sentir(MediaActionSound.STOP_VIDEO_RECORDING)
+        avisar(porQue ?: getString(R.string.grabar_pantalla_parada), fuera = true)
+        actualizarAviso()
+    }
+
+    /** **El trozo siguiente del vídeo de la pantalla** ([TrozosDeVideo.TROZO_MS]). */
+    private fun cambiarDeTrozoDePantalla() {
+        val v = pantalla ?: return
+        val c = cronometro ?: return
+        if (c.enPausa) return
+        val desde = c.llevadoMs()
+        val g = grupoDePantalla
+        val siguiente = File(carpeta, "reunion_${marca}_p${++numeroDePantalla}.mp4")
+        val antes = pantallaDesde
+        pantallaDesde = desde
+        scope.launch {
+            val viejo = v.trozo
+            val bien = withContext(Dispatchers.IO) { v.cambiarDeTrozo(siguiente) }
+            if (bien == null) {
+                if (pantalla === v) pantallaDesde = antes
+                return@launch
+            }
+            tramosDePantalla += TramoGrabado(siguiente, desde, g)
+            diario?.cambiar {
+                cerrarTrozo(viejo.absolutePath, desde - antes)
+                empezarTrozo(desde, siguiente.absolutePath, g)
+            }
+        }
+    }
+
+    /**
+     * **Descartar** (desde la pantalla completa, con su confirmación): lo único que borra lo grabado. Como
+     * el ✕ dos veces de la barra de la clase.
+     */
+    private fun descartar() {
+        if (terminado) return
+        if (!empezado || cronometro == null) return terminar()
+        terminado = true
+        enMarcha = false
+        GrabacionDelMovil.tirar(this)
+        quitarLaBurbuja()
+        zona.quitar()
+        orientacion?.disable()
+        ReunionConJev.tirar()
+        val g = grabador
+        grabador = null
+        val v = pantalla
+        pantalla = null
+        val cam = camara
+        val d = diario
+        val app = applicationContext as PixPinApp
+        val cerrarLaSesion = abrimosLaSesion
+        val sobran = (tramos + tramosDePantalla).map { it.archivo } + clips.mapNotNull { it.archivo } + listOfNotNull(clipArchivo)
+        estado.update { it.copy(terminando = true) }
+        app.scope.launch(Dispatchers.Main.immediate) {
+            if (cam?.grabando == true) runCatching { cam.pararVideo() }
+            cam?.cerrar()
+            withContext(Dispatchers.IO) {
+                Voz.parar(g)
+                runCatching { v?.parar() }
+                d?.cerrar(borrar = false)
+                d?.let { GrabacionAMedias.descartar(it.dir, it.diario) }
+                sobran.forEach { it.delete() }
+                nota?.let { GuardarLaGrabacion.parteDe(it).delete(); RespaldoWav.rutaDelRespaldo(it).delete(); it.delete() }
+            }
+            if (cerrarLaSesion) CaptureService.stopSession(app)
+            toast(getString(R.string.clase_tirada))
+            estado.update { EstadoDeLaReunion() }
+            stopSelf()
+        }
     }
 
     /**
@@ -755,7 +1099,11 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         sentir(MediaActionSound.STOP_VIDEO_RECORDING)
         estado.update { it.copy(terminando = true) }
         quitarLaBurbuja()
+        zona.quitar()
         orientacion?.disable()
+        // El vídeo de la pantalla, cerrado ya (se espera abajo a que acabe de cerrarse).
+        pararLaPantalla(null)
+        val cerrarLaSesion = abrimosLaSesion
         val app = applicationContext as PixPinApp
         // **El servicio de pasar a texto, arrancado ya** (28-oct-2026): el toque de «Terminar» deja
         // arrancarlo; cuando la reunión esté guardada (segundos después), quizá ya no. Ver [ColaDeTexto].
@@ -798,9 +1146,12 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 ultimo?.let { t -> d?.cambiar { cerrarTrozo(t.archivo.absolutePath, llevado - t.desdeMs) } }
             }
             cam?.cerrar()
+            parandoLaPantalla?.join()
             val bienLaNota = Voz.parar(grabador)
             grabador = null
-            val lasFotos = fotos.sortedBy { it.ms }.map { GuardarLaGrabacion.Imagen(it.ms, it.archivo, it.cuando) }
+            val lasFotos = (fotos + capturas).sortedBy { it.ms }.map { GuardarLaGrabacion.Imagen(it.ms, it.archivo, it.cuando, it.deCamara) }
+            val losDePantalla = tramosDePantalla.map { GuardarLaGrabacion.TrozoDeGrupo(it.archivo, it.desdeMs, it.grupo) }
+            val minutos = minutosDelVideo.toList()
             val losClips = clips.sortedBy { it.ms }.map { GuardarLaGrabacion.ClipHecho(it.ms, it.duracionMs, it.archivo) }
             val losTramos = tramos.map { GuardarLaGrabacion.TrozoDeGrupo(it.archivo, it.desdeMs, it.grupo) }
             val laNota = nota
@@ -810,7 +1161,14 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                 val r = runCatching {
                     val m4a = laNota?.let { GuardarLaGrabacion.cerrarLaNota(it, bienLaNota) }
                     val partes = GuardarLaGrabacion.juntarVideo(losTramos, m4a) { File(carpeta, "reunion_${laMarca}_video$it.mp4") }
-                    val r = GuardarLaGrabacion.reunion(app, m4a, null, elProyecto, elNombre, System.currentTimeMillis(), lasPicos, lasFotos, losClips, partes, d?.reloj())
+                    // **La pantalla** (29-oct-2026): sus partes con el sonido de la nota, y las capturas de sus fotogramas.
+                    val dePantalla = GuardarLaGrabacion.juntarVideo(losDePantalla, m4a) { File(carpeta, "reunion_${laMarca}_pantalla$it.mp4") }
+                    val sacadas = GuardarLaGrabacion.fotogramasDePartes(dePantalla, minutos, File(cacheDir, "clase"))
+                    val r = GuardarLaGrabacion.reunion(
+                        app, m4a, null, elProyecto, elNombre, System.currentTimeMillis(), lasPicos, lasFotos + sacadas, losClips, partes, d?.reloj(),
+                        pantalla = dePantalla
+                    )
+                    sacadas.forEach { it.archivo.delete() }
                     notaGuardada = r.notaId
                     val notaId = r.notaId
                     if (notaId != null && laReunion != null) runCatching { ReunionConJev.guardar(app, notaId, laReunion) }
@@ -842,6 +1200,7 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     else -> getString(R.string.sin_perder_quedo_para_recuperar)
                 }
                 withContext(Dispatchers.Main) {
+                    if (cerrarLaSesion) CaptureService.stopSession(app)
                     toast(dicho)
                     notaGuardada?.let { avisarParaEstudiar(it) }
                     estado.update { EstadoDeLaReunion(guardada = notaGuardada) }
@@ -896,11 +1255,15 @@ class ReunionPresencialService : Service(), LifecycleOwner {
     }
 
     /**
-     * **La burbuja** (28-oct-2026): con la cámara y su mirilla, **un cuadro pequeño con lo que se
-     * fotografía** —un destello blanco al hacer una foto, «● 0:12» en rojo mientras se graba un clip— y
-     * debajo Foto, Clip, pausa y Terminar. Sin mirilla (sin cámara, o soltada para grabar el vídeo), la
-     * fila de siempre con el contador. Con PixPin delante no se pinta: manda la barra de la app
-     * ([ReunionEnLaApp]).
+     * **La burbuja** (28-oct-2026; reordenada el 29-oct-2026, el usuario: «los iconos están muy
+     * aglomerados, organízalos de una mejor forma»). Dos filas con aire:
+     *
+     * - arriba, el asa para moverla, **el reloj** (un toque pausa o sigue, mantenerlo termina: ver
+     *   [MandosDeLaGrabacion.Reloj]), la pantalla completa ([ReunionEnCursoActivity]) y «☑ 2/5» si hay temas;
+     * - debajo, **Foto, Captura, Pantalla y Clip**, cada uno con su nombre ([MandosDeLaGrabacion.Acciones]).
+     *
+     * Grabando un clip, encima, el cuadro con la mirilla (lo que se graba, en vivo). Con PixPin delante no
+     * se pinta: manda la barra de la app ([ReunionEnLaApp]). Mientras se hace una captura, tampoco.
      */
     @Composable
     private fun LaBurbuja() {
@@ -908,16 +1271,11 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         val delante by appDelante.collectAsState()
         val fondo = Color(0xEE1E1E22)
         val claro = Color.White
-        val rojo = Color(0xFFE53935)
         if (!delante) Column(horizontalAlignment = Alignment.Start) {
-            if (e.mirilla) {
-                val destello = remember { Animatable(0f) }
-                LaunchedEffect(e.destellos) {
-                    if (e.destellos > 0) { destello.snapTo(0.9f); destello.animateTo(0f, tween(380)) }
-                }
+            if (e.mirilla && e.clipDesde != null) {
                 Box(
-                    Modifier.size(120.dp, 160.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black)
-                        .border(if (e.clipDesde != null) 3.dp else 1.dp, if (e.clipDesde != null) rojo else claro.copy(alpha = 0.4f), RoundedCornerShape(16.dp))
+                    Modifier.padding(bottom = 4.dp).size(120.dp, 160.dp).clip(RoundedCornerShape(16.dp)).background(Color.Black)
+                        .border(3.dp, MandosDeLaGrabacion.ROJO, RoundedCornerShape(16.dp))
                         .pointerInput(Unit) { detectDragGestures { cambio, d -> cambio.consume(); mover(d.x, d.y) } }
                 ) {
                     AndroidView(
@@ -932,93 +1290,24 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                         onRelease = { mirillaDeLaBurbuja = null; elegirMirilla() },
                         modifier = Modifier.matchParentSize()
                     )
-                    Box(Modifier.matchParentSize().background(Color.White.copy(alpha = destello.value)))
-                    Text(
-                        if (e.clipDesde != null) "● " + getString(R.string.reunion_clip) + " " + GrabarClase.minuto((e.segundos * 1000 - e.clipDesde!!).coerceAtLeast(0))
-                        else (if (e.enPausa) "❚❚ " else "● ") + GrabarClase.minuto(e.segundos * 1000),
-                        color = claro, fontSize = 11.sp, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.align(Alignment.TopStart).padding(6.dp).clip(RoundedCornerShape(8.dp))
-                            .background(if (e.clipDesde != null) rojo else Color.Black.copy(alpha = 0.55f)).padding(horizontal = 5.dp, vertical = 1.dp)
-                    )
-                    if (e.fotos > 0 || e.fotosEnCurso > 0) Text(
-                        "📷 ${e.fotos}" + (if (e.fotosEnCurso > 0) "…" else ""), color = claro, fontSize = 11.sp,
-                        modifier = Modifier.align(Alignment.BottomEnd).padding(6.dp).clip(RoundedCornerShape(8.dp))
-                            .background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 5.dp, vertical = 1.dp)
-                    )
                 }
-                Row(
-                    Modifier.padding(top = 4.dp).clip(RoundedCornerShape(20.dp)).background(fondo),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = { foto() }, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.PhotoCamera, getString(R.string.reunion_foto), tint = claro)
-                    }
-                    IconButton(onClick = { clip() }, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            if (e.clipDesde != null) Icons.Filled.StopCircle else Icons.Filled.Videocam,
-                            getString(if (e.clipDesde != null) R.string.reunion_parar_clip else R.string.reunion_clip),
-                            tint = if (e.clipDesde != null) Color(0xFFFF5252) else claro
-                        )
-                    }
-                    IconButton(onClick = { pausa() }, modifier = Modifier.size(40.dp)) {
-                        Icon(
-                            if (e.enPausa) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                            getString(if (e.enPausa) R.string.clase_seguir else R.string.clase_pausa), tint = claro
-                        )
-                    }
-                    IconButton(onClick = { terminar() }, modifier = Modifier.size(40.dp)) {
-                        Icon(Icons.Filled.Stop, getString(R.string.clase_terminar), tint = Color(0xFF81C784))
-                    }
-                }
-            } else Row(
-                Modifier.clip(RoundedCornerShape(24.dp)).background(fondo).padding(horizontal = 4.dp, vertical = 2.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    Icons.Filled.DragIndicator, contentDescription = null, tint = claro.copy(alpha = 0.6f),
-                    modifier = Modifier.size(28.dp).pointerInput(Unit) {
-                        detectDragGestures { cambio, d -> cambio.consume(); mover(d.x, d.y) }
-                    }
-                )
-                Box(
-                    Modifier.padding(start = 2.dp, end = 6.dp).size(10.dp).clip(CircleShape)
-                        .background(if (e.enPausa) Color.Gray else rojo)
-                )
-                Text(
-                    GrabarClase.minuto(e.segundos * 1000), color = claro, fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold, modifier = Modifier.width(52.dp)
-                )
-                TextButton(onClick = { foto() }) {
-                    Icon(Icons.Filled.PhotoCamera, contentDescription = null, tint = claro, modifier = Modifier.size(20.dp))
-                    Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (e.fotos == 0) getString(R.string.reunion_foto) else "${getString(R.string.reunion_foto)} · ${e.fotos}",
-                        color = claro, fontSize = 13.sp
-                    )
-                }
-                val desde = e.clipDesde
-                TextButton(onClick = { clip() }) {
+            }
+            Column(Modifier.clip(RoundedCornerShape(22.dp)).background(fondo).padding(horizontal = 4.dp, vertical = 2.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        if (desde != null) Icons.Filled.StopCircle else Icons.Filled.Videocam, contentDescription = null,
-                        tint = if (desde != null) Color(0xFFFF5252) else claro, modifier = Modifier.size(20.dp)
+                        Icons.Filled.DragIndicator, contentDescription = null, tint = claro.copy(alpha = 0.6f),
+                        modifier = Modifier.size(28.dp).pointerInput(Unit) {
+                            detectDragGestures { cambio, d -> cambio.consume(); mover(d.x, d.y) }
+                        }
                     )
+                    MandosDeLaGrabacion.Reloj(e, claro)
                     Spacer(Modifier.width(4.dp))
-                    Text(
-                        if (desde != null) "● " + getString(R.string.reunion_clip) + " " + GrabarClase.minuto((e.segundos * 1000 - desde).coerceAtLeast(0))
-                        else if (e.clips == 0) getString(R.string.reunion_clip) else "${getString(R.string.reunion_clip)} · ${e.clips}",
-                        color = if (desde != null) Color(0xFFFF8A80) else claro, fontSize = 13.sp
-                    )
+                    TemasEnLaBarra.Boton(claro)
+                    IconButton(onClick = { ReunionEnCursoActivity.abrir(this@ReunionPresencialService) }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Filled.Fullscreen, getString(R.string.grabar_pantalla_completa), tint = claro)
+                    }
                 }
-                IconButton(onClick = { pausa() }, modifier = Modifier.size(40.dp)) {
-                    Icon(
-                        if (e.enPausa) Icons.Filled.PlayArrow else Icons.Filled.Pause,
-                        contentDescription = getString(if (e.enPausa) R.string.clase_seguir else R.string.clase_pausa),
-                        tint = claro
-                    )
-                }
-                IconButton(onClick = { terminar() }, modifier = Modifier.size(40.dp)) {
-                    Icon(Icons.Filled.Stop, contentDescription = getString(R.string.clase_terminar), tint = Color(0xFF81C784))
-                }
+                MandosDeLaGrabacion.Acciones(e, claro)
             }
             e.aviso?.let {
                 Text(
@@ -1027,6 +1316,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
+            // Los temas de la reunión y las fichas de Jev (29-oct-2026).
+            TemasEnLaBarra.Panel(Modifier.padding(top = 4.dp))
         }
     }
 
@@ -1156,8 +1447,15 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         }
         val texto = buildString {
             if (desde != null) append(getString(R.string.reunion_notif)).append(" ").append(GrabarClase.minuto(llevado)).append(" · ")
-            append(getString(if (forma == Presencial.Forma.VIDEO) R.string.reunion_forma_video else R.string.reunion_forma_audio))
+            append(
+                when {
+                    forma == Presencial.Forma.VIDEO -> getString(R.string.reunion_forma_video)
+                    e.pantalla -> "● " + getString(R.string.grabar_pantalla)
+                    else -> getString(R.string.reunion_forma_audio)
+                }
+            )
             append(" · ").append(resources.getQuantityString(R.plurals.reunion_fotos, e.fotos, e.fotos))
+            if (e.capturas > 0) append(" · ").append(getString(R.string.clase_captura)).append(" ").append(e.capturas)
             append(" · ").append(resources.getQuantityString(R.plurals.reunion_clips, e.clips, e.clips))
         }
         val abrir = PendingIntent.getActivity(
@@ -1180,15 +1478,19 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         } else b.setShowWhen(false)
         val compactos: IntArray
         if (e.lista) {
+            // **Foto, Captura y Terminar** a la vista (29-oct-2026, la grabación única); desplegada, la pausa,
+            // la pantalla y el clip.
             b.addAction(boton(R.drawable.ic_reunion_foto, R.string.reunion_foto, ACCION_FOTO, 1))
-            b.addAction(
-                if (desde != null) boton(R.drawable.ic_reunion_parar_clip, R.string.reunion_parar_clip, ACCION_CLIP, 2)
-                else boton(R.drawable.ic_reunion_clip, R.string.reunion_clip, ACCION_CLIP, 2)
-            )
+            b.addAction(boton(R.drawable.ic_reunion_captura, R.string.clase_captura, ACCION_CAPTURA, 6))
             b.addAction(boton(R.drawable.ic_reunion_terminar, R.string.clase_terminar, ACCION_TERMINAR, 3))
             b.addAction(
                 if (e.enPausa) boton(R.drawable.ic_reunion_seguir, R.string.clase_seguir, ACCION_PAUSA, 5)
                 else boton(R.drawable.ic_reunion_pausa, R.string.clase_pausa, ACCION_PAUSA, 5)
+            )
+            if (e.sePuedePantalla) b.addAction(boton(R.drawable.ic_reunion_pantalla, R.string.grabar_pantalla, ACCION_PANTALLA, 7))
+            else b.addAction(
+                if (desde != null) boton(R.drawable.ic_reunion_parar_clip, R.string.reunion_parar_clip, ACCION_CLIP, 2)
+                else boton(R.drawable.ic_reunion_clip, R.string.reunion_clip, ACCION_CLIP, 2)
             )
             compactos = intArrayOf(0, 1, 2)
         } else {
@@ -1230,5 +1532,13 @@ data class EstadoDeLaReunion(
     /** Pulsado «Terminar»: guardándose. */
     val terminando: Boolean = false,
     /** La nota de la reunión ya guardada (para «Estudiar»), al acabar. */
-    val guardada: String? = null
+    val guardada: String? = null,
+    /** **Las capturas de la pantalla** hechas (29-oct-2026, la grabación única). */
+    val capturas: Int = 0,
+    /** Si se está grabando el vídeo de la pantalla. */
+    val pantalla: Boolean = false,
+    /** Si se puede grabar la pantalla (no con el vídeo de la sala). */
+    val sePuedePantalla: Boolean = true,
+    /** Haciendo una captura: los mandos se esconden para no salir en ella. */
+    val oculta: Boolean = false
 )

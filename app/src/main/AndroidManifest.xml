@@ -719,18 +719,13 @@
             android:exported="false"
             android:foregroundServiceType="mediaPlayback" />
 
-        <!-- Grabar una clase o una reunión: micrófono en primer plano y la barra flotante; con
-             vídeo, también mediaProjection. Sin vídeo, las capturas van por CaptureService. -->
-        <service
-            android:name=".guardados.GrabarClaseService"
-            android:exported="false"
-            android:foregroundServiceType="microphone|mediaProjection" />
-
-        <!-- La reunión presencial: micrófono y cámara en segundo plano (28-oct-2026). -->
+        <!-- La grabación (desde el 29-oct-2026, una sola para la clase, la presencial y la reunión):
+             micrófono y cámara en segundo plano y, con «Pantalla», mediaProjection. Sin vídeo de la
+             pantalla, las capturas van por CaptureService. -->
         <service
             android:name=".guardados.ReunionPresencialService"
             android:exported="false"
-            android:foregroundServiceType="microphone|camera" />
+            android:foregroundServiceType="microphone|camera|mediaProjection" />
 
         <!-- Qwen3-ASR pasando a texto o bajándose: ver PasarATextoService. -->
         <service
@@ -792,6 +787,15 @@
             android:name=".guardados.RepasarActivity"
             android:exported="false"
             android:theme="@style/Theme.PixPin" />
+        <!-- «Pantalla» a media grabación: el permiso del sistema, transparente (29-oct-2026). -->
+        <activity
+            android:name=".guardados.PermisoDePantallaActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:autoRemoveFromRecents="true"
+            android:finishOnTaskLaunch="true"
+            android:taskAffinity="${applicationId}.consent"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!-- La reunión presencial en marcha, con su mirilla (28-oct-2026). Ver guardados/ReunionEnCursoActivity. -->
         <activity
             android:name=".guardados.ReunionEnCursoActivity"

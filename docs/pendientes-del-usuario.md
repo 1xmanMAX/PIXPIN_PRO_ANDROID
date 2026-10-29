@@ -200,3 +200,16 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 60. Dictar al chat (§6) y repasar en voz alta (§7) con Jev.
 - [x] 61. La letra de las canciones como el PC: «Sincronizar sola», idioma de la letra, el alineador
       igual al del PC, karaoke sin tira y moverse por la letra.
+
+## La barra de grabación y una sola grabación (pedido del 29-oct)
+
+- [x] 62. La barra flotante sin amontonar: el reloj pausa con un toque (el punto rojo pasa a pausa) y
+      termina si se mantiene; Foto, Captura, Pantalla y Clip en su fila, cada uno con su nombre.
+- [x] 63. Una sola opción de grabar para la clase en línea, la presencial y la reunión: el audio siempre
+      y, en la barra, Foto, Captura (mantener: un trozo) y Pantalla (el vídeo de la pantalla, que se
+      enciende y se apaga mientras el audio sigue). El vídeo de la sala queda en «Más opciones».
+- [x] 64. La pantalla de «Grabar» sin palabras apretadas (ya no hay tres modos en una fila).
+- [x] 65. Pantalla completa de la grabación: arriba los mandos, en medio la lista de lo que voy a decir
+      y abajo la transcripción en vivo, con A−/A+ para verlo grande.
+- [x] 66. El botón de la foto para la grabación del PC junto al «+» de la pantalla de los chats (solo
+      mientras el PC graba), y fuera de «Adjuntar».

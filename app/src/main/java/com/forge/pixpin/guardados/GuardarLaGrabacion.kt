@@ -44,7 +44,12 @@ object GuardarLaGrabacion {
     data class Imagen(
         val ms: Long, val archivo: File,
         /** La hora de pared del disparo (las fotos por su hora: `tomadaEn`). 0: no se sabe. */
-        val cuando: Long = 0
+        val cuando: Long = 0,
+        /**
+         * Si salió de la cámara (`fuente: "camara"`) o es una captura de la pantalla (29-oct-2026, la
+         * grabación única: en la misma reunión hay de las dos).
+         */
+        val deCamara: Boolean = true
     )
 
     /** Un clip con su minuto: su MP4, o null si se recorta del vídeo de la reunión. */
@@ -179,15 +184,21 @@ object GuardarLaGrabacion {
     fun reunion(
         context: Context, nota: File?, duracionConocida: Int?, proyecto: String?, nombre: String, ahora: Long,
         picos: List<Int>, fotos: List<Imagen>, clips: List<ClipHecho>, partes: List<Parte>, reloj: RelojDePared?,
-        pasarATexto: Boolean = true
+        pasarATexto: Boolean = true,
+        /**
+         * **El vídeo de la pantalla** (29-oct-2026, la grabación única): sus partes ya juntas, una por cada
+         * vez que se encendió «Pantalla». Si empezó con la grabación y no hay vídeo de la sala, la primera
+         * es el vídeo de la reunión; las demás entran como clips en su minuto, sin `fuente`.
+         */
+        pantalla: List<Parte> = emptyList()
     ): Resultado = conLoDelPc(context, proyecto) {
-        guardarLaReunion(context, nota, duracionConocida, proyecto, nombre, ahora, picos, fotos, clips, partes, reloj, pasarATexto)
+        guardarLaReunion(context, nota, duracionConocida, proyecto, nombre, ahora, picos, fotos, clips, partes, reloj, pasarATexto, pantalla)
     }
 
     private fun guardarLaReunion(
         context: Context, nota: File?, duracionConocida: Int?, proyecto: String?, nombre: String, ahora: Long,
         picos: List<Int>, fotos: List<Imagen>, clips: List<ClipHecho>, partes: List<Parte>, reloj: RelojDePared?,
-        pasarATexto: Boolean
+        pasarATexto: Boolean, pantalla: List<Parte>
     ): Resultado {
         val almacen = MensajesStore(context)
         val carpeta = almacen.carpetaDeAdjuntos()
@@ -216,13 +227,21 @@ object GuardarLaGrabacion {
         // Las fotos: con su nombre del PC (`foto-<hora>-<n>.jpg`), los bytes tal cual.
         val fotosListas = fotos.sortedBy { it.ms }.mapIndexedNotNull { i, f ->
             val ext = f.archivo.extension.ifEmpty { "jpg" }
-            val fichero = Presencial.nombreDeLaFoto(true, ahora, i + 1, ext)
+            val fichero = Presencial.nombreDeLaFoto(f.deCamara, ahora, i + 1, ext)
             val final = File(carpeta, "${ahora}_$fichero")
-            if (!f.archivo.renameTo(final)) return@mapIndexedNotNull null
-            Presencial.FotoGuardada(UUID.randomUUID().toString(), Presencial.msDeLaFoto(f.ms, duracion.toLong().takeIf { conNota }), final.absolutePath, fichero, final.length(), f.cuando)
+            // Las capturas sacadas del vídeo están en la caché: si no se dejan mover, se copian.
+            val movida = f.archivo.renameTo(final) || runCatching { f.archivo.copyTo(final, overwrite = true); f.archivo.delete(); true }.getOrDefault(false)
+            if (!movida) return@mapIndexedNotNull null
+            Presencial.FotoGuardada(
+                UUID.randomUUID().toString(), Presencial.msDeLaFoto(f.ms, duracion.toLong().takeIf { conNota }), final.absolutePath, fichero,
+                final.length(), f.cuando, f.deCamara
+            )
         }
         // El vídeo de la reunión: la primera parte; las siguientes (720p pasada la hora), como clips.
-        val video = buenas.firstOrNull()?.archivo?.let { v ->
+        // **La pantalla** (29-oct-2026): si no hay vídeo de la sala y se grabó desde el principio, es el vídeo.
+        val dePantalla = pantalla.filter { it.archivo.isFile && it.archivo.length() > 0 }
+        val pantallaEsElVideo = buenas.isEmpty() && dePantalla.firstOrNull()?.let { it.desdeMs <= Presencial.PANTALLA_DESDE_EL_PRINCIPIO_MS } == true
+        val video = (buenas.firstOrNull() ?: dePantalla.firstOrNull()?.takeIf { pantallaEsElVideo })?.archivo?.let { v ->
             val n = GrabarClase.nombreDelVideo(nombre)
             val final = File(carpeta, "${ahora}_${nombreConExtension(n, "mp4")}")
             val ruta = if (v.renameTo(final)) final else v
@@ -234,15 +253,22 @@ object GuardarLaGrabacion {
             val ruta = if (t.archivo.renameTo(final)) final else t.archivo
             Presencial.ClipGuardado(UUID.randomUUID().toString(), tr.desdeMs, tr.duracionMs, ruta.absolutePath, n, ruta.length())
         }
-        val todosLosClips = (clipsListos + otrasPartes).sortedBy { it.ms }
+        val otrasDePantalla = dePantalla.drop(if (pantallaEsElVideo) 1 else 0).mapIndexed { i, t ->
+            val n = Presencial.nombreDeLaPantalla(nombre, i + 1)
+            val final = File(carpeta, "${ahora}_${nombreConExtension(n, "mp4")}")
+            val ruta = if (t.archivo.renameTo(final)) final else t.archivo
+            val dura = Voz.duracion(ruta.absolutePath).toLong().coerceAtLeast(0)
+            Presencial.ClipGuardado(UUID.randomUUID().toString(), t.desdeMs, dura, ruta.absolutePath, n, ruta.length(), deCamara = false)
+        }
+        val todosLosClips = (clipsListos + otrasPartes + otrasDePantalla).sortedBy { it.ms }
 
         if (!conNota) {
             // Sin nota no hay reunión que enlazar: lo de la cámara entra suelto, como el PC.
             var cuando = ahora
             fun suelto(m: Mensaje) = almacen.anadir(m)
             video?.let { suelto(Mensaje(id = it.id, cuando = cuando++, clase = Clase.ARCHIVO, ruta = it.ruta, nombre = it.nombre, bytes = it.bytes, duracionMs = it.duracionMs, proyecto = proyecto)) }
-            for (f in fotosListas) suelto(Mensaje(id = f.id, cuando = cuando++, clase = Clase.IMAGEN, ruta = f.ruta, nombre = f.nombre, bytes = f.bytes, proyecto = proyecto, fuente = Presencial.DE_CAMARA))
-            for (c in todosLosClips) suelto(Mensaje(id = c.id, cuando = cuando++, clase = Clase.ARCHIVO, ruta = c.ruta, nombre = c.nombre, bytes = c.bytes, duracionMs = c.duracionMs.toInt(), proyecto = proyecto, fuente = Presencial.DE_CAMARA))
+            for (f in fotosListas) suelto(Mensaje(id = f.id, cuando = cuando++, clase = Clase.IMAGEN, ruta = f.ruta, nombre = f.nombre, bytes = f.bytes, proyecto = proyecto, fuente = Presencial.DE_CAMARA.takeIf { f.deCamara }))
+            for (c in todosLosClips) suelto(Mensaje(id = c.id, cuando = cuando++, clase = Clase.ARCHIVO, ruta = c.ruta, nombre = c.nombre, bytes = c.bytes, duracionMs = c.duracionMs.toInt(), proyecto = proyecto, fuente = Presencial.DE_CAMARA.takeIf { c.deCamara }))
             val algo = video != null || fotosListas.isNotEmpty() || todosLosClips.isNotEmpty()
             return Resultado(if (algo) Que.SIN_NOTA else if (m4a != null) Que.MUY_CORTA else Que.NADA, null, fotosListas.size, todosLosClips.size)
         }
@@ -342,5 +368,21 @@ object GuardarLaGrabacion {
         } finally {
             runCatching { r.release() }
         }
+    }
+
+    /**
+     * **Las capturas hechas con «Pantalla» encendida** (29-oct-2026, la grabación única): cada minuto, del
+     * fotograma de la parte del vídeo de la pantalla en que cae (las partes van de su minuto a lo que
+     * duran). Son capturas de la pantalla ([Imagen.deCamara] false) con el minuto de la nota.
+     */
+    fun fotogramasDePartes(partes: List<Parte>, minutos: List<Long>, dir: File): List<Imagen> {
+        if (minutos.isEmpty() || partes.isEmpty()) return emptyList()
+        val tramos = partes.map { it to Voz.duracion(it.archivo.absolutePath).toLong().coerceAtLeast(0) }
+        return minutos.groupBy { ms -> tramos.indexOfFirst { (p, dura) -> ms >= p.desdeMs && ms < p.desdeMs + dura.coerceAtLeast(1) } }
+            .filterKeys { it >= 0 }
+            .flatMap { (i, deEsta) ->
+                val p = tramos[i].first
+                fotogramas(p.archivo, deEsta.map { it - p.desdeMs }, dir).map { it.copy(ms = it.ms + p.desdeMs, deCamara = false) }
+            }
     }
 }

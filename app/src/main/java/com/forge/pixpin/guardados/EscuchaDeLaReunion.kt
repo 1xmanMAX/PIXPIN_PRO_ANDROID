@@ -79,6 +79,11 @@ class EscuchaDeLaReunion(
         data class Reunion(val sucesos: List<EnLaReunion.Suceso>) : Vuelta()
         /** Lo que se está oyendo ahora (un parcial del reconocedor): solo se enseña. */
         data class Parcial(val texto: String) : Vuelta()
+        /**
+         * **Una frase ya oída**, en su minuto (29-oct-2026): la transcripción en vivo de la pantalla
+         * completa de la grabación. Solo se enseña; el texto de verdad sale al terminar.
+         */
+        data class Frase(val ms: Long, val texto: String) : Vuelta()
     }
 
     /** Cómo va la escucha (la cabecera de la lista de los temas). */
@@ -219,6 +224,7 @@ class EscuchaDeLaReunion(
     private fun entregar(ms: Long, finMs: Long, texto0: String, relojFin: Long) {
         val texto = texto0.trim()
         if (texto.isEmpty() || parar) return
+        alVolver(Vuelta.Frase(ms, texto))
         cerrojo.withLock {
             if (mesa != null && clienteMesa != null) frases += Vivo.Frase(ms, EnLaReunion.QUIEN_NO_SE, texto) to finMs
             if (clienteTemas != null) rollo.meter(Temas.Dicho(ms, finMs, texto, relojFin))

@@ -160,11 +160,20 @@ object RecuperarGrabacion {
             GrabacionAMedias.Video.LISTO -> listOfNotNull(d.video?.let { GuardarLaGrabacion.Parte(File(it), 0) })
             GrabacionAMedias.Video.DEL_PARTE -> if (p.trozos.isNotEmpty()) {
                 GuardarLaGrabacion.juntarVideo(
-                    p.trozos.map { i -> d.trozos[i].let { GuardarLaGrabacion.TrozoDeGrupo(File(it.ruta), it.ms, it.grupo) } }, nota
+                    p.trozos.map { i -> d.trozos[i] }.filterNot { Presencial.esDePantalla(it.grupo) }
+                        .map { GuardarLaGrabacion.TrozoDeGrupo(File(it.ruta), it.ms, it.grupo) }, nota
                 ) { File(carpeta, "recuperada_${d.marca}_video$it.mp4") }
             } else listOfNotNull(d.video?.let { v -> File(v).takeIf { GrabacionAMedias.conSufijo(v, ".parte").renameTo(it) }?.let { GuardarLaGrabacion.Parte(it, 0) } })
             else -> emptyList()
         }
+        // **El vídeo de la pantalla de la grabación única** (29-oct-2026): sus trozos aparte (otros grupos).
+        val dePantalla: List<GuardarLaGrabacion.Parte> = if (p.video == GrabacionAMedias.Video.DEL_PARTE) {
+            val trozos = p.trozos.map { i -> d.trozos[i] }.filter { Presencial.esDePantalla(it.grupo) }
+            if (trozos.isEmpty()) emptyList()
+            else GuardarLaGrabacion.juntarVideo(trozos.map { GuardarLaGrabacion.TrozoDeGrupo(File(it.ruta), it.ms, it.grupo) }, nota) {
+                File(carpeta, "recuperada_${d.marca}_pantalla$it.mp4")
+            }
+        } else emptyList()
         val duracion = p.duracionMs.toInt().takeIf { it > 0 }
         val reloj = RelojDeLaGrabacion.delDiario(
             d.reloj, runCatching { com.forge.pixpin.sincro.Codigos.deEsteAparato(context.filesDir) }.getOrNull().orEmpty(),
@@ -173,10 +182,12 @@ object RecuperarGrabacion {
         val proyecto = d.proyecto.ifEmpty { null }
         val ahora = System.currentTimeMillis()
         val r = if (d.modo == Presencial.Modo.PRESENCIAL.palabra) {
-            val fotos = p.capturas.map { i -> d.capturas[i].let { GuardarLaGrabacion.Imagen(it.ms, File(c.dir, it.fichero)) } }
+            val sacadas = GuardarLaGrabacion.fotogramasDePartes(dePantalla, d.capturasDelVideo.toList(), File(context.cacheDir, "recuperada"))
+            val fotos = p.capturas.map { i -> d.capturas[i].let { GuardarLaGrabacion.Imagen(it.ms, File(c.dir, it.fichero), deCamara = it.deCamara) } } + sacadas
             val clips = p.clips.map { i -> d.clips[i].let { GuardarLaGrabacion.ClipHecho(it.ms, it.duracionMs ?: 0, File(it.ruta)) } } +
                 p.clipsDelVideo.map { i -> d.clips[i].let { GuardarLaGrabacion.ClipHecho(it.ms, it.duracionMs ?: 0, null) } }
-            GuardarLaGrabacion.reunion(context, nota, duracion, proyecto, d.nombre, ahora, picos, fotos, clips, partes, reloj, pasarATexto)
+            GuardarLaGrabacion.reunion(context, nota, duracion, proyecto, d.nombre, ahora, picos, fotos, clips, partes, reloj, pasarATexto, dePantalla)
+                .also { sacadas.forEach { s -> s.archivo.delete() } }
         } else {
             val video = partes.firstOrNull()?.archivo
             val sacadas = if (video != null) GuardarLaGrabacion.fotogramas(video, p.capturasDelVideo, File(context.cacheDir, "recuperada")) else emptyList()
