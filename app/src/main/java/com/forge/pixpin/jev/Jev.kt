@@ -20,6 +20,8 @@ import javax.crypto.spec.GCMParameterSpec
  * - [Funcion.ANKI]: solo las tarjetas de una clase que valen la pena ([AnkiEnLaApp]).
  * - [Funcion.URGENCIA]: la prioridad de cada tarea pendiente, en Tareas ([UrgenciaEnLaApp]).
  * - [Funcion.MODELO]: el modelo del asistente según lo difícil del pedido ([ModeloEnLaApp]).
+ * - [Funcion.TEMAS] y las siete de la reunión ([Funcion.TAREAS_DICHAS]…[Funcion.FECHAS_AL_HORARIO]): lo que
+ *   se oye mientras se graba una reunión (29-oct-2026, [com.forge.pixpin.guardados.ReunionConJev]).
  *
  * **Sin clave (o con la función apagada) [para] da null y cada función hace lo de siempre.** La clave
  * es de este teléfono: cifrada con una llave AES-GCM del **Android Keystore** (no exportable) en
@@ -31,7 +33,15 @@ import javax.crypto.spec.GCMParameterSpec
 object Jev {
 
     /** Una función que usa Jev, con su interruptor (encendida de fábrica; sin clave no hace nada). */
-    enum class Funcion(val id: String) { REUNION("reunion"), ANKI("anki"), URGENCIA("urgencia"), MODELO("modelo") }
+    enum class Funcion(val id: String) {
+        REUNION("reunion"), ANKI("anki"), URGENCIA("urgencia"), MODELO("modelo"),
+        /** Los temas de la reunión tratados, mientras se graba (29-oct-2026, `[jev] temas` del PC). */
+        TEMAS("temas"),
+        /** Lo que se oye en la reunión, frase a frase ([EnLaReunion], `[jev]` del PC). */
+        TAREAS_DICHAS("tareas_dichas"), URGENCIA_EN_VIVO("urgencia_en_vivo"), TEMA_OLVIDADO("tema_olvidado"),
+        TIEMPO_POR_TEMA("tiempo_por_tema"), DECISIONES("decisiones"), PREGUNTAS_PENDIENTES("preguntas_pendientes"),
+        FECHAS_AL_HORARIO("fechas_al_horario")
+    }
 
     /** La página donde se saca la clave. */
     const val PAGINA_DE_CLAVES = "https://console.typesafe.ai"

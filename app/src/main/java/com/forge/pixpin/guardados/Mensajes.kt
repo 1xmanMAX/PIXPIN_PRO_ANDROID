@@ -442,6 +442,34 @@ data class Mensaje(
     val importantesDe: String? = null,
 
     /**
+     * **Los temas de la reunión** (29-oct-2026, PC `faf84d7a`…`58ee21b2`, `docs/jev.md` §5): en la nota de
+     * voz, `temas: [{id, texto, hecho, ms?, p?, porJev, aMano}]` en el orden de la agenda y `temasLista:
+     * {proyecto, id}` (la lista de tareas que lleva los mismos temas). **Sin temas la clave se quita**
+     * (null, nunca `[]`). Cada aparato escribe `temas` entero y **nunca deja que Jev cambie un tema que
+     * llegó con `aMano: true`**. Las cuentas, en [TemasDeLaReunion]; se conservan tal cual al reescribir.
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val temas: kotlinx.serialization.json.JsonArray? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val temasLista: kotlinx.serialization.json.JsonObject? = null,
+    /**
+     * **Lo demás que se oyó en la reunión** (29-oct-2026, PC `acta_viva.rs`, `docs/jev.md` §8): las
+     * decisiones, las preguntas sin respuesta, los minutos de cada tema, las tareas y eventos propuestos
+     * y los cambios de urgencia, con el formato del PC. **Cada clave solo si tiene algo.** Se leen sin
+     * clave ni red y se conservan tal cual al reescribir el mensaje. Ver [ActaViva].
+     */
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val decisiones: kotlinx.serialization.json.JsonArray? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val preguntasAbiertas: kotlinx.serialization.json.JsonArray? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val tiempoPorTema: kotlinx.serialization.json.JsonObject? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val propuestas: kotlinx.serialization.json.JsonArray? = null,
+    @EncodeDefault(EncodeDefault.Mode.NEVER)
+    val cambiosDeUrgencia: kotlinx.serialization.json.JsonArray? = null,
+
+    /**
      * **Las fotos por su hora** (28-oct-2026, PC `por_su_hora.rs`, `docs/movil-como-camara.md` §12-§14
      * del PC). En la nota de voz de una clase: `reloj` (la ventana de la grabación en la hora de pared
      * de quien grabó, `{aparato, inicio, fin, pausas, vistoEn, huecos, grabacion}`, ver [RelojDePared]) y

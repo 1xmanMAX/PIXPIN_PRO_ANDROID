@@ -333,6 +333,8 @@ class GrabarClaseService : Service() {
         val c = GrabarClase.Cronometro()
         cronometro = c
         enMarcha = true
+        // **La reunión con Jev** (29-oct-2026): los temas de «Preparar» y la escucha en vivo, si toca.
+        ReunionConJev.empezar(this, nombre, proyecto, g) { msDeLaNota() }
         // El PC puede mandar capturas a esta grabación (§13 de la guía del PC). Ver [GrabacionDelMovil].
         GrabacionDelMovil.empezar(this, getString(R.string.clase_nombre, GrabarClase.fechaDelNombre(ahora))) { c.llevadoMs() to c.enPausa }
         ensenarLaBarra()
@@ -562,6 +564,7 @@ class GrabarClaseService : Service() {
         val d = diario
         diario = null
         hechas.clear()
+        ReunionConJev.tirar()
         val app = applicationContext as PixPinApp
         app.scope.launch(Dispatchers.IO) {
             Voz.parar(g)
@@ -598,6 +601,8 @@ class GrabarClaseService : Service() {
         val laMarca = marca
         val app = applicationContext as PixPinApp
         val cerrarLaSesion = abrimosLaSesion
+        // La escucha se para en el acto; lo de la reunión va a la nota en cuanto esté (29-oct-2026).
+        val laReunion = ReunionConJev.terminar()
         // **El servicio de pasar a texto, arrancado ya** (28-oct-2026): ahora Android deja (es el toque
         // de «Terminar»); dentro de unos segundos, con la clase ya guardada, quizá no. Ver [ColaDeTexto].
         val reserva = PasarATextoService.reservar(app, getString(R.string.pasar_a_texto_titulo))
@@ -620,6 +625,9 @@ class GrabarClaseService : Service() {
                 val capturas = lasHechas.mapNotNull { h -> h.archivo?.let { GuardarLaGrabacion.Imagen(h.ms, it) } } + sacadas
                 val r = GuardarLaGrabacion.clase(app, m4a, null, elProyecto, elNombre, System.currentTimeMillis(), lasPicos, capturas, elVideo, d?.reloj())
                 notaGuardada = r.notaId
+                val notaId = r.notaId
+                if (notaId != null && laReunion != null) runCatching { ReunionConJev.guardar(app, notaId, laReunion) }
+                    .onFailure { android.util.Log.w("PixPinClase", "los temas de la reunión no entraron en la nota", it) }
                 sacadas.forEach { it.archivo.delete() }
                 when (r.que) {
                     GuardarLaGrabacion.Que.LISTA, GuardarLaGrabacion.Que.SIN_NOTA -> {
@@ -793,6 +801,7 @@ class GrabarClaseService : Service() {
                         Icon(Icons.Filled.Crop, contentDescription = getString(R.string.clase_zona), tint = claro)
                     }
                 }
+                TemasEnLaBarra.Boton(claro)
                 IconButton(onClick = { pausa() }, modifier = Modifier.size(40.dp)) {
                     Icon(
                         if (b.enPausa) Icons.Filled.PlayArrow else Icons.Filled.Pause,
@@ -817,6 +826,8 @@ class GrabarClaseService : Service() {
                         .padding(horizontal = 10.dp, vertical = 4.dp)
                 )
             }
+            // Los temas de la reunión y las fichas de Jev (29-oct-2026).
+            TemasEnLaBarra.Panel(Modifier.padding(top = 4.dp))
         }
     }
 

@@ -515,6 +515,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         diario = DiarioEnMarcha(this, d)
         val c = GrabarClase.Cronometro()
         cronometro = c
+        // **La reunión con Jev** (29-oct-2026): los temas de «Preparar» y la escucha en vivo, si toca.
+        ReunionConJev.empezar(this, nombre, proyecto, g) { msDeLaNota() }
         // El PC puede mandar capturas a esta grabación (§13 de la guía del PC). Ver [GrabacionDelMovil].
         GrabacionDelMovil.empezar(this, getString(R.string.reunion_nombre, GrabarClase.fechaDelNombre(ahora))) { c.llevadoMs() to c.enPausa }
         estado.update { it.copy(lista = true, conCamara = camara != null, video = forma == Presencial.Forma.VIDEO, mirilla = camara?.conMirilla == true) }
@@ -758,6 +760,8 @@ class ReunionPresencialService : Service(), LifecycleOwner {
         // **El servicio de pasar a texto, arrancado ya** (28-oct-2026): el toque de «Terminar» deja
         // arrancarlo; cuando la reunión esté guardada (segundos después), quizá ya no. Ver [ColaDeTexto].
         val reserva = PasarATextoService.reservar(app, getString(R.string.pasar_a_texto_titulo))
+        // La escucha se para en el acto; lo de la reunión va a la nota en cuanto esté (29-oct-2026).
+        val laReunion = ReunionConJev.terminar()
         val c = cronometro
         val clipAbierto = estado.value.clipDesde
         val elProyecto = proyecto
@@ -808,6 +812,9 @@ class ReunionPresencialService : Service(), LifecycleOwner {
                     val partes = GuardarLaGrabacion.juntarVideo(losTramos, m4a) { File(carpeta, "reunion_${laMarca}_video$it.mp4") }
                     val r = GuardarLaGrabacion.reunion(app, m4a, null, elProyecto, elNombre, System.currentTimeMillis(), lasPicos, lasFotos, losClips, partes, d?.reloj())
                     notaGuardada = r.notaId
+                    val notaId = r.notaId
+                    if (notaId != null && laReunion != null) runCatching { ReunionConJev.guardar(app, notaId, laReunion) }
+                        .onFailure { android.util.Log.w("PixPinReunion", "los temas de la reunión no entraron en la nota", it) }
                     when (r.que) {
                         GuardarLaGrabacion.Que.LISTA, GuardarLaGrabacion.Que.SIN_NOTA -> {
                             laNota?.let { RespaldoWav.rutaDelRespaldo(it).delete(); GuardarLaGrabacion.parteDe(it).delete() }

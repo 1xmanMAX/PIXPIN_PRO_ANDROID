@@ -127,6 +127,8 @@ object ReunionEnLaApp {
                 .pointerInput(Unit) { detectDragGestures { cambio, d -> cambio.consume(); dy += d.y } },
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            // Los temas de la reunión y las fichas de Jev (29-oct-2026), encima de la pastilla.
+            TemasEnLaBarra.Panel(Modifier.padding(bottom = 4.dp))
             e.aviso?.let {
                 Text(
                     it, color = claro, fontSize = 12.sp, maxLines = 2,
@@ -164,6 +166,7 @@ object ReunionEnLaApp {
                         )
                     }
                 }
+                TemasEnLaBarra.Boton(claro)
                 IconButton(onClick = { ReunionPresencialService.pausa() }, modifier = Modifier.size(42.dp)) {
                     Icon(
                         if (e.enPausa) Icons.Filled.PlayArrow else Icons.Filled.Pause,

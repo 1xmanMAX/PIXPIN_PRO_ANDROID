@@ -637,6 +637,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                         }.start()
                     }
                 )
+                // **La reunión** (29-oct-2026): la agenda con ✓ y su minuto, las decisiones, las preguntas y las propuestas. Ver [AgendaDeLaReunion].
+                if (sincronizando == null && !esCancion) AgendaDeLaReunion(m) { irYSonar(it) }
                 Box(Modifier.weight(1f).fillMaxWidth()) {
                     val sinc = sincronizando
                     if (sinc != null) ListaParaSincronizar(sinc, toques, tamano)

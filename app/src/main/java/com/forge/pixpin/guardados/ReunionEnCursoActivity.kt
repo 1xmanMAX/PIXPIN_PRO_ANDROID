@@ -132,6 +132,9 @@ class ReunionEnCursoActivity : ComponentActivity() {
                 color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp
             )
             Text(e.aviso ?: " ", color = Color.White.copy(alpha = 0.7f), fontSize = 13.sp, maxLines = 2, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp))
+            // **Los temas de la reunión y las fichas de Jev** (29-oct-2026): «☑ 2/5» abre la lista; un toque marca a mano.
+            Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.Center) { TemasEnLaBarra.Boton() }
+            TemasEnLaBarra.Panel(Modifier.padding(horizontal = 12.dp))
             // **Colaboradores** (28-oct-2026, §14 de la guía del PC): los del chat compartido aportan
             // fotos que entran en su minuto; y lo que manda el PC a esta grabación (§13).
             val todos by com.forge.pixpin.sincro.GrabacionDelMovil.abiertaATodos.collectAsState()

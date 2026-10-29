@@ -46,6 +46,18 @@ object UrgenciaEnLaApp {
     /** La clave de una tarea: su texto (sin la fecha de creada), su lista y su chat. */
     fun claveDe(l: TodasLasTareas.Lista, texto: String) = "${l.proyecto.orEmpty()}\u001f${l.titulo}\u001f$texto"
 
+    /**
+     * **Lo que ya se sabe de la urgencia de una tarea** (29-oct-2026, `jev::urgencia::sabidas` del PC): para
+     * la urgencia en vivo de la reunión ([com.forge.pixpin.guardados.ReunionConJev]). null si aún no se sabe.
+     */
+    fun sabidas(clave: String): Urgencia.Senales? = (synchronized(sabido) { sabido[clave] } as? Sabido.Dicho)?.s
+
+    /** Y cambiarlo (lo que la apura en vivo, o su «Deshacer»). En memoria, como siempre: no viaja. */
+    fun ponerSabidas(clave: String, s: Urgencia.Senales?) {
+        synchronized(sabido) { if (s == null) sabido.remove(clave) else sabido[clave] = Sabido.Dicho(s) }
+        _novedades.value++
+    }
+
     /** La marca del usuario. */
     fun marcaDe(u: TareaInteligente.Urgencia): Urgencia.Marca = when (u) {
         TareaInteligente.Urgencia.MUY_URGENTE -> Urgencia.Marca.MUY_URGENTE

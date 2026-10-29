@@ -120,6 +120,40 @@ private val FUNCIONES = listOf(
     Triple(
         Jev.Funcion.MODELO, "Elegir el modelo según el pedido",
         "Lo fácil va al modelo rápido (Haiku, DeepSeek Flash) y lo que pide razonar, al fuerte (Sonnet, DeepSeek V4 Pro). Se manda el pedido y los tres últimos mensajes."
+    ),
+    // **La reunión** (29-oct-2026, `ajustes2-jev-temas` y los siete de «En la reunión» del PC): lo que se
+    // oye mientras se graba, pasado a texto en este teléfono frase a frase.
+    Triple(
+        Jev.Funcion.TEMAS, "Temas de la reunión tratados",
+        "Mientras grabas una reunión con temas, lo que se oye se pasa a texto en este teléfono frase a frase y Jev marca los temas que ya se trataron. Lo que marques tú manda. Se manda el texto de los últimos 40 s, los temas y el título."
+    ),
+    Triple(
+        Jev.Funcion.TAREAS_DICHAS, "Tareas dichas en la reunión",
+        "Mientras grabas una reunión, «yo me encargo de mandar la cotización el viernes» sale en la barra como tarea propuesta, con su fecha y su urgencia. Solo se apunta en Tareas si la aceptas. Se manda cada frase con las dos de antes y el título."
+    ),
+    Triple(
+        Jev.Funcion.URGENCIA_EN_VIVO, "Urgencia de las tareas dicha en la reunión",
+        "«Esto es para hoy» sube la prioridad o cambia la fecha de una tarea pendiente de este chat o del Inbox. Se aplica sola y se puede deshacer en la barra. Se manda cada frase y el texto de hasta 8 tareas."
+    ),
+    Triple(
+        Jev.Funcion.TEMA_OLVIDADO, "Avisar del tema olvidado",
+        "Con «Duración prevista» en Preparar, avisa cerca del final (o si se están despidiendo) de los temas de la agenda que aún no se trataron. Se manda cada frase y los temas."
+    ),
+    Triple(
+        Jev.Funcion.TIEMPO_POR_TEMA, "Minutos de cada tema",
+        "Cuánto se habló de cada tema de la agenda, en «Estudiar la clase» y en la página compartida. Se manda cada frase y los temas."
+    ),
+    Triple(
+        Jev.Funcion.DECISIONES, "Decisiones de la reunión",
+        "«Queda decidido: adelantamos el pedido» se apunta con su minuto (no «podríamos…»). Se ve en «Estudiar la clase» y en la página compartida. Se manda cada frase."
+    ),
+    Triple(
+        Jev.Funcion.PREGUNTAS_PENDIENTES, "Preguntas sin respuesta",
+        "Las preguntas que nadie contestó en la reunión, al final en «Estudiar la clase», para pasarlas a Tareas. Se manda cada frase y las preguntas aún abiertas."
+    ),
+    Triple(
+        Jev.Funcion.FECHAS_AL_HORARIO, "Fechas dichas, al horario",
+        "«Nos vemos el martes a las 3» sale en la barra como evento propuesto; si lo aceptas, va a Tareas con su hora y se ve en el Horario. Se manda cada frase."
     )
 )
 

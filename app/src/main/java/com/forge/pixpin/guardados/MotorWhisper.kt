@@ -123,7 +123,7 @@ object MotorWhisper {
 
     private fun idiomaDe(idioma: String): String = idioma.substringBefore('-').lowercase().takeIf { it in IDIOMAS } ?: "es"
 
-    private fun configuracion(context: Context, modelo: String, lengua: String, tarea: String = "transcribe"): OfflineRecognizerConfig {
+    private fun configuracion(context: Context, modelo: String, lengua: String, tarea: String = "transcribe", hilos: Int? = null): OfflineRecognizerConfig {
         val dir = carpeta(context, modelo)
         val a = archivos(modelo)
         return OfflineRecognizerConfig(
@@ -136,7 +136,7 @@ object MotorWhisper {
                     task = tarea
                 ),
                 tokens = File(dir, a[2]).absolutePath,
-                numThreads = Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
+                numThreads = hilos ?: Runtime.getRuntime().availableProcessors().coerceIn(2, 4),
                 modelType = "whisper"
             )
         )
@@ -239,6 +239,25 @@ object MotorWhisper {
             }
         }
         return salida
+    }
+
+    /**
+     * **Whisper ligero para la escucha en vivo de una reunión** (29-oct-2026, `Whisper::cargar_ligero` del
+     * PC): un reconocedor aparte, con dos hilos, en el idioma de la voz, que no pisa al de pasar a texto.
+     * null si este teléfono no puede (32 bits) o el modelo no está bajado: **nunca se baja en mitad de una
+     * reunión**. Quien lo pide lo suelta ([OfflineRecognizer.release]) al acabar.
+     */
+    fun ligero(context: Context, idioma: String): OfflineRecognizer? {
+        val modelo = modelo(context)
+        if (!modeloListo(context, modelo) || !soportado()) return null
+        return runCatching { OfflineRecognizer(null, configuracion(context, modelo, idiomaDe(idioma), hilos = 2)) }.getOrNull()
+    }
+
+    /** El texto de un trozo (16 kHz, mono) con un reconocedor de [ligero]. Vacío si no entendió nada creíble. */
+    fun textoDe(rec: OfflineRecognizer, muestras: ShortArray, idioma: String): String {
+        val f = FloatArray(muestras.size) { muestras[it] / 32768f }
+        val t = decodificar(rec, f).text.trim()
+        return if (Transcriptor.creible(t, idiomaDe(idioma))) t else ""
     }
 
     private fun decodificar(rec: OfflineRecognizer, muestras: FloatArray): com.k2fsa.sherpa.onnx.OfflineRecognizerResult {

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -122,6 +123,9 @@ class GrabarClaseActivity : ComponentActivity() {
         forma = Presencial.Forma.de(runCatching { prefs().getString(FORMA, null) }.getOrNull())
         calidad = Presencial.Calidad.de(runCatching { prefs().getString(CALIDAD, null) }.getOrNull())
         conBurbuja = runCatching { prefs().getBoolean(BURBUJA, true) }.getOrDefault(true)
+        // **Los temas de la reunión** (29-oct-2026): los que esperaban a la próxima reunión, ya puestos.
+        val anteriores = PrepararTemas.empezar(this)
+        if (anteriores > 0) Toast.makeText(this, TextosDeLaReunion.anteriores(anteriores), Toast.LENGTH_SHORT).show()
         setContent { PixPinTheme { Pantalla() } }
     }
 
@@ -131,7 +135,10 @@ class GrabarClaseActivity : ComponentActivity() {
         val donde = proyecto?.let { p -> app?.proyectos?.porId(p)?.nombre }
             ?: if (proyecto == null) getString(R.string.clase_general) else null
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-            Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.Center) {
+            Column(
+                Modifier.fillMaxSize().verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(24.dp),
+                verticalArrangement = Arrangement.Center
+            ) {
                 Text(getString(R.string.clase_titulo), style = MaterialTheme.typography.headlineSmall)
                 Text(
                     getString(R.string.clase_sub),
@@ -228,6 +235,8 @@ class GrabarClaseActivity : ComponentActivity() {
                     )
                 }
                 if (modo == Presencial.Modo.PRESENCIAL) Reunion()
+                // **Temas de la reunión** y la duración prevista (29-oct-2026, la fila de Preparar del PC).
+                PrepararTemas.Fila(proyecto)
                 Button(onClick = { empezar() }, modifier = Modifier.fillMaxWidth().padding(top = 24.dp)) {
                     Text(getString(R.string.clase_empezar))
                 }
@@ -344,6 +353,7 @@ class GrabarClaseActivity : ComponentActivity() {
             Toast.makeText(this, R.string.clase_ya, Toast.LENGTH_SHORT).show()
         } else {
             // Ahora, con esta pantalla delante: es lo que deja al servicio quedarse el micrófono.
+            PrepararTemas.entregar()
             runCatching { GrabarClaseService.empezar(this, proyecto, codigo, datos, perfil) }
                 .onFailure { Toast.makeText(this, R.string.clase_no_arranca, Toast.LENGTH_LONG).show() }
         }
@@ -375,6 +385,7 @@ class GrabarClaseActivity : ComponentActivity() {
             Toast.makeText(this, R.string.clase_ya, Toast.LENGTH_SHORT).show()
         } else {
             // Ahora, con esta pantalla delante: es lo que deja al servicio quedarse el micrófono y la cámara.
+            PrepararTemas.entregar()
             runCatching { ReunionPresencialService.empezar(this, proyecto, forma, calidad, conBurbuja) }
                 .onFailure { Toast.makeText(this, R.string.clase_no_arranca, Toast.LENGTH_LONG).show() }
         }

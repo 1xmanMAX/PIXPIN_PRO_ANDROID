@@ -97,6 +97,13 @@ object CamaraDelPc {
         })
     }
 
+    /**
+     * **Si este teléfono hace ahora de cámara de una grabación del PC** (29-oct-2026, §13 de
+     * `docs/movil-como-camara.md` del PC): la pantalla de cámara abierta y el PC grabando. Entonces
+     * **escucha el PC**: el teléfono no pasa a texto en vivo ni le pregunta a Jev.
+     */
+    fun haciendoDeCamara(): Boolean = pantallas.get() > 0 && visto.value?.grabando == true
+
     /** La pantalla de cámara se abre o se cierra: con ella abierta se pregunta más a menudo y a todos. */
     fun pantallaDeCamara(abierta: Boolean) {
         if (abierta) { pantallas.incrementAndGet(); preguntado.value = false } else pantallas.updateAndGet { (it - 1).coerceAtLeast(0) }

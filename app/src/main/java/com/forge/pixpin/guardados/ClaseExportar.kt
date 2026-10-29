@@ -59,7 +59,15 @@ object ClaseExportar {
          * **Lo importante que halló Jev** en la transcripción (28-oct-2026, PC `a6b248fe`; ver
          * [Importantes]): chapitas en cada renglón y un filtro arriba. Vacío, la página es la de siempre.
          */
-        val importantes: List<Importantes.Importante> = emptyList()
+        val importantes: List<Importantes.Importante> = emptyList(),
+        /**
+         * **Los temas de la reunión** (29-oct-2026, PC `clase_exportar.rs`; ver [TemasDeLaReunion]), en el
+         * orden de la agenda: lo tratado con su minuto y lo que quedó sin tratar. Vacío, la página es la de
+         * siempre.
+         */
+        val temas: List<TemasDeLaReunion.Tema> = emptyList(),
+        /** **Lo que Jev sacó mientras se grababa** ([ActaViva]): los minutos de cada tema, las decisiones y las preguntas sin respuesta. */
+        val acta: ActaViva.Acta = ActaViva.Acta()
     ) {
         /** La duración: la apuntada o, sin ella, la última señal. */
         fun duracion(): Long {
@@ -150,7 +158,9 @@ object ClaseExportar {
             lineas = lineas,
             marcadores = marcadores.sortedBy { it.ms },
             adjuntos = adjuntos,
-            importantes = Importantes.de(voz).orEmpty()
+            importantes = Importantes.de(voz).orEmpty(),
+            temas = TemasDeLaReunion.temasDe(voz),
+            acta = ActaViva.de(voz)
         )
     }
 
@@ -228,7 +238,12 @@ object ClaseExportar {
         val audio: String = "Audio",
         val video: String = "Vídeo",
         /** El filtro de lo importante: «Todo» (cada tipo dice lo suyo, [Importantes.Tipo.rotulo]). */
-        val importanteTodo: String = "Todo"
+        val importanteTodo: String = "Todo",
+        /** «Temas de la reunión» y la chapita de lo que quedó sin tratar; «Decisiones» y «Preguntas sin respuesta» (29-oct-2026). */
+        val temas: String = "Temas de la reunión",
+        val sinTratar: String = "Sin tratar",
+        val decisiones: String = "Decisiones",
+        val preguntasAbiertas: String = "Preguntas sin respuesta"
     )
 
     /**
@@ -372,11 +387,16 @@ object ClaseExportar {
             if (conMedio) h.append("<label class=\"seguir\"><input type=\"checkbox\" id=\"seguir\" checked> ${escapar(r.seguir)}</label>")
             h.append("</div>\n")
         }
-        // Al lado: los marcadores y el índice de las capturas. Sin ellos, el texto a lo ancho.
-        val conLado = c.marcadores.isNotEmpty() || nCapturas > 0
+        // Al lado: los temas, las decisiones, las preguntas, los marcadores y el índice de las capturas.
+        // Sin ellos, el texto a lo ancho.
+        val conActa = c.acta.decisiones.isNotEmpty() || c.acta.preguntasAbiertas.isNotEmpty()
+        val conLado = c.marcadores.isNotEmpty() || nCapturas > 0 || c.temas.isNotEmpty() || conActa
         h.append(if (conLado) "</section>\n<main class=\"cuerpo con-lado\">\n" else "</section>\n<main class=\"cuerpo\">\n")
         if (conLado) {
             h.append("<aside class=\"lado\">\n")
+            if (c.temas.isNotEmpty()) h.append(temasHtml(c, r, conMedio))
+            h.append(dichosHtml(r.decisiones, c.acta.decisiones, conMedio))
+            h.append(dichosHtml(r.preguntasAbiertas, c.acta.preguntasAbiertas, conMedio))
             if (c.marcadores.isNotEmpty()) {
                 h.append("<section class=\"bloque\"><h2>${escapar(r.marcadores)}</h2>\n<ol class=\"lista-marcadores\">\n")
                 for (m in c.marcadores) {
@@ -449,6 +469,39 @@ object ClaseExportar {
         return h.toString()
     }
 
+    /** **La agenda con su estado**: cada tema con ✓ y su minuto (que salta ahí) o, si quedó sin tratar, resaltado con su chapita. */
+    private fun temasHtml(c: Datos, r: Rotulos, conMedio: Boolean): String {
+        val (hechos, total) = TemasDeLaReunion.cuenta(c.temas)
+        val h = StringBuilder("<section class=\"bloque\"><h2>${escapar(r.temas)} <span class=\"cuenta\">$hechos/$total</span></h2>\n<ol class=\"lista-temas\">\n")
+        for (t in c.temas) {
+            if (t.hecho) {
+                val minuto = t.ms?.let { " " + minutoHtml(it, conMedio) }.orEmpty()
+                val data = t.ms?.let { " data-ms=\"$it\"" }.orEmpty()
+                h.append("<li class=\"tema hecho\"$data><span class=\"casilla\" aria-hidden=\"true\">✓</span><span>${escapar(t.texto)}</span>$minuto${tiempoHtml(c, t.id)}</li>\n")
+            } else {
+                h.append("<li class=\"tema pendiente\"><span class=\"casilla\" aria-hidden=\"true\"></span><span>${escapar(t.texto)}</span> <span class=\"chip sin-tratar\">${escapar(r.sinTratar)}</span>${tiempoHtml(c, t.id)}</li>\n")
+            }
+        }
+        h.append("</ol></section>\n")
+        return h.toString()
+    }
+
+    /** Lo que llevó un tema («6 min»), si se contó y fue algo. */
+    private fun tiempoDe(c: Datos, id: String): String? =
+        c.acta.tiempoPorTema?.de(id)?.takeIf { it > 0 }?.let(ActaViva::duracionCorta)
+
+    private fun tiempoHtml(c: Datos, id: String): String =
+        tiempoDe(c, id)?.let { " <span class=\"duracion\">${escapar(it)}</span>" }.orEmpty()
+
+    /** **Las decisiones o las preguntas sin respuesta**, cada una con su minuto (que salta ahí). Sin nada, nada. */
+    private fun dichosHtml(titulo: String, v: List<ActaViva.Dicho>, conMedio: Boolean): String {
+        if (v.isEmpty()) return ""
+        val h = StringBuilder("<section class=\"bloque\"><h2>${escapar(titulo)} <span class=\"cuenta\">${v.size}</span></h2>\n<ol class=\"lista-marcadores lista-acta\">\n")
+        for (d in v) h.append("<li data-ms=\"${d.ms}\">${minutoHtml(d.ms, conMedio)} <span>${escapar(d.texto.trim())}</span></li>\n")
+        h.append("</ol></section>\n")
+        return h.toString()
+    }
+
     // --- Markdown y texto ---------------------------------------------------------------------
 
     private fun mdEscapar(s: String): String = buildString {
@@ -488,6 +541,25 @@ object ClaseExportar {
             medios += "- [${mdEscapar(nombre(a))}](${urlRelativa(e)})"
         }
         if (medios.isNotEmpty()) v.append(medios.joinToString("\n")).append("\n\n")
+        // Los temas de la reunión y el acta (29-oct-2026, como el PC).
+        if (c.temas.isNotEmpty()) {
+            val (hechos, total) = TemasDeLaReunion.cuenta(c.temas)
+            v.append("## ${r.temas} ($hechos/$total)\n\n")
+            for (t in c.temas) {
+                val min = t.ms?.takeIf { t.hecho }?.let { " · ${minuto(it)}" }.orEmpty()
+                val marca = if (t.hecho) "x" else " "
+                val falta = if (t.hecho) "" else " — *${r.sinTratar}*"
+                val tiempo = tiempoDe(c, t.id)?.let { " ($it)" }.orEmpty()
+                v.append("- [$marca] ${mdEscapar(t.texto)}$min$tiempo$falta\n")
+            }
+            v.append('\n')
+        }
+        for ((titulo, dichos) in listOf(r.decisiones to c.acta.decisiones, r.preguntasAbiertas to c.acta.preguntasAbiertas)) {
+            if (dichos.isEmpty()) continue
+            v.append("## $titulo\n\n")
+            for (d in dichos) v.append("- ${minuto(d.ms)} · ${mdEscapar(d.texto)}\n")
+            v.append('\n')
+        }
         if (c.marcadores.isNotEmpty()) {
             v.append("## ${r.marcadores}\n\n")
             for (m in c.marcadores) {

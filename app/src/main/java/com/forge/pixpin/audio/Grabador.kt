@@ -37,6 +37,21 @@ interface Grabador {
      */
     fun llevadoMs(): Long? = null
 
+    /**
+     * **La toma del PCM de la nota** (29-oct-2026, la escucha en vivo de la reunión: «no se abre otro
+     * micrófono», `Grabadora::suscribir_pcm` del PC). [oido] recibe cada bloque ya realzado (mono, a
+     * [muestreo]) con su posición en muestras de la nota (pausas fuera, silencios de relleno dentro),
+     * **en el hilo del micrófono**: tiene que copiarlo y volver en el acto (una cola que tira lo que no
+     * cabe), nunca esperar. null la quita. Sin PCM (la grabadora del sistema), no hace nada y da false.
+     */
+    fun oir(oido: ((muestras: ShortArray, cuantas: Int, posicion: Long) -> Unit)?): Boolean = false
+
+    /** Las muestras por segundo de la nota (0 si no se sabe). */
+    fun muestreo(): Int = 0
+
+    /** La sesión de audio del micrófono (para ver si Android lo silencia por otra app), o null. */
+    fun sesionDeAudio(): Int? = null
+
     class DelSistema(private val r: MediaRecorder) : Grabador {
         override fun pico() = runCatching { r.maxAmplitude }.getOrDefault(0).coerceAtLeast(0)
         override fun pausar(pausa: Boolean) {
@@ -88,6 +103,18 @@ interface Grabador {
         override fun pico(): Int { val m = maximo; maximo = 0; return m }
 
         override fun llevadoMs(): Long = metidas * 1000 / muestreo
+
+        /** La escucha en vivo de la reunión (29-oct-2026). Ver [Grabador.oir]. */
+        @Volatile private var oido: ((ShortArray, Int, Long) -> Unit)? = null
+
+        override fun oir(oido: ((muestras: ShortArray, cuantas: Int, posicion: Long) -> Unit)?): Boolean {
+            this.oido = oido
+            return true
+        }
+
+        override fun muestreo(): Int = muestreo
+
+        override fun sesionDeAudio(): Int? = runCatching { record.audioSessionId }.getOrNull()
 
         /**
          * **Los cascos que se van** (28-oct-2026): si el aparato por el que entraba el sonido desaparece
@@ -168,8 +195,13 @@ interface Grabador {
         }
 
         private fun meter(buf: ShortArray, n: Int, fin: Boolean) {
-            // El mismo PCM al respaldo, en su hilo (no espera nunca), y la cuenta para el latido.
-            if (n > 0) { respaldo?.escribir(buf, n); metidas += n }
+            // El mismo PCM al respaldo, en su hilo (no espera nunca), a la escucha en vivo (copia y
+            // vuelve: si va tarde, pierde bloques ella sola) y la cuenta para el latido.
+            if (n > 0) {
+                respaldo?.escribir(buf, n)
+                oido?.let { o -> runCatching { o(buf, n, metidas) } }
+                metidas += n
+            }
             var hecho = 0
             var intentos = 0
             while (true) {
