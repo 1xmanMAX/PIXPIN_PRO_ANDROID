@@ -212,30 +212,4 @@ class VivoYFechasTest {
         val corta = Cliente("k", Grabado(listOf(Grabado.ok(Grabado.respuesta(listOf(Grabado.noul("compromiso", 0.9)))))), Cache(), registro = {})
         assertTrue(runCatching { Vivo.preguntar(corta, c, partes) }.exceptionOrNull() is ErrorJev.FaltaRespuesta)
     }
-
-    // --- dictado.rs ----------------------------------------------------------------------------
-
-    @Test
-    fun `los textos que se podrian anotar`() {
-        fun f(d: String) = Vivo.Frase(0, "Ana", d)
-        val antes = listOf(f("el cemento llega el jueves a las 8"))
-        assertEquals(listOf(Preguntas.Vivo.LA_ANTERIOR to "el cemento llega el jueves a las 8"), Dictado.textos(f("anota esto en el chat de la obra"), antes))
-        assertEquals(listOf(Preguntas.Vivo.LO_QUE_SIGUE to "faltan tornillos"), Dictado.textos(f("pon en el grupo de compras que faltan tornillos."), emptyList()))
-        val t = Dictado.textos(f("Anota en el chat de la obra: Llega la grúa el lunes"), antes)
-        assertEquals("Llega la grúa el lunes", t[0].second)
-        assertEquals(2, t.size)
-        assertTrue(Dictado.textos(f("anótalo"), emptyList()).isEmpty())
-    }
-
-    @Test
-    fun `la tabla del dictado`() {
-        val chats = listOf("Obra Calle Lima", "Compras")
-        fun d(p: Double, dicho: Double) = Vivo.Dictado(p, dicho, 0, "faltan tornillos")
-        val fr = Vivo.Frase(0, "Ana", "x")
-        assertEquals("Obra Calle Lima", (Dictado.decidir(fr, d(0.9, 0.9), chats) as Dictado.Resultado.Anotar).nota.chat)
-        assertNull((Dictado.decidir(fr, d(0.9, 0.2), chats) as Dictado.Resultado.Anotar).nota.chat)
-        assertEquals(Dictado.Resultado.Dudoso(0.5), Dictado.decidir(fr, d(0.5, 0.9), chats))
-        assertEquals(Dictado.Resultado.Nada, Dictado.decidir(fr, d(0.1, 0.9), chats))
-        assertEquals(Dictado.Resultado.SinTexto, Dictado.decidir(fr, d(0.9, 0.9).copy(texto = null), chats))
-    }
 }

@@ -22,6 +22,10 @@ import javax.crypto.spec.GCMParameterSpec
  * - [Funcion.MODELO]: el modelo del asistente según lo difícil del pedido ([ModeloEnLaApp]).
  * - [Funcion.TEMAS] y las siete de la reunión ([Funcion.TAREAS_DICHAS]…[Funcion.FECHAS_AL_HORARIO]): lo que
  *   se oye mientras se graba una reunión (29-oct-2026, [com.forge.pixpin.guardados.ReunionConJev]).
+ * - [Funcion.DICTADO]: **dictar al chat** (29-oct-2026, `ventana_chat/dictado_a_chat.rs` del PC): «anota en el
+ *   chat de la obra que…» al dictar en la caja propone anotarlo en ese chat ([DictadoAlChat], [com.forge.pixpin.guardados.DictarAlChat]).
+ * - [Funcion.REPASO]: **repasar en voz alta** (29-oct-2026, `ventana_chat/repaso_oral.rs` del PC): desde
+ *   «Estudiar la clase», qué puntos clave cubre lo que explica el alumno ([RepasoOral], [com.forge.pixpin.guardados.RepasarActivity]).
  *
  * **Sin clave (o con la función apagada) [para] da null y cada función hace lo de siempre.** La clave
  * es de este teléfono: cifrada con una llave AES-GCM del **Android Keystore** (no exportable) en
@@ -40,7 +44,11 @@ object Jev {
         /** Lo que se oye en la reunión, frase a frase ([EnLaReunion], `[jev]` del PC). */
         TAREAS_DICHAS("tareas_dichas"), URGENCIA_EN_VIVO("urgencia_en_vivo"), TEMA_OLVIDADO("tema_olvidado"),
         TIEMPO_POR_TEMA("tiempo_por_tema"), DECISIONES("decisiones"), PREGUNTAS_PENDIENTES("preguntas_pendientes"),
-        FECHAS_AL_HORARIO("fechas_al_horario")
+        FECHAS_AL_HORARIO("fechas_al_horario"),
+        /** Dictar al chat (29-oct-2026, `[jev] dictado` del PC). */
+        DICTADO("dictado"),
+        /** Repasar una clase en voz alta (29-oct-2026, `[jev] repaso` del PC). */
+        REPASO("repaso")
     }
 
     /** La página donde se saca la clave. */

@@ -112,8 +112,8 @@ al horario), encendidos de fábrica; sin clave no hacen nada.
 
 ## Ficheros
 
-- `jev/`: `Preguntas.kt` (copia del PC), `Temas.kt` (Rollo, Ritmo, Seguimiento), `Vivo.kt` (`vivo.rs` y
-  `dictado.rs`), `FechasDichas.kt` (`fechas.rs`), `IdeasDeLaReunion.kt` (compromisos, citas, pendientes,
+- `jev/`: `Preguntas.kt` (copia del PC), `Temas.kt` (Rollo, Ritmo, Seguimiento), `Vivo.kt` (`vivo.rs`; la clave de las opciones y los candidatos del dictado son los de `DictadoAlChat.kt`, una sola
+  implementación), `FechasDichas.kt` (`fechas.rs`), `IdeasDeLaReunion.kt` (compromisos, citas, pendientes,
   tiempo de temas, urgencia viva), `EnLaReunion.kt` (la mesa).
 - `guardados/`: `TemasDeLaReunion.kt` (`temas.rs` de `pixpin-proyecto`), `ActaViva.kt`, `OidoEnVivo.kt`
   (`en_vivo.rs` de `pixpin-voz`), `EscuchaDeLaReunion.kt`, `ReunionConJev.kt`, `PrepararTemas.kt`,
@@ -126,8 +126,7 @@ al horario), encendidos de fábrica; sin clave no hacen nada.
 
 ## Pruebas (JVM, sin red)
 
-`TemasEnVivoTest`, `VivoYFechasTest`, `MesaDeLaReunionTest` (las de `temas.rs`, `vivo.rs`, `fechas.rs`,
-`dictado.rs`, `compromisos.rs`, `citas.rs`, `pendientes.rs`, `tiempo_de_temas.rs`, `urgencia_viva.rs` y
+`TemasEnVivoTest`, `VivoYFechasTest`, `MesaDeLaReunionTest` (las de `temas.rs`, `vivo.rs`, `fechas.rs`, `compromisos.rs`, `citas.rs`, `pendientes.rs`, `tiempo_de_temas.rs`, `urgencia_viva.rs` y
 `en_la_reunion.rs`, con respuestas grabadas), `TemasYActaDeLaReunionTest` (`temas.rs` y `acta_viva.rs` de
 `pixpin-proyecto`, y la ida y vuelta de una nota escrita por el PC), `OidoEnVivoTest` (`en_vivo.rs`),
 `ClaseExportarReunionTest` (la página) y `ReunionConJevTest` (`texto_de`).

@@ -22,7 +22,7 @@ import com.forge.pixpin.jev.Preguntas.Vivo as Q
  * | `pregunta` y `abiertas` | `pregunta`, `respondida_<id>` por pregunta | [Pendientes] |
  * | `cita` | `cita`, `cita_cuando` | [Citas] |
  * | `tema` y `cierre` | `de_la_agenda`, `tema`, `cierre` | [TiempoDeTemas] |
- * | `chats` | `dictado`, `dictado_chat_dicho`, `dictado_chat`, `dictado_que` | [Dictado] |
+ * | `chats` | `dictado`, `dictado_chat_dicho`, `dictado_chat`, `dictado_que` | [DictadoAlChat] |
  *
  * Las fechas las busca el código ([FechasDichas.buscar]) y Jev solo elige cuál es el plazo o la cita:
  * sin ninguna expresión de fecha en la frase no se pregunta por plazos ni citas (no hay nada que
@@ -123,35 +123,13 @@ object Vivo {
     }
 
     /**
-     * La clave de una opción: su texto en minúsculas, sin tildes y con `_` (el nombre de la opción se
-     * le manda a Jev: mejor que «c1»).
+     * La clave de una opción: su texto en minúsculas, sin tildes y con `_` (`vivo::clave` del PC). Una sola
+     * implementación para toda la app: la de [DictadoAlChat.clave].
      */
-    fun clave(texto: String): String {
-        val s = StringBuilder()
-        for (c0 in texto.trim().lowercase()) {
-            val c = FechasDichas.sinTilde(c0)
-            if ((c in 'a'..'z') || (c in '0'..'9')) s.append(c)
-            else if (s.isNotEmpty() && !s.endsWith("_")) s.append('_')
-        }
-        val r = s.toString().trimEnd('_').take(60)
-        return r.ifEmpty { "x" }
-    }
+    fun clave(texto: String): String = DictadoAlChat.clave(texto)
 
-    /** Claves únicas para estos textos, en el mismo orden («todos» es la opción de todos). */
-    internal fun claves(textos: List<String>): List<Pair<String, String>> {
-        val v = ArrayList<Pair<String, String>>()
-        for (t in textos) {
-            val base = clave(t)
-            var k = base
-            var n = 2
-            while (v.any { it.first == k } || k == Q.TODOS) {
-                k = "${base}_$n"
-                n++
-            }
-            v += k to t
-        }
-        return v
-    }
+    /** Claves únicas para estos textos, en el mismo orden («todos» es la opción de todos): [DictadoAlChat.claves]. */
+    internal fun claves(textos: List<String>): List<Pair<String, String>> = DictadoAlChat.claves(textos)
 
     /** El estado (ver [Preguntas.Vivo]). */
     fun estado(c: Contexto, partes: Partes): JsonObject {
@@ -269,7 +247,8 @@ object Vivo {
         val chats = claves(partes.chats)
         var textosDictado = emptyList<Pair<String, String>>()
         if (chats.isNotEmpty()) {
-            textosDictado = com.forge.pixpin.jev.Dictado.textos(c.frase, c.antes)
+            // Los candidatos, con la misma función que dictar al chat ([DictadoAlChat.textos], `dictado::textos`).
+            textosDictado = DictadoAlChat.textos(DictadoAlChat.Frase(c.frase.ms, c.frase.quien, c.frase.dice), c.antes.map { DictadoAlChat.Frase(it.ms, it.quien, it.dice) })
             p = p.con(Q.DICTADO, Q.dictado()).con(Q.DICTADO_CHAT_DICHO, Q.dictadoChatDicho()).con(Q.DICTADO_CHAT, Q.dictadoChat(chats))
             if (textosDictado.size > 1) p = p.con(Q.DICTADO_QUE, Q.dictadoQue(textosDictado))
         }
@@ -335,56 +314,4 @@ object Vivo {
 
     /** **¿Se decidió algo?** `decision` ≥ SI: sí; entre NO y SI: no se apunta (una decisión de más en el acta es peor que una de menos). */
     fun esDecision(s: Senales): Boolean = s.decision?.let { it >= Preguntas.SI } == true
-}
-
-/**
- * **Dictar al chat** (29-oct-2026; porte de `dictado.rs` del PC): «anota esto en el chat de la obra» →
- * en qué chat (Choice sobre los nombres de los chats, con un Noul de «nombra alguno») y qué se anota. El
- * texto **no se genera**: el código saca los candidatos ([textos]) y Jev elige cuál.
- *
- * | `dictado` | `dictado_chat_dicho` | se hace |
- * |---|---|---|
- * | ≥ SI | ≥ SI | nota en el chat elegido |
- * | ≥ SI | < SI | nota sin chat (se pregunta al usuario cuál) |
- * | ≥ SI, sin nada que anotar | — | nada (no hay texto) |
- * | entre NO y SI | — | nada, se apunta como dudoso |
- * | ≤ NO | — | nada |
- */
-object Dictado {
-
-    /** Lo que se podría anotar: (clave de la opción, texto). */
-    fun textos(frase: Vivo.Frase, antes: List<Vivo.Frase>): List<Pair<String, String>> {
-        val v = ArrayList<Pair<String, String>>()
-        val d = frase.dice.trim()
-        val bajo = d.lowercase()
-        val resto: String? = if (':' in d) d.substring(d.indexOf(':') + 1) else {
-            // «… que faltan tornillos»: lo de después del primer «que» que sigue a «chat» o «grupo» (o del primero, si no se nombran).
-            val desde = listOf("chat", "grupo").map { bajo.indexOf(it) }.filter { it >= 0 }.minOrNull() ?: 0
-            val i = bajo.indexOf(" que ", desde)
-            if (i >= 0 && i + 5 <= d.length) d.substring(i + 5) else null
-        }
-        resto?.trim()?.trimEnd('.', '!')?.trim()?.takeIf { r -> r.split(Regex("\\s+")).count { it.isNotEmpty() } >= 2 }?.let {
-            v += Preguntas.Vivo.LO_QUE_SIGUE to it
-        }
-        antes.lastOrNull()?.takeIf { it.dice.isNotBlank() }?.let { v += Preguntas.Vivo.LA_ANTERIOR to recortar(it.dice, 300) }
-        return v
-    }
-
-    /** Una nota para un chat. [chat] null: no se dijo el chat (se pregunta). */
-    data class Nota(val ms: Long, val chat: String?, val texto: String, val p: Double)
-
-    sealed class Resultado {
-        data class Anotar(val nota: Nota) : Resultado()
-        data object SinTexto : Resultado()
-        data class Dudoso(val p: Double) : Resultado()
-        data object Nada : Resultado()
-    }
-
-    /** **La tabla.** */
-    fun decidir(frase: Vivo.Frase, d: Vivo.Dictado?, chats: List<String>): Resultado {
-        if (d == null || d.p <= Preguntas.NO) return Resultado.Nada
-        if (d.p < Preguntas.SI) return Resultado.Dudoso(d.p)
-        val texto = d.texto ?: return Resultado.SinTexto
-        return Resultado.Anotar(Nota(frase.ms, if (d.chatDicho >= Preguntas.SI) chats.getOrNull(d.chat) else null, texto, d.p))
-    }
 }

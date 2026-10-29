@@ -154,6 +154,15 @@ private val FUNCIONES = listOf(
     Triple(
         Jev.Funcion.FECHAS_AL_HORARIO, "Fechas dichas, al horario",
         "«Nos vemos el martes a las 3» sale en la barra como evento propuesto; si lo aceptas, va a Tareas con su hora y se ve en el Horario. Se manda cada frase."
+    ),
+    // Las dos del 29-oct-2026 (`ajustes2-jev-dictado` y `ajustes2-jev-repaso` del PC, con el gesto del teléfono).
+    Triple(
+        Jev.Funcion.DICTADO, "Dictar al chat",
+        "Al dictar en la caja del chat (el botón 🗣 de la caja), «anota en el chat de la obra que faltan tornillos» propone anotarlo en ese chat: tocar la propuesta lo anota, la ✕ la quita. Se manda cada frase dictada, la anterior y los nombres de tus chats recientes."
+    ),
+    Triple(
+        Jev.Funcion.REPASO, "Repasar en voz alta",
+        "En «Estudiar la clase», explica la clase de viva voz y Jev marca qué puntos clave cubres, cuáles dices mal y cuáles faltan. Se manda lo que explicas, el título y los puntos clave."
     )
 )
 

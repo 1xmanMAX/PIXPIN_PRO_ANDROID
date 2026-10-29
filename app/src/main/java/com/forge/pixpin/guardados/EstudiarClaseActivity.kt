@@ -35,6 +35,7 @@ import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.material.icons.filled.FullscreenExit
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.SubtitlesOff
 import androidx.compose.material3.LocalContentColor
@@ -820,6 +821,16 @@ class EstudiarClaseActivity : ComponentActivity() {
                             text = { Text(getString(R.string.pasar_a_texto_ahora)) },
                             leadingIcon = { Icon(Icons.Filled.Subtitles, null) },
                             onClick = { menu = false; MensajesStore(this@EstudiarClaseActivity).transcribir(m) }
+                        )
+                        // **Repasar en voz alta** (29-oct-2026, Jev): solo con la clave y su interruptor. Ver [RepasarActivity].
+                        val versionDeJev by com.forge.pixpin.jev.Jev.version.collectAsState()
+                        val puedeRepasar by androidx.compose.runtime.produceState(false, versionDeJev) {
+                            value = withContext(Dispatchers.IO) { runCatching { RepasarActivity.disponible(this@EstudiarClaseActivity) }.getOrDefault(false) }
+                        }
+                        if (puedeRepasar) androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("Repasar en voz alta") },
+                            leadingIcon = { Icon(Icons.Filled.RecordVoiceOver, null) },
+                            onClick = { menu = false; RepasarActivity.abrir(this@EstudiarClaseActivity, m.id) }
                         )
                     }
                 }
