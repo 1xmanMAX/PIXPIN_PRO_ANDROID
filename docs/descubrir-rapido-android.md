@@ -96,7 +96,9 @@ grupo: ni se calcula la firma) → firma en tiempo constante
   teléfono. Se engancha en `GrabacionDelMovil` (empezar / pausa / acabar / tirar
   / guardada), por donde ya pasan «Grabar clase» y la reunión presencial: los
   servicios no se tocan. El id es el mismo `m-…` que va en
-  `camara_remota.suya` (§13). La bandera «cámara» va apagada por ahora.
+  `camara_remota.suya` (§13). La bandera «cámara» va puesta mientras graba con
+  su cámara encendida y `camara1` (`GrabacionDelMovil.camaraEncendida`, el
+  `c.encendida` del PC): acepta las capturas del PC y las fotos de otro teléfono.
 - `ConexionCaliente.kt` (§11.7): `PlanCaliente` (puro) y la conexión con el PC
   que graba: `hola` con `camara1`, `camara_remota` cada 3 s (keepalive y reloj,
   `CamaraDelPc.alResponder`), cada foto un `suelto` más por la misma conexión,
@@ -108,12 +110,37 @@ grupo: ni se calcula la firma) → firma en tiempo constante
 - `Prioridad.kt` → `ModoPrioritario` y `RelojDeSincro.acaboDeGrabar`: el
   §11.6 en `SincronizacionAutomatica`.
 
-## Lo que no hace (aún)
+## Ocupado mientras graba (§11.6) y el anuncio al aparecer (§11.5.5)
 
-- Darse por **ocupado** mientras el teléfono graba (el PC sí lo hace): quien
-  llame para sincronizar con el teléfono que graba sigue siendo atendido.
-- §11.5 punto 5 (mandar el anuncio de la cámara al aparecer alguien mientras el
-  teléfono graba): es de «De la PC a la grabación del móvil» (§13).
+- **El teléfono que graba se da por ocupado** (`Protocolo.grabando`, lo pone
+  `GrabacionDelMovil`; aparte de `Protocolo.ocupar` para que el botón de
+  sincronizar no gire toda la clase). Quien llame para sincronizar oye
+  `OCUPADO` («Está sincronizando con otro aparato. Prueba otra vez en un
+  momento.», el mismo texto que el PC) y lo reintenta como siempre; la
+  cámara (`camara_remota`) y lo suelto (las capturas del PC con `destino:
+  "grabacion"` y lo suelto a lo abierto) se atienden igual
+  (`Respondedor.contestarOcupado`, el `contestar_ocupado` del PC). Lo mismo
+  sincronizando con otro: el «ocupado» suelto tras el `hola` de siempre, y
+  después, en vez de cortar, la cámara sigue (sin lo suelto a lo abierto, que
+  escribiría en el chat a mitad de vuelta). A una persona, «ocupado» a todo,
+  como el PC.
+- **Diferencia con el PC, a propósito, solo grabando**: el PC manda además un
+  «ocupado» suelto justo tras el `hola`. Su propio cliente de la cámara
+  (`al_lienzo::Conexion`, el que manda las capturas a la grabación del
+  teléfono) no lo espera y se descuadraría, así que el teléfono que graba lo
+  dice solo como respuesta a cada petición de sincronizar. Quien sincroniza lo
+  oye igual con su primera petición.
+- **Y al revés**: el PC que graba sí manda ese «ocupado» suelto.
+  `ConexionDeCamara` lo salta si es la primera respuesta tras el `hola` y no
+  trae nada más (antes, la pregunta `camara_remota` y la primera foto a un PC
+  que grababa fallaban y la conexión quedaba descuadrada).
+- **§11.5 punto 5**: si el teléfono graba y la baliza oye a uno del grupo nuevo
+  en esta grabación (o en otra dirección), `GrabacionDelMovil.aparecio` le
+  manda ya el anuncio (`camara_remota` con `suya`), sin esperar a los 30 s del
+  siguiente aviso.
+
+Probado contra el PC de verdad en `OcupadoAlGrabarContraElPcTest`
+(`pc-simulado camara` con las órdenes `ocupar`/`soltar`).
 
 ## Probar con aparatos de verdad
 

@@ -505,6 +505,7 @@ fn main() {
 /// - `terminar <duracion>`: «Terminar»; la clase se guarda (la nota y su carpeta) y entra lo de la
 ///   cola. Escribe `{proyecto, voz, carpeta, hechas}`.
 /// - `avisar <puerto>`: el PC avisa al movil que escucha ahi (`anunciar_camara`) y mide su reloj.
+/// - `ocupar`, `soltar`: el PC se da por ocupado (como al grabar, `protocolo::ocupar`) o deja de estarlo.
 mod camara {
     use std::io::BufRead;
     use std::net::{TcpListener, TcpStream};
@@ -642,6 +643,10 @@ mod camara {
                         Err(e) => serde_json::json!({"error": e}).to_string(),
                     }
                 }
+                // **El PC que graba se da por ocupado** (`sincronizar::baliza` del PC, §11.6): quien
+                // llame para sincronizar oye «ocupado», la camara y lo suelto se atienden igual.
+                "ocupar" => pixpin_sincro::protocolo::ocupar(&DiscoPc::nuevo(raiz)).to_string(),
+                "soltar" => { pixpin_sincro::protocolo::soltar(&DiscoPc::nuevo(raiz)); "ok".into() }
                 "fin" => break,
                 _ => format!("error: no sé qué es «{orden}»"),
             };

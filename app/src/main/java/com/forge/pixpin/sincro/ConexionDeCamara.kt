@@ -26,6 +26,30 @@ class ConexionDeCamara private constructor(
     val capacidades: Set<String>
 ) {
     private var despedida = false
+    /** Aún no se ha leído ninguna respuesta tras el `hola` ([recibir]). */
+    private var primera = true
+
+    /**
+     * **La siguiente respuesta, sin el «ocupado» suelto del PC** (28-oct-2026, §11.6): el PC que graba
+     * se da por ocupado y, tras el `hola`, manda **por su cuenta** un [Protocolo.OCUPADO]
+     * (`contestar_ocupado` de `protocolo.rs`) antes de atender la cámara y las fotos como siempre. Si
+     * la primera respuesta es ese «ocupado» a secas, no es la de lo pedido: se salta y se lee la de
+     * verdad. Un aparato de antes que corta tras su «ocupado» da aquí un corte ([IOException]).
+     */
+    private fun recibir(): String {
+        while (true) {
+            val (tipo, datos) = canal.recibir()
+            if (tipo != Protocolo.JSON_) throw IOException("Se esperaba una respuesta")
+            val texto = datos.decodeToString()
+            if (primera) {
+                primera = false
+                if (esElOcupadoSuelto(texto)) continue
+            }
+            return texto
+        }
+    }
+
+    private fun respuesta(): Protocolo.Respuesta = Protocolo.json.decodeFromString(Protocolo.Respuesta.serializer(), recibir())
 
     /** Si el otro sabe de la cámara del móvil (`camara1` en su `hola`). */
     val sabeDeCamara: Boolean get() = CamaraRemota.CAPACIDAD in capacidades
@@ -48,10 +72,9 @@ class ConexionDeCamara private constructor(
     fun preguntar(ahora: () -> Long = System::currentTimeMillis): Respuesta {
         val t0 = ahora()
         canal.enviar(Protocolo.JSON_, CamaraRemota.aTexto(CamaraRemota.Anuncio(reloj = t0)).toByteArray())
-        val (tipo, datos) = canal.recibir()
+        val texto = recibir()
         val t2 = ahora()
-        if (tipo != Protocolo.JSON_) throw IOException("Se esperaba una respuesta")
-        val r = CamaraRemota.deTexto(datos.decodeToString())
+        val r = CamaraRemota.deTexto(texto)
         r.error?.let { throw Protocolo.ErrorDelOtro(it) }
         val adelanto = if (r.reloj > 0) -CamaraRemota.desfase(t0, r.reloj, t2) else 0L
         return Respuesta(r, adelanto, ((t2 - t0) / 2).coerceAtLeast(0))
@@ -85,12 +108,12 @@ class ConexionDeCamara private constructor(
                 duracionMs = if (t.esClip) t.duracionMs else 0, clave = t.clave
             )
         )
-        val vale = Protocolo.leerRespuestaSinLanzar(canal)
+        val vale = respuesta()
         vale.error?.let { throw Protocolo.ErrorDelOtro(it) }
         // Lo que ya tenía de otro intento (solo con clave): lo demás.
         val desde = if (vale.desdeByte > 0 && t.clave.isNotEmpty()) vale.desdeByte.coerceIn(0, largo) else 0L
         val bien = Protocolo.salidaDeArchivo(fichero, desde).mandar(canal, avance)
-        val listo = Protocolo.leerRespuestaSinLanzar(canal)
+        val listo = respuesta()
         if (bien == null) throw Protocolo.ErrorDelOtro("El archivo cambió mientras se mandaba")
         listo.error?.let { throw Protocolo.ErrorDelOtro(it) }
         return listo.ms ?: t.ms
@@ -107,10 +130,9 @@ class ConexionDeCamara private constructor(
         val t0 = ahora()
         val pregunta = CamaraRemota.Pregunta(reloj = t0, suya = mia.copy(t = CamaraRemota.PETICION, reloj = t0))
         canal.enviar(Protocolo.JSON_, CamaraRemota.aTexto(pregunta).toByteArray())
-        val (tipo, datos) = canal.recibir()
+        val texto = recibir()
         val t2 = ahora()
-        if (tipo != Protocolo.JSON_) throw IOException("Se esperaba una respuesta")
-        val r = CamaraRemota.deTexto(datos.decodeToString())
+        val r = CamaraRemota.deTexto(texto)
         r.error?.let { throw Protocolo.ErrorDelOtro(it) }
         val adelanto = if (r.reloj > 0) -CamaraRemota.desfase(t0, r.reloj, t2) else 0L
         return Respuesta(r, adelanto, ((t2 - t0) / 2).coerceAtLeast(0))
@@ -122,11 +144,16 @@ class ConexionDeCamara private constructor(
         despedida = true
         runCatching {
             Protocolo.enviar(canal, Protocolo.Peticion("adios"))
-            Protocolo.leerRespuestaSinLanzar(canal)
+            respuesta()
         }
     }
 
     companion object {
+        /** Si [texto] es un «ocupado» y nada más (`{"error":"Está sincronizando…"}`). */
+        internal fun esElOcupadoSuelto(texto: String): Boolean = runCatching {
+            Protocolo.json.decodeFromString(Protocolo.Respuesta.serializer(), texto) == Protocolo.Respuesta(error = Protocolo.OCUPADO)
+        }.getOrDefault(false)
+
         /** La clave del grupo cuesta (PBKDF2): se calcula una vez por código. */
         private val claves = ConcurrentHashMap<String, ByteArray>()
 

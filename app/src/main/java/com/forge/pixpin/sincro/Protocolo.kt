@@ -86,6 +86,21 @@ object Protocolo {
     fun soltar(disco: Disco) {
         if (ocupados.remove(disco.filesDir.absolutePath)) VueltasEnMarcha.acabar()
     }
+
+    /**
+     * **Ocupado mientras este aparato graba** (28-oct-2026, §11.6 de `docs/movil-como-camara.md` del
+     * PC, que se da por ocupado igual con `protocolo::ocupar`): quien llame para sincronizar oye
+     * [OCUPADO] y vuelve luego, pero la cámara (`camara_remota`) y lo suelto (las capturas del PC para
+     * esta grabación) se atienden igual. Aparte de [ocupar] a propósito: no es una vuelta y el botón
+     * de sincronizar no tiene que girar toda la clase. Lo pone [GrabacionDelMovil].
+     */
+    private val grabandoEn: MutableSet<String> = java.util.concurrent.ConcurrentHashMap.newKeySet()
+
+    fun grabando(disco: Disco, si: Boolean) {
+        if (si) grabandoEn.add(disco.filesDir.absolutePath) else grabandoEn.remove(disco.filesDir.absolutePath)
+    }
+
+    fun grabando(disco: Disco): Boolean = disco.filesDir.absolutePath in grabandoEn
     /**
      * **Lo más grande que se acepta como `suelto`** (un archivo del PC a lo que esté abierto): 2 GB,
      * lo mismo que el PC, para que pasen vídeos. Va a disco trozo a trozo, no a memoria. Por
@@ -449,9 +464,10 @@ class Respondedor(
             Protocolo.enviar(canal, Protocolo.Respuesta(hola = Protocolo.Hola(actual.yo, juntos, ahora(), puerto = miPuerto, capacidades = capacidades)))
         }
         alSaludar(otro, hola.puerto)
-        if (!Protocolo.ocupar(disco)) {
-            Protocolo.enviar(canal, Protocolo.Respuesta(error = Protocolo.OCUPADO))
-            canal.vaciar()
+        // Grabando, ni se ocupa: la vuelta no empieza (§11.6). Si no, una sincronización a la vez.
+        val grabando = Protocolo.grabando(disco)
+        if (grabando || !Protocolo.ocupar(disco)) {
+            contestarOcupado(canal, otro, avisarYa = !grabando, conLaCamara = true, conSueltos = grabando)
             return
         }
         try {
@@ -470,6 +486,42 @@ class Respondedor(
     }
 
     private val compartidos by lazy { CompartidosEnDisco(disco.filesDir) }
+
+    /**
+     * **Ocupado, pero la cámara sigue** (28-oct-2026, `contestar_ocupado` del PC): a cada petición de
+     * sincronizar, [Protocolo.OCUPADO] (el mismo texto que el PC, y quien llama lo trata igual: «vuelve
+     * luego», ver [Reintentos]); con [conLaCamara], `camara_remota` y el `suelto` con `destino:
+     * "grabacion"` se atienden como siempre; con [conSueltos] (este aparato graba, no sincroniza),
+     * también el `suelto` a lo abierto, como el PC. `adios` se contesta y se acaba.
+     *
+     * Con [avisarYa] (ocupado **sincronizando**), un «ocupado» suelto justo tras el `hola`, como
+     * siempre aquí y como el PC. **Grabando, no**: el cliente de la cámara del PC
+     * (`al_lienzo::Conexion`, que manda las capturas a la grabación de este teléfono, §13) no lo
+     * espera y lo leería como la respuesta a su primera petición; quien sincroniza oye el «ocupado»
+     * igual, con su primera petición.
+     */
+    private fun contestarOcupado(canal: Canal, otro: Aparato, avisarYa: Boolean, conLaCamara: Boolean, conSueltos: Boolean) {
+        val ocupado = Protocolo.Respuesta(error = Protocolo.OCUPADO)
+        if (avisarYa) {
+            Protocolo.enviar(canal, ocupado)
+            canal.vaciar()
+        }
+        while (true) {
+            val (p, crudo) = runCatching { Protocolo.leerPeticionCruda(canal) }.getOrElse { return }
+            try {
+                when {
+                    p.t == "adios" -> { Protocolo.enviar(canal, Protocolo.Respuesta()); canal.vaciar(); return }
+                    conLaCamara && p.t == CamaraRemota.PETICION -> atenderCamara(canal, crudo, otro)
+                    conLaCamara && p.t == "suelto" && (conSueltos || p.destino == CamaraRemota.DESTINO) -> recibirSuelto(canal, p, otro)
+                    else -> Protocolo.enviar(canal, ocupado)
+                }
+            } catch (e: IOException) {
+                return
+            } catch (e: Exception) {
+                runCatching { Protocolo.enviar(canal, Protocolo.Respuesta(error = e.message ?: e.javaClass.simpleName)) }.onFailure { return }
+            }
+        }
+    }
 
     /**
      * **Antes de contestar nada** (27-oct-2026): fuera los restos de una vuelta que murió a medias
@@ -501,9 +553,9 @@ class Respondedor(
         val otro = Aparato(persona.id, persona.nombre)
         Protocolo.enviar(canal, Protocolo.Respuesta(hola = Protocolo.Hola(Aparato(yo.id, yo.nombre), reloj = ahora(), puerto = miPuerto, capacidades = capacidades)))
         alSaludar(otro, hola.puerto)
-        if (!Protocolo.ocupar(disco)) {
-            Protocolo.enviar(canal, Protocolo.Respuesta(error = Protocolo.OCUPADO))
-            canal.vaciar()
+        if (Protocolo.grabando(disco) || !Protocolo.ocupar(disco)) {
+            // A una persona, como el PC: «ocupado» a todo hasta que se despida.
+            contestarOcupado(canal, otro, avisarYa = !Protocolo.grabando(disco), conLaCamara = false, conSueltos = false)
             return
         }
         try {

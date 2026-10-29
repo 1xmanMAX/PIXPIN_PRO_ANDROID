@@ -34,6 +34,25 @@ object GrabacionDelMovil {
     @Volatile private var llevado: (() -> Pair<Long, Boolean>)? = null
     /** Lo que dice la baliza de la grabación en curso ([BalizaDelMovil]). */
     @Volatile private var baliza: GrabacionParaLaBaliza? = null
+
+    /**
+     * **Si este teléfono hace de cámara para los demás** (la bandera «cámara» de la baliza, como
+     * `c.encendida` del PC): graba, su cámara está encendida ([GrabacionesDelMovil.encendida]) y dice
+     * `camara1` ([Protocolo.CAPACIDADES]): el PC le puede mandar capturas, y otro teléfono, fotos.
+     */
+    val camaraEncendida: Boolean
+        get() = grabaciones?.let { it.enCurso != null && it.encendida } == true && CamaraRemota.CAPACIDAD in Protocolo.CAPACIDADES
+
+    /**
+     * **Apareció uno del grupo mientras se graba** (28-oct-2026, §11.5 punto 5; lo dice la baliza al
+     * oírlo nuevo en esta grabación o en otra dirección): se le manda el anuncio de la grabación
+     * (`camara_remota` con `suya`) ya, sin esperar a los [CADA_MS] del siguiente aviso.
+     */
+    fun aparecio(c: Context, aparato: String) {
+        if (!grabando) return
+        val app = c.applicationContext
+        Thread({ runCatching { anunciarA(app, setOf(aparato)) } }, "pixpin-grabacion-aparecio").apply { isDaemon = true; start() }
+    }
     private val despertar = LinkedBlockingQueue<Boolean>()
     @Volatile private var anunciador: Thread? = null
 
@@ -78,9 +97,11 @@ object GrabacionDelMovil {
         arrancarAnunciador(c.applicationContext)
         runCatching { Presencia.grabacion(true) }
         // La baliza UDP (28-oct-2026, §11): el PC sabe en un segundo que se graba, y cada segundo.
-        val paraLaBaliza = GrabacionParaLaBaliza.de(id) { runCatching { cronometro() }.getOrNull() }
+        val paraLaBaliza = GrabacionParaLaBaliza.de(id, aceptaFotos = { camaraEncendida }) { runCatching { cronometro() }.getOrNull() }
         baliza = paraLaBaliza
         BalizaDelMovil.empezo(paraLaBaliza)
+        // Y ocupado para sincronizar mientras dura (§11.6); la cámara y las capturas, igual.
+        Protocolo.grabando(Red.disco(c.applicationContext), true)
         return id
     }
 
@@ -104,6 +125,7 @@ object GrabacionDelMovil {
         despertar.offer(true)
         runCatching { Presencia.grabacion(false) }
         baliza?.let { BalizaDelMovil.acabo(it) }
+        Protocolo.grabando(Red.disco(c.applicationContext), false)
     }
 
     /**
@@ -127,6 +149,7 @@ object GrabacionDelMovil {
     fun tirar(c: Context) {
         llevado = null
         baliza?.let { BalizaDelMovil.acabo(it) }
+        Protocolo.grabando(Red.disco(c.applicationContext), false)
         con(c) { it.tirar() }
         abiertaATodos.value = false
         despertar.offer(true)
@@ -166,13 +189,16 @@ object GrabacionDelMovil {
     }
 
     /** **Dice a cada PC del grupo cómo va la grabación** y mide su reloj de paso. */
-    private fun anunciarATodos(app: Context) {
+    private fun anunciarATodos(app: Context) = anunciarA(app, null)
+
+    /** Lo mismo, solo a [soloA] (null: a todos). */
+    private fun anunciarA(app: Context, soloA: Set<String>?) {
         val disco = Red.disco(app)
         val id = disco.identidad.leer()
         if (!id.enGrupo) return
         val anuncio = con(app) { it.anuncio(System.currentTimeMillis()) } ?: return
         val dirs = disco.direcciones()
-        for (m in id.miembros.filter { it.id.isNotBlank() && it.id != id.yo.id && dirs[it.id] != null }.distinctBy { it.id }) {
+        for (m in id.miembros.filter { it.id.isNotBlank() && it.id != id.yo.id && dirs[it.id] != null && (soloA == null || it.id in soloA) }.distinctBy { it.id }) {
             val (host, puerto) = dirs.getValue(m.id)
             runCatching {
                 Socket().apply { connect(InetSocketAddress(host, puerto), 2_000); soTimeout = 10_000; tcpNoDelay = true }.use { s ->

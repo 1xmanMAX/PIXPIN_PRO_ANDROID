@@ -61,6 +61,8 @@ object BalizaDelMovil {
     /** Acabó la grabación: el motivo [GRABANDO] se suelta tras mandar la última («ya no grabo»). */
     private val soltarGrabando = AtomicBoolean(false)
     private val oidos = ConcurrentHashMap<String, Oido>()
+    /** Quién ya tiene el anuncio de la grabación de aquí, y en qué dirección (§11.5 punto 5). */
+    private val avisados = ConcurrentHashMap<String, String>()
     private val aContestar = LinkedBlockingQueue<Long>()
     private val despertar = Semaphore(0)
     @Volatile private var mandador: Thread? = null
@@ -368,6 +370,16 @@ object BalizaDelMovil {
         if (b.graba && b.camara) {
             CamaraDelPc.alOirBaliza(b.id, nombre, b.grabacion, b.enPausa, b.msActual)
             ConexionCaliente.alOirBaliza()
+        }
+        // 5. **Este teléfono graba**: quien aparece (o cambia de sitio) recibe el anuncio de la
+        // grabación al momento (`camara_remota` con `suya`), sin esperar al siguiente aviso.
+        if (grabandoAqui()) {
+            if (avisados[b.id] != ip) {
+                avisados[b.id] = ip
+                GrabacionDelMovil.aparecio(c, b.id)
+            }
+        } else {
+            avisados.clear()
         }
         // Acabó de grabar: lo aplazado sale ya, y la conexión caliente se despide.
         if (antes?.baliza?.graba == true && !b.graba) {

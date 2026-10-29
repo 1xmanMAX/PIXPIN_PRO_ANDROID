@@ -17,13 +17,14 @@ interface GrabacionParaLaBaliza {
     val enPausa: Boolean
     /** En qué milisegundo de la grabación va. */
     fun msActual(): Long
-    /** Si acepta fotos y clips de otros aparatos (`camara1`): de momento, no. */
+    /** Si acepta fotos y clips de otros aparatos (`camara1` y su cámara encendida). */
     val camara: Boolean get() = false
 
     companion object {
         /** La de [GrabacionDelMovil]: [llevado] dice por dónde va y si está en pausa (null si ya no). */
-        fun de(idDeLaGrabacion: String, llevado: () -> Pair<Long, Boolean>?): GrabacionParaLaBaliza = object : GrabacionParaLaBaliza {
+        fun de(idDeLaGrabacion: String, aceptaFotos: () -> Boolean = { false }, llevado: () -> Pair<Long, Boolean>?): GrabacionParaLaBaliza = object : GrabacionParaLaBaliza {
             override val id: String = idDeLaGrabacion
+            override val camara: Boolean get() = aceptaFotos()
             override val enPausa: Boolean get() = llevado()?.second == true
             override fun msActual(): Long = llevado()?.first ?: 0L
         }
