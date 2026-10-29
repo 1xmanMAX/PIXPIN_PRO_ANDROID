@@ -192,6 +192,10 @@ import java.io.File
  *   letra» (lo que se oye alineado con la letra pegada, [AlinearLetra], con la propuesta para aceptar o
  *   seguir editando) y copiarla en LRC. Lo que no va con una canción se esconde solo: la tira de
  *   capturas y los clips (no los tiene), el marcador, el lápiz de anotar y compartir la clase.
+ * - **Una canción es el karaoke** (29-oct-2026, como el PC de 058ae2b7): **sin la tira de arriba** ni el
+ *   cartel; la portada con el título y el artista de sus etiquetas (nunca el nombre del fichero), A−, A+,
+ *   el reloj, «Sincronizar sola» ([SincronizarSola]), el lápiz, ⋮ y una ✕; la letra entera, que se
+ *   mueve y sigue a la canción ([LetraQueSigue], [SeguirLaLetra]). Ver `KaraokeDeLaCancion.kt`.
  * - **Cada línea con su minuto se toca para ir ahí** y sonar. Mientras se pasa a texto se dice por dónde
  *   va (o si espera al modelo de voz, y cómo bajarlo): ver [ColaDeTexto].
  *
@@ -358,6 +362,9 @@ class EstudiarClaseActivity : ComponentActivity() {
         var poniendoTiempos by remember { mutableStateOf<Float?>(null) }
         var propuesta by remember { mutableStateOf<String?>(null) }
         var textoParaEditar by remember { mutableStateOf<String?>(null) }
+        // «Sincronizar sola» (29-oct-2026): la de esta canción, si está en marcha. Ver [SincronizarSola].
+        val solaAhora by SincronizarSola.enMarcha.collectAsState()
+        val sola = solaAhora?.takeIf { it.id == id }
         val esta = m?.ruta != null && estado.ruta == m.ruta
         val posMs = if (esta) estado.posicionMs.toLong() else 0L
         val durMs = (if (esta && estado.duracionMs > 0) estado.duracionMs else m?.duracionMs ?: 0).toLong()
@@ -546,7 +553,8 @@ class EstudiarClaseActivity : ComponentActivity() {
         @Composable
         fun MandosEnFila() {
             Row(Modifier.fillMaxWidth().height(44.dp).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Seguir(false)
+                // Una canción sigue sola a lo que suena ([LetraQueSigue]): sin «Seguir».
+                if (!esCancion) Seguir(false)
                 IconButton(onClick = { irA(EstudiarClase.saltar(posMs, -10_000, durMs)) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.Replay10, null) }
                 IconButton(onClick = { m?.ruta?.let { Reproductor.alternar(it, titulo) } }, modifier = Modifier.size(44.dp)) {
                     Icon(if (sonando) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, modifier = Modifier.size(32.dp))
@@ -563,7 +571,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                 }
                 if (pantallaEntera) IconButton(onClick = { pantallaEntera = false }, modifier = Modifier.size(40.dp)) {
                     Icon(Icons.Filled.FullscreenExit, "Salir de la pantalla entera")
-                } else BotonDelTexto(textoEnVertical) { textoEnVertical = !textoEnVertical }
+                } else if (!esCancion) BotonDelTexto(textoEnVertical) { textoEnVertical = !textoEnVertical }
             }
         }
 
@@ -586,7 +594,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                     Modifier.fillMaxHeight().width(48.dp),
                     verticalArrangement = Arrangement.SpaceEvenly, horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Seguir(true)
+                    if (!esCancion) Seguir(true)
                     IconButton(onClick = { irA(EstudiarClase.saltar(posMs, -10_000, durMs)) }, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.Replay10, null) }
                     IconButton(onClick = { m?.ruta?.let { Reproductor.alternar(it, titulo) } }, modifier = Modifier.size(44.dp)) {
                         Icon(if (sonando) Icons.Filled.Pause else Icons.Filled.PlayArrow, null, modifier = Modifier.size(32.dp))
@@ -600,7 +608,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                     if (!esCancion) IconButton(enabled = m != null, onClick = { poniendo = posMs }, modifier = Modifier.size(40.dp)) {
                         Icon(Icons.Filled.BookmarkAdd, getString(R.string.estudiar_marcador))
                     }
-                    BotonDelTexto(textoEnApaisada) { textoEnApaisada = !textoEnApaisada }
+                    if (!esCancion) BotonDelTexto(textoEnApaisada) { textoEnApaisada = !textoEnApaisada }
                 }
             }
         }
@@ -999,6 +1007,94 @@ class EstudiarClaseActivity : ComponentActivity() {
             }
         }
 
+        /**
+         * **El karaoke de una canción** (29-oct-2026, como el PC de 058ae2b7): **sin la tira de arriba**
+         * ni el cartel; arriba la portada con el título y el artista de sus etiquetas y sus botones
+         * ([CabeceraDelKaraoke]), la pastilla de lo que se esté haciendo («Sincronizando la letra…
+         * 40 %»), la letra entera que sigue a la canción ([LetraQueSigue]) y abajo la barra y los mandos
+         * (tumbado, en columna al lado). Sincronizando a toques, la lista para marcar y su panel.
+         */
+        @Composable
+        fun Karaoke(apaisada: Boolean) {
+            val conAudio = m?.ruta?.let { File(it).exists() } == true
+            @Composable
+            fun Cabecera() {
+                CabeceraDelKaraoke(
+                    portada = datosDeCancion?.portada,
+                    titulo = datosDeCancion?.titulo,
+                    debajo = listOfNotNull(datosDeCancion?.artista, datosDeCancion?.album).joinToString(" · ").ifEmpty { null },
+                    conAudio = conAudio,
+                    sincronizandoSola = sola != null,
+                    sincronizandoAToques = sincronizando != null,
+                    alMenos = { if (tamano > 12) tamano -= 2 },
+                    alMas = { if (tamano < 44) tamano += 2 },
+                    alReloj = { if (sincronizando == null) empezarASincronizar() },
+                    alSola = {
+                        m?.let { n -> Toast.makeText(this@EstudiarClaseActivity, SincronizarSola.alternar(this@EstudiarClaseActivity, n), Toast.LENGTH_LONG).show() }
+                    },
+                    alLapiz = { editandoLetra = true },
+                    alVolver = { finish() },
+                    menu = {
+                        MenuDelKaraoke(
+                            conAudio = conAudio, poniendoTiempos = poniendoTiempos != null, conTiempos = letra?.conTiempos == true, oscuro = oscuroAhora,
+                            alPonerTiempos = { ponerTiempos() },
+                            alCopiarLrc = {
+                                letra?.let { l -> copiarComoLrc(this@EstudiarClaseActivity, LetraDeCancion.aLrc(l, datosDeCancion?.titulo ?: titulo, datosDeCancion?.artista)) }
+                            },
+                            alCambiarTema = { alCambiarTema(!oscuroAhora) }
+                        )
+                    },
+                    modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                )
+                // Lo que se está haciendo: sincronizar sola, o oír la canción para la propuesta o la cola.
+                val avanceSola = sola?.avance?.collectAsState()?.value
+                val bajando = sola?.bajando?.collectAsState()?.value == true
+                val oyendo = poniendoTiempos ?: avanceDelTexto
+                if (sola != null && avanceSola != null) PastillaDelKaraoke(
+                    getString(if (bajando) R.string.letra_sola_bajando else R.string.letra_sola_avance, (avanceSola * 100).toInt()), avanceSola
+                ) else if (oyendo != null && lineas.isNotEmpty()) PastillaDelKaraoke(getString(R.string.letra_poniendo_tiempos, (oyendo * 100).toInt()), oyendo)
+            }
+            @Composable
+            fun Letra(modifier: Modifier) {
+                Box(modifier) {
+                    val sinc = sincronizando
+                    if (sinc != null) ListaParaSincronizar(sinc, toques, tamano)
+                    else if (lineas.isEmpty()) SinLetraEnElKaraoke(
+                        avance = avanceDelTexto ?: poniendoTiempos, conAudio = conAudio,
+                        alEscribir = { editandoLetra = true }, alPonerTiempos = { ponerTiempos() },
+                        modifier = Modifier.align(Alignment.Center)
+                    )
+                    else LetraQueSigue(lineas, lineaActual, sonando, tamano, alTocar = irYSonar, modifier = Modifier.fillMaxSize())
+                }
+                sincronizando?.let { sinc ->
+                    PanelDeSincronizar(
+                        sinc, toques,
+                        alMarcar = { sinc.marcar(Reproductor.posicionAhora()); toques++ },
+                        alDeshacer = { sinc.deshacer()?.let { Reproductor.irAMs(it) }; toques++ },
+                        alGuardar = {
+                            guardarLaLetra(id, LetraDeCancion.aGuardar(sinc.letra()))
+                            sincronizando = null
+                            Toast.makeText(this@EstudiarClaseActivity, R.string.letra_sincronizada, Toast.LENGTH_SHORT).show()
+                        },
+                        alCancelar = { sincronizando = null }
+                    )
+                }
+            }
+            if (apaisada) Row(Modifier.fillMaxSize()) {
+                Column(Modifier.weight(1f).fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Start))) {
+                    Cabecera()
+                    Letra(Modifier.weight(1f).fillMaxWidth())
+                }
+                Row(Modifier.fillMaxHeight().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Bottom + WindowInsetsSides.End))) {
+                    MandosEnColumna()
+                }
+            } else Column(Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom + WindowInsetsSides.Horizontal))) {
+                Cabecera()
+                Letra(Modifier.weight(1f).fillMaxWidth())
+                BarraConHoras()
+                MandosEnFila()
+            }
+        }
 
         val fondo = MaterialTheme.colorScheme.background
         Surface(Modifier.fillMaxSize(), color = fondo) {
@@ -1046,7 +1142,9 @@ class EstudiarClaseActivity : ComponentActivity() {
                         }
                     }
                 }
-                when (r.forma) {
+                // Una canción: el karaoke, sin la tira de arriba ni el cartel (29-oct-2026).
+                if (esCancion) Karaoke(apaisada = maxWidth > maxHeight)
+                else when (r.forma) {
                     EstudiarClase.Forma.ENTERA -> Imagen(Modifier.fillMaxSize())
                     // De pie: la imagen arriba; debajo, apretados, la barra, la tira y los mandos; el texto abajo.
                     EstudiarClase.Forma.VERTICAL -> Column(
@@ -1092,7 +1190,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                         Row(Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.End) {
                             TextButton(onClick = { editandoLetra = false; textoParaEditar = null }) { Text(getString(R.string.cancel)) }
                             androidx.compose.material3.Button(onClick = {
-                                guardarLaLetra(id, LetraDeCancion.aGuardar(LetraDeCancion.leer(escrito)))
+                                // Una letra pegada sin tiempos se sincroniza sola (29-oct-2026, [SincronizarSola.trasPegar]).
+                                guardarLaLetra(id, LetraDeCancion.aGuardar(LetraDeCancion.leer(escrito)), sincronizarSola = m)
                                 editandoLetra = false
                                 textoParaEditar = null
                             }) { Text(getString(R.string.estudiar_guardar)) }
@@ -1137,10 +1236,23 @@ class EstudiarClaseActivity : ComponentActivity() {
     }
 
     /** **La letra a la canción** (escrita, sincronizada o con los tiempos puestos): sigue siendo letra, como la lee el PC. */
-    private fun guardarLaLetra(id: String, texto: String) {
+    private fun guardarLaLetra(id: String, texto: String, sincronizarSola: Mensaje? = null) {
         Thread {
             MensajesStore(this).actualizar(id) { it.copy(transcripcion = texto.ifBlank { null }, estadoDelTexto = TEXTO_LETRA) }
+            // Ya guardada: si no trae tiempos, a sincronizarla sola (si el reconocedor está bajado).
+            if (sincronizarSola != null) runOnUiThread {
+                SincronizarSola.trasPegar(this, sincronizarSola.copy(estadoDelTexto = TEXTO_LETRA), texto)?.let {
+                    Toast.makeText(this, it, Toast.LENGTH_LONG).show()
+                }
+            }
         }.start()
+    }
+
+    /** **Cerrar la pantalla para «Sincronizar sola»** de esta canción (girar el teléfono, no). */
+    override fun onDestroy() {
+        super.onDestroy()
+        val id = intent.getStringExtra(LA_NOTA).orEmpty()
+        if (!isChangingConfigurations && SincronizarSola.enMarcha.value?.id == id) SincronizarSola.parar()
     }
 
     /** Un botón redondo en el cristal de los visores, para lo que va encima de la imagen. */

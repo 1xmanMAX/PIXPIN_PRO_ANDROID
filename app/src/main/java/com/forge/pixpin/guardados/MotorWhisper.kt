@@ -169,11 +169,17 @@ object MotorWhisper {
      * Sin segundo idioma, todo con el primero. Cambiar de idioma es cambiar la
      * configuración del mismo reconocedor, no cargar otro modelo.
      */
-    fun reconocer(context: Context, pcm: File, idioma: String, segundo: String = "", todoEnUno: Boolean = false, avance: (Float) -> Unit = {}): List<Transcriptor.Segmento>? {
+    fun reconocer(
+        context: Context, pcm: File, idioma: String, segundo: String = "", todoEnUno: Boolean = false, avance: (Float) -> Unit = {},
+        cancion: Boolean = false, cancelado: java.util.concurrent.atomic.AtomicBoolean? = null
+    ): List<Transcriptor.Segmento>? {
         val modelo = modelo(context)
         asegurarModelo(context, modelo) ?: return null
         val rec = reconocedorPara(context, modelo)
-        val tandas = Transcriptor.tandasDeLineas(pcm)
+        // **Una canción, en tandas más cortas** (29-oct-2026, `oir_cancion_pcm` del PC): frases de
+        // hasta [Transcriptor.TANDA_CANCION_SEGUNDOS], para que el tiempo repartido de cada palabra
+        // caiga cerca de cuando se canta. Ver [OirCancion].
+        val tandas = if (cancion) Transcriptor.tandasDeCancion(pcm) else Transcriptor.tandasDeLineas(pcm)
         if (tandas.isEmpty()) return emptyList()
         val principal = idiomaDe(idioma)
         val otro = segundo.takeIf { it.isNotBlank() }?.let { idiomaDe(it) }?.takeIf { it != principal }
@@ -190,6 +196,8 @@ object MotorWhisper {
             rec.setConfig(if (adivinar) sinIdioma else conElPrincipal)
             RandomAccessFile(pcm, "r").use { raf ->
                 for ((i, tanda) in tandas.withIndex()) {
+                    // «Sincronizar sola» parada (su botón otra vez, o se cerró la pantalla).
+                    if (cancelado?.get() == true) throw java.util.concurrent.CancellationException("canción parada")
                     val desde = tanda.first().first
                     val hasta = tanda.last().last
                     val muestras = muestras(raf, desde, hasta)
@@ -224,6 +232,11 @@ object MotorWhisper {
                         texto = decodificar(rec, muestras).text
                     }
                     texto = texto.trim()
+                    // **Sin anotaciones en una canción** (29-oct-2026, 147492df del PC): con música
+                    // debajo, Whisper escribe «[Música]» o «♪» en vez de la letra. El PC le prohíbe
+                    // esos tokens al decodificar; sherpa-onnx no deja, así que aquí se quitan del
+                    // texto ([OirCancion.sinAnotaciones]) y una tanda que solo era eso no cuenta.
+                    if (cancion) texto = OirCancion.sinAnotaciones(texto)
                     // **Y si aun así no se sostiene, se intenta una vez más con el primero antes
                     // de tirarlo**: perder un trozo de la grabación se ve como «no transcribe
                     // bien», que es peor que una frase regular.
