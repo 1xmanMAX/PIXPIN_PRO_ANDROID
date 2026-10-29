@@ -10,6 +10,8 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 - [x] v0.144.0 — OCR con Indra en el teléfono; Whisper como motor de voz por defecto.
 - [x] v0.145.0 — Fuera la pantalla de Proyectos; atrás: visor → chat → lista → salir.
 - [x] v0.147.0 — Markdown y formatos de texto; Lectura Veloz 0.3.1 abre los archivos (puntos 37–39).
+- [x] v0.150.0 — Lo nuevo del PC del 28-oct: grabar sin perder nada, baliza, fotos por su hora,
+      de la PC al móvil y colaboradores, Jev y la web del asistente (puntos 53–58).
 - [x] v0.149.0 — Sin ⚙ en los visores, menú por tipo, una pantalla por clase, transcripción
       siempre, letra con tiempos, cuadernos con todos los formatos (puntos 44–52).
 - [x] v0.148.0 — Tinta del plano, reunión presencial y el móvil como cámara del PC (puntos 40–43).
@@ -170,17 +172,17 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
 
 ## Tanda del 28-oct (3): lo nuevo del PC (origin/main 995fd94b, 49 commits)
 
-- [ ] 53. Grabar sin perder nada (`docs/grabar-sin-perder-nada.md` del PC, §Android): respaldo WAV de
+- [x] 53. Grabar sin perder nada (`docs/grabar-sin-perder-nada.md` del PC, §Android): respaldo WAV de
       la nota, vídeo en trozos, diario de la grabación en disco, «Se cortó una grabación —
       Recuperar / Descartar», guarda de espacio, huecos al suspender, auriculares que se van.
-- [ ] 54. Descubrir rápido y prioridad al grabar (`movil-como-camara.md` §11): baliza UDP firmada,
+- [x] 54. Descubrir rápido y prioridad al grabar (`movil-como-camara.md` §11): baliza UDP firmada,
       multidifusión, barrido, conexión caliente para las fotos, no sincronizar mientras alguien graba.
-- [ ] 55. Fotos por su hora (§12): `resto.reloj` en la nota, `tomadaEn`/EXIF en cada foto, la regla de
+- [x] 55. Fotos por su hora (§12): `resto.reloj` en la nota, `tomadaEn`/EXIF en cada foto, la regla de
       dónde va cada foto, `desfases.json`, la cámara en directo sin saber la grabación.
-- [ ] 56. De la PC a la grabación del móvil (§13: `camara_remota` con `suya`) y colaboradores (§14).
-- [ ] 57. Jev (`docs/jev.md`): lo importante de una clase (puntos de color, filtro, «+N tareas») en
+- [x] 56. De la PC a la grabación del móvil (§13: `camara_remota` con `suya`) y colaboradores (§14).
+- [x] 57. Jev (`docs/jev.md`): lo importante de una clase (puntos de color, filtro, «+N tareas») en
       Estudiar la clase, la letra y la página compartida; con clave propia, preguntar a Jev igual que el PC
       (importantes, tarjetas de Anki que valen la pena, urgencia de las tareas, elegir el modelo);
       interruptores en Ajustes › Asistente.
-- [ ] 58. El asistente en la web (`manual-asistente-android.md` §2.6): buscar y leer páginas, con las
+- [x] 58. El asistente en la web (`manual-asistente-android.md` §2.6): buscar y leer páginas, con las
       mismas reglas de seguridad que el PC.

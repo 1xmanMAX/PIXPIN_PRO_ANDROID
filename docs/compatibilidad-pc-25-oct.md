@@ -262,3 +262,22 @@ sincronización y las 2 de la cámara del PC pasan con el PC simulado de esa ver
 - Lo demás es solo del teléfono: el menú del mensaje por tipo, los visores sin ⚙, «Estudiar la
   clase» como única pantalla de una grabación (y de las canciones), la cola de transcripción y la
   reunión presencial con aviso, vista previa y «Terminar» siempre a la vista.
+
+## v0.150.0: lo nuevo del PC del 28-oct (29-oct)
+
+Probado contra el PC de `origin/main` 995fd94b con el PC simulado de esa versión: sincronización
+(12), cámara del PC (2), baliza (6), fotos por su hora (4) y «ocupado al grabar» (3).
+
+- **Grabar sin perder nada**: el diario `estado.json` con los mismos campos que el PC (más `trozos`
+  y `capturas_del_video`, que no salen del teléfono); `resto.reloj` con `huecos`, claves en orden
+  alfabético como el PC. Ver `docs/grabar-sin-perder-nada-android.md`.
+- **Baliza UDP** idéntica byte a byte (47475, 239.255.74.74, firmada con el grupo); sin vueltas de
+  sincronización mientras alguien graba; «ocupado» al que llama a sincronizar mientras el teléfono
+  graba, sin cortar la cámara. Ver `docs/descubrir-rapido-android.md`.
+- **Fotos por su hora, de la PC a la grabación del móvil y colaboradores**: `reloj`,
+  `colaboradores`, `tomadaEn`/`tomadaEnExif`/`desfaseExif`, `paraGrabacion`, `fotoUid`, y
+  `capturas[].aparato|uid|horaSinComprobar`; `desfases.json` no viaja. Ver
+  `docs/fotos-por-su-hora-android.md`.
+- **Jev**: `importantes` + `importantesDe` en la nota (claves en orden alfabético); la clave y las
+  prioridades no viajan. Ver `docs/jev-android.md`.
+- **La web del asistente**: solo del teléfono. Ver `docs/manual-asistente-android.md`.
