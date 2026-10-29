@@ -20,6 +20,10 @@ import javax.crypto.spec.GCMParameterSpec
  * - [Funcion.ANKI]: solo las tarjetas de una clase que valen la pena ([AnkiEnLaApp]).
  * - [Funcion.URGENCIA]: la prioridad de cada tarea pendiente, en Tareas ([UrgenciaEnLaApp]).
  * - [Funcion.MODELO]: el modelo del asistente según lo difícil del pedido ([ModeloEnLaApp]).
+ * - [Funcion.DICTADO]: **dictar al chat** (29-oct-2026, `ventana_chat/dictado_a_chat.rs` del PC): «anota en el
+ *   chat de la obra que…» al dictar en la caja propone anotarlo en ese chat ([DictadoAlChat], [com.forge.pixpin.guardados.DictarAlChat]).
+ * - [Funcion.REPASO]: **repasar en voz alta** (29-oct-2026, `ventana_chat/repaso_oral.rs` del PC): desde
+ *   «Estudiar la clase», qué puntos clave cubre lo que explica el alumno ([RepasoOral], [com.forge.pixpin.guardados.RepasarActivity]).
  *
  * **Sin clave (o con la función apagada) [para] da null y cada función hace lo de siempre.** La clave
  * es de este teléfono: cifrada con una llave AES-GCM del **Android Keystore** (no exportable) en
@@ -31,7 +35,13 @@ import javax.crypto.spec.GCMParameterSpec
 object Jev {
 
     /** Una función que usa Jev, con su interruptor (encendida de fábrica; sin clave no hace nada). */
-    enum class Funcion(val id: String) { REUNION("reunion"), ANKI("anki"), URGENCIA("urgencia"), MODELO("modelo") }
+    enum class Funcion(val id: String) {
+        REUNION("reunion"), ANKI("anki"), URGENCIA("urgencia"), MODELO("modelo"),
+        /** Dictar al chat (29-oct-2026, `[jev] dictado` del PC). */
+        DICTADO("dictado"),
+        /** Repasar una clase en voz alta (29-oct-2026, `[jev] repaso` del PC). */
+        REPASO("repaso")
+    }
 
     /** La página donde se saca la clave. */
     const val PAGINA_DE_CLAVES = "https://console.typesafe.ai"
