@@ -38,6 +38,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.RecordVoiceOver
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Groups
@@ -616,6 +617,42 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
         var escrito by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf("") }
         var grabando by remember { mutableStateOf(false) }
+        // **Dictar al chat** (29-oct-2026, Jev): el botón 🗣 de la caja dicta frase a frase y, con la clave y su
+        // interruptor, propone anotar en otro chat lo que se pida («anota en el chat de la obra que…»). Sin
+        // clave no sale el botón. Ver [DictarAlChat].
+        val versionDeJev by com.forge.pixpin.jev.Jev.version.collectAsState()
+        val puedeDictar by androidx.compose.runtime.produceState(false, versionDeJev) {
+            value = withContext(Dispatchers.IO) { runCatching { DictarAlChat.disponible(this@MensajesActivity) }.getOrDefault(false) }
+        }
+        val anotarDictado = remember { DictarAlChat.Anotar(applicationContext, lifecycleScope) }
+        var dictando by remember { mutableStateOf(false) }
+        var dictadoParcial by remember { mutableStateOf("") }
+        var eligiendoChatParaAnotar by remember { mutableStateOf<DictarAlChat.Propuesta?>(null) }
+        val chatsParaAnotar = remember(proyectos, mensajes, chatDe, chatDelAsistente) {
+            val ultimo = HashMap<String, Long>()
+            for (x in mensajes) x.proyecto?.let { p -> if (x.cuando > (ultimo[p] ?: 0L)) ultimo[p] = x.cuando }
+            DictarAlChat.chatsPara(proyectos, chatDe, chatDelAsistente, ultimo)
+        }
+        val chatsAlDictar by androidx.compose.runtime.rememberUpdatedState(chatsParaAnotar)
+        val escuchaDelDictado = remember {
+            EscuchaFraseAFrase(
+                this@MensajesActivity,
+                alFrase = { t ->
+                    val antes = escrito
+                    escrito = DictarAlChat.juntar(escrito, t)
+                    anotarDictado.oir(t, antes, chatsAlDictar)
+                },
+                alParcial = { dictadoParcial = it },
+                alFallo = { razon ->
+                    dictando = false
+                    android.widget.Toast.makeText(this@MensajesActivity, "No se pudo dictar: $razon", android.widget.Toast.LENGTH_LONG).show()
+                },
+                alOir = { si -> if (!si) { dictando = false; dictadoParcial = "" } }
+            )
+        }
+        androidx.compose.runtime.DisposableEffect(Unit) { onDispose { escuchaDelDictado.parar() } }
+        // Apagado en Ajustes (o la clave borrada) con el micrófono abierto: se para.
+        LaunchedEffect(puedeDictar) { if (!puedeDictar && dictando) escuchaDelDictado.parar() }
         // **Modo selección.** Guarda identificadores y no mensajes: la lista se recarga
         // entera al escribir o borrar, y con copias guardadas se quedarían marcadas
         // versiones viejas de cosas que ya han cambiado.
@@ -1192,9 +1229,65 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             }
                         }
                     }
+                    // Dictar al chat: lo que se va oyendo, la chapa «Anotar en «…»» y el aviso de un fallo de Jev.
+                    if (dictando || anotarDictado.propuesta != null || anotarDictado.aviso != null) EncimaDeLaCaja(
+                        anotarDictado, dictadoParcial,
+                        alAnotar = { prop ->
+                            val chat = prop.chat
+                            if (chat == null) eligiendoChatParaAnotar = prop
+                            else {
+                                anotarDictado.propuesta = null
+                                var queda = escrito
+                                for (t in prop.quitar) queda = DictarAlChat.quitarDicho(queda, t)
+                                escrito = queda
+                                lifecycleScope.launch {
+                                    withContext(Dispatchers.IO) { DictarAlChat.anotar(this@MensajesActivity, chat.first, prop.texto) }
+                                    android.widget.Toast.makeText(this@MensajesActivity, "Anotado en «${chat.second}»", android.widget.Toast.LENGTH_SHORT).show()
+                                    refrescar()
+                                }
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = MARGEN_DE_LA_ISLA).padding(top = 4.dp)
+                    )
+                    eligiendoChatParaAnotar?.let { prop ->
+                        ElegirChatParaAnotar(
+                            chatsParaAnotar, prop.texto,
+                            alElegir = { c ->
+                                eligiendoChatParaAnotar = null
+                                anotarDictado.propuesta = null
+                                var queda = escrito
+                                for (t in prop.quitar) queda = DictarAlChat.quitarDicho(queda, t)
+                                escrito = queda
+                                lifecycleScope.launch {
+                                    withContext(Dispatchers.IO) { DictarAlChat.anotar(this@MensajesActivity, c.first, prop.texto) }
+                                    android.widget.Toast.makeText(this@MensajesActivity, "Anotado en «${c.second}»", android.widget.Toast.LENGTH_SHORT).show()
+                                    refrescar()
+                                }
+                            },
+                            alCerrar = { eligiendoChatParaAnotar = null }
+                        )
+                    }
                     BarraDeEscribir(
                     escrito = escrito,
                     grabando = grabando,
+                    dictando = dictando,
+                    onDictar = if (puedeDictar) {
+                        {
+                            if (dictando) escuchaDelDictado.parar()
+                            else {
+                                val tiene = androidx.core.content.ContextCompat.checkSelfPermission(
+                                    this@MensajesActivity, android.Manifest.permission.RECORD_AUDIO
+                                ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                                if (!tiene) androidx.core.app.ActivityCompat.requestPermissions(
+                                    this@MensajesActivity, arrayOf(android.Manifest.permission.RECORD_AUDIO), 1
+                                ) else {
+                                    com.forge.pixpin.asistente.VozDelAsistente.callar(this@MensajesActivity)
+                                    anotarDictado.empezar()
+                                    dictando = escuchaDelDictado.empezar()
+                                }
+                            }
+                        }
+                    } else null,
                     onEscrito = { escrito = it },
                     onAdjuntar = { eligiendoQue = true },
                     onEmpezarVoz = {
@@ -5754,7 +5847,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         onSoltarVoz: (guardar: Boolean) -> Unit,
         onMandar: () -> Unit,
         /** Con el asistente contestando en este chat: el botón de mandar lo para. */
-        parar: (() -> Unit)? = null
+        parar: (() -> Unit)? = null,
+        /** Dictando en la caja (dictar al chat, 29-oct-2026): el botón 🗣 en color. */
+        dictando: Boolean = false,
+        /** Dictar en la caja; null (sin clave de Jev o apagado): no sale el botón. Ver [DictarAlChat]. */
+        onDictar: (() -> Unit)? = null
     ) {
         val hayTexto = escrito.isNotBlank()
         // **Grabar es mantener pulsado, no dos toques.**
@@ -5929,6 +6026,17 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 campo()
                             }
                         )
+                        // **Dictar al chat** (29-oct-2026): 🗣 dicta frase a frase en la caja; solo con Jev.
+                        if (onDictar != null) IconButton(
+                            onClick = onDictar,
+                            modifier = Modifier.size(FILA_DE_LA_BARRA)
+                        ) {
+                            Icon(
+                                Icons.Filled.RecordVoiceOver,
+                                contentDescription = if (dictando) "Parar de dictar" else "Dictar en la caja",
+                                tint = if (dictando) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         // **El clip va dentro del campo y a la derecha** (`:2794`), y se
                         // retira al escribir para dejarle el sitio al texto. Es lo que
                         // hace que la barra parezca responder a lo que uno hace, en vez

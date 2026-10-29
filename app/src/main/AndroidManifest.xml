@@ -67,6 +67,11 @@
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
+        <!-- Dictar al chat y repasar en voz alta (29-oct-2026): el reconocedor de voz del sistema solo se ve
+             desde Android 11 si se declara que se busca. Ver guardados/EscuchaFraseAFrase.kt. -->
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
         <!-- «Escanear» en el clip del chat: el escáner del usuario, «Escáner Pro Max». Sin esto,
              en Android 11+ no se ve y el botón diría siempre que falta. Ver guardados/EscanerProMax.kt. -->
         <package android:name="com.scannerpromax" />
@@ -780,6 +785,11 @@
             android:theme="@style/Theme.PixPin" />
         <activity
             android:name=".guardados.EstudiarClaseActivity"
+            android:exported="false"
+            android:theme="@style/Theme.PixPin" />
+        <!-- «Repasar en voz alta» desde «Estudiar la clase» (29-oct-2026, Jev). Ver guardados/RepasarActivity. -->
+        <activity
+            android:name=".guardados.RepasarActivity"
             android:exported="false"
             android:theme="@style/Theme.PixPin" />
         <!-- La reunión presencial en marcha, con su mirilla (28-oct-2026). Ver guardados/ReunionEnCursoActivity. -->
