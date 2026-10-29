@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Close
@@ -187,8 +188,6 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                     IconoDeSincronizar(Cristal.tinta, MaterialTheme.colorScheme.background)
                 }
             }
-            // La cámara para la reunión que graba el PC (28-oct-2026): solo con un PC grabando.
-            com.forge.pixpin.sincro.AvisoDeCamaraDelPc()
             if (consulta != null && !enFunciones) {
                 val foco = remember { androidx.compose.ui.focus.FocusRequester() }
                 androidx.compose.material3.OutlinedTextField(
@@ -303,10 +302,29 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
         // como se crea un proyecto desde que no hay pantalla de Proyectos: un proyecto es un chat.
         // El compartido nace ya en `compartidos.json` conmigo dentro y se abren sus personas para
         // invitar (Añadir, el código y el QR), como «Compartir» de siempre.
+        //
+        // **La cámara para la reunión del PC, junto al «+»** (29-oct-2026, pedido del usuario): antes
+        // era una tira arriba de la lista y una opción del clip, demasiado escondida. Mientras un PC
+        // del grupo graba (lo que sabe la sincronización, [com.forge.pixpin.sincro.CamaraDelPc]) sale
+        // el botón de la foto a la izquierda del «+», del mismo tamaño, y los dos quedan centrados
+        // donde estaba el «+» solo: es algo de un rato. Al acabar la grabación se va y el «+» vuelve
+        // a su sitio.
+        val vistoDelPc by com.forge.pixpin.sincro.CamaraDelPc.visto.collectAsState()
         Row(
             Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
+            androidx.compose.animation.AnimatedVisibility(
+                visible = vistoDelPc?.grabando == true,
+                enter = androidx.compose.animation.fadeIn() + androidx.compose.animation.expandHorizontally(),
+                exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkHorizontally()
+            ) {
+                BotonRedondo(
+                    Icons.Filled.PhotoCamera, "Foto para la reunión del PC",
+                    { com.forge.pixpin.sincro.CamaraDelPcActivity.abrir(contexto) },
+                    Modifier.padding(end = 16.dp), tamano = 56.dp, puesto = true
+                )
+            }
             Box {
                 BotonRedondo(Icons.Filled.Add, "Chat nuevo", { eligiendoNuevo = true }, tamano = 56.dp, puesto = true)
                 com.forge.pixpin.guardados.MenuDeChatNuevo(
