@@ -186,3 +186,15 @@ Al cerrar cada tanda se revisa esta lista punto por punto.
       interruptores en Ajustes › Asistente.
 - [x] 58. El asistente en la web (`manual-asistente-android.md` §2.6): buscar y leer páginas, con las
       mismas reglas de seguridad que el PC.
+
+## Revisar Windows cada 30 min (pedido del 29-oct)
+
+Se revisan todas las ramas del repo de Windows cada media hora
+(`scratchpad/vigia/revisar-windows.sh`, base en `visto.txt`) y todo lo nuevo se porta a Android,
+sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b).
+
+- [ ] 59. Temas de la reunión y lo demás que oye Jev (jev.md §5 y §8): agenda que Jev marca en vivo,
+      decisiones, preguntas abiertas, tiempo por tema, propuestas, fichas en la barra y el acta.
+- [ ] 60. Dictar al chat (§6) y repasar en voz alta (§7) con Jev.
+- [ ] 61. La letra de las canciones como el PC: «Sincronizar sola», idioma de la letra, el alineador
+      igual al del PC, karaoke sin tira y moverse por la letra.
