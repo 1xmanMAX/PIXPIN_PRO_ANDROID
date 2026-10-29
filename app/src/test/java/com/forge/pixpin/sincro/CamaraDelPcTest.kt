@@ -261,6 +261,9 @@ class CamaraDelPcTest {
         val grande = mp4(3_000_000)
         val cortado = toma("VID_0002.mp4", grande, empiezaEn, duracionMs = 15 * s)
         assertEquals(30 * s, cortado.ms)
+        // Lo que el PC ya dijo de conexiones que acabaron mal (se cuenta antes del corte).
+        fun cortesDelPc() = runCatching { Regex("UnexpectedEof|ConnectionReset|BrokenPipe").findAll(File(raiz, "pc.log").readText()).count() }.getOrDefault(0)
+        val cortesAntes = cortesDelPc()
         conectar({ Cortar(it, 2_500_000) {} }) { so, out ->
             val p = SubidaALaGrabacion.subir(so.getInputStream(), out, movil.identidad.leer(), cola, "id-pc", ahora = ::ahoraMovil)
             assertTrue("se cortó: a reintentar", p.reintentar)
@@ -270,7 +273,15 @@ class CamaraDelPcTest {
         assertEquals(cortado.clave, trasElCorte.clave)
         assertEquals(1, trasElCorte.intentos)
         // El PC guarda lo llegado en su `.parcial` al ver el corte (`camara::parcial`, en la carpeta
-        // temporal del PC): se espera a que esté y no crezca.
+        // temporal del PC): se espera a que **el PC haya acabado con la conexión cortada** (lo apunta en su
+        // registro) y a que el `.parcial` esté y no crezca. Solo mirar que no crezca no basta: el PC escribe
+        // con un búfer de 1 MB y, con la máquina cargada, el `.parcial` se queda quieto en 1 MB mientras aún
+        // lee lo que quedaba en el socket; el reintento seguía desde ahí y lo de la conexión vieja llegaba
+        // después, detrás (29-oct-2026: el clip salía con 1 MB de más). Un teléfono de verdad reintenta
+        // segundos después; aquí se espera a lo mismo, sin adivinar tiempos.
+        val hastaQueAcabe = System.currentTimeMillis() + 15_000
+        while (System.currentTimeMillis() < hastaQueAcabe && cortesDelPc() <= cortesAntes) Thread.sleep(100)
+        assertTrue("el PC no apuntó el corte: " + File(raiz, "pc.log").readText().takeLast(2000), cortesDelPc() > cortesAntes)
         val limpia = cortado.clave.map { if (it.isLetterOrDigit() && it.code < 128 || it == '-' || it == '_') it else '_' }.take(80).joinToString("")
         val parcial = File(System.getenv("TMPDIR") ?: "/tmp", "pixpin-suelto/parciales/$limpia-${grande.size}.parcial")
         var antes = -1L

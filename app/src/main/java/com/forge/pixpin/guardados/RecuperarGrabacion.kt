@@ -184,6 +184,11 @@ object RecuperarGrabacion {
             GuardarLaGrabacion.clase(context, nota, duracion, proyecto, d.nombre, ahora, picos, capturas, video, reloj, pasarATexto)
                 .also { sacadas.forEach { s -> s.archivo.delete() } }
         }
+        // **Los temas de la reunión, con lo ya tratado** (29-oct-2026, como el PC): a la nota y a su lista.
+        val notaId = r.notaId
+        if (r.que == GuardarLaGrabacion.Que.LISTA && notaId != null) ReunionConJev.cierreDelDiario(d)?.let { cierre ->
+            runCatching { ReunionConJev.guardar(context, notaId, cierre) }.onFailure { android.util.Log.w(TAG, "los temas de la grabación cortada no entraron en la nota", it) }
+        }
         if (r.que == GuardarLaGrabacion.Que.LISTA || r.que == GuardarLaGrabacion.Que.SIN_NOTA) {
             // Entró: fuera el diario y el respaldo. Lo que no se abría (un trozo sin índice) se queda.
             respaldo?.delete()

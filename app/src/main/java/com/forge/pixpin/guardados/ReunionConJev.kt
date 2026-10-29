@@ -107,7 +107,9 @@ object ReunionConJev {
         val nombre: String,
         val proyecto: String?,
         val lista: Pair<String?, String>?,
-        val msDeLaNota: () -> Long
+        val msDeLaNota: () -> Long,
+        /** El diario de «Grabar sin perder nada» de esta grabación: los temas van ahí en el acto. */
+        val diario: DiarioEnMarcha? = null
     ) {
         var escucha: EscuchaDeLaReunion? = null
         var mesa: EnLaReunion.Mesa? = null
@@ -134,14 +136,15 @@ object ReunionConJev {
      * grabando). [msDeLaNota]: por dónde va la nota (el minuto de un toque a mano). Sin temas ni ideas
      * encendidas no hace nada y la barra queda como siempre.
      */
-    fun empezar(context: Context, nombre: String, proyecto: String?, g: Grabador?, msDeLaNota: () -> Long) {
+    fun empezar(context: Context, nombre: String, proyecto: String?, g: Grabador?, diario: DiarioEnMarcha? = null, msDeLaNota: () -> Long) {
         terminar()
         val app = context.applicationContext
         val p = preparada
         preparada = null
         val temas = p?.temas.orEmpty()
-        val s = Sesion(app, nombre, proyecto, p?.lista, msDeLaNota)
+        val s = Sesion(app, nombre, proyecto, p?.lista, msDeLaNota, diario)
         sesion = s
+        alDiario(s, temas, conLaLista = true)
         _estado.value = Estado(activa = true, temas = temas, cabecera = if (temas.isNotEmpty()) TextosDeLaReunion.PREPARANDO else null)
         if (temas.isNotEmpty()) runCatching { PrepararTemas.olvidarLaProxima(app) }
         val duracionMs = p?.duracionMin?.let { it * 60_000L }
@@ -269,8 +272,23 @@ object ReunionConJev {
         alCambiarLosTemas(s, v)
     }
 
-    /** Lo que siguen mirando Jev y la mesa tras un cambio en los temas. */
+    /**
+     * **Los temas, al diario** (29-oct-2026, `Estado::apuntar_temas` del PC): al empezar (con la lista elegida)
+     * y cada vez que se marca uno, a mano o Jev; la grabación recuperada tras un corte los lleva.
+     */
+    private fun alDiario(s: Sesion, v: List<TemasDeLaReunion.Tema>, conLaLista: Boolean = false) {
+        val d = s.diario ?: return
+        if (v.isEmpty() && !conLaLista) return
+        val j = TemasDeLaReunion.aJson(v)
+        d.cambiar {
+            temas = j
+            if (conLaLista) temasLista = s.lista?.let { (p, id) -> listOf(TemasDeLaReunion.proyectoQueViaja(p), id) }
+        }
+    }
+
+    /** Lo que siguen mirando Jev y la mesa tras un cambio en los temas (y el diario, al día). */
     private fun alCambiarLosTemas(s: Sesion, v: List<TemasDeLaReunion.Tema>) {
+        alDiario(s, v)
         s.escucha?.pendientes(TemasDeLaReunion.paraJev(v).map { Temas.Pendiente(it.id, it.texto) })
         s.mesa?.tratados(s.agendaIds.withIndex().filter { (_, id) -> v.firstOrNull { it.id == id }?.hecho == true }.map { it.index })
     }
@@ -603,6 +621,17 @@ object ReunionConJev {
             )
         )
         return c.proyecto to id
+    }
+
+    /**
+     * **Lo de la reunión de una grabación recuperada tras un corte** (`recuperar_una` del PC): los temas del
+     * diario, con lo ya tratado, y su lista. null si el diario no los lleva.
+     */
+    fun cierreDelDiario(d: GrabacionAMedias.Diario): Cierre? {
+        val temas = TemasDeLaReunion.temasDe(d.temas as? kotlinx.serialization.json.JsonArray)
+        if (temas.isEmpty()) return null
+        val lista = d.temasLista?.takeIf { it.size == 2 }?.let { (p, id) -> TemasDeLaReunion.proyectoDeAqui(p) to id }
+        return Cierre(temas, ActaViva.Acta(), lista, d.nombre, d.proyecto.ifEmpty { null })
     }
 
     // --- Al estudiar la clase (sin clave ni red) ------------------------------------------------

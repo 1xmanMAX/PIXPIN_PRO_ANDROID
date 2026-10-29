@@ -104,6 +104,17 @@ conservan tal cual al reescribir el mensaje: son campos de `Mensaje`):
 - `jev/Preguntas.kt` es **copia entera** de `crates/pixpin-typesafe/src/preguntas.rs` (en el mismo
   orden): las 271 cadenas comprobadas por guion contra el PC.
 
+## En el diario de «Grabar sin perder nada»
+
+Como el PC (`Diario::temas` y `temas_lista` de `grabacion_a_medias.rs`, `a_salvo.rs`, `recuperar.rs`): el
+diario (`estado.json`) lleva `temas` (el mismo JSON que irá a la nota, con lo ya tratado: `hecho`, `ms`,
+`p`, `porJev`, `aMano`) y `temas_lista` (`[proyecto, id]`, el `(String, String)` del PC), detrás de
+`solo_la_nota` y sin ellos si no hay temas. Se apuntan al empezar y **cada vez que se marca un tema, a mano
+o Jev** (`ReunionConJev`). La grabación recuperada tras un corte (`RecuperarGrabacion.recuperar`) vuelve
+con sus temas y su minuto, y con su lista de tareas («Temas · <nombre>», o la elegida) enlazada en
+`temasLista`. El PC tampoco guarda en el diario el acta (decisiones, minutos por tema, propuestas): solo
+los temas.
+
 ## Ajustes
 
 Ajustes › Asistente › TypeSafe (Jev): **Temas de la reunión tratados** y los siete de la reunión (tareas
@@ -139,5 +150,3 @@ al horario), encendidos de fábrica; sin clave no hacen nada.
 - Lo que tarda el ✓ de verdad (se apunta en el registro, etiqueta `PixPinReunion`, con los ms desde que
   se dejó de hablar) y el gasto de batería de una hora de escucha.
 - Las preguntas contra la API de verdad (como en el PC: sin clave el 29-oct-2026).
-- Pendiente: los temas en el diario de «Grabar sin perder nada» (`temas` y `temas_lista` del PC): una
-  reunión recuperada tras un corte entra sin sus temas.

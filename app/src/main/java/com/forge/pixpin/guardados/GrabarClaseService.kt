@@ -334,7 +334,7 @@ class GrabarClaseService : Service() {
         cronometro = c
         enMarcha = true
         // **La reunión con Jev** (29-oct-2026): los temas de «Preparar» y la escucha en vivo, si toca.
-        ReunionConJev.empezar(this, nombre, proyecto, g) { msDeLaNota() }
+        ReunionConJev.empezar(this, nombre, proyecto, g, diario) { msDeLaNota() }
         // El PC puede mandar capturas a esta grabación (§13 de la guía del PC). Ver [GrabacionDelMovil].
         GrabacionDelMovil.empezar(this, getString(R.string.clase_nombre, GrabarClase.fechaDelNombre(ahora))) { c.llevadoMs() to c.enPausa }
         ensenarLaBarra()

@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.serialization.ExperimentalSerializationApi::class)
+
 package com.forge.pixpin.guardados
 
 import android.util.AtomicFile
@@ -160,6 +162,16 @@ object GrabacionAMedias {
         var movil: String? = null,
         /** Lo demás ya entró en el chat y solo falta la nota. */
         @SerialName("solo_la_nota") var soloLaNota: Boolean = false,
+        /**
+         * **Los temas de la reunión** tal cual irán a la nota (`temas`, ver [TemasDeLaReunion]), con lo ya
+         * tratado (29-oct-2026, `Diario::temas` del PC): se apuntan al empezar y cada vez que se marca uno, a
+         * mano o Jev, y la grabación recuperada tras un corte los lleva. Sin temas, no va.
+         */
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+        var temas: kotlinx.serialization.json.JsonElement? = null,
+        /** La lista de tareas de los temas elegida al preparar, `[proyecto, id]` (el `(String, String)` del PC). */
+        @kotlinx.serialization.EncodeDefault(kotlinx.serialization.EncodeDefault.Mode.NEVER)
+        @SerialName("temas_lista") var temasLista: List<String>? = null,
         // --- Solo del teléfono ---
         val trozos: MutableList<TrozoApuntado> = mutableListOf(),
         @SerialName("capturas_del_video") val capturasDelVideo: MutableList<Long> = mutableListOf()
