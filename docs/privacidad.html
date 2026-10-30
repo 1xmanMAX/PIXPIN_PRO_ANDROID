@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PixPin · Política de privacidad</title>
+<meta name="description" content="Política de privacidad de la aplicación PixPin para Android (com.forge.pixpin).">
+<style>
+  :root { --texto:#1d1d1f; --suave:#5a5a60; --fondo:#ffffff; --caja:#f4f5f7; --borde:#dcdde1; --enlace:#0b57d0; }
+  @media (prefers-color-scheme: dark) {
+    :root { --texto:#ececef; --suave:#a8a8b0; --fondo:#141416; --caja:#1f2024; --borde:#33343a; --enlace:#8ab4f8; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--fondo); color:var(--texto);
+         font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+  main { max-width:760px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:1.7rem; line-height:1.25; margin:0 0 4px; }
+  h2 { font-size:1.2rem; margin:2rem 0 .5rem; padding-top:.5rem; border-top:1px solid var(--borde); }
+  h3 { font-size:1.02rem; margin:1.3rem 0 .3rem; }
+  p, li { overflow-wrap:anywhere; }
+  a { color:var(--enlace); }
+  .fecha { color:var(--suave); margin:0 0 1rem; }
+  .resumen { background:var(--caja); border:1px solid var(--borde); border-radius:10px; padding:12px 16px; }
+  .tabla { width:100%; overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:.93rem; }
+  th, td { border:1px solid var(--borde); padding:6px 8px; text-align:left; vertical-align:top; }
+  th { background:var(--caja); }
+  nav ul { columns:2; column-gap:24px; padding-left:18px; }
+  @media (max-width:520px) { nav ul { columns:1; } }
+  .en { margin-top:3rem; }
+  small { color:var(--suave); }
+</style>
+</head>
+<body>
+<main>
+
+<h1>Política de privacidad de PixPin</h1>
+<p class="fecha">Aplicación para Android «PixPin» (paquete <code>com.forge.pixpin</code>).<br>
+Fecha de entrada en vigor: <strong>30 de octubre de 2026</strong>. Última actualización: 30 de octubre de 2026.</p>
+
+<div class="resumen">
+<p><strong>En pocas palabras:</strong></p>
+<ul>
+  <li>PixPin no tiene cuentas de usuario ni servidores propios. <strong>Lo que creas se guarda en tu teléfono</strong>.</li>
+  <li>No hay publicidad, ni analítica, ni seguimiento, ni SDK de terceros que recojan datos. <strong>No vendemos datos</strong>.</li>
+  <li>Algo sale del teléfono <strong>solo cuando tú usas una función que lo necesita</strong>: el asistente con la clave de API que tú pones (Anthropic o DeepSeek), Jev de TypeSafe con tu clave, la búsqueda web del asistente, «Compartir como enlace» o la descarga de modelos de voz y de texto. Abajo se detalla cada caso.</li>
+  <li>La sincronización con tu PC u otros aparatos va <strong>por tu Wi-Fi local, cifrada</strong>, sin pasar por internet.</li>
+  <li>Puedes borrarlo todo desde <em>Ajustes → Privacidad y datos → Borrar todos mis datos</em>, o desinstalando la app.</li>
+</ul>
+</div>
+
+<nav>
+<p><strong>Contenido</strong></p>
+<ul>
+  <li><a href="#responsable">1. Quién es el responsable</a></li>
+  <li><a href="#dispositivo">2. Datos que se quedan en tu teléfono</a></li>
+  <li><a href="#terceros">3. Datos que salen del teléfono</a></li>
+  <li><a href="#red-local">4. Sincronización por la red local</a></li>
+  <li><a href="#permisos">5. Permisos y para qué sirven</a></li>
+  <li><a href="#no-hacemos">6. Lo que no hacemos</a></li>
+  <li><a href="#conservacion">7. Conservación y borrado</a></li>
+  <li><a href="#seguridad">8. Seguridad</a></li>
+  <li><a href="#menores">9. Menores</a></li>
+  <li><a href="#derechos">10. Tus derechos</a></li>
+  <li><a href="#futuro">11. Cuentas y servidores (futuro)</a></li>
+  <li><a href="#cambios">12. Cambios</a></li>
+  <li><a href="#contacto">13. Contacto</a></li>
+  <li><a href="#english">English version</a></li>
+</ul>
+</nav>
+
+<h2 id="responsable">1. Quién es el responsable</h2>
+<p>PixPin lo desarrolla un desarrollador independiente (en adelante, «nosotros»). Para cualquier asunto de privacidad, escribe a
+<a href="mailto:max.antony.8.5.1@gmail.com">max.antony.8.5.1@gmail.com</a>.</p>
+<p>Como PixPin no tiene servidores propios ni cuentas, <strong>nosotros no recibimos ni almacenamos tus datos</strong>. Lo que la app guarda está en tu teléfono, bajo tu control.</p>
+
+<h2 id="dispositivo">2. Datos que se quedan en tu teléfono</h2>
+<p>PixPin guarda en el almacenamiento privado de la app (al que otras apps no tienen acceso) lo que tú creas o traes a ella:</p>
+<ul>
+  <li>Chats, mensajes, notas, tareas, gastos, horarios, recordatorios, lecciones y documentos.</li>
+  <li>Capturas de pantalla, fotos, vídeos, notas de voz y grabaciones de clases o reuniones que hagas con la app.</li>
+  <li>Transcripciones y resúmenes. <strong>La transcripción de voz se hace en el teléfono</strong> (Vosk, Whisper o Qwen3-ASR ejecutados localmente, o el reconocedor «en el dispositivo» de Android).</li>
+  <li>El reconocimiento de texto en imágenes (OCR) y la lectura de PDF, Word, Excel y planos también se hacen en el teléfono.</li>
+  <li>Tus ajustes y preferencias.</li>
+  <li>Las claves de API que pegues (Anthropic, DeepSeek, TypeSafe, Brave Search): se guardan <strong>cifradas con una clave del Android Keystore</strong> que no puede salir del aparato, y fuera de la copia de seguridad.</li>
+  <li>Un índice de búsqueda local (AppSearch de Android) para encontrar tus cosas desde el buscador del teléfono; se queda en el aparato.</li>
+</ul>
+<p><strong>Copia de seguridad de Android.</strong> Si tienes activada la copia de seguridad de Google en tu teléfono, Android puede incluir datos de la app en <em>tu</em> cuenta de Google, cifrados según la configuración del sistema. Las claves de API y los secretos de sincronización quedan excluidos. Puedes desactivar esa copia en los ajustes de Android.</p>
+
+<h2 id="terceros">3. Datos que salen del teléfono (solo si usas la función)</h2>
+<p>Ninguna de estas funciones se activa sola. Cada una envía datos <strong>directamente desde tu teléfono al servicio indicado</strong>, por conexión cifrada (HTTPS/TLS); nosotros no hacemos de intermediarios ni vemos esos datos. Cada servicio trata los datos según su propia política de privacidad.</p>
+<div class="tabla">
+<table>
+<thead><tr><th>Función</th><th>Qué se envía</th><th>A quién</th></tr></thead>
+<tbody>
+<tr><td>Asistente con IA (Max)</td>
+    <td>Los mensajes que le escribes, el historial de esa conversación y lo que tú adjuntes (por ejemplo una foto, una captura o el texto de un documento).</td>
+    <td>Anthropic (Claude) o DeepSeek, según elijas, <strong>con tu propia clave de API</strong>. Lo envías a tu cuenta con ese proveedor.<br>
+    <small><a href="https://www.anthropic.com/legal/privacy">anthropic.com/legal/privacy</a> · <a href="https://www.deepseek.com/">deepseek.com</a></small></td></tr>
+<tr><td>Jev (TypeSafe)</td>
+    <td>Fragmentos de texto (por ejemplo, frases de una transcripción de clase o reunión, o lo que dictas) y, en algunas funciones, una imagen, para obtener una clasificación (tareas, temas, prioridades, tarjetas).</td>
+    <td>TypeSafe (<code>api.typesafe.ai</code>), <strong>con tu propia clave</strong>. Sin clave no se envía nada.</td></tr>
+<tr><td>Búsqueda y lectura web del asistente</td>
+    <td>Los términos de búsqueda que decide el asistente para responderte y la dirección de las páginas que lee. Sin cookies ni datos de tu cuenta.</td>
+    <td>DuckDuckGo, o Brave Search si pones tu clave de Brave; y la web que se lee.</td></tr>
+<tr><td>«Compartir como enlace»</td>
+    <td>El archivo que eliges compartir.</td>
+    <td>Un servicio público de archivos temporales (litterbox.catbox.moe o temp.sh). <strong>Cualquiera con el enlace puede abrirlo</strong> hasta que caduque (de 1 hora a 3 días). No lo uses para algo privado.</td></tr>
+<tr><td>Descarga de modelos y diccionarios</td>
+    <td>Solo la petición de descarga (como cualquier descarga, el servidor ve tu dirección IP). No se envía contenido tuyo.</td>
+    <td>alphacephei.com (Vosk), huggingface.co y github.com (Whisper, Qwen3-ASR, OCR), raw.githubusercontent.com (diccionarios de LibreOffice).</td></tr>
+<tr><td>Enlaces que abres</td>
+    <td>Cuando tocas un enlace o abres un documento con otra app, se encarga esa app o tu navegador.</td>
+    <td>La app o web de destino.</td></tr>
+</tbody>
+</table>
+</div>
+<p><strong>Contenido generado por IA.</strong> Las respuestas del asistente las genera un modelo de terceros y pueden contener errores. Puedes informar de una respuesta inadecuada con <em>«Reportar respuesta»</em> en el menú del mensaje; solo se nos envía lo que tú decidas incluir en el reporte.</p>
+<p><small>La versión que se distribuye fuera de Google Play puede incluir además voces de lectura en línea de Microsoft Edge (envían el texto a leer a los servidores de Microsoft). Esa función no está en la versión de Google Play.</small></p>
+
+<h2 id="red-local">4. Sincronización por la red local</h2>
+<p>PixPin puede sincronizar chats, fotos y grabaciones con tu PC o con otros teléfonos <strong>en la misma Wi-Fi</strong>. Los aparatos se encuentran por la red local (mDNS y una baliza UDP) y se emparejan con un código o un QR. Todo lo que viaja va <strong>cifrado con AES-GCM</strong> con una clave del grupo que solo conocen tus aparatos. <strong>No hay ningún servidor intermedio en internet</strong>. Si compartes un chat con otra persona, esa persona recibe una copia en su aparato.</p>
+
+<h2 id="permisos">5. Permisos y para qué sirven</h2>
+<p>Los permisos sensibles se piden cuando usas la función, no al instalar. Puedes retirarlos en cualquier momento en los ajustes de Android; la app sigue funcionando sin la función correspondiente.</p>
+<ul>
+  <li><strong>Cámara</strong>: fotos y clips dentro de la app, el croquis 3D sobre la imagen de la cámara, leer códigos QR para emparejar y la grabación de una reunión presencial. Mientras se graba con la app fuera, se ve una notificación permanente.</li>
+  <li><strong>Micrófono</strong>: notas de voz, dictado y grabar clases o reuniones. Mientras graba, se ve una notificación permanente.</li>
+  <li><strong>Captura de pantalla</strong> (proyección de medios): solo cuando tú la inicias; Android muestra su propio aviso y pide tu consentimiento cada vez.</li>
+  <li><strong>Mostrar sobre otras apps</strong>: para los «pines» flotantes y los accesos rápidos de captura.</li>
+  <li><strong>Notificaciones</strong>: recordatorios, avisos de clase y el estado de grabaciones, transcripciones y subidas.</li>
+  <li><strong>Alarmas exactas</strong>: que un recordatorio suene a la hora que pusiste.</li>
+  <li><strong>Red local y Wi-Fi</strong> (estado de la red, multidifusión): encontrar tu PC y tus aparatos para sincronizar.</li>
+  <li><strong>Internet</strong>: solo para las funciones de la sección 3.</li>
+  <li><strong>Iniciar al encender</strong>: volver a programar tus recordatorios tras reiniciar el teléfono.</li>
+  <li><strong>AnkiDroid</strong> (opcional): crear tarjetas en AnkiDroid cuando tú lo pides.</li>
+  <li><strong>Vibración, mantener activo, ajustes de audio</strong>: avisos, grabaciones largas y la salida de audio de la lectura en voz alta.</li>
+</ul>
+<p>PixPin <strong>no</strong> pide acceso a tus contactos, ubicación, SMS, registro de llamadas ni a toda tu galería: las fotos que quieras traer las eliges tú con el selector del sistema.</p>
+
+<h2 id="no-hacemos">6. Lo que no hacemos</h2>
+<ul>
+  <li>No mostramos publicidad ni usamos identificadores publicitarios.</li>
+  <li>No usamos analítica, informes de fallos remotos ni rastreadores.</li>
+  <li>No vendemos, alquilamos ni cedemos datos personales.</li>
+  <li>No usamos tus datos para entrenar modelos. (Los proveedores de IA a los que envías datos con tu clave tienen sus propias condiciones; revísalas.)</li>
+</ul>
+
+<h2 id="conservacion">7. Conservación y borrado</h2>
+<ul>
+  <li>Tus datos se conservan en el teléfono hasta que los borras.</li>
+  <li><strong>Borrar todos mis datos</strong>: en <em>Ajustes → Privacidad y datos</em> borra chats, archivos, grabaciones, modelos descargados, ajustes y claves guardadas.</li>
+  <li><strong>Desinstalar</strong> PixPin borra todos los datos de la app del teléfono.</li>
+  <li>Lo que ya enviaste a un tercero (sección 3) se rige por ese servicio; por ejemplo, para borrar el historial de tu cuenta de API, hazlo en la consola de ese proveedor. Los enlaces temporales caducan solos.</li>
+  <li>Las copias que hayas sincronizado en tu PC u otros aparatos se borran en esos aparatos.</li>
+</ul>
+
+<h2 id="seguridad">8. Seguridad</h2>
+<p>Los datos se guardan en el almacenamiento privado de la app. Las claves de API van cifradas con el Android Keystore. Las conexiones a internet usan HTTPS (la app no permite tráfico sin cifrar) y la sincronización local va cifrada de extremo a extremo entre tus aparatos. Ningún sistema es infalible: protege tu teléfono con bloqueo de pantalla.</p>
+
+<h2 id="menores">9. Menores</h2>
+<p>PixPin no está dirigida a menores de 13 años (ni de la edad mínima que fije la ley de tu país) y no recoge conscientemente datos de niños. El asistente usa servicios de IA de terceros cuyas condiciones exigen ser mayor de edad. Si crees que un menor nos ha enviado datos, escríbenos y los borraremos.</p>
+
+<h2 id="derechos">10. Tus derechos</h2>
+<p>Según la ley que te aplique (por ejemplo, el RGPD en la Unión Europea, la LOPDGDD en España o la Ley 29733 de Protección de Datos Personales en Perú), tienes derecho a acceder, rectificar, suprimir y oponerte al tratamiento de tus datos. Como tus datos están en tu teléfono, puedes ejercerlos directamente desde la app. Para cualquier consulta, escríbenos; también puedes reclamar ante tu autoridad de protección de datos (en España, la AEPD; en Perú, la Autoridad Nacional de Protección de Datos Personales).</p>
+
+<h2 id="futuro">11. Cuentas y servidores (futuro)</h2>
+<p>Hoy PixPin no tiene cuentas ni servidores. Si en el futuro añadimos <strong>cuentas de usuario, sincronización en la nube o funciones de pago</strong>, actualizaremos esta política <strong>antes</strong> de activarlas, explicando qué datos se guardan en nuestros servidores, dónde, cuánto tiempo y con qué encargados del tratamiento, y cómo borrar tu cuenta y sus datos desde la app y desde una página web. Esas funciones serán opcionales.</p>
+
+<h2 id="cambios">12. Cambios en esta política</h2>
+<p>Si cambiamos esta política, publicaremos la nueva versión en esta misma dirección con su fecha. Si el cambio es importante, también lo avisaremos dentro de la app.</p>
+
+<h2 id="contacto">13. Contacto</h2>
+<p>Correo: <a href="mailto:max.antony.8.5.1@gmail.com">max.antony.8.5.1@gmail.com</a></p>
+
+<hr>
+
+<section class="en" id="english" lang="en">
+<h1>PixPin Privacy Policy (English)</h1>
+<p class="fecha">Android app “PixPin” (package <code>com.forge.pixpin</code>). Effective date: <strong>October 30, 2026</strong>. The Spanish version above is the full text; this is a faithful summary.</p>
+
+<h3>Who we are</h3>
+<p>PixPin is made by an independent developer. Contact: <a href="mailto:max.antony.8.5.1@gmail.com">max.antony.8.5.1@gmail.com</a>. PixPin has no user accounts and no servers of its own, so we do not receive or store your data.</p>
+
+<h3>Data kept on your device</h3>
+<p>Chats, notes, tasks, expenses, schedules, reminders, documents, screenshots, photos, videos, voice notes, class/meeting recordings, transcripts and settings are stored in the app's private storage. Speech-to-text, OCR and document reading run on the device. API keys you enter are encrypted with an Android Keystore key and excluded from backups. If Android backup is enabled, Android may back up app data to <em>your</em> Google account.</p>
+
+<h3>Data that leaves the device (only when you use the feature)</h3>
+<ul>
+  <li><strong>AI assistant</strong>: your messages, conversation history and anything you attach go directly to Anthropic (Claude) or DeepSeek using <strong>your own API key</strong>.</li>
+  <li><strong>Jev (TypeSafe)</strong>: text snippets (e.g. transcript lines) and sometimes an image go to TypeSafe using your own key. Nothing is sent without a key.</li>
+  <li><strong>Assistant web search</strong>: search terms and page addresses go to DuckDuckGo (or Brave Search with your key) and to the pages read. No cookies or account data.</li>
+  <li><strong>“Share as link”</strong>: the file you choose is uploaded to a public temporary file host (litterbox.catbox.moe or temp.sh); anyone with the link can open it until it expires (1 hour to 3 days).</li>
+  <li><strong>Model downloads</strong>: speech, OCR models and dictionaries are downloaded from alphacephei.com, huggingface.co, github.com and raw.githubusercontent.com. Only the download request (and your IP address) is seen.</li>
+</ul>
+<p>All internet traffic uses HTTPS. AI responses are produced by third-party models and may be inaccurate; you can report a response from the message menu (“Reportar respuesta”).</p>
+
+<h3>Local network sync</h3>
+<p>Sync with your PC or other devices happens over your local Wi-Fi only, end-to-end encrypted (AES-GCM) with a key known only to your paired devices. No internet relay is used.</p>
+
+<h3>Permissions</h3>
+<p>Camera, microphone and screen capture are used only for features you start (photos, QR pairing, voice notes, dictation, class/meeting recording, screenshots), with a persistent notification while recording in the background. Display over other apps is used for floating pins; notifications and exact alarms for reminders; local network/Wi-Fi state for sync. PixPin does not access contacts, location, SMS, call logs or your whole photo library.</p>
+
+<h3>What we don't do</h3>
+<p>No ads, no analytics, no tracking, no crash-reporting SDKs, no sale of personal data, no use of your data to train models.</p>
+
+<h3>Retention and deletion</h3>
+<p>Data stays on your device until you delete it. Use <em>Settings → Privacy and data → Delete all my data</em> (“Borrar todos mis datos”), or uninstall the app. Data you sent to third parties is governed by those services.</p>
+
+<h3>Children</h3>
+<p>PixPin is not directed to children under 13 (or the minimum age in your country) and does not knowingly collect children's data.</p>
+
+<h3>Your rights</h3>
+<p>Depending on your jurisdiction (e.g. GDPR, Spain's LOPDGDD, Peru's Law 29733) you may access, correct, delete or object to processing of your data; since the data is on your device, you can do so directly in the app, or contact us.</p>
+
+<h3>Future accounts and servers</h3>
+<p>If we add optional accounts, cloud sync or paid features, we will update this policy before enabling them, including how to delete your account and data in-app and via a web page.</p>
+
+<h3>Changes</h3>
+<p>Updates will be posted at this address with a new date, and important changes will be announced in the app.</p>
+</section>
+
+</main>
+</body>
+</html>

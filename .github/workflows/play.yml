@@ -1,0 +1,135 @@
+# **El AAB para Google Play, compilado en GitHub** (30-oct-2026). Ver docs/google-play.md.
+#
+# Compila `./gradlew :app:bundlePlay` (la variante `play`: sin los permisos que Play no deja),
+# lo firma con la **clave de subida**, comprueba que todas las bibliotecas nativas de 64 bits están
+# alineadas a **16 KB** (Play rechaza las que no) y deja el `.aab` como artefacto de la ejecución
+# (pestaña Actions → la ejecución → «Artifacts»). Subirlo a Play Console se hace a mano.
+# Se lanza solo a mano: Actions → «AAB para Google Play» → Run workflow.
+#
+# **Los secretos** (Settings → Secrets and variables → Actions → New repository secret):
+#
+#   CLAVE_DE_SUBIDA               El almacén de la clave de subida (.jks) en base64, en una línea:
+#                                   Linux/macOS:  base64 -w0 pixpin-subida.jks
+#                                   PowerShell:   [Convert]::ToBase64String([IO.File]::ReadAllBytes("pixpin-subida.jks"))
+#   CLAVE_DE_SUBIDA_ALMACEN_PASS  La contraseña del almacén.
+#   CLAVE_DE_SUBIDA_ALIAS         El alias de la clave dentro del almacén (p. ej. pixpin-subida).
+#   CLAVE_DE_SUBIDA_PASS          La contraseña de la clave (en PKCS12 es la misma que la del almacén).
+#
+# Se pasan a Gradle como PIXPIN_SUBIDA_ALMACEN, PIXPIN_SUBIDA_CLAVE_ALMACEN, PIXPIN_SUBIDA_ALIAS y
+# PIXPIN_SUBIDA_CLAVE (los lee app/build.gradle.kts). Sin CLAVE_DE_SUBIDA el flujo falla a
+# propósito: un AAB sin firmar no sirve para Play. **Nunca** uses aquí la clave de depuración ni
+# herramientas/pixpin-prueba.keystore (está en el repositorio: es pública).
+name: AAB para Google Play
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aab-play-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  aab:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: SDK de Android 36
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-36" "build-tools;36.0.0" > /dev/null
+
+      # El almacén va a la carpeta temporal del runner (se borra al acabar) con una ruta absoluta:
+      # build.gradle.kts lo abre con file(), que resolvería una relativa desde app/.
+      - name: Clave de subida
+        env:
+          CLAVE: ${{ secrets.CLAVE_DE_SUBIDA }}
+          ALMACEN_PASS: ${{ secrets.CLAVE_DE_SUBIDA_ALMACEN_PASS }}
+          ALIAS: ${{ secrets.CLAVE_DE_SUBIDA_ALIAS }}
+          CLAVE_PASS: ${{ secrets.CLAVE_DE_SUBIDA_PASS }}
+        run: |
+          if [ -z "$CLAVE" ] || [ -z "$ALMACEN_PASS" ] || [ -z "$ALIAS" ] || [ -z "$CLAVE_PASS" ]; then
+            echo "::error::Faltan secretos: CLAVE_DE_SUBIDA, CLAVE_DE_SUBIDA_ALMACEN_PASS, CLAVE_DE_SUBIDA_ALIAS y CLAVE_DE_SUBIDA_PASS (ver la cabecera de play.yml)."
+            exit 1
+          fi
+          ALMACEN="$RUNNER_TEMP/pixpin-subida.jks"
+          echo "$CLAVE" | base64 -d > "$ALMACEN"
+          {
+            echo "PIXPIN_SUBIDA_ALMACEN=$ALMACEN"
+            echo "PIXPIN_SUBIDA_CLAVE_ALMACEN=$ALMACEN_PASS"
+            echo "PIXPIN_SUBIDA_ALIAS=$ALIAS"
+            echo "PIXPIN_SUBIDA_CLAVE=$CLAVE_PASS"
+          } >> "$GITHUB_ENV"
+          # Solo la huella, para comprobar en Play Console (Integridad de la app) que es la de subida.
+          keytool -list -v -keystore "$ALMACEN" -storepass "$ALMACEN_PASS" -alias "$ALIAS" | grep -m1 SHA256
+
+      - name: Compilar el AAB
+        # La misma memoria que prueba.yml: con los 2 GB de gradle.properties el empaquetado se queda corto.
+        run: ./gradlew :app:bundlePlay --stacktrace "-Dorg.gradle.jvmargs=-Xmx6g -XX:+UseParallelGC -Dfile.encoding=UTF-8" -Pkotlin.daemon.jvmargs=-Xmx4g
+
+      - name: Localizar el AAB
+        run: |
+          VERSION=$(grep -m1 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+          CODIGO=$(grep -m1 'versionCode' app/build.gradle.kts | sed 's/[^0-9]//g')
+          # Sin LOCALAPPDATA (Linux), build.gradle.kts deja lo compilado en <raíz>/pixpin-build.
+          AAB=$(ls pixpin-build/app/outputs/bundle/play/*.aab | head -1)
+          [ -f "$AAB" ] || { echo "::error::No se encontró el AAB en pixpin-build/app/outputs/bundle/play/"; exit 1; }
+          SALIDA="PixPin-$VERSION-$CODIGO-play.aab"
+          cp "$AAB" "$SALIDA"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "SALIDA=$SALIDA" >> "$GITHUB_ENV"
+          # Firmado con la clave de subida, no con la de depuración.
+          if keytool -printcert -jarfile "$SALIDA" | grep -q "CN=Android Debug"; then
+            echo "::error::El AAB está firmado con la clave de depuración."; exit 1
+          fi
+          keytool -printcert -jarfile "$SALIDA" | grep -m1 SHA256 || { echo "::error::El AAB no está firmado."; exit 1; }
+
+      # **Páginas de 16 KB** (obligatorio en Play para apps que apuntan a Android 15+): cada segmento
+      # LOAD de cada .so de 64 bits tiene que tener p_align >= 0x4000. Aquí se mira dentro del AAB, que
+      # es lo que llega a Play.
+      - name: Comprobar el alineado a 16 KB
+        run: |
+          DIR="$RUNNER_TEMP/so"
+          rm -rf "$DIR" && mkdir -p "$DIR"
+          unzip -q -o "$SALIDA" 'base/lib/arm64-v8a/*.so' -d "$DIR" || { echo "::error::El AAB no trae base/lib/arm64-v8a/*.so"; exit 1; }
+          MAL=0
+          for so in "$DIR"/base/lib/arm64-v8a/*.so; do
+            nombre=$(basename "$so")
+            # Columna Align de los LOAD en `readelf -lW` (la última), en hexadecimal.
+            minimo=$(readelf -lW "$so" | awk '$1=="LOAD"{print $NF}' | while read -r a; do printf '%d\n' "$a"; done | sort -n | head -1)
+            if [ -z "$minimo" ]; then
+              echo "::error::$nombre: no se pudieron leer sus segmentos LOAD"; MAL=1
+            elif [ "$minimo" -lt 16384 ]; then
+              printf '::error::%s: alineado %#x (< 0x4000)\n' "$nombre" "$minimo"; MAL=1
+            else
+              printf 'OK  %-32s %#x\n' "$nombre" "$minimo"
+            fi
+          done
+          [ "$MAL" = 0 ] || { echo "Hay bibliotecas sin alinear a 16 KB: Play rechazará el AAB."; exit 1; }
+
+      - name: Guardar el AAB
+        uses: actions/upload-artifact@v4
+        with:
+          name: PixPin-${{ env.VERSION }}-play
+          path: ${{ env.SALIDA }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Resumen
+        run: |
+          {
+            echo "### AAB para Google Play"
+            echo ""
+            echo "- Archivo: \`$SALIDA\` (en «Artifacts» de esta ejecución)"
+            echo "- Súbelo en Play Console → Prueba interna → Crear versión."
+            echo "- Recuerda: cada subida necesita un \`versionCode\` mayor que el anterior."
+          } >> "$GITHUB_STEP_SUMMARY"
