@@ -24,6 +24,26 @@ android {
         versionName = "0.152.0"
     }
 
+    // **La clave de subida a Google Play** (30-oct-2026): fuera del repositorio. Se lee de
+    // `clave-de-subida.properties` en la raíz (ignorado por git) o de las variables
+    // PIXPIN_SUBIDA_ALMACEN, PIXPIN_SUBIDA_CLAVE_ALMACEN, PIXPIN_SUBIDA_ALIAS y PIXPIN_SUBIDA_CLAVE (el
+    // flujo `play.yml`). Sin ella, el AAB sale sin firmar y hay que firmarlo antes de subirlo.
+    signingConfigs {
+        val props = java.util.Properties()
+        val archivo = rootProject.file("clave-de-subida.properties")
+        if (archivo.isFile) archivo.inputStream().use { props.load(it) }
+        fun dato(clave: String, entorno: String): String? = props.getProperty(clave) ?: System.getenv(entorno)
+        val almacen = dato("almacen", "PIXPIN_SUBIDA_ALMACEN")
+        if (almacen != null && file(almacen).isFile) {
+            create("subida") {
+                storeFile = file(almacen)
+                storePassword = dato("claveAlmacen", "PIXPIN_SUBIDA_CLAVE_ALMACEN")
+                keyAlias = dato("alias", "PIXPIN_SUBIDA_ALIAS")
+                keyPassword = dato("clave", "PIXPIN_SUBIDA_CLAVE")
+            }
+        }
+    }
+
     buildTypes {
         release {
             // **Los 73 MB eran esto.** Sin bloque de release solo existía el
@@ -47,6 +67,23 @@ android {
             // firma el APK no se puede instalar, y montar una clave de release
             // para un proyecto personal es ceremonia sin nadie que la lea.
             signingConfig = signingConfigs.getByName("debug")
+            buildConfigField("boolean", "PARA_PLAY", "false")
+        }
+        // **La versión para Google Play** (30-oct-2026, el usuario: «prepara la app para subirla a la
+        // Play Store como gratis… considera las nuevas políticas de Google»). Es la de release con lo que
+        // Play no deja quitado (`src/play/AndroidManifest.xml`: instalar APKs, la pantalla completa de
+        // las llamadas, la alarma exacta sin pedirla) y `BuildConfig.PARA_PLAY` para lo que cambia en el
+        // código. Sale como **AAB** (`./gradlew :app:bundlePlay`), firmado con la **clave de subida**
+        // (ver `docs/google-play.md`); la de verdad la guarda Google (Play App Signing). Las pruebas y el
+        // APK de siempre no cambian.
+        create("play") {
+            initWith(getByName("release"))
+            matchingFallbacks += listOf("release")
+            buildConfigField("boolean", "PARA_PLAY", "true")
+            signingConfig = signingConfigs.findByName("subida")
+        }
+        getByName("debug") {
+            buildConfigField("boolean", "PARA_PLAY", "false")
         }
     }
 
@@ -96,8 +133,10 @@ android {
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2026.02.01"))
     // Reconocimiento de voz en el aparato, de archivo y con tiempos por palabra. Ver MotorVosk.
-    implementation("com.alphacephei:vosk-android:0.3.47")
-    implementation("net.java.dev.jna:jna:5.13.0@aar")
+    // **0.3.75 y JNA 5.18.1** (30-oct-2026): sus .so de 64 bits van alineadas a 16 KB, lo que Google Play
+    // exige (los teléfonos con páginas de 16 KB); la 0.3.47 no lo estaba y Play rechazaba el AAB.
+    implementation("com.alphacephei:vosk-android:0.3.75")
+    implementation("net.java.dev.jna:jna:5.18.1@aar")
 
     implementation("androidx.core:core-ktx:1.16.0")
     // El índice de búsqueda del sistema (Android 12+): todos los archivos del chat en el
@@ -142,5 +181,5 @@ dependencies {
     // **La JNA de escritorio, solo para las pruebas** (25-oct-2026): el AAR de arriba trae el
     // `libjnidispatch.so` de los teléfonos; el jar, el de esta máquina. Con él, Qwen3DeVerdadTest
     // corre Qwen3-ASR entero por el mismo OrtPorJna que el teléfono, con un libonnxruntime.so de aquí.
-    testImplementation("net.java.dev.jna:jna:5.13.0")
+    testImplementation("net.java.dev.jna:jna:5.18.1")
 }

@@ -33,3 +33,7 @@ telegram/
 
 # La firma v4 que deja apksigner junto a cada APK repartido
 *.idsig
+
+# La clave de subida a Google Play (30-oct-2026): nunca en el repositorio. Ver docs/google-play.md.
+clave-de-subida.properties
+*.aab
