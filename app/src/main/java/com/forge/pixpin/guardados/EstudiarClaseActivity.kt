@@ -644,6 +644,13 @@ class EstudiarClaseActivity : ComponentActivity() {
                             val n = runCatching { com.forge.pixpin.jev.ReunionEnLaApp.aTareas(this@EstudiarClaseActivity, id) }.getOrDefault(0)
                             runOnUiThread { Toast.makeText(this@EstudiarClaseActivity, "$n tareas apuntadas en el Inbox de Tareas", Toast.LENGTH_SHORT).show() }
                         }.start()
+                    },
+                    // «Reportar respuesta» (30-oct-2026): los renglones marcados, con su tipo.
+                    alReportar = {
+                        lineas.mapNotNull { l ->
+                            val tipos = Importantes.tiposEn(importantes, l.ms)
+                            if (tipos.isEmpty()) null else tipos.joinToString(", ") { it.rotulo } + " · " + l.texto
+                        }.joinToString("\n")
                     }
                 )
                 // **La reunión** (29-oct-2026): la agenda con ✓ y su minuto, las decisiones, las preguntas y las propuestas. Ver [AgendaDeLaReunion].

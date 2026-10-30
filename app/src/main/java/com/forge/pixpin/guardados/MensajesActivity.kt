@@ -3976,11 +3976,16 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // La fuente que citó: «Abrir fuente» (§4.5).
                     if (m.clase == Clase.NOTA && m.fuentesIa != null && enVivo == null) com.forge.pixpin.asistente.FuenteDeLaRespuesta(m)
                     // El altavoz de la respuesta acabada (§4.6): la lee con el lector común.
+                    // Y **«⚑ Reportar»** a su lado (30-oct-2026, política de contenido generado por IA de
+                    // Google Play): marcarla como ofensiva, peligrosa o falsa sin salir del chat.
                     if (m.clase == Clase.NOTA && enVivo == null && com.forge.pixpin.asistente.ChatDelAsistente.esRespuesta(m) && m.texto.isNotBlank())
-                        androidx.compose.material3.TextButton(
-                            onClick = { com.forge.pixpin.asistente.VozDelAsistente.leer(this@MensajesActivity, m.texto) },
-                            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
-                        ) { Text("🔊 Escuchar", fontSize = 12.sp) }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            androidx.compose.material3.TextButton(
+                                onClick = { com.forge.pixpin.asistente.VozDelAsistente.leer(this@MensajesActivity, m.texto) },
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
+                            ) { Text("🔊 Escuchar", fontSize = 12.sp) }
+                            com.forge.pixpin.privacidad.TextoReportarIa(com.forge.pixpin.privacidad.ReportesDeIa.Funcion.ASISTENTE) { m.texto }
+                        }
                     if (enVivo != null) com.forge.pixpin.asistente.PreguntaDelAsistente(m.id)
                     if (rica) NotaRicaEnBurbuja(m.texto)
                     val medidor = androidx.compose.ui.text.rememberTextMeasurer()

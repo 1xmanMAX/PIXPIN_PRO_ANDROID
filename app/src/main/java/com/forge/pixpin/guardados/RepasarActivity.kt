@@ -280,6 +280,11 @@ class RepasarActivity : ComponentActivity() {
                 version++
             }) { Text("Empezar otra vez") }
             Box(Modifier.weight(1f))
+            // «Reportar respuesta» (30-oct-2026, Google Play): cómo marcó Jev cada punto.
+            com.forge.pixpin.privacidad.BotonReportarIa(com.forge.pixpin.privacidad.ReportesDeIa.Funcion.REPASO, {
+                repaso.puntos.mapIndexed { i, (_, texto) -> marca(estados.getOrElse(i) { RepasoOral.Estado.FALTA }).first + " " + texto }
+                    .joinToString("\n") + "\n\nLo explicado: " + repaso.explicacion
+            })
             TextButton(onClick = { finish() }) { Text("Cerrar") }
         }
     }

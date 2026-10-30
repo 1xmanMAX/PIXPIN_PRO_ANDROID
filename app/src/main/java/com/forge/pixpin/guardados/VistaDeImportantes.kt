@@ -51,7 +51,9 @@ fun FiltroDeImportantes(
     buscando: Boolean,
     alElegir: (Importantes.Tipo?) -> Unit,
     alApuntar: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Lo hallado en texto, para «Reportar respuesta» (30-oct-2026, Google Play): la bandera al final. */
+    alReportar: (() -> String)? = null
 ) {
     val cuentas = Importantes.cuentas(importantes)
     val sinApuntar = Importantes.tareasSinApuntar(importantes).size
@@ -71,6 +73,10 @@ fun FiltroDeImportantes(
             }
         }
         if (sinApuntar > 0) TextButton(onClick = alApuntar) { Text("+$sinApuntar tareas a Tareas", fontSize = 13.sp) }
+        // Lo marcó una IA (Jev): se puede reportar sin salir de la clase.
+        if (importantes.isNotEmpty() && alReportar != null) com.forge.pixpin.privacidad.BotonReportarIa(
+            com.forge.pixpin.privacidad.ReportesDeIa.Funcion.LO_IMPORTANTE, alReportar, tinte = tenue
+        )
     }
 }
 
