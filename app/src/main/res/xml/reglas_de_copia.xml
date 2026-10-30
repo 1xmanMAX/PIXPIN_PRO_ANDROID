@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    **Qué entra en la copia de seguridad de Android y en el traspaso a otro teléfono** (30-oct-2026,
+    para Google Play; Android 12 en adelante. Para Android 10 y 11 vale copia_de_seguridad.xml, que
+    dice lo mismo para la copia en la nube).
+
+    Todo lo del usuario entra (chats, pins, dibujos, ajustes), como hasta ahora con allowBackup. Lo
+    que **no** entra son los secretos:
+
+    - Las claves de las APIs (Claude, DeepSeek, Brave, TypeSafe) ya viven en `noBackupFilesDir`
+      cifradas con una clave del Keystore que no sale del aparato (asistente/ClavesDeLaNube.kt,
+      jev/Jev.kt): esa carpeta no entra nunca, ni hace falta nombrarla aquí.
+    - `sincro/identidad.json`: el código del grupo de sincronización (de él sale la clave con la que
+      se cifra lo que viaja por la Wi-Fi) y el id al azar de este aparato.
+    - `sincro/persona.json`: la llave privada de «yo, como persona» en los chats compartidos.
+    - `sincro/compartidos.json`: los chats compartidos con sus códigos de invitación.
+
+    **En la nube (cloud-backup) no va ninguno**: es una copia que sale del teléfono y se queda en una
+    cuenta de Google; quien recupere la copia en otro teléfono vuelve a teclear el código del grupo
+    y a entrar en los chats compartidos, como en un aparato nuevo.
+
+    **En el traspaso directo a otro teléfono (device-transfer)**, cable o Wi-Fi entre los dos,
+    cifrado y sin pasar por ningún servidor, sí van la persona y los chats compartidos: el teléfono
+    nuevo sigue siendo la misma persona en esos chats. La **identidad del aparato no va**: su id
+    tiene que ser único, y si el teléfono viejo sigue en uso habría dos aparatos que se creen el
+    mismo en el grupo. El nuevo se une al grupo con el código, como cualquier otro.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="sincro/identidad.json" />
+        <exclude domain="file" path="sincro/persona.json" />
+        <exclude domain="file" path="sincro/compartidos.json" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="sincro/identidad.json" />
+    </device-transfer>
+</data-extraction-rules>

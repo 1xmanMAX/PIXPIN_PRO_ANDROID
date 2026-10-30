@@ -1,4 +1,6 @@
-﻿plugins {
+﻿import java.util.Properties
+
+plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.plugin.compose")
     id("org.jetbrains.kotlin.plugin.serialization")
@@ -29,7 +31,7 @@ android {
     // PIXPIN_SUBIDA_ALMACEN, PIXPIN_SUBIDA_CLAVE_ALMACEN, PIXPIN_SUBIDA_ALIAS y PIXPIN_SUBIDA_CLAVE (el
     // flujo `play.yml`). Sin ella, el AAB sale sin firmar y hay que firmarlo antes de subirlo.
     signingConfigs {
-        val props = java.util.Properties()
+        val props = Properties()  // `java.` aquí dentro sería la extensión `java` de Gradle, no el paquete
         val archivo = rootProject.file("clave-de-subida.properties")
         if (archivo.isFile) archivo.inputStream().use { props.load(it) }
         fun dato(clave: String, entorno: String): String? = props.getProperty(clave) ?: System.getenv(entorno)

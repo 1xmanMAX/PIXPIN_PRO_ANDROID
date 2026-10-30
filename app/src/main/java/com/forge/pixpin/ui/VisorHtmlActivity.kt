@@ -1168,7 +1168,8 @@ class VisorHtmlActivity : ComponentActivity() {
         if (esDocumento) {
             leerLaMarcaDeVoz()
             vocesEnLinea = prefsDeLectura.getBoolean("voz:enLinea", false)
-            vocesDeMicrosoft = prefsDeLectura.getBoolean("voz:edge", false)
+            // En la versión de Google Play no hay voces de Microsoft (ver [VozDeEdge.DISPONIBLE]).
+            vocesDeMicrosoft = VozDeEdge.DISPONIBLE && prefsDeLectura.getBoolean("voz:edge", false)
         }
         engancharALaVoz()
         // **De paso** (27-oct-2026): abierto desde otra aplicación sin guardarlo. Ver [com.forge.pixpin.guardados.ModoDePaso].
@@ -1852,11 +1853,14 @@ class VisorHtmlActivity : ComponentActivity() {
                 prefsDeLectura.edit().putBoolean("voz:enLinea", it).apply()
                 lector.ponerEnLinea(it)
             }
-            Casilla("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", vocesDeMicrosoft) {
-                vocesDeMicrosoft = it
-                prefsDeLectura.edit().putBoolean("voz:edge", it).apply()
-                if (!it) lector.usarEdge(null)
-                else if (lector.estado.value.listo) lifecycleScope.launch { ponerLaVozDeMicrosoft(idiomaDeAhora()) }
+            // **Fuera de la versión de Google Play** (30-oct-2026): no es un servicio oficial. Ver [VozDeEdge.DISPONIBLE].
+            if (VozDeEdge.DISPONIBLE) {
+                Casilla("Voces de Microsoft", "Muy naturales y gratis; no es un servicio oficial y el texto va a Microsoft", vocesDeMicrosoft) {
+                    vocesDeMicrosoft = it
+                    prefsDeLectura.edit().putBoolean("voz:edge", it).apply()
+                    if (!it) lector.usarEdge(null)
+                    else if (lector.estado.value.listo) lifecycleScope.launch { ponerLaVozDeMicrosoft(idiomaDeAhora()) }
+                }
             }
             if (vocesDeMicrosoft) {
                 val puesta = (lector.vozDeEdge ?: prefsDeLectura.getString(claveDeVozDeMicrosoft(idiomaDeAhora()), null))

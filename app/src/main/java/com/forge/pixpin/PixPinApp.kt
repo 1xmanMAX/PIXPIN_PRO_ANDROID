@@ -141,6 +141,13 @@ class PixPinApp : Application() {
         // **Las llamadas del horario de clases**, también al arrancar (y tras reiniciar el teléfono).
         // Ver [com.forge.pixpin.horario.AvisosDelHorario].
         scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.horario.AvisosDelHorario.reprogramar(this@PixPinApp) } }
+        // **En la versión de Play, todos los recordatorios otra vez** (30-oct-2026): quitar el permiso de
+        // alarmas exactas cancela las que había y reiniciar el teléfono las borra; se vuelven a poner
+        // (inexactas si sigue sin permiso). El APK de GitHub no lo necesita y sigue igual.
+        // Ver [com.forge.pixpin.pin.AlarmaExacta].
+        if (BuildConfig.PARA_PLAY) {
+            scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.pin.Recordatorios.reponerTodos(this@PixPinApp) } }
+        }
         @OptIn(kotlinx.coroutines.FlowPreview::class)
         scope.launch(Dispatchers.IO) {
             com.forge.pixpin.guardados.MensajesStore.cambios.debounce(1_500).collect {

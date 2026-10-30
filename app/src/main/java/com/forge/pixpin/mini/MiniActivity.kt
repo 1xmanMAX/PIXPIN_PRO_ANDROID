@@ -930,6 +930,7 @@ class MiniActivity : ComponentActivity() {
                                 com.forge.pixpin.pin.Recordatorios.poner(
                                     this@MiniActivity, aviso(id), it
                                 )
+                                com.forge.pixpin.pin.AlarmaExacta.ofrecerSiFalta(this@MiniActivity)
                             }
                         }
                     }
@@ -965,6 +966,7 @@ class MiniActivity : ComponentActivity() {
                         java.util.TimeZone.getDefault()
                     )
                 )
+                com.forge.pixpin.pin.AlarmaExacta.ofrecerSiFalta(this)
             }
             onGuardar(Tiempos.escribirAlarma(titulo, nueva))
         }

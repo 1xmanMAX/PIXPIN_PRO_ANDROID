@@ -22,6 +22,8 @@ import java.util.TimeZone
  * alarmas para los próximos [Horario.DIAS_A_LA_VISTA] días y se rehacen al guardar el horario, al
  * arrancar la app y cada vez que suena una (así la semana siempre va por delante). Las que sobran se
  * quitan, como en [com.forge.pixpin.pin.RecordatoriosDeTareas].
+ * Sin permiso de alarmas exactas (la versión de Google Play, 30-oct-2026) suenan con algún minuto de
+ * retraso en vez de fallar: ver [com.forge.pixpin.pin.AlarmaExacta].
  *
  * El horario vive en `filesDir/horario.md` y las notas de voz en `filesDir/horario/voz/`: en el PC
  * es «solo de este equipo y no viaja», y aquí igual, con el mismo nombre y formato.

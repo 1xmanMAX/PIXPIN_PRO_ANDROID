@@ -228,6 +228,8 @@ fun PanelDelHorario(
         ponerTexto(texto)
         alcance.launch(Dispatchers.IO) {
             val hecho = runCatching { AvisosDelHorario.guardar(contexto, texto) }.isSuccess
+            // Las llamadas de las clases son alarmas: sin permiso de exactas, se ofrece (versión de Play).
+            if (hecho) com.forge.pixpin.pin.AlarmaExacta.ofrecerSiFalta(contexto)
             if (!hecho) withContext(Dispatchers.Main) { Toast.makeText(contexto, "No se pudo guardar el horario", Toast.LENGTH_SHORT).show() }
         }
     }
