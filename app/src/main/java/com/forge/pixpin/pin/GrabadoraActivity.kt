@@ -207,6 +207,7 @@ class GrabadoraActivity : ComponentActivity() {
     private fun poner(cuando: Long) {
         val m = guardado ?: return
         Recordatorios.poner(this, RecordatorioReceiver.DE_UN_MENSAJE + m.id, cuando)
+        AlarmaExacta.ofrecerSiFalta(this)
         LlamadaSecretaActivity.ponerQuienLlama(this, m.id, m.nombre.removeSuffix(".m4a").ifBlank { null })
         Thread { MensajesStore(this).actualizar(m.id) { it.copy(recuerdaEn = cuando) } }.start()
         puestaA = legible(cuando)

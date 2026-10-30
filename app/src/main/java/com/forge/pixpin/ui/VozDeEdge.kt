@@ -23,8 +23,16 @@ import java.util.concurrent.TimeUnit
  * Cada trozo de texto es una conexión: se abre, se mandan los ajustes y el texto, llegan los
  * trozos de MP3 y al «turn.end» se cierra (como hace `edge-tts`). **Lo leído se guarda** en la
  * caché, por voz y texto: volver a escuchar un párrafo no gasta red ni depende de Microsoft.
+ *
+ * **No está en la versión de Google Play** (30-oct-2026): usa una dirección de Microsoft que no es
+ * un servicio público documentado (la del «Leer en voz alta» de Edge), y eso es un riesgo de
+ * políticas y de propiedad intelectual en la tienda. Allí la opción no se enseña ([DISPONIBLE]) y se
+ * lee siempre con la voz del teléfono; el APK de GitHub sigue igual.
  */
 object VozDeEdge {
+
+    /** Si hay voces de Microsoft en esta versión: en la de Google Play, no. */
+    val DISPONIBLE: Boolean get() = !com.forge.pixpin.BuildConfig.PARA_PLAY
 
     private val cliente by lazy {
         OkHttpClient.Builder()
@@ -39,6 +47,7 @@ object VozDeEdge {
 
     /** El MP3 de [texto] con la voz [voz]: de la caché si ya se leyó; si no, pedido a Microsoft. */
     suspend fun archivo(context: Context, texto: String, voz: String): File = withContext(Dispatchers.IO) {
+        check(DISPONIBLE) { "sin voces de Microsoft en esta versión" }
         val carpeta = File(context.cacheDir, "voz-edge").apply { mkdirs() }
         val destino = File(carpeta, sha1("$voz\u0000$texto") + ".mp3")
         if (destino.length() > 0) return@withContext destino.also { it.setLastModified(System.currentTimeMillis()) }
@@ -114,7 +123,7 @@ object VozDeEdge {
      * **Las voces**, de la lista de Microsoft; guardada una semana en `files/` para no pedirla cada
      * vez. Sin red y sin copia, vacía.
      */
-    suspend fun voces(context: Context): List<EdgeVoz.Voz> = withContext(Dispatchers.IO) {
+    suspend fun voces(context: Context): List<EdgeVoz.Voz> = if (!DISPONIBLE) emptyList() else withContext(Dispatchers.IO) {
         val copia = File(context.filesDir, "voces-edge.json")
         val fresca = copia.exists() && System.currentTimeMillis() - copia.lastModified() < 7L * 24 * 3600 * 1000
         if (!fresca) runCatching {

@@ -26,6 +26,8 @@ import java.io.File
  * - Como PixPin también sabe abrir PDF, el sistema se quedaba con PixPin. En «Abrir con» PixPin sale
  *   de la lista: para verlo aquí ya está el toque normal.
  *
+ * En la versión de Google Play (30-oct-2026) un APK no se instala: se comparte ([compartirApk]).
+ *
  * Y el 29-sep-2026: **un DWG no ofrecía ninguna aplicación de planos**, sino todas las demás. Android
  * no conoce la extensión, el archivo salía como `*`/`*` y eso casa con cualquiera que declare algún
  * tipo. Ahora se busca con todos los nombres de ese tipo ([TiposDeArchivo]) y se ofrecen juntas las
@@ -61,8 +63,9 @@ object AbrirCon {
         val fuera = context !is android.app.Activity
         runCatching {
             val uri = uriDe(context, archivo)
-            if (tipo == MIME_APK || archivo.extension.equals("apk", true)) {
-                instalar(context, uri, fuera)
+            if (esApk(tipo, archivo.name)) {
+                // En la versión de Play no hay permiso de instalar (Play no lo deja): se comparte.
+                if (com.forge.pixpin.BuildConfig.PARA_PLAY) compartirApk(context, uri, fuera) else instalar(context, uri, fuera)
                 return
             }
             fun ver(t: String) = Intent(Intent.ACTION_VIEW).setDataAndType(uri, t).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -104,6 +107,36 @@ object AbrirCon {
         }.onFailure {
             Toast.makeText(context, "No se pudo abrir: ${it.javaClass.simpleName}", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    /** Si es un APK: por su tipo o por su extensión. Pura, para probarla. */
+    fun esApk(tipo: String?, nombre: String): Boolean =
+        tipo == MIME_APK || nombre.substringAfterLast('.', "").equals("apk", true)
+
+    /**
+     * **Un APK en la versión de Google Play** (30-oct-2026): Play no deja pedir el permiso de instalar
+     * apps a quien no es una tienda ni un gestor de archivos, así que no se instala desde aquí. Se
+     * ofrece **compartirlo** (guardarlo en Archivos, mandarlo a otra app que sí lo instale…), y se
+     * explica por qué en un aviso breve. El APK de GitHub sigue instalándolo ([instalar]).
+     */
+    private fun compartirApk(context: Context, uri: Uri, fuera: Boolean) {
+        Toast.makeText(
+            context,
+            "Esta versión de PixPin no instala apps: compártelo o guárdalo en Archivos para instalarlo desde ahí",
+            Toast.LENGTH_LONG
+        ).show()
+        val enviar = Intent(Intent.ACTION_SEND)
+            .setType(MIME_APK)
+            .putExtra(Intent.EXTRA_STREAM, uri)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        // El permiso de lectura viaja con el ClipData: si no, el selector no lo pasa a la app elegida.
+        enviar.clipData = android.content.ClipData.newRawUri("", uri)
+        context.startActivity(
+            Intent.createChooser(enviar, "Compartir APK").apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (fuera) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+        )
     }
 
     private fun instalar(context: Context, uri: Uri, fuera: Boolean) {

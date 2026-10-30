@@ -4611,6 +4611,7 @@ class PinWindowController(
     /** Le pone la hora que ha elegido el usuario en el reloj del sistema. */
     fun aceptarLaHora(cuando: Long) {
         Recordatorios.poner(context, pin.value.id, cuando)
+        AlarmaExacta.ofrecerSiFalta(context)
         pin.value = pin.value.copy(recordarA = cuando)
         callbacks.onPinChanged(this)
     }

@@ -140,7 +140,7 @@ class LlamadaSecretaActivity : ComponentActivity() {
                 context, AVISO, laIntencion(context, audio, nombre, mensaje, detalle, texto),
                 android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
             )
-            val aviso = androidx.core.app.NotificationCompat.Builder(context, CANAL)
+            val builder = androidx.core.app.NotificationCompat.Builder(context, CANAL)
                 .setSmallIcon(android.R.drawable.sym_call_incoming)
                 .setContentTitle(nombre)
                 .setContentText(detalle?.lineSequence()?.firstOrNull() ?: "Llamada entrante")
@@ -148,9 +148,13 @@ class LlamadaSecretaActivity : ComponentActivity() {
                 .setPriority(androidx.core.app.NotificationCompat.PRIORITY_MAX)
                 .setOngoing(true).setAutoCancel(true)
                 .setContentIntent(pendiente)
-                .setFullScreenIntent(pendiente, true)
                 .setTimeoutAfter(60_000)
-                .build()
+            // **La pantalla completa, solo si se puede** (30-oct-2026, versión de Google Play): sin
+            // USE_FULL_SCREEN_INTENT (Play solo lo da a apps de llamadas y despertadores) no se pide, y
+            // el aviso queda como lo que ya es —categoría llamada, prioridad máxima, canal urgente—, que
+            // Android enseña arriba, encima de lo que se esté haciendo. Ver [PantallaCompleta].
+            if (PantallaCompleta.puede(context, avisos)) builder.setFullScreenIntent(pendiente, true)
+            val aviso = builder.build()
             runCatching { avisos.notify(AVISO, aviso) }
             // Y a pelo también: donde el sistema lo deja, sale al instante.
             runCatching { context.startActivity(laIntencion(context, audio, nombre, mensaje, detalle, texto)) }
@@ -230,12 +234,14 @@ class LlamadaSecretaActivity : ComponentActivity() {
             // Una clase del horario: su aviso, pospuesto (`horario::posponer` del PC).
             val contexto = applicationContext
             Thread { runCatching { com.forge.pixpin.horario.AvisosDelHorario.posponer(contexto, id, cuando) } }.start()
+            AlarmaExacta.ofrecerSiFalta(this)
             val hora = android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(cuando))
             android.widget.Toast.makeText(this, "Te vuelve a llamar a las $hora", android.widget.Toast.LENGTH_SHORT).show()
             colgar()
             return
         }
         Recordatorios.poner(this, RecordatorioReceiver.DE_UN_MENSAJE + id, cuando)
+        AlarmaExacta.ofrecerSiFalta(this)
         val contexto = applicationContext
         Thread { runCatching { com.forge.pixpin.guardados.MensajesStore(contexto).actualizar(id) { it.copy(recuerdaEn = cuando) } } }.start()
         val hora = android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(cuando))

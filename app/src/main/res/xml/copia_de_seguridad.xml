@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    **La copia de seguridad en Android 10 y 11** (30-oct-2026, para Google Play). En Android 12 en
+    adelante manda reglas_de_copia.xml, donde está explicado el porqué de cada línea.
+
+    Aquí no se distingue la nube del traspaso entre teléfonos, así que se quitan todos los secretos:
+    el código del grupo y el id del aparato, la llave privada de la persona y los chats compartidos.
+    Las claves de las APIs viven en `noBackupFilesDir`, que nunca entra.
+-->
+<full-backup-content>
+    <exclude domain="file" path="sincro/identidad.json" />
+    <exclude domain="file" path="sincro/persona.json" />
+    <exclude domain="file" path="sincro/compartidos.json" />
+</full-backup-content>

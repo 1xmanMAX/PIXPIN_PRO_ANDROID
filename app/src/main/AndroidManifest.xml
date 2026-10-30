@@ -246,14 +246,12 @@
     <application
         android:name=".PixPinApp"
         android:allowBackup="true"
+        android:dataExtractionRules="@xml/reglas_de_copia"
+        android:fullBackupContent="@xml/copia_de_seguridad"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.PixPin">
-
-        <property
-            android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-            android:value="Floating overlay pins and quick capture entry points" />
 
         <!--
             La lista de chats (26-oct-2026: ya no hay pantalla de Proyectos, como en el
@@ -709,10 +707,21 @@
             android:exported="false"
             android:process=":planos" />
 
+        <!--
+            El servicio que mantiene los pins flotantes. Su tipo es «specialUse», y Google Play pide
+            explicar ese uso **dentro del propio servicio** (30-oct-2026; antes estaba suelto en
+            <application>, donde Play no lo lee). El texto va en inglés porque lo leen los revisores
+            de Play: «mantiene visibles encima de las demás apps los pins que crea el usuario (notas,
+            imágenes, temporizadores) mientras trabaja».
+        -->
         <service
             android:name=".floating.PinHostService"
             android:exported="false"
-            android:foregroundServiceType="specialUse" />
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Keeps user-created floating pins (notes, images, timers, quick capture) visible over other apps while the user works" />
+        </service>
 
         <service
             android:name=".ui.LeyendoEnVozService"
@@ -770,6 +779,8 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <!-- Al conceder las alarmas exactas (versión de Play): se reponen a la hora en punto. -->
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
             </intent-filter>
         </receiver>
     

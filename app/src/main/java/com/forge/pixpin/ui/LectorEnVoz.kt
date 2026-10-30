@@ -108,7 +108,9 @@ class LectorEnVoz private constructor(context: Context) {
      * **Leer con la voz [voz] de Microsoft** (o con la de Google, con null). Si estaba sonando,
      * vuelve a empezar el párrafo con la nueva. [etiqueta] es lo que se enseña: «Elvira · Microsoft».
      */
-    fun usarEdge(voz: String?, etiqueta: String = "") {
+    fun usarEdge(voz0: String?, etiqueta: String = "") {
+        // En la versión de Google Play no hay voces de Microsoft: siempre la del teléfono. Ver [VozDeEdge.DISPONIBLE].
+        val voz = voz0?.takeIf { VozDeEdge.DISPONIBLE }
         if (voz == edge) return
         val sonaba = _estado.value.leyendo
         if (sonaba) pausar()

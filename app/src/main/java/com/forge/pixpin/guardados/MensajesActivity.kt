@@ -7192,6 +7192,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             com.forge.pixpin.pin.Recordatorios.quitar(this, clave)
         } else {
             com.forge.pixpin.pin.Recordatorios.poner(this, clave, cuando)
+            com.forge.pixpin.pin.AlarmaExacta.ofrecerSiFalta(this)
         }
         Thread { almacen.actualizar(m.id) { it.copy(recuerdaEn = cuando) } }.start()
         Toast.makeText(
