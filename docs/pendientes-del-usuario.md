@@ -213,3 +213,16 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       y abajo la transcripción en vivo, con A−/A+ para verlo grande.
 - [x] 66. El botón de la foto para la grabación del PC junto al «+» de la pantalla de los chats (solo
       mientras el PC graba), y fuera de «Adjuntar».
+
+## Preparar Google Play (pedido del 30-oct)
+
+- [x] 67. La versión «play» (AAB con la clave de subida, `bundlePlay`) sin los permisos que Play no deja;
+      librerías nativas alineadas a 16 KB; target API 36. Ver `docs/google-play.md`.
+- [x] 68. Recordatorios sin alarma exacta concedida, APK compartido en vez de instalado, llamada secreta
+      sin pantalla completa, voces de Edge fuera de Play y secretos fuera de las copias de Google.
+- [x] 69. «Privacidad y datos» en Ajustes (política, qué sale del teléfono, borrar todos mis datos) y
+      «Reportar» en todo lo que escribe la IA.
+- [x] 70. El andamio de los planes de pago (`planes/`) y el plan de monetización, cuentas y servidores
+      (`docs/monetizacion-y-cuentas.md`).
+- [ ] 71. Lo que hace el usuario: cuenta de desarrollador, la clave de subida, publicar la política,
+      la prueba cerrada y las declaraciones de la Play Console (ver `docs/google-play.md`).

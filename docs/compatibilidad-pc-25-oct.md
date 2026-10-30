@@ -315,3 +315,11 @@ pasando (la sincronización no cambió en estos commits).
 - **Formato**: el mismo del PC (`grabacion: "clase"`, `capturas`, `video`, `clips`). En la misma
   grabación hay fotos con `fuente: "camara"` y capturas y trozos de la pantalla sin `fuente`. Prueba nueva
   en `PresencialTest`. 4246 pruebas.
+
+## v0.153.0: lista para Google Play (30-oct)
+
+La variante `play` (`./gradlew :app:bundlePlay`, flujo `play.yml`), sin REQUEST_INSTALL_PACKAGES,
+USE_FULL_SCREEN_INTENT ni USE_EXACT_ALARM; Vosk 0.3.75 y JNA 5.18.1 (todas las .so de 64 bits a 16 KB);
+«Privacidad y datos», «Reportar» en la IA, `planes/` y las guías `google-play.md`,
+`monetizacion-y-cuentas.md` y `privacidad.html`. Nada cambia en el formato ni en la sincronización.
+4262 pruebas.
