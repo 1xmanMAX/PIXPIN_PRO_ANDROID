@@ -450,6 +450,9 @@ fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {
         // móvil no hay forma de saber qué build tienes puesto — y con los APK repartidos por enlace,
         // esa era la pregunta que no se podía responder.
         pie = {
+            // **«Privacidad y datos»** (30-oct-2026, para Google Play): la política, qué sale del
+            // teléfono, reportar lo que escribe la IA y borrar todo. Ver [com.forge.pixpin.privacidad.PrivacidadYDatos].
+            com.forge.pixpin.privacidad.PrivacidadYDatos()
             Text(
                 stringResource(R.string.version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
                 style = MaterialTheme.typography.labelSmall,

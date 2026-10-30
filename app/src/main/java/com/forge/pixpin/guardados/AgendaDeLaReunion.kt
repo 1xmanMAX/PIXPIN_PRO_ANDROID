@@ -80,6 +80,15 @@ fun AgendaDeLaReunion(m: Mensaje?, alSaltar: (Long) -> Unit) {
                 if (temas.isNotEmpty()) "${TextosDeLaReunion.TITULO} · $hechos/$total" else TextosDeLaReunion.TITULO,
                 fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.weight(1f)
             )
+            // **Reportar** lo que marcó Jev (30-oct-2026, política de contenido generado por IA de Google Play).
+            com.forge.pixpin.privacidad.BotonReportarIa(com.forge.pixpin.privacidad.ReportesDeIa.Funcion.REUNION, {
+                buildString {
+                    for (t in temas) append(if (t.hecho) "✓ " else "· ").append(t.texto).append('\n')
+                    for (d in acta.decisiones) append("Decisión: ").append(d.texto).append('\n')
+                    for (q in acta.preguntasAbiertas) append("Pregunta: ").append(q.texto).append('\n')
+                    for (p in acta.propuestas) append("Propuesta: ").append(p.texto).append('\n')
+                }
+            })
             Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, contentDescription = null)
         }
         if (abierta) Column(Modifier.heightIn(max = 260.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(2.dp)) {

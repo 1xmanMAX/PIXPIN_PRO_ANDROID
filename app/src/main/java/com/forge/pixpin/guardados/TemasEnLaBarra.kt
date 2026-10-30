@@ -162,6 +162,10 @@ object TemasEnLaBarra {
                 }
                 ReunionConJev.TipoDeFicha.AVISO -> {}
             }
+            // «Reportar respuesta» (30-oct-2026, Google Play): lo propuso una IA (Jev).
+            com.forge.pixpin.privacidad.BotonReportarIa(
+                com.forge.pixpin.privacidad.ReportesDeIa.Funcion.REUNION, { f.texto }, tinte = claro.copy(alpha = 0.6f), tamano = 32.dp
+            )
             IconButton(onClick = { ReunionConJev.fichaNo(f.id) }, modifier = Modifier.size(36.dp)) {
                 Icon(Icons.Filled.Close, contentDescription = null, tint = claro.copy(alpha = 0.7f))
             }
