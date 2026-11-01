@@ -30,7 +30,7 @@ object ColorDeExtension {
     val TEXTO = Familia("Texto", 0x607D8B)
     val LIBRO = Familia("Libro", 0x3B5BDB)
     val APLICACION = Familia("Aplicación", 0x6CBF5B)
-    val PIXPIN = Familia("PixPin", 0x7048E8)
+    val PIXPIN = Familia("PinDesk", 0x7048E8)
 
     private val porExtension: Map<String, Familia> = buildMap {
         fun poner(f: Familia, vararg ext: String) = ext.forEach { put(it, f) }

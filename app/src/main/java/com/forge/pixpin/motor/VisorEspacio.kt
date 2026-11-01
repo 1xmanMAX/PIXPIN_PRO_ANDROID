@@ -994,7 +994,7 @@ function objDelCroquis(){
  }
  function vertice(p,hex){ var q=ejes(p), c=rgb(hex); obj.push('v '+f4(q[0])+' '+f4(q[1])+' '+f4(q[2])+' '+f4(c[0]/255)+' '+f4(c[1]/255)+' '+f4(c[2]/255)); return ++nv; }
  function normal(d){ var q=ejes(d); obj.push('vn '+f4(q[0])+' '+f4(q[1])+' '+f4(q[2])); return ++nn; }
- obj.push('# PixPin croquis 3D','mtllib croquis.mtl','');
+ obj.push('# PinDesk croquis 3D','mtllib croquis.mtl','');
  var i,j,k;
  for(i=0;i<D.tr.length;i++){
   var t=D.tr[i]; if(!visible(t)) continue;

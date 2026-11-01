@@ -39,7 +39,7 @@ object FormatosDeCompartir {
         CSV("Tabla (CSV)"),
         /** Lo propio de un contenido (el modelo 3D de un croquis, el DXF de un DWG): con su nombre. */
         OTRO(""),
-        PIXPIN("PixPin (.pixpin)"),
+        PIXPIN("PinDesk (.pixpin)"),
         ORIGINAL("Original"),
         ANKI("Anki"),
         WIFI("Por Wi‑Fi a mis aparatos")

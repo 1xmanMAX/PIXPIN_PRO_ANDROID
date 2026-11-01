@@ -116,7 +116,7 @@ private fun DialogoDeBorrarTodo(alCerrar: () -> Unit) {
         text = {
             Column {
                 Text(
-                    "Se borra para siempre todo lo que PixPin guarda en este teléfono: chats, notas, pines, lienzos, " +
+                    "Se borra para siempre todo lo que PinDesk guarda en este teléfono: chats, notas, pines, lienzos, " +
                         "grabaciones y su texto, tareas, ajustes, modelos bajados y tus claves de IA. No se puede deshacer, " +
                         "y la app se cerrará.",
                     fontSize = 14.sp
@@ -137,7 +137,7 @@ private fun DialogoDeBorrarTodo(alCerrar: () -> Unit) {
                 val am = context.getSystemService(ActivityManager::class.java)
                 val ok = runCatching { am?.clearApplicationUserData() == true }.getOrDefault(false)
                 // Si sale bien, el sistema cierra la app aquí mismo; si no, se dice.
-                if (!ok) Toast.makeText(context, "No se pudo borrar. Prueba desde Ajustes del teléfono › Apps › PixPin › Almacenamiento.", Toast.LENGTH_LONG).show()
+                if (!ok) Toast.makeText(context, "No se pudo borrar. Prueba desde Ajustes del teléfono › Apps › PinDesk › Almacenamiento.", Toast.LENGTH_LONG).show()
                 alCerrar()
             }) { Text("Borrar todo", color = if (vale) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant) }
         },

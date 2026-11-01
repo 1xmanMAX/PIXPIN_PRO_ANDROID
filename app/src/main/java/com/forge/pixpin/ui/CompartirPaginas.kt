@@ -188,7 +188,7 @@ object CompartirPaginas {
                         contexto, editable,
                         File(carpeta, ExportarProyecto.nombreDeArchivo(editable.nombre) + "." + PaquetePixpin.EXTENSION),
                         croquisDe = { id -> com.forge.pixpin.croquis3d.Croquis3DAlmacen.jsonDe(contexto, id) }
-                    )?.let { Compartible.Salida(it, PaquetePixpin.MIME_TYPE, ".pixpin: se sigue editando en otro PixPin") }
+                    )?.let { Compartible.Salida(it, PaquetePixpin.MIME_TYPE, ".pixpin: se sigue editando en otro PinDesk") }
                 }))
             }
             if (wifi != null) add(Compartible.Formato("wifi", Icons.Filled.Wifi, "Enviar por Wi-Fi", Compartible.NINGUNA, accion = { antes(); wifi() }))

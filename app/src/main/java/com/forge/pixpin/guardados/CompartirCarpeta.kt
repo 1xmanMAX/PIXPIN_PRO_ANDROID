@@ -302,7 +302,7 @@ object CompartirCarpeta {
     private fun pixpin(context: Context, carpeta: Mensaje, todos: List<Mensaje>, titulo: String, paginas: Int): Compartible.Formato =
         Compartible.Formato("editable", Icons.Filled.FolderZip, ".pixpin", paginas, generar = { claves ->
             paqueteDe(context, carpeta, todos, titulo, claves.takeIf { paginas != Compartible.NINGUNA }?.toSet())
-                ?.let { Compartible.Salida(it, PaquetePixpin.MIME_TYPE, "El cuaderno con su carpeta: se sigue editando en otro PixPin o en el PC") }
+                ?.let { Compartible.Salida(it, PaquetePixpin.MIME_TYPE, "El cuaderno con su carpeta: se sigue editando en otro PinDesk o en el PC") }
         })
 
     /** Escribe el `.pixpin` del cuaderno con las páginas [solo] (null: todas). Ver [pixpin]. */

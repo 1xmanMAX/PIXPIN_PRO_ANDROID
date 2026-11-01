@@ -277,7 +277,7 @@ object BalizaDelMovil {
         val texto = when (d) {
             Baliza.Diagnostico.BIEN -> return
             Baliza.Diagnostico.OTRA_RED -> "No aparece tu PC: está en otra red que este teléfono. Conéctalos a la misma Wi-Fi (o el PC al punto de acceso del teléfono). Lo grabado se queda aquí y se sincroniza al encontrarse."
-            Baliza.Diagnostico.AISLADOS -> "No aparece tu PC, y estáis en la misma red: puede que esta Wi-Fi aísle a los aparatos (las de invitados, hotel o empresa lo hacen) o que un cortafuegos bloquee PixPin. Conecta el PC al punto de acceso del teléfono, o los dos a otra Wi-Fi."
+            Baliza.Diagnostico.AISLADOS -> "No aparece tu PC, y estáis en la misma red: puede que esta Wi-Fi aísle a los aparatos (las de invitados, hotel o empresa lo hacen) o que un cortafuegos bloquee PinDesk. Conecta el PC al punto de acceso del teléfono, o los dos a otra Wi-Fi."
         }
         Log.w(TAG, "grabando y sin nadie del grupo a la vista: $d")
         Presencia.apuntar(texto)

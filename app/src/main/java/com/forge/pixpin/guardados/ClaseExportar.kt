@@ -331,7 +331,7 @@ object ClaseExportar {
         h.append("<html lang=\"${escapar(r.idioma)}\">\n<head>\n<meta charset=\"utf-8\">\n")
         h.append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n")
         h.append("<meta name=\"color-scheme\" content=\"light dark\">\n")
-        h.append("<meta name=\"generator\" content=\"PixPin\">\n<title>${escapar(c.titulo)}</title>\n<style>\n$CSS</style>\n</head>\n")
+        h.append("<meta name=\"generator\" content=\"PinDesk\">\n<title>${escapar(c.titulo)}</title>\n<style>\n$CSS</style>\n</head>\n")
         h.append("<body data-duracion=\"$duracion\">\n<header class=\"cab\">\n<h1>${escapar(c.titulo)}</h1>\n<p class=\"meta\">")
         val meta = ArrayList<String>()
         if (c.fecha.isNotBlank()) meta += "<span>${escapar(c.fecha)}</span>"

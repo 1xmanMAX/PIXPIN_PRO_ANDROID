@@ -1861,7 +1861,7 @@ class Sesion private constructor(
                 val r = Protocolo.leerRespuesta(canal)
                 val despues = ahora()
                 val hola = r.hola ?: throw IOException("${persona.nombre} no saludó")
-                if (hola.version != Protocolo.VERSION) throw IOException("${persona.nombre} tiene otra versión de PixPin: actualizad los dos")
+                if (hola.version != Protocolo.VERSION) throw IOException("${persona.nombre} tiene otra versión de PinDesk: actualizad los dos")
                 if (hola.yo.id != persona.id) throw IOException("No es quien dice ser")
                 return Sesion(canal, disco, Aparato(persona.id, persona.nombre), hola.reloj - (antes + despues) / 2, hola.puerto, hola.capacidades.toSet()).also {
                     it.acceso = AccesoDePersona(disco, compartidos, yo.id, persona.id)
@@ -1883,7 +1883,7 @@ class Sesion private constructor(
             val r = Protocolo.leerRespuesta(canal)
             val despues = ahora()
             val hola = r.hola ?: throw IOException("El otro aparato no saludó")
-            if (hola.version != Protocolo.VERSION) throw IOException("El otro aparato tiene otra versión de PixPin: actualiza los dos")
+            if (hola.version != Protocolo.VERSION) throw IOException("El otro aparato tiene otra versión de PinDesk: actualiza los dos")
             val desfase = hola.reloj - (antes + despues) / 2
             if (unirme) {
                 val yoConLetra = hola.miembros.firstOrNull { it.id == id.yo.id }

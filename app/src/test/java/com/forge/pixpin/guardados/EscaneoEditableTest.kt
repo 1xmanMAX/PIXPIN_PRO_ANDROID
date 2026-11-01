@@ -78,7 +78,7 @@ class EscaneoEditableTest {
         assertEquals("0123456789abcdef", i.getStringExtra("com.scannerpromax.extra.DOCUMENT_ID"))
         assertEquals("pdf", i.getStringExtra("com.scannerpromax.extra.FORMAT"))
         assertTrue(i.getBooleanExtra("com.scannerpromax.extra.MULTI_PAGE", false))
-        assertEquals("PixPin", i.getStringExtra("com.scannerpromax.extra.CALLER_LABEL"))
+        assertEquals("PinDesk", i.getStringExtra("com.scannerpromax.extra.CALLER_LABEL"))
     }
 
     @Test

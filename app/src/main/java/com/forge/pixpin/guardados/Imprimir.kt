@@ -62,7 +62,7 @@ object Imprimir {
         val apaisada = hojas.first().first.let { it.width > it.height }
         val manager = actividad.getSystemService(Activity.PRINT_SERVICE) as PrintManager
         manager.print(
-            nombre.ifBlank { "PixPin" },
+            nombre.ifBlank { "PinDesk" },
             AdaptadorDeEscena(actividad, escena, hojas, imagenes, nombre),
             PrintAttributes.Builder()
                 .setMediaSize(
@@ -81,13 +81,13 @@ object Imprimir {
     fun paginaDePdf(actividad: Activity, pdfConAnotacion: ByteArray, pagina: Int, nombre: String) {
         val solo = PdfUnion.soloPaginas(pdfConAnotacion, listOf(pagina)) ?: pdfConAnotacion
         val manager = actividad.getSystemService(Activity.PRINT_SERVICE) as PrintManager
-        manager.print(nombre.ifBlank { "PixPin" }, AdaptadorDeBytes(solo, nombre), null)
+        manager.print(nombre.ifBlank { "PinDesk" }, AdaptadorDeBytes(solo, nombre), null)
     }
 
     /** Un PDF entero ya hecho (un Word o un PowerPoint en vectores, con lo anotado). */
     fun pdf(actividad: Activity, bytes: ByteArray, nombre: String) {
         val manager = actividad.getSystemService(Activity.PRINT_SERVICE) as PrintManager
-        manager.print(nombre.ifBlank { "PixPin" }, AdaptadorDeBytes(bytes, nombre), null)
+        manager.print(nombre.ifBlank { "PinDesk" }, AdaptadorDeBytes(bytes, nombre), null)
     }
 
     /** Las hojas a imprimir: una por marco con contenido; si no hay, una con todo. */

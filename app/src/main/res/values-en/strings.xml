@@ -5,15 +5,18 @@
   TraduccionesTest falla si falta aquí o si cambian sus %1$s).
 -->
 <resources>
-    <string name="app_name">PixPin</string>
-    <string name="onboarding_title">Welcome to PixPin</string>
+    <!-- La app se llama PinDesk (1-nov-2026), como el PC: «PixPin» es de otro producto. Solo cambia
+         el nombre visible; el paquete, el formato .pixpin y Sincronizar siguen igual
+         (docs/nombre-pindesk-android.md). -->
+    <string name="app_name">PinDesk</string>
+    <string name="onboarding_title">Welcome to PinDesk</string>
     <string name="onboarding_subtitle">Capture, annotate and pin floating notes over any app. I need these permissions to work:</string>
     <string name="perm_overlay_title">Display over other apps</string>
     <string name="perm_overlay_desc">Essential: pins and the floating ball are windows over other apps.</string>
     <string name="perm_notif_title">Notifications</string>
     <string name="perm_notif_desc">Persistent bar with Capture and Pin buttons.</string>
     <string name="perm_battery_title">Exclude from battery saving</string>
-    <string name="perm_battery_desc">Stops the system from closing PixPin and your pins from disappearing.</string>
+    <string name="perm_battery_desc">Stops the system from closing PinDesk and your pins from disappearing.</string>
     <string name="granted">Granted</string>
     <string name="grant">Grant</string>
     <string name="start_app">Start</string>
@@ -34,7 +37,7 @@
     <string name="hoja_pauta">Ruling</string>
     <string name="imagen_titulo">Image</string>
     <string name="imagen_plano">Drawing</string>
-    <string name="app_started">PixPin active — the floating ball appears on your screen</string>
+    <string name="app_started">PinDesk active — the floating ball appears on your screen</string>
     <string name="need_overlay">Grant “Display over other apps” to continue</string>
     <string name="onboarding_listo">All set. Tap Start and the floating ball will appear.</string>
     <string name="permisos_listos">Permissions granted</string>
@@ -114,26 +117,26 @@
     <string name="iman_eje">Coordinate axis</string>
     <string name="iman_borde_guia">Guide edges</string>
     <string name="iman_borde_figura">Shape edges</string>
-    <string name="version">PixPin %1$s (%2$d)</string>
+    <string name="version">PinDesk %1$s (%2$d)</string>
     <string name="capture_mode_title">Capture mode</string>
     <string name="capture_mode_fast">Fast</string>
     <string name="capture_mode_fast_desc">Android asks for permission once and later captures are instant and reliable. While it lasts, the session uses power like a screen recording and the system shows its icon. You can close it from the notification.</string>
     <string name="capture_mode_discreet">Discreet</string>
     <string name="capture_mode_discreet_desc">The session closes after each capture: no permanent icon or battery use, but Android asks for permission every time.</string>
-    <string name="crash_title">PixPin closed unexpectedly</string>
-    <string name="crash_desc">A report with the technical details of the crash has been saved. Until you dismiss it, PixPin won\'t start by itself when the phone restarts.</string>
+    <string name="crash_title">PinDesk closed unexpectedly</string>
+    <string name="crash_desc">A report with the technical details of the crash has been saved. Until you dismiss it, PinDesk won\'t start by itself when the phone restarts.</string>
     <string name="safe_mode">Safe mode: saved pins have not been restored. Dismiss the crash report to get them back.</string>
     <string name="crash_share">Share report</string>
     <string name="crash_dismiss">Dismiss</string>
-    <string name="notif_channel_name">PixPin</string>
+    <string name="notif_channel_name">PinDesk</string>
     <string name="notif_channel_desc">Quick capture and pin shortcuts</string>
-    <string name="notif_title">PixPin active</string>
+    <string name="notif_title">PinDesk active</string>
     <string name="notif_text">Capture and pin notes over any app</string>
     <string name="action_capture">Capture</string>
     <string name="action_pin">Pin</string>
     <string name="action_done">Done</string>
     <string name="action_cancel">Cancel</string>
-    <string name="scroll_hint">Scroll slowly with your finger. PixPin stitches as you go.</string>
+    <string name="scroll_hint">Scroll slowly with your finger. PinDesk stitches as you go.</string>
     <string name="scroll_progress">%.1f screens</string>
     <string name="scroll_slower">You are going too fast: scroll more slowly</string>
     <string name="scroll_full">Maximum height reached</string>
@@ -165,7 +168,7 @@
     <string name="pins_empty">No active pins</string>
     <string name="copied_hex">Copied %1$s</string>
     <string name="copied_text">Text copied</string>
-    <string name="need_overlay_toast">Grant “Display over other apps” to PixPin</string>
+    <string name="need_overlay_toast">Grant “Display over other apps” to PinDesk</string>
     <string name="cd_clickthrough">Let touches through</string>
     <string name="cd_clickthrough_off">Receive touches again</string>
     <string name="pin_transparente_aviso">Touches pass through. Use the corner button to go back.</string>
@@ -287,7 +290,7 @@
     <string name="cd_tools">Tools</string>
     <string name="cd_done">Done</string>
     <string name="priority_chip">PRIORITY</string>
-    <string name="pin_image_default">PixPin</string>
+    <string name="pin_image_default">PinDesk</string>
     <string name="pin_image_priority">Priority</string>
     <string name="checklist_seed">First task\nSecond task</string>
     <string name="ledger_seed">+1000 Salary\n-250 Shopping</string>
@@ -340,7 +343,7 @@
     <string name="guardados_escaner_antiguo_titulo">Update the scanner</string>
     <string name="guardados_escaner_antiguo">Your version of “Escáner Pro Max” can\'t open a scan for editing yet. Update it, or scan the document again.</string>
     <string name="guardados_escaner_no_esta_titulo">This scan is no longer in the scanner</string>
-    <string name="guardados_escaner_no_esta">It can\'t be reopened for editing: the document was deleted from “Escáner Pro Max”, the app was reinstalled, or it was scanned before PixPin recorded which document it was. The file in this message is still intact. You can scan it again or look for it in the scanner.</string>
+    <string name="guardados_escaner_no_esta">It can\'t be reopened for editing: the document was deleted from “Escáner Pro Max”, the app was reinstalled, or it was scanned before PinDesk recorded which document it was. The file in this message is still intact. You can scan it again or look for it in the scanner.</string>
     <string name="guardados_escaner_escanear_otra_vez">Scan again</string>
     <string name="guardados_escaner_abrir">Open the scanner</string>
     <string name="guardados_escaner_editado">Scan updated</string>
@@ -349,7 +352,7 @@
     <string name="guardados_lectura_veloz_falta_titulo">“Lectura Veloz” missing</string>
     <string name="guardados_lectura_veloz_falta">To read this document at full speed you need to install the “Lectura Veloz” app. Once it is installed, this option will open it with the document already loaded, from your green bookmark.</string>
     <string name="guardados_lectura_veloz_antigua_titulo">Update “Lectura Veloz”</string>
-    <string name="guardados_lectura_veloz_antigua">Your version of “Lectura Veloz” can\'t open PixPin documents yet. Update it and try again.</string>
+    <string name="guardados_lectura_veloz_antigua">Your version of “Lectura Veloz” can\'t open PinDesk documents yet. Update it and try again.</string>
     <string name="guardados_lectura_veloz_no_se_puede">This document can\'t be read in “Lectura Veloz”.</string>
     <string name="guardados_lectura_veloz_abrir">Open Lectura Veloz</string>
     <string name="guardados_escaner_editado_nuevo">The message was gone: the edited scan comes in as a new one</string>
@@ -582,7 +585,7 @@
     <string name="plano_faltan_letras">%1$d drawing fonts are missing: tap Aa above to add them</string>
     <string name="plano_letras_faltan">This drawing asks for fonts that are not on the phone; its texts use similar ones and may not fit in their boxes:</string>
     <string name="plano_letras_no_falta">No font that the drawing names is missing.</string>
-    <string name="plano_letras_donde">Copy them from your PC and add them here: SHX fonts are in C:\\Program Files\\Autodesk\\AutoCAD 20xx\\Fonts and TrueType ones in C:\\Windows\\Fonts. PixPin can\'t bring them: they belong to Autodesk and Microsoft.</string>
+    <string name="plano_letras_donde">Copy them from your PC and add them here: SHX fonts are in C:\\Program Files\\Autodesk\\AutoCAD 20xx\\Fonts and TrueType ones in C:\\Windows\\Fonts. PinDesk can\'t bring them: they belong to Autodesk and Microsoft.</string>
     <string name="plano_letras_de_windows">The ones that are not .shx don\'t come with AutoCAD: they are TrueType fonts from Windows and Office. Copy them from C:\\Windows\\Fonts (the file is in parentheses) and add them with “Add fonts…”.</string>
     <string name="plano_letras_mias">Your fonts: %1$d</string>
     <string name="plano_letras_quitar">Remove mine</string>
@@ -883,9 +886,9 @@
     <string name="proyecto_paquete_corto">Editable</string>
     <string name="proyecto_paquete">Share editable (.pixpin)</string>
     <string name="croquis_exportar_paquete">Editable (.pixpin)</string>
-    <string name="proyecto_desde_compartido">New project in PixPin</string>
+    <string name="proyecto_desde_compartido">New project in PinDesk</string>
     <string name="proyecto_desde_compartido_ok">Project created</string>
-    <string name="formato_html_titulo">PixPin drawing</string>
+    <string name="formato_html_titulo">PinDesk drawing</string>
     <string name="formato_editable">Editable file</string>
     <string name="pin_font_title">Pin font</string>
     <string name="pin_font_desc">Which font is used in simple editing. In advanced editing you still choose it on the fly.</string>
@@ -939,7 +942,7 @@
     <string name="guardados_entrar_en_chat">Join a shared chat</string>
     <string name="guardados_cambiar_nombre">Rename</string>
     <string name="atajo_buscar">Search</string>
-    <string name="atajo_buscar_largo">PixPin: search everything</string>
+    <string name="atajo_buscar_largo">PinDesk: search everything</string>
     <string name="atajo_capturas">Screenshots</string>
     <string name="atajo_capturas_largo">Screenshot gallery</string>
     <string name="atajo_grabar">Record</string>

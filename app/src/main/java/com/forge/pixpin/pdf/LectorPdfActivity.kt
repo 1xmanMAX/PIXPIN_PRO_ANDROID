@@ -182,7 +182,7 @@ class LectorPdfActivity : ComponentActivity() {
     private fun copiar(texto: String, aviso: String) {
         if (texto.isBlank()) { android.widget.Toast.makeText(this, "No hay texto aquí", android.widget.Toast.LENGTH_SHORT).show(); return }
         val portapapeles = getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager
-        portapapeles.setPrimaryClip(android.content.ClipData.newPlainText("PixPin", texto))
+        portapapeles.setPrimaryClip(android.content.ClipData.newPlainText("PinDesk", texto))
         // Android 13 ya enseña su propio aviso al copiar.
         if (android.os.Build.VERSION.SDK_INT < 33) android.widget.Toast.makeText(this, aviso, android.widget.Toast.LENGTH_SHORT).show()
     }

@@ -67,7 +67,7 @@ object IndiceDelBuscador {
             }
             val clave = "$ARCHIVOS/${m.id}"
             docs[clave] = (nombre + "\u0001" + donde) to cosa(
-                ARCHIVOS, m.id, nombre, "$donde · PixPin", m.cuando,
+                ARCHIVOS, m.id, nombre, "$donde · PinDesk", m.cuando,
                 Atajos.sena(Atajos.ARCHIVO, m.id).toString(), listOfNotNull(chat, m.ruta?.substringAfterLast('/'))
             )
         }
@@ -76,14 +76,14 @@ object IndiceDelBuscador {
         for (f in BuscarEnTodo.FUNCIONES) {
             val accion = f.accion ?: continue
             docs["$FUNCIONES/$accion"] = (f.titulo + "\u0001" + f.otras) to cosa(
-                FUNCIONES, accion, f.titulo, "${f.detalle} · PixPin", 0L,
+                FUNCIONES, accion, f.titulo, "${f.detalle} · PinDesk", 0L,
                 Atajos.sena(accion).toString(), f.otras.split(' ').filter { it.length > 3 }
             )
         }
         for (p in proyectos) {
             if (p.archivado || p.nombre.isBlank()) continue
             docs["$PROYECTOS/${p.id}"] = p.nombre to cosa(
-                PROYECTOS, p.id, p.nombre, "Proyecto · PixPin", p.creado.takeIf { it > 0 } ?: p.tocado,
+                PROYECTOS, p.id, p.nombre, "Proyecto · PinDesk", p.creado.takeIf { it > 0 } ?: p.tocado,
                 Atajos.sena(Atajos.PROYECTO, p.id).toString(), emptyList()
             )
         }
@@ -119,7 +119,7 @@ object IndiceDelBuscador {
         // Los buscadores casan por principio de palabra, así que «p tesis» o «pixpin tesis»
         // dejan arriba lo de PixPin. No pueden esconder lo de otras apps: eso no lo decide nadie
         // más que el buscador. Para buscar solo aquí está la tarjeta de [BuscarActivity].
-        .setAlternateNames((otrosNombres.filter { it.isNotBlank() && it != nombre } + "p $nombre" + "PixPin $nombre").distinct())
+        .setAlternateNames((otrosNombres.filter { it.isNotBlank() && it != nombre } + "p $nombre" + "PinDesk $nombre").distinct())
         .setUrl(sena)
         .setCreationTimestampMillis(cuando)
         .addPotentialAction(PotentialAction.Builder().setName("Abrir").setUri(sena).build())

@@ -8,7 +8,7 @@
 <resources>
     <!-- Ajustes › Idioma -->
     <string name="ajustes_idioma">Idioma</string>
-    <string name="ajustes_idioma_desc">El de los menús y textos de PixPin. «El del teléfono»: español si el teléfono está en español; si no, inglés.</string>
+    <string name="ajustes_idioma_desc">El de los menús y textos de PinDesk. «El del teléfono»: español si el teléfono está en español; si no, inglés.</string>
     <string name="ajustes_idioma_sistema">El del teléfono</string>
 
     <!-- Lista de chats (ui/ListaDeChats.kt) -->
@@ -102,7 +102,7 @@
     <string name="ajustes_dias_desc">Pasado el plazo se van a la papelera del teléfono, salvo las conservadas.</string>
     <string name="ajustes_dias_nunca">Nunca</string>
     <string name="ajustes_pdf_titulo">Compresión de los PDF</string>
-    <string name="ajustes_pdf_desc">Al guardar un PDF en PixPin se aligera solo, en segundo plano, con pdfsqueeze. El original que tengas fuera de PixPin no se toca.</string>
+    <string name="ajustes_pdf_desc">Al guardar un PDF en PinDesk se aligera solo, en segundo plano, con pdfsqueeze. El original que tengas fuera de PinDesk no se toca.</string>
     <string name="ajustes_barra_pdf">Barra del PDF</string>
     <string name="ajustes_barra_pdf_desc">Las herramientas al anotar un PDF. Sin tocar, las del lector.</string>
     <string name="ajustes_barra_documento">Barra de Word y libros</string>
@@ -130,7 +130,7 @@
     <string name="ajustes_sec_capturar">Capturar</string>
     <string name="ajustes_sec_capturar_resumen">Cómo se recorta la pantalla y en qué formato se copia</string>
     <string name="ajustes_sec_pdf">PDF</string>
-    <string name="ajustes_sec_pdf_resumen">Cuánto se comprimen al guardarlos en PixPin</string>
+    <string name="ajustes_sec_pdf_resumen">Cuánto se comprimen al guardarlos en PinDesk</string>
     <string name="ajustes_sec_dibujar">Dibujar</string>
     <string name="ajustes_sec_dibujar_resumen">Imán, mano, modo guía y qué herramientas salen en cada sitio</string>
     <string name="ajustes_sec_pinear">Pinear</string>

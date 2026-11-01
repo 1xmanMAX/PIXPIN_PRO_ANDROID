@@ -66,7 +66,7 @@ object RedDelTelefono : Web.Red {
         } catch (_: UnknownHostException) {
             throw Direccion.NoSeAbre("no se encontro el servidor «$servidor» (¿hay internet?)")
         } catch (_: SecurityException) {
-            throw Direccion.NoSeAbre("PixPin no tiene permiso para usar internet")
+            throw Direccion.NoSeAbre("PinDesk no tiene permiso para usar internet")
         }
     }
 
