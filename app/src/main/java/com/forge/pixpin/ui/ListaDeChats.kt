@@ -179,6 +179,9 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                 androidx.compose.material3.IconButton(onClick = { com.forge.pixpin.ConfiguracionActivity.abrir(contexto) }) {
                     Icon(Icons.Filled.Tune, stringResource(R.string.ajustes_titulo), tint = Cristal.tinta)
                 }
+                // **El estado de las IA** (1-nov-2026, del PC): tres puntitos (Claude, DeepSeek, Jev)
+                // pegados a la izquierda del botón de sincronizar. Ver [PuntitosDeLasIa].
+                PuntitosDeLasIa()
                 // **El botón de sincronizar gira mientras hay una vuelta en marcha** y lleva la marca
                 // roja si la última falló (25-oct-2026, PC `0470294`). Pulsarlo es ver qué pasó.
                 androidx.compose.material3.IconButton(onClick = {

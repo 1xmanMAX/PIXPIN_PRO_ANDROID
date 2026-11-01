@@ -164,8 +164,10 @@ class Cliente(
             val c = try {
                 transporte.enviar("POST", url, cabeceras, cuerpo, queda)
             } catch (e: ErrorJev) {
+                avisar(null)
                 throw e
             } catch (e: Exception) {
+                avisar(null)
                 throw ErrorJev.Red(e.message ?: e.javaClass.simpleName)
             }
             if ((c.codigo == 429 || c.codigo == 529) && intento == 0 && reloj() - empezo < tiempoMs / 2) {
@@ -176,6 +178,7 @@ class Cliente(
             contestado = c
             break
         }
+        avisar(contestado.codigo)
         val texto = String(contestado.cuerpo, Charsets.UTF_8)
         registro("respuesta ${contestado.codigo} en ${reloj() - empezo} ms: $texto")
         if (contestado.codigo !in 200..299) throw ErrorJev.Http(contestado.codigo, detalle(texto))
@@ -193,8 +196,10 @@ class Cliente(
         val c = try {
             transporte.enviar("GET", "$base/v1/models", cabeceras(false), ByteArray(0), tiempoMs * 2)
         } catch (e: Exception) {
+            avisar(null)
             throw ErrorJev.Red(e.message ?: e.javaClass.simpleName)
         }
+        avisar(c.codigo)
         val texto = String(c.cuerpo, Charsets.UTF_8)
         if (c.codigo !in 200..299) throw ErrorJev.Http(c.codigo, detalle(texto))
         val v = runCatching { Json.parseToJsonElement(texto) as JsonObject }.getOrNull() ?: throw ErrorJev.Formato("lista de modelos")
@@ -205,6 +210,17 @@ class Cliente(
     companion object {
         const val BASE = "https://api.typesafe.ai"
         const val TIEMPO_MS = 2_000L
+
+        /**
+         * **A quién se avisa de cada desenlace** (1-nov-2026, `cliente::al_contestar` del PC): el
+         * código HTTP con que contestó TypeSafe, o null si no se llegó. Lo que sale del [Cache] no
+         * cuenta. Lo pone [com.forge.pixpin.estadoia.EstadoDeLasIa] al arrancar; en las pruebas, nadie.
+         */
+        @Volatile var alContestar: ((Int?) -> Unit)? = null
+
+        private fun avisar(codigo: Int?) {
+            alContestar?.let { f -> runCatching { f(codigo) } }
+        }
 
         /** La huella SHA-256 del cuerpo, en hexadecimal. */
         fun huella(cuerpo: ByteArray): String =

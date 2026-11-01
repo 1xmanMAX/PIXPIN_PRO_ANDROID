@@ -87,13 +87,18 @@ fun AjustesV2(
      * pantalla aparte delante de los ajustes. Solo en la portada, sin buscar.
      */
     cabecera: @Composable () -> Unit = {},
+    /**
+     * La sección abierta al entrar (1-nov-2026): el nombre de una [Seccion], o null para la
+     * portada. «Claves en Ajustes → Asistente» de los puntitos de las IA abre `ASISTENTE`.
+     */
+    seccionInicial: String? = null,
     tarjeta: @Composable (id: String) -> Unit
 ) {
     val app = LocalContext.current.applicationContext as PixPinApp
     val scope = rememberCoroutineScope()
     val ajustes by app.settings.settings.collectAsState(initial = Settings())
     var busqueda by rememberSaveable { mutableStateOf("") }
-    var abierta by rememberSaveable { mutableStateOf<String?>(null) }
+    var abierta by rememberSaveable { mutableStateOf(seccionInicial?.takeIf { n -> Seccion.entries.any { it.name == n } }) }
     val seccion = abierta?.let { n -> Seccion.entries.firstOrNull { it.name == n } }
 
     // **Deshacer**: se mira lo guardado y se apunta cómo estaba antes de cada cambio. Vive lo que
