@@ -137,6 +137,8 @@ object Jev {
         if (!tmp.renameTo(f)) { f.delete(); tmp.renameTo(f) }
         enMemoria = clave; leida = true
         _version.value++
+        // El puntito de Jev se comprueba ya con la clave nueva (1-nov-2026).
+        com.forge.pixpin.estadoia.EstadoDeLasIa.claveCambiada(c, com.forge.pixpin.estadoia.Servicio.JEV)
     }
 
     /** Borra la clave guardada: todo vuelve a lo de siempre. */
@@ -145,6 +147,7 @@ object Jev {
         fichero(c).delete()
         enMemoria = null; leida = true
         _version.value++
+        com.forge.pixpin.estadoia.EstadoDeLasIa.claveCambiada(c, com.forge.pixpin.estadoia.Servicio.JEV)
     }
 
     /**

@@ -131,6 +131,9 @@ class PixPinApp : Application() {
             }
         }
         settings = SettingsRepository(this)
+        // **El estado de las IA** (1-nov-2026): los puntitos de Claude, DeepSeek y Jev junto al botón
+        // de sincronizar. Escucha cada petición y comprueba sin gastar en su hilo. Ver [com.forge.pixpin.estadoia.EstadoDeLasIa].
+        com.forge.pixpin.estadoia.EstadoDeLasIa.arrancar(this)
         scope.launch { settings.settings.collect { ajustes = it; com.forge.pixpin.pdf.ComprimirPdf.nivel = it.compresionPdf } }
         // **Los widgets de tareas y de galería, al día** con el chat y con las capturas.
         // Ver [com.forge.pixpin.widget.AvisoDeWidgets].

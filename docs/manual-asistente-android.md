@@ -130,3 +130,34 @@ Lo que solo se prueba con un teléfono y red de verdad: OkHttp contra páginas r
 redirecciones, `Content-Type`), DuckDuckGo de verdad (y su comprobación de robot), Brave con una
 clave, las herramientas de servidor de Claude con Haiku 5.5, un PDF real de la web y la burbuja en
 pantalla.
+
+## 2.7 El estado de las IA junto al botón de sincronizar (1-nov-2026)
+
+Del PC (`docs/ui-funciones-y-chats.md`, «El estado de las IA junto al botón de sincronizar»). En la
+cabecera de la lista de chats, pegada a la izquierda del botón redondo de sincronizar, una columna
+de **tres puntitos de 5 dp** (3 dp de hueco): **Claude, DeepSeek y Jev**, de arriba abajo, siempre
+los tres.
+
+| Estado | Puntito | Cuándo |
+|---|---|---|
+| Funciona | verde lleno (`#43A047` de día, `#66BB6A` de noche) | la última petición o comprobación contestó 2xx (o 400/413/422: era de esa petición) |
+| Falla | rojo lleno (`#E53935` / `#EF5350`) | 401/403 clave mala, 402 (o 400 «credit balance») sin saldo, 429 límite, 5xx/529 servicio caído, sin red, otro código (404) |
+| Sin clave | solo el aro rojo | no hay clave guardada en este teléfono |
+| Sin comprobar | gris tenue (al 55 %) | hay clave y aún no se sabe |
+
+- **Tocarlos o dejar el dedo**: un menú con una línea por servicio («Claude · funciona · hace 3
+  min», «DeepSeek · sin clave», «Jev · la clave no es válida (401)»; cada una lleva a las claves),
+  **«Comprobar ahora»** y **«Claves en Ajustes → Asistente»** (abre Ajustes directamente en la
+  sección Asistente).
+- **De dónde sale**: cada petición del asistente, de «Probar» en Ajustes y de Jev avisa de cómo
+  acabó (`Nube.alContestar`, `jev.Cliente.alContestar`); lo que sale del cache de Jev no cuenta.
+  Y una comprobación que no gasta tokens: Anthropic `GET https://api.anthropic.com/v1/models?limit=1`,
+  DeepSeek `GET https://api.deepseek.com/models`, TypeSafe `GET https://api.typesafe.ai/v1/models`.
+- **Cuándo**: a los 10 s de arrancar, al guardar o borrar una clave (ya), con «Comprobar ahora» y
+  como mucho cada 30 min desde lo último que se supo (una petición de verdad también cuenta y
+  aplaza la comprobación). Sin red, otra vez a 1, 2, 4, 8… min, hasta 30. En su hilo («estado-ia»).
+- Las claves son de cada aparato (no viajan): cada teléfono enseña las suyas.
+
+Código: `estadoia/Tablero.kt` (las reglas del PC, tal cual, con `TableroTest`),
+`estadoia/EstadoDeLasIa.kt` (el tablero de la app, el hilo y las comprobaciones),
+`ui/PuntitosDeLasIa.kt` (pintar y el menú) y `AvisosDeLasIaTest` (los avisos de la nube y de Jev).

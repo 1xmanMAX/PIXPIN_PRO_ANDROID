@@ -109,6 +109,79 @@ object Nube {
         }
     }
 
+    // ------------------------------------------------------------------------ el estado de la IA
+
+    /**
+     * **A quién se avisa de cada desenlace** (1-nov-2026, `nube::al_contestar` del PC): el
+     * proveedor y el código HTTP con que contestó, o null si no se llegó a hablar con él. Lo pone
+     * [com.forge.pixpin.estadoia.EstadoDeLasIa] al arrancar; en las pruebas, nadie.
+     */
+    @Volatile var alContestar: ((Proveedor, Int?) -> Unit)? = null
+
+    private fun avisar(p: Proveedor, codigo: Int?) {
+        alContestar?.let { f -> runCatching { f(p, codigo) } }
+    }
+
+    /**
+     * El código que cuenta para el estado: Claude dice «sin saldo» con un 400 («credit balance is
+     * too low»), que para el puntito es un 402.
+     */
+    fun codigoDelEstado(codigo: Int, cuerpo: String): Int {
+        val bajo = cuerpo.lowercase()
+        return if ("credit balance" in bajo || "insufficient balance" in bajo) 402 else codigo
+    }
+
+    /** La lista de modelos de cada API: un `GET` que no gasta tokens. */
+    fun urlDeModelos(p: Proveedor): String = when (p) {
+        Proveedor.CLAUDE -> "https://api.anthropic.com/v1/models?limit=1"
+        Proveedor.DEEPSEEK -> "https://api.deepseek.com/models"
+    }
+
+    /** **Un GET** que devuelve el código y el principio del cuerpo; lanza [Fallo.Red] si no se llegó. */
+    fun interface Get {
+        fun pedir(url: String, cabeceras: List<Pair<String, String>>): Pair<Int, String>
+    }
+
+    /** El de verdad, con OkHttp: solo HTTPS, 20 s como mucho. */
+    object OkHttpGet : Get {
+        private val cliente by lazy {
+            okhttp3.OkHttpClient.Builder().callTimeout(20, java.util.concurrent.TimeUnit.SECONDS).build()
+        }
+
+        override fun pedir(url: String, cabeceras: List<Pair<String, String>>): Pair<Int, String> {
+            val u = url.toHttpUrlOrNull() ?: throw Fallo.Red("direccion mala")
+            if (!u.isHttps) throw Fallo.Red("solo https")
+            val b = okhttp3.Request.Builder().url(u).get()
+            for ((k, v) in cabeceras) b.header(k, v)
+            return try {
+                cliente.newCall(b.build()).execute().use { r ->
+                    val texto = runCatching {
+                        r.body?.byteStream()?.use { s -> val b = ByteArray(4096); var n = 0; while (n < b.size) { val k = s.read(b, n, b.size - n); if (k < 0) break; n += k }; String(b, 0, n, Charsets.UTF_8) }
+                    }.getOrNull().orEmpty()
+                    r.code to texto
+                }
+            } catch (e: java.io.IOException) {
+                throw Fallo.Red(e.javaClass.simpleName)
+            }
+        }
+    }
+
+    /**
+     * **Comprueba la clave sin gastar** (`nube::comprobar` del PC): la lista de modelos, y avisa
+     * del desenlace como una petición más. Devuelve lo mismo que avisa. Bloquea: desde un hilo de
+     * fondo.
+     */
+    fun comprobar(p: Proveedor, clave: String, url: String = urlDeModelos(p), get: Get = OkHttpGet): Int? {
+        val codigo = try {
+            val (c, cuerpo) = get.pedir(url, p.cabeceras(clave.trim()))
+            if (c in 200..299) c else codigoDelEstado(c, cuerpo)
+        } catch (e: Fallo.Red) {
+            null
+        }
+        avisar(p, codigo)
+        return codigo
+    }
+
     // ------------------------------------------------------------------------------------ HTTP
 
     /** Por qué no salió el POST. */
@@ -611,10 +684,12 @@ object Nube {
         }
 
         private inline fun resultadoHttp(enviar: () -> Boolean): Boolean = try {
-            enviar()
+            enviar().also { avisar(proveedor, 200) }
         } catch (f: Fallo.Red) {
+            avisar(proveedor, null)
             throw Intento.Reintentar(nube("No hay conexion con ${proveedor.nombre}. Mira la red y vuelve a pedirlo."), null)
         } catch (f: Fallo.Http) {
+            avisar(proveedor, codigoDelEstado(f.codigo, f.cuerpo))
             if (f.codigo == 400 && proveedor == Proveedor.DEEPSEEK && "reasoning" in f.cuerpo.lowercase() && pensar.getAndSet(false))
                 throw Intento.Cambiar(nube(clasificar(proveedor, f.codigo, f.cuerpo).first))
             val (aviso, pasajero) = clasificar(proveedor, f.codigo, f.cuerpo)
@@ -652,8 +727,9 @@ object Nube {
             val respuesta = ByteArrayOutputStream()
             try {
                 http.enviar(url, proveedor.cabeceras(clave), cuerpo) { b -> respuesta.write(b); if (respuesta.size() > 64 * 1024) Seguir.PARAR else Seguir.SI }
-            } catch (f: Fallo.Red) { error("no hay conexion con ${proveedor.nombre}") }
-            catch (f: Fallo.Http) { error(clasificar(proveedor, f.codigo, f.cuerpo).first) }
+                avisar(proveedor, 200)
+            } catch (f: Fallo.Red) { avisar(proveedor, null); error("no hay conexion con ${proveedor.nombre}") }
+            catch (f: Fallo.Http) { avisar(proveedor, codigoDelEstado(f.codigo, f.cuerpo)); error(clasificar(proveedor, f.codigo, f.cuerpo).first) }
             val v = runCatching { Json.parseToJsonElement(respuesta.toString(Charsets.UTF_8.name())) as JsonObject }.getOrNull()
                 ?: error("${proveedor.nombre} contesto algo que no se entiende")
             val modelo = (v["model"] as? JsonPrimitive)?.content ?: proveedor.modelo

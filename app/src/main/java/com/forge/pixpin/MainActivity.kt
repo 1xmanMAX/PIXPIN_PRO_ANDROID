@@ -429,10 +429,11 @@ private fun TodoConcedido() {
  * opción, y son las de siempre: no se pierde ninguna.
  */
 @Composable
-fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {}) {
+fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {}, seccionInicial: String? = null) {
     com.forge.pixpin.ajustes.AjustesV2(
         onVolver = onVolver,
         cabecera = cabecera,
+        seccionInicial = seccionInicial,
         // **La versión, aquí abajo.** Si el número solo vive en el archivo de compilación, desde el
         // móvil no hay forma de saber qué build tienes puesto — y con los APK repartidos por enlace,
         // esa era la pregunta que no se podía responder.

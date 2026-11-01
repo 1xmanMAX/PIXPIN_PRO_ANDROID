@@ -48,6 +48,7 @@ class ConfiguracionActivity : ComponentActivity() {
                 // «Comenzar» y los permisos que falten, va ahora encima de las secciones.
                 PantallaDeAjustes(
                     onVolver = { finish() },
+                    seccionInicial = intent?.getStringExtra(EXTRA_SECCION),
                     cabecera = {
                         TarjetaDeConfiguracion(Modifier.fillMaxWidth().padding(bottom = 16.dp))
                     }
@@ -64,10 +65,18 @@ class ConfiguracionActivity : ComponentActivity() {
     }
 
     companion object {
-        fun abrir(context: android.content.Context) {
+        /** La sección que se abre al entrar (el nombre de una `CatalogoDeAjustes.Seccion`). */
+        const val EXTRA_SECCION = "com.forge.pixpin.SECCION_DE_AJUSTES"
+
+        /**
+         * Abre los ajustes; con [seccion] (1-nov-2026), directamente en ella: «Claves en Ajustes →
+         * Asistente» de los puntitos de las IA pasa `ASISTENTE`.
+         */
+        fun abrir(context: android.content.Context, seccion: String? = null) {
             runCatching {
                 context.startActivity(
                     Intent(context, ConfiguracionActivity::class.java)
+                        .also { if (seccion != null) it.putExtra(EXTRA_SECCION, seccion) }
                         .also { if (context !is android.app.Activity) it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }
                 )
             }

@@ -46,7 +46,11 @@ object ClavesDeLaNube {
     }
 
     /** **Guarda** la clave cifrada (escritura atómica). Lanza si no tiene pinta de clave. */
-    fun guardar(c: Context, p: Nube.Proveedor, clave: String) = guardar(fichero(c, p), clave)
+    fun guardar(c: Context, p: Nube.Proveedor, clave: String) {
+        guardar(fichero(c, p), clave)
+        // El puntito de esta nube se comprueba ya con la clave nueva (1-nov-2026).
+        com.forge.pixpin.estadoia.EstadoDeLasIa.claveCambiada(c, p)
+    }
 
     @Synchronized
     private fun guardar(f: File, clave: String) {
@@ -76,9 +80,9 @@ object ClavesDeLaNube {
 
     fun hay(c: Context, p: Nube.Proveedor) = fichero(c, p).isFile
 
-    @Synchronized
     fun borrar(c: Context, p: Nube.Proveedor) {
-        fichero(c, p).delete()
+        synchronized(this) { fichero(c, p).delete() }
+        com.forge.pixpin.estadoia.EstadoDeLasIa.claveCambiada(c, p)
     }
 
     // ------------------------------------------------------------- la clave de Brave Search
