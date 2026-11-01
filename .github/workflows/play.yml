@@ -1,3 +1,6 @@
+# **Lánzalo sobre la rama `play-store`** (1-nov-2026, ver docs/ramas.md): en `main` no existe la variante `play`.
+# Se queda aquí porque GitHub solo enseña «Run workflow» con el flujo en la rama principal.
+#
 # **El AAB para Google Play, compilado en GitHub** (30-oct-2026). Ver docs/google-play.md.
 #
 # Compila `./gradlew :app:bundlePlay` (la variante `play`: sin los permisos que Play no deja),
