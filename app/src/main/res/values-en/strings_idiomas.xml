@@ -3,7 +3,7 @@
 <resources>
     <!-- Ajustes › Idioma -->
     <string name="ajustes_idioma">Language</string>
-    <string name="ajustes_idioma_desc">The language of PinDesk\'s menus and texts. “Same as the phone”: Spanish if the phone is in Spanish; otherwise, English.</string>
+    <string name="ajustes_idioma_desc">The language of PinDesk\'s menus and texts. “Same as the phone”: the phone\'s language if PinDesk has it; otherwise, English.</string>
     <string name="ajustes_idioma_sistema">Same as the phone</string>
 
     <!-- Lista de chats (ui/ListaDeChats.kt) -->

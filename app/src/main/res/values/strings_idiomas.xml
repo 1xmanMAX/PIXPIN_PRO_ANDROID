@@ -8,7 +8,7 @@
 <resources>
     <!-- Ajustes › Idioma -->
     <string name="ajustes_idioma">Idioma</string>
-    <string name="ajustes_idioma_desc">El de los menús y textos de PinDesk. «El del teléfono»: español si el teléfono está en español; si no, inglés.</string>
+    <string name="ajustes_idioma_desc">El de los menús y textos de PinDesk. «El del teléfono»: el del teléfono si PinDesk lo tiene; si no, inglés.</string>
     <string name="ajustes_idioma_sistema">El del teléfono</string>
 
     <!-- Lista de chats (ui/ListaDeChats.kt) -->
