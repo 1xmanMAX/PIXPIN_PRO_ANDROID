@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ko/strings_sin_perder.xml: traducción de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">휴대전화 저장 공간이 부족해지고 있습니다</string>
+    <string name="sin_perder_disco_lleno">휴대전화가 거의 가득 찼습니다: 동영상을 닫고 오디오는 계속합니다</string>
+    <string name="sin_perder_sin_sitio_para_video">남은 공간이 매우 적습니다: 오디오만 녹음합니다</string>
+    <string name="sin_perder_video_cortado">동영상이 끊겼습니다. 오디오는 계속 녹음 중입니다</string>
+    <string name="sin_perder_hueco">휴대전화가 앱을 %1$d분 동안 멈췄습니다. 돌아왔을 때 녹음을 다시 시작했습니다</string>
+    <string name="sin_perder_quedo_para_recuperar">녹음을 저장할 수 없습니다: 안전하게 보관되어 있으며 PinDesk를 열 때 복구를 제안합니다</string>
+    <string name="cortada_titulo">중단된 녹음</string>
+    <string name="cortada_texto">녹음이 중단되었습니다(%1$s, %2$d분)</string>
+    <string name="cortada_perdida">중단된 녹음(%1$s)에는 열 수 없는 동영상만 남았습니다</string>
+    <string name="cortada_en_chat">\'%1$s\'에서</string>
+    <string name="cortada_recuperar">복구</string>
+    <string name="cortada_descartar">버리기</string>
+    <string name="cortada_luego">나중에</string>
+    <string name="cortada_recuperando">복구하는 중…</string>
+    <string name="cortada_recuperada">녹음을 복구했습니다: 이제 해당 채팅에 있습니다</string>
+    <string name="cortada_fallo">녹음을 복구할 수 없습니다: 그대로 남아 있습니다</string>
+    <string name="cortada_descartar_seguro">\'%1$s\'에서 녹음한 내용을 삭제할까요? 되돌릴 수 없습니다.</string>
+    <string name="cortada_no">아니요</string>
+    <string name="cortada_si_borrar">예, 삭제</string>
+    <string name="cortada_aviso">PinDesk를 열어 복구하거나 버리세요</string>
+</resources>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-zh-rCN/strings_por_su_hora.xml: traducción de values/strings_por_su_hora.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="clase_todos_aportan">让聊天中的每个人都能添加照片</string>
+    <string name="clase_solo_mis_fotos">此录制中只放我的照片</string>
+    <string name="clase_todos_aportan_hecho">聊天成员的照片会放在对应的分钟</string>
+    <string name="clase_solo_mis_fotos_hecho">此录制中只放你的照片</string>
+    <string name="clase_todos_aportan_detalle">会议期间共享聊天中的成员拍的照片会放在对应的分钟，即使他们没有连接。</string>
+    <string name="foto_adjuntar_a_la_grabacion">附加到录制</string>
+    <string name="foto_sin_grabaciones">此聊天中没有录制</string>
+    <string name="foto_adjuntada_a_la_grabacion">在“%1$s”中，位于 %2$s</string>
+    <string name="clase_hora_sin_comprobar">时间未验证</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="other">来自电脑的 %d 张截图</item>
+    </plurals>
+</resources>

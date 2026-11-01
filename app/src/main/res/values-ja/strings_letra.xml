@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ja/strings_letra.xml: traducción de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">自動同期</string>
+    <string name="letra_sola_empieza">歌詞を自動同期しています: 曲を聞いています…</string>
+    <string name="letra_sola_avance">歌詞を同期中… %1$d %%</string>
+    <string name="letra_sola_bajando">音声認識をダウンロード中… %1$d %%</string>
+    <string name="letra_sola_parada">同期を停止しました</string>
+    <string name="letra_sola_ocupada">別の曲を同期中です</string>
+    <string name="letra_sola_sin_reconocedor">このスマートフォンでは Whisper で曲を聞けません。時計でタップして同期してください</string>
+    <string name="letra_sola_falta_modelo">タイミングを自動で合わせるには「自動同期」(字幕) をタップしてください: 音声認識を一度だけダウンロードします (約 %1$d MB)</string>
+    <string name="letra_sola_sin_red">音声認識をダウンロードできませんでした: 接続を確認して、もう一度「自動同期」をタップしてください</string>
+    <string name="letra_sola_no_se_oye">曲の中で歌詞を認識できませんでした。時計でタップして同期してください</string>
+    <string name="letra_sola_fallo">歌詞を同期できませんでした</string>
+    <string name="letra_sola_cambio">同期中に歌詞が変更されました: もう一度「自動同期」をタップしてください</string>
+    <string name="letra_sola_hecha">歌詞を自動同期しました (%2$d 行中 %1$d 行を聞き取り)。ずれている行は時計で修正してください</string>
+    <string name="letra_sola_hecha_poca">歌詞をおおまかに同期しました: %2$d 行中 %1$d 行しか聞き取れませんでした。時計で修正してください</string>
+    <string name="letra_con_tiempos_lista_de">「%1$s」の歌詞にタイミングが付きました (%3$d 行中 %2$d 行を聞き取り)。開いて確認してください。</string>
+    <string name="letra_con_tiempos_lista_a_ojo">「%1$s」の歌詞のタイミングはおおまかです: %3$d 行中 %2$d 行しか聞き取れませんでした。時計で修正してください。</string>
+    <string name="letra_volver">戻る</string>
+    <string name="letra_tema_claro">ライトテーマ</string>
+    <string name="letra_tema_oscuro">ダークテーマ</string>
+</resources>

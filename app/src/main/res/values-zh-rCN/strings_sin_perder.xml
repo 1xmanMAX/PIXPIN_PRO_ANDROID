@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-zh-rCN/strings_sin_perder.xml: traducción de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">手机空间快用完了</string>
+    <string name="sin_perder_disco_lleno">手机快满了：视频已关闭，音频继续</string>
+    <string name="sin_perder_sin_sitio_para_video">剩余空间很少：只录制音频</string>
+    <string name="sin_perder_video_cortado">视频被中断；音频仍在录制</string>
+    <string name="sin_perder_hueco">手机让应用停止了 %1$d 分钟；返回后录制已恢复</string>
+    <string name="sin_perder_quedo_para_recuperar">无法保存录制：它已被妥善保留，打开 PinDesk 时会提示你恢复</string>
+    <string name="cortada_titulo">录制中断</string>
+    <string name="cortada_texto">有一段录制被中断（%1$s，%2$d 分钟）</string>
+    <string name="cortada_perdida">一段中断的录制（%1$s）只剩下一个无法打开的视频</string>
+    <string name="cortada_en_chat">在“%1$s”中</string>
+    <string name="cortada_recuperar">恢复</string>
+    <string name="cortada_descartar">放弃</string>
+    <string name="cortada_luego">稍后</string>
+    <string name="cortada_recuperando">正在恢复…</string>
+    <string name="cortada_recuperada">录制已恢复：现在在它的聊天中</string>
+    <string name="cortada_fallo">无法恢复录制：保持原样</string>
+    <string name="cortada_descartar_seguro">要删除“%1$s”中录下的内容吗？此操作无法撤销。</string>
+    <string name="cortada_no">否</string>
+    <string name="cortada_si_borrar">是，删除</string>
+    <string name="cortada_aviso">打开 PinDesk 以恢复或放弃</string>
+</resources>

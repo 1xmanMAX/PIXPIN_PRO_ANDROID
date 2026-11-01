@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ja/strings_sin_perder.xml: traducción de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">スマートフォンの空き容量が少なくなっています</string>
+    <string name="sin_perder_disco_lleno">スマートフォンの容量がほぼいっぱいです: 動画を終了し、音声は続けます</string>
+    <string name="sin_perder_sin_sitio_para_video">空き容量がほとんどありません: 音声のみ録音します</string>
+    <string name="sin_perder_video_cortado">動画が途切れました。音声は録音を続けています</string>
+    <string name="sin_perder_hueco">スマートフォンがアプリを %1$d 分間停止しました。戻ったときに録音を再開しました</string>
+    <string name="sin_perder_quedo_para_recuperar">録音を保存できませんでした: 安全に保管されており、PinDesk を開いたときに復元を提案します</string>
+    <string name="cortada_titulo">中断された録音</string>
+    <string name="cortada_texto">録音が中断されました (%1$s、%2$d 分)</string>
+    <string name="cortada_perdida">中断された録音 (%1$s) は開けない動画しか残っていません</string>
+    <string name="cortada_en_chat">「%1$s」内</string>
+    <string name="cortada_recuperar">復元</string>
+    <string name="cortada_descartar">破棄</string>
+    <string name="cortada_luego">あとで</string>
+    <string name="cortada_recuperando">復元中…</string>
+    <string name="cortada_recuperada">録音を復元しました: チャットに戻りました</string>
+    <string name="cortada_fallo">録音を復元できませんでした: そのままになっています</string>
+    <string name="cortada_descartar_seguro">「%1$s」で録音したものを削除しますか？元に戻せません。</string>
+    <string name="cortada_no">いいえ</string>
+    <string name="cortada_si_borrar">はい、削除します</string>
+    <string name="cortada_aviso">PinDesk を開いて復元または破棄してください</string>
+</resources>

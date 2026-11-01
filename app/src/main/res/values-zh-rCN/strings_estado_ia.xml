@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-zh-rCN/strings_estado_ia.xml: traducción de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">正常</string>
+    <string name="ia_estado_sin_clave">无密钥</string>
+    <string name="ia_estado_desconocido">尚未检查</string>
+    <string name="ia_estado_clave_mala">密钥无效 (%d)</string>
+    <string name="ia_estado_sin_saldo">账户余额不足</string>
+    <string name="ia_estado_limite">请求过多或额度已用完</string>
+    <string name="ia_estado_red">无网络</string>
+    <string name="ia_estado_servidor">服务出错 (%d)</string>
+    <string name="ia_estado_otro">响应异常 (%d)</string>
+    <string name="ia_estado_comprobando">正在检查…</string>
+    <string name="ia_estado_hace_nada">刚刚</string>
+    <string name="ia_estado_hace_min">%d 分钟前</string>
+    <string name="ia_estado_hace_horas">%d 小时前</string>
+    <string name="ia_estado_comprobar">立即检查</string>
+    <string name="ia_estado_claves">密钥在 设置 → 助手 中</string>
+    <string name="ia_estado_descripcion">Claude、DeepSeek 和 Jev 的状态</string>
+</resources>

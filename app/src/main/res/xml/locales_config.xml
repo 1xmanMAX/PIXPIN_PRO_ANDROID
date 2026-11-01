@@ -1,9 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    **Los idiomas de PixPin** (1-nov-2026): los que salen en Ajustes del sistema › Idioma de las
-    apps (Android 13+). Los mismos dos del PC. Ver ajustes/IdiomaDeLaApp.kt.
+    **Los idiomas de PinDesk** (1-nov-2026): los que salen en Ajustes del sistema › Idioma de las
+    apps (Android 13+). Los catorce del PC, en su orden (`Idioma::TODOS`). El indonesio va como
+    `id`; su carpeta de recursos es `values-in` (el código viejo que sigue usando Android).
+    Ver ajustes/Idioma.kt y ajustes/IdiomaDeLaApp.kt.
 -->
 <locale-config xmlns:android="http://schemas.android.com/apk/res/android">
     <locale android:name="es" />
     <locale android:name="en" />
+    <locale android:name="zh-CN" />
+    <locale android:name="hi" />
+    <locale android:name="ar" />
+    <locale android:name="pt-BR" />
+    <locale android:name="fr" />
+    <locale android:name="de" />
+    <locale android:name="ja" />
+    <locale android:name="ru" />
+    <locale android:name="ko" />
+    <locale android:name="it" />
+    <locale android:name="id" />
+    <locale android:name="tr" />
 </locale-config>

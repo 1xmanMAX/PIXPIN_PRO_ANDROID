@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-tr/strings_letra.xml: traducción de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">Otomatik eşitle</string>
+    <string name="letra_sola_empieza">Sözler otomatik eşitleniyor: şarkı dinleniyor…</string>
+    <string name="letra_sola_avance">Sözler eşitleniyor… %%%1$d</string>
+    <string name="letra_sola_bajando">Konuşma tanıyıcı indiriliyor… %%%1$d</string>
+    <string name="letra_sola_parada">Eşitleme durdu</string>
+    <string name="letra_sola_ocupada">Zaten başka bir şarkı eşitleniyor</string>
+    <string name="letra_sola_sin_reconocedor">Bu telefon şarkıyı Whisper ile dinleyemiyor. Saatle dokunarak eşitleyin</string>
+    <string name="letra_sola_falta_modelo">Zamanlamaları otomatik yapmak için “Otomatik eşitle”ye (altyazılar) dokunun: konuşma tanıyıcıyı bir kez indirir (yaklaşık %1$d MB)</string>
+    <string name="letra_sola_sin_red">Konuşma tanıyıcı indirilemedi: bağlantıyı kontrol edip yeniden “Otomatik eşitle”ye dokunun</string>
+    <string name="letra_sola_no_se_oye">Şarkıda sözler tanınmadı. Saatle dokunarak eşitleyin</string>
+    <string name="letra_sola_fallo">Sözler eşitlenemedi</string>
+    <string name="letra_sola_cambio">Eşitleme sırasında sözler değişti: yeniden “Otomatik eşitle”ye dokunun</string>
+    <string name="letra_sola_hecha">Sözler otomatik eşitlendi (%2$d satırdan %1$d tanesi duyuldu). Kayan varsa saatle düzeltin</string>
+    <string name="letra_sola_hecha_poca">Sözler kabaca eşitlendi: %2$d satırdan yalnızca %1$d tanesi duyuldu. Saatle düzeltin</string>
+    <string name="letra_con_tiempos_lista_de">“%1$s” şarkısının sözleri artık zamanlı (%3$d satırdan %2$d tanesi duyuldu). İncelemek için açın.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">“%1$s” şarkısının sözlerinin zamanlaması kaba: %3$d satırdan yalnızca %2$d tanesi duyuldu. Saatle düzeltin.</string>
+    <string name="letra_volver">Geri</string>
+    <string name="letra_tema_claro">Açık tema</string>
+    <string name="letra_tema_oscuro">Koyu tema</string>
+</resources>

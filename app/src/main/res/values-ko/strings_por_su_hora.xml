@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ko/strings_por_su_hora.xml: traducción de values/strings_por_su_hora.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="clase_todos_aportan">채팅의 모든 사람이 사진을 추가할 수 있게</string>
+    <string name="clase_solo_mis_fotos">이 녹음에는 내 사진만</string>
+    <string name="clase_todos_aportan_hecho">채팅 멤버의 사진이 해당 분에 들어갑니다</string>
+    <string name="clase_solo_mis_fotos_hecho">이 녹음에는 내 사진만 들어갑니다</string>
+    <string name="clase_todos_aportan_detalle">회의 중에 공유 채팅의 사람들이 찍은 사진은 연결되어 있지 않아도 해당 분에 들어갑니다.</string>
+    <string name="foto_adjuntar_a_la_grabacion">녹음에 첨부</string>
+    <string name="foto_sin_grabaciones">이 채팅에는 녹음이 없습니다</string>
+    <string name="foto_adjuntada_a_la_grabacion">\'%1$s\'의 %2$s에</string>
+    <string name="clase_hora_sin_comprobar">시간 미확인</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="other">PC에서 온 스크린샷 %d장</item>
+    </plurals>
+</resources>
