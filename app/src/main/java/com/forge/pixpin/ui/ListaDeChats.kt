@@ -320,13 +320,13 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                 exit = androidx.compose.animation.fadeOut() + androidx.compose.animation.shrinkHorizontally()
             ) {
                 BotonRedondo(
-                    Icons.Filled.PhotoCamera, "Foto para la reunión del PC",
+                    Icons.Filled.PhotoCamera, stringResource(R.string.lista_foto_reunion_pc),
                     { com.forge.pixpin.sincro.CamaraDelPcActivity.abrir(contexto) },
                     Modifier.padding(end = 16.dp), tamano = 56.dp, puesto = true
                 )
             }
             Box {
-                BotonRedondo(Icons.Filled.Add, "Chat nuevo", { eligiendoNuevo = true }, tamano = 56.dp, puesto = true)
+                BotonRedondo(Icons.Filled.Add, stringResource(R.string.lista_chat_nuevo), { eligiendoNuevo = true }, tamano = 56.dp, puesto = true)
                 com.forge.pixpin.guardados.MenuDeChatNuevo(
                     eligiendoNuevo, { eligiendoNuevo = false },
                     alUnirse = { com.forge.pixpin.sincro.ChatCompartidoActivity.entrar(contexto) }
@@ -407,7 +407,7 @@ private suspend fun chatNuevo(contexto: android.content.Context, conPersonas: Bo
     }
     MensajesActivity.abrirChatDe(contexto, p.id, p.nombre)
     if (compartido) com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(contexto, p.id, p.nombre)
-    else if (conPersonas) android.widget.Toast.makeText(contexto, "No se pudo compartir el chat nuevo: queda como chat normal", android.widget.Toast.LENGTH_LONG).show()
+    else if (conPersonas) android.widget.Toast.makeText(contexto, contexto.getString(R.string.lista_no_se_compartio), android.widget.Toast.LENGTH_LONG).show()
 }
 
 private fun abrir(contexto: android.content.Context, c: Conversacion) {
@@ -471,7 +471,7 @@ private fun Fila(
                 c.ultimo?.let { Text(hora(it.cuando), fontSize = 12.sp, color = Cristal.tinta.copy(alpha = 0.6f)) }
             }
             Text(
-                c.ultimo?.let { vistazo(it) } ?: if (esDelAsistente) "Pregunta, pide un dibujo o una gráfica" else "Sin mensajes",
+                c.ultimo?.let { vistazo(it) } ?: if (esDelAsistente) stringResource(R.string.lista_asistente_vacio) else stringResource(R.string.lista_sin_mensajes),
                 fontSize = 14.sp, color = Cristal.tinta.copy(alpha = 0.7f), maxLines = 1, overflow = TextOverflow.Ellipsis
             )
         }
@@ -701,18 +701,18 @@ private fun VerMas(n: Int, alTocar: () -> Unit) {
 
 /** La línea de debajo, como en cualquier app de mensajes: el texto, o qué es el archivo. */
 internal fun vistazo(m: Mensaje): String = when (m.clase) {
-    Clase.VOZ -> "🎙 " + m.nombre.removeSuffix(".m4a").ifBlank { "Nota de voz" }
-    Clase.IMAGEN -> "🖼 " + m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().ifBlank { "Foto" }
-    Clase.DIBUJO, Clase.PAGINA -> "✏️ " + m.nombre.ifBlank { "Lienzo" }
-    Clase.TABLA -> "📊 " + m.nombre.ifBlank { "Tabla" }
-    Clase.CROQUIS -> "🧊 " + m.nombre.ifBlank { "Croquis 3D" }
-    Clase.PROYECTO -> "📁 " + m.nombre.ifBlank { "Proyecto" }
+    Clase.VOZ -> "🎙 " + m.nombre.removeSuffix(".m4a").ifBlank { Textos.t(R.string.vistazo_nota_de_voz, "Nota de voz") }
+    Clase.IMAGEN -> "🖼 " + m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().ifBlank { Textos.t(R.string.vistazo_foto, "Foto") }
+    Clase.DIBUJO, Clase.PAGINA -> "✏️ " + m.nombre.ifBlank { Textos.t(R.string.vistazo_lienzo, "Lienzo") }
+    Clase.TABLA -> "📊 " + m.nombre.ifBlank { Textos.t(R.string.vistazo_tabla, "Tabla") }
+    Clase.CROQUIS -> "🧊 " + m.nombre.ifBlank { Textos.t(R.string.vistazo_croquis, "Croquis 3D") }
+    Clase.PROYECTO -> "📁 " + m.nombre.ifBlank { Textos.t(R.string.vistazo_proyecto, "Proyecto") }
     // Una carpeta de páginas: su nombre, no su JSON (25-oct-2026). Ver [com.forge.pixpin.guardados.CarpetaDePaginas].
     // La de una grabación, con el punto rojo de su tarjeta (26-oct-2026): que se sepa que llegó una clase.
-    Clase.MINIAPP -> if (com.forge.pixpin.guardados.CarpetaDePaginas.esGrabacion(m)) "🔴 " + m.nombre.ifBlank { "Grabación" }
-    else if (com.forge.pixpin.guardados.CarpetaDePaginas.esCarpeta(m)) "📒 " + m.nombre.ifBlank { "Carpeta de páginas" }
+    Clase.MINIAPP -> if (com.forge.pixpin.guardados.CarpetaDePaginas.esGrabacion(m)) "🔴 " + m.nombre.ifBlank { Textos.t(R.string.vistazo_grabacion, "Grabación") }
+    else if (com.forge.pixpin.guardados.CarpetaDePaginas.esCarpeta(m)) "📒 " + m.nombre.ifBlank { Textos.t(R.string.vistazo_carpeta, "Carpeta de páginas") }
     else "☑️ " + m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().trim('#', ' ')
-    Clase.ARCHIVO -> "📄 " + m.nombre.ifBlank { "Archivo" }
+    Clase.ARCHIVO -> "📄 " + m.nombre.ifBlank { Textos.t(R.string.vistazo_archivo, "Archivo") }
     // Las fotos de una nota rica, como «🖼 alt» y no su ruta (25-oct-2026). Ver [com.forge.pixpin.guardados.NotaRica.sinRutasDeFotos].
     Clase.NOTA -> com.forge.pixpin.guardados.NotaRica.sinRutasDeFotos(m.texto).lineSequence().firstOrNull { it.isNotBlank() }.orEmpty()
 }
@@ -724,7 +724,7 @@ private fun hora(ms: Long): String {
     val dias = hoy.get(Calendar.DAY_OF_YEAR) - c.get(Calendar.DAY_OF_YEAR)
     return when {
         mismoAno && dias == 0 -> String.format(java.util.Locale.ROOT, "%d:%02d", c.get(Calendar.HOUR_OF_DAY), c.get(Calendar.MINUTE))
-        mismoAno && dias == 1 -> "ayer"
+        mismoAno && dias == 1 -> Textos.t(R.string.lista_ayer, "ayer")
         else -> String.format(java.util.Locale.ROOT, "%d/%d", c.get(Calendar.DAY_OF_MONTH), c.get(Calendar.MONTH) + 1)
     }
 }

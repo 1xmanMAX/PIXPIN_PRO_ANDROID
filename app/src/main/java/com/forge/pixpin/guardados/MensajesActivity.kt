@@ -482,7 +482,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 val md = com.forge.pixpin.ui.ElegirParaLaNota.delChat(m, app.proyectos.porId(m.proyecto))
                 val antes = h.nota.orEmpty().trimEnd()
                 app.proyectos.guardar(com.forge.pixpin.motor.Proyectos.conNota(p, h.id, (if (antes.isEmpty()) "" else "$antes\n\n") + md + "\n", System.currentTimeMillis()))
-                Toast.makeText(this@MensajesActivity, "Insertado en «${h.nombre.ifBlank { "Nota" }}»", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_insertado_en, h.nombre.ifBlank { getString(com.forge.pixpin.R.string.chat_nota) }), Toast.LENGTH_SHORT).show()
             }
         }
         // **La descripción de una foto** (4-oct-2026, la del PC): el texto que se ve debajo,
@@ -529,7 +529,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             val esLienzo = m.clase == Clase.DIBUJO && m.referencia != null
             com.forge.pixpin.ui.DialogoDeNombre(
                 nombreVisible(m), onCerrar = { renombrandoMensaje = null },
-                titulo = if (esLienzo) "Nombre del lienzo" else if (m.clase == Clase.VOZ) "Nombre del audio" else "Nombre del archivo"
+                titulo = if (esLienzo) androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nombre_lienzo) else if (m.clase == Clase.VOZ) androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nombre_audio) else androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nombre_archivo)
             ) { nuevo ->
                 renombrandoMensaje = null
                 val app = application as? com.forge.pixpin.PixPinApp ?: return@DialogoDeNombre
@@ -644,7 +644,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 alParcial = { dictadoParcial = it },
                 alFallo = { razon ->
                     dictando = false
-                    android.widget.Toast.makeText(this@MensajesActivity, "No se pudo dictar: $razon", android.widget.Toast.LENGTH_LONG).show()
+                    android.widget.Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_no_se_pudo_dictar, razon), android.widget.Toast.LENGTH_LONG).show()
                 },
                 alOir = { si -> if (!si) { dictando = false; dictadoParcial = "" } }
             )
@@ -1196,7 +1196,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             val nota = Mensaje(id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.NOTA, texto = pedido, proyecto = chatDe)
                             almacen.anadir(nota)
                             if (!com.forge.pixpin.asistente.Asistente.preguntar(this@MensajesActivity, nota, chatDelAsistente)) {
-                                android.widget.Toast.makeText(this@MensajesActivity, "El asistente está contestando otra cosa", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_asistente_ocupado), android.widget.Toast.LENGTH_SHORT).show()
                             }
                             loMandado = nota.id
                             refrescar()
@@ -1241,7 +1241,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 escrito = queda
                                 lifecycleScope.launch {
                                     withContext(Dispatchers.IO) { DictarAlChat.anotar(this@MensajesActivity, chat.first, prop.texto) }
-                                    android.widget.Toast.makeText(this@MensajesActivity, "Anotado en «${chat.second}»", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_anotado_en, chat.second), android.widget.Toast.LENGTH_SHORT).show()
                                     refrescar()
                                 }
                             }
@@ -1259,7 +1259,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 escrito = queda
                                 lifecycleScope.launch {
                                     withContext(Dispatchers.IO) { DictarAlChat.anotar(this@MensajesActivity, c.first, prop.texto) }
-                                    android.widget.Toast.makeText(this@MensajesActivity, "Anotado en «${c.second}»", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_anotado_en, c.second), android.widget.Toast.LENGTH_SHORT).show()
                                     refrescar()
                                 }
                             },
@@ -1307,11 +1307,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 val prefijo = if (chatDe != null && chatDe == chatDelAsistente) "" else escrito.trim() + " "
                                 val audio = pararVozSinGuardar()
                                 if (audio != null) {
-                                    android.widget.Toast.makeText(this@MensajesActivity, "Pasando a texto…", android.widget.Toast.LENGTH_SHORT).show()
+                                    android.widget.Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_pasando_a_texto), android.widget.Toast.LENGTH_SHORT).show()
                                     lifecycleScope.launch {
                                         val dicho = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.VozDelAsistente.transcribir(this@MensajesActivity, audio) }
                                         if (dicho == null) {
-                                            android.widget.Toast.makeText(this@MensajesActivity, "No se entendió lo que dijiste", android.widget.Toast.LENGTH_SHORT).show()
+                                            android.widget.Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_no_se_entendio), android.widget.Toast.LENGTH_SHORT).show()
                                             return@launch
                                         }
                                         val revisar = withContext(Dispatchers.IO) { (application as PixPinApp).settings.settings.first().asistenteRevisarDicho }
@@ -1347,7 +1347,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             if (com.forge.pixpin.asistente.ChatDelAsistente.leToca(nota, chatDelAsistente) &&
                                 !com.forge.pixpin.asistente.Asistente.preguntar(this@MensajesActivity, nota, chatDelAsistente)
                             ) {
-                                android.widget.Toast.makeText(this@MensajesActivity, "El asistente está contestando otra cosa", android.widget.Toast.LENGTH_SHORT).show()
+                                android.widget.Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_asistente_ocupado), android.widget.Toast.LENGTH_SHORT).show()
                             }
                             escrito = ""
                             respondiendo = null
@@ -2563,7 +2563,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         else lifecycleScope.launch {
                             val id = withContext(Dispatchers.IO) { com.forge.pixpin.ui.HojaNueva.lienzoSuelto(this@MensajesActivity, chatDe) }
                             refrescar()
-                            if (id == null) Toast.makeText(this@MensajesActivity, "No se pudo crear el lienzo", Toast.LENGTH_SHORT).show()
+                            if (id == null) Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_no_se_creo_lienzo), Toast.LENGTH_SHORT).show()
                             else com.forge.pixpin.motor.DrawEditorActivity.abrir(this@MensajesActivity, id, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(this@MensajesActivity, id), null)
                         }
                     }
@@ -2617,7 +2617,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             val chat = chatDe
             lifecycleScope.launch {
                 val m = withContext(Dispatchers.IO) { runCatching { AdjuntarFigura.adjuntar(this@MensajesActivity, almacen, chat, f) }.getOrNull() }
-                Toast.makeText(this@MensajesActivity, if (m != null) "Adjuntada «${m.nombre}»" else "No se pudo adjuntar", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MensajesActivity, if (m != null) getString(com.forge.pixpin.R.string.chat_adjuntada, m.nombre) else getString(com.forge.pixpin.R.string.chat_no_se_adjunto), Toast.LENGTH_SHORT).show()
             }
         }
         compartiendo?.let { cual ->
@@ -3845,7 +3845,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // **De quién llegó**, si vino por Wi-Fi: su nombre y el código fijo de su aparato.
                     m.recibidoDe?.let { de ->
                         Text(
-                            "Recibido de $de",
+                            androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_recibido_de, de),
                             fontSize = 11.sp,
                             color = ColoresDelChat.hora(),
                             modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 6.dp, bottom = 2.dp)
@@ -3876,7 +3876,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                     Spacer(Modifier.size(6.dp))
                                     Column(Modifier.weight(1f, fill = false)) {
                                         Text(
-                                            "Viene de",
+                                            androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_viene_de),
                                             fontSize = 10.sp,
                                             color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.75f)
                                         )
@@ -3890,7 +3890,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                     }
                                     Spacer(Modifier.size(6.dp))
                                     Icon(
-                                        Icons.AutoMirrored.Filled.ArrowForward, contentDescription = "Abrir el origen",
+                                        Icons.AutoMirrored.Filled.ArrowForward, contentDescription = androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_abrir_origen),
                                         tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         modifier = Modifier.size(16.dp)
                                     )
@@ -3983,7 +3983,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                             androidx.compose.material3.TextButton(
                                 onClick = { com.forge.pixpin.asistente.VozDelAsistente.leer(this@MensajesActivity, m.texto) },
                                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
-                            ) { Text("🔊 Escuchar", fontSize = 12.sp) }
+                            ) { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_escuchar), fontSize = 12.sp) }
                             com.forge.pixpin.privacidad.TextoReportarIa(com.forge.pixpin.privacidad.ReportesDeIa.Funcion.ASISTENTE) { m.texto }
                         }
                     if (enVivo != null) com.forge.pixpin.asistente.PreguntaDelAsistente(m.id)
@@ -4698,7 +4698,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 4.dp)
             ) {
                 Icon(Icons.Filled.Draw, contentDescription = null, modifier = Modifier.size(16.dp))
-                Text("Abrir lienzo", fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
+                Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_abrir_lienzo), fontSize = 13.sp, modifier = Modifier.padding(start = 6.dp))
             }
         }
     }
@@ -5727,7 +5727,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // deja todos los de una carpeta con el mismo aspecto.
                 NombreConLapiz(m) {
                     Text(
-                        m.nombre.ifBlank { "Archivo" },
+                        m.nombre.ifBlank { androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_archivo) },
                         fontSize = 15.sp,
                         maxLines = 2,
                         overflow = androidx.compose.ui.text.style.TextOverflow.MiddleEllipsis,
@@ -5740,7 +5740,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 val detalle = listOfNotNull(
                     tamanoLegible(m.bytes).ifBlank { null },
                     extensionDe(m.nombre),
-                    m.pagina?.let { "pág. ${it + 1}" }
+                    m.pagina?.let { com.forge.pixpin.ui.Textos.t(com.forge.pixpin.R.string.chat_pagina_corta, "pág. %1\$d", it + 1) }
                 ).joinToString(" ")
                 if (detalle.isNotBlank()) {
                     Text(
@@ -6035,7 +6035,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         ) {
                             Icon(
                                 Icons.Filled.RecordVoiceOver,
-                                contentDescription = if (dictando) "Parar de dictar" else "Dictar en la caja",
+                                contentDescription = if (dictando) androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_parar_dictar) else androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_dictar),
                                 tint = if (dictando) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
@@ -6083,7 +6083,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 ) {
                     if (parar != null) {
                         IconButton(onClick = parar) {
-                            Icon(Icons.Filled.Stop, contentDescription = "Parar", tint = MaterialTheme.colorScheme.error)
+                            Icon(Icons.Filled.Stop, contentDescription = androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_parar), tint = MaterialTheme.colorScheme.error)
                         }
                         return@Box
                     }
@@ -6211,7 +6211,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         ) {
             androidx.compose.material3.OutlinedTextField(
                 value = buscado, onValueChange = { buscado = it.take(60) }, singleLine = true,
-                placeholder = { Text("Buscar: lienzo, PDF, cronómetro…") },
+                placeholder = { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_buscar)) },
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
                 modifier = Modifier.fillMaxWidth()
@@ -6220,14 +6220,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             CuadriculaDelClip(vista.deSiempre, grande = true, alElegir)
             if (vista.mas.isNotEmpty()) {
                 Text(
-                    "MÁS", fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_mas), fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = if (vista.deSiempre.isEmpty()) 0.dp else 8.dp, bottom = 8.dp, start = 4.dp)
                 )
                 CuadriculaDelClip(vista.mas, grande = false, alElegir)
             }
             if (vista.deSiempre.isEmpty() && vista.mas.isEmpty()) Text(
-                "Nada coincide con lo buscado", color = MaterialTheme.colorScheme.onSurfaceVariant,
+                androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_nada), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
             )
@@ -6271,7 +6271,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 )
             }
             Text(
-                a.rotulo,
+                androidx.compose.ui.res.stringResource(a.texto),
                 fontSize = if (grande) 12.sp else 11.sp,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
                 maxLines = 2,
@@ -6541,7 +6541,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     val pedido = pregunta?.texto?.let { com.forge.pixpin.asistente.ChatDelAsistente.sinMencion(it) }.orEmpty()
                     val aviso = runCatching {
                         com.forge.pixpin.asistente.RecetasDelTelefono.cambiar(contexto) { com.forge.pixpin.ia.Automatizaciones.anadirReceta(it, "", "", pedido, System.currentTimeMillis()) }
-                    }.fold({ "Receta «${it.nombre}» guardada" }, { "No se pudo: ${it.message}" })
+                    }.fold({ contexto.getString(com.forge.pixpin.R.string.chat_receta_guardada, it.nombre) }, { contexto.getString(com.forge.pixpin.R.string.chat_no_se_pudo, it.message.orEmpty()) })
                     withContext(Dispatchers.Main) { android.widget.Toast.makeText(contexto, aviso, android.widget.Toast.LENGTH_SHORT).show() }
                 }
             }
@@ -6752,7 +6752,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val deAjustes = com.forge.pixpin.pdf.ComprimirPdf.nivel
         androidx.compose.material3.AlertDialog(
             onDismissRequest = { aAligerar = null },
-            title = { Text("¿Cuánto aligerarlo?") },
+            title = { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_cuanto_aligerar)) },
             text = {
                 Column {
                     com.forge.pixpin.pdf.ComprimirPdf.NIVELES.filter { it != com.forge.pixpin.pdf.ComprimirPdf.NO_COMPRIMIR }.forEach { nivel ->
@@ -6762,14 +6762,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 .clickable { aAligerar = null; aligerarPdfDelMensaje(m, ruta, nivel) }
                                 .padding(horizontal = 8.dp, vertical = 8.dp)
                         ) {
-                            Text(nombre + if (nivel == deAjustes) "  ·  el de Ajustes" else "", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                            Text(nombre + if (nivel == deAjustes) androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_el_de_ajustes) else "", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                             Text(que, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
             },
             confirmButton = {},
-            dismissButton = { androidx.compose.material3.TextButton(onClick = { aAligerar = null }) { Text("Cancelar") } }
+            dismissButton = { androidx.compose.material3.TextButton(onClick = { aAligerar = null }) { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.cancel)) } }
         )
     }
 
@@ -7350,7 +7350,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             if (cuantas > 0) withContext(Dispatchers.Main) {
                 Toast.makeText(
                     this@MensajesActivity,
-                    if (cuantas == 1) "También se quitó de su proyecto" else "También se quitaron $cuantas cosas de sus proyectos",
+                    if (cuantas == 1) getString(com.forge.pixpin.R.string.chat_tambien_quitada_una) else getString(com.forge.pixpin.R.string.chat_tambien_quitadas, cuantas),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -7368,7 +7368,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             withContext(Dispatchers.Main) {
                 Toast.makeText(
                     this@MensajesActivity,
-                    if (cuantas > 0) "De vuelta en «$nombre»" else "No se pudo volver a añadir",
+                    if (cuantas > 0) getString(com.forge.pixpin.R.string.chat_de_vuelta_en, nombre) else getString(com.forge.pixpin.R.string.chat_no_se_devolvio),
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -7652,7 +7652,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         lifecycleScope.launch {
             val e = withContext(Dispatchers.IO) { VersionesEnElChat.empezar(this@MensajesActivity, almacen, m) }
             if (e == null) {
-                Toast.makeText(this@MensajesActivity, "No se pudo preparar tu versión", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_no_se_preparo_version), Toast.LENGTH_SHORT).show()
                 return@launch
             }
             Toast.makeText(
@@ -7677,7 +7677,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             val hecho = withContext(Dispatchers.IO) { VersionesEnElChat.alMomento(this@MensajesActivity, almacen, m, cambio) }
             Toast.makeText(
                 this@MensajesActivity,
-                if (hecho) "Se guardó como tu versión; lo de ${otro.nombre} no se toca" else "No se pudo hacer tu versión",
+                if (hecho) getString(com.forge.pixpin.R.string.chat_tu_version_de, otro.nombre) else getString(com.forge.pixpin.R.string.chat_no_tu_version),
                 Toast.LENGTH_SHORT
             ).show()
             recargarLaLista?.invoke()
@@ -7699,7 +7699,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             kotlinx.coroutines.delay(800)
             val hechas = withContext(Dispatchers.IO) { VersionesEnElChat.cerrar(this@MensajesActivity, almacen) }
             if (hechas > 0) {
-                Toast.makeText(this@MensajesActivity, "Se guardó como tu versión; el original no se ha tocado", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.chat_tu_version), Toast.LENGTH_SHORT).show()
                 recargarLaLista?.invoke()
             }
         }
@@ -8164,7 +8164,7 @@ private fun DialogoDeRecordatorio(
                     androidx.compose.material3.OutlinedTextField(
                         value = quienLlama,
                         onValueChange = onQuienLlama,
-                        label = { Text("Quién llama") },
+                        label = { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_quien_llama)) },
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
                     )
@@ -8238,10 +8238,10 @@ internal fun atajosDeRecordatorio(ahora: Long): List<Pair<String, Long>> {
         return c.timeInMillis
     }
     return listOf(
-        "En 1 hora" to ahora + 60L * 60 * 1000,
-        "En 3 horas" to ahora + 3L * 60 * 60 * 1000,
-        "Esta tarde (18:00)" to aLas(18),
-        "Mañana (9:00)" to aLas(9, 1)
+        com.forge.pixpin.ui.Textos.t(com.forge.pixpin.R.string.chat_en_1_hora, "En 1 hora") to ahora + 60L * 60 * 1000,
+        com.forge.pixpin.ui.Textos.t(com.forge.pixpin.R.string.chat_en_3_horas, "En 3 horas") to ahora + 3L * 60 * 60 * 1000,
+        com.forge.pixpin.ui.Textos.t(com.forge.pixpin.R.string.chat_esta_tarde, "Esta tarde (18:00)") to aLas(18),
+        com.forge.pixpin.ui.Textos.t(com.forge.pixpin.R.string.chat_manana_9, "Mañana (9:00)") to aLas(9, 1)
     )
 }
 
@@ -8282,20 +8282,20 @@ private fun DialogoDeNotas(
     }
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onCerrar,
-        title = { Text("Insertar en una nota") },
+        title = { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_insertar_en_nota)) },
         text = {
-            if (notas.isEmpty()) Text("No hay notas en los proyectos. Crea una con «Nota» en un proyecto.")
+            if (notas.isEmpty()) Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_sin_notas))
             else androidx.compose.foundation.lazy.LazyColumn(Modifier.heightIn(max = 420.dp)) {
                 items(notas.size) { i ->
                     val (p, h) = notas[i]
                     Column(Modifier.fillMaxWidth().clickable { onElegir(p, h) }.padding(vertical = 8.dp)) {
-                        Text(h.nombre.ifBlank { h.nota.orEmpty().lineSequence().firstOrNull { it.isNotBlank() }?.trimStart('#', ' ')?.take(60) ?: "Nota" }, maxLines = 1)
+                        Text(h.nombre.ifBlank { h.nota.orEmpty().lineSequence().firstOrNull { it.isNotBlank() }?.trimStart('#', ' ')?.take(60) ?: androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nota) }, maxLines = 1)
                         Text(p.nombre, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         },
-        confirmButton = { androidx.compose.material3.TextButton(onClick = onCerrar) { Text("Cancelar") } }
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onCerrar) { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.cancel)) } }
     )
 }
 

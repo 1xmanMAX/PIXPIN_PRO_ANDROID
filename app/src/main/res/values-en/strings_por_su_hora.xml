@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inglés de values/strings_por_su_hora.xml (1-nov-2026). -->
+<resources>
+    <string name="clase_todos_aportan">Let everyone in the chat add photos</string>
+    <string name="clase_solo_mis_fotos">Only my photos in this recording</string>
+    <string name="clase_todos_aportan_hecho">Photos from the chat members will go in at their minute</string>
+    <string name="clase_solo_mis_fotos_hecho">Only your photos go into this recording</string>
+    <string name="clase_todos_aportan_detalle">Photos taken by the people in the shared chat during the meeting go in at their minute, even if they are not connected.</string>
+    <string name="foto_adjuntar_a_la_grabacion">Attach to the recording</string>
+    <string name="foto_sin_grabaciones">There are no recordings in this chat</string>
+    <string name="foto_adjuntada_a_la_grabacion">In “%1$s”, at %2$s</string>
+    <string name="clase_hora_sin_comprobar">time not verified</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="one">%d screenshot from the PC</item>
+        <item quantity="other">%d screenshots from the PC</item>
+    </plurals>
+</resources>
