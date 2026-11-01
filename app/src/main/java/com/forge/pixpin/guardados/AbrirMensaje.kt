@@ -129,6 +129,11 @@ object AbrirMensaje {
                 // Lo que no sea un PDF sigue saliendo fuera: para eso están las otras aplicaciones.
                 else -> m.ruta?.let { ruta ->
                     when {
+                        // **Un `.excalidraw` suelto se abre en el lienzo** (1-nov-2026), como en el PC:
+                        // lo editable de un lienzo ya es el `.pixpin`, pero los que uno tenga se siguen
+                        // abriendo. Ver [abrirLienzoSuelto].
+                        NombreDelLienzo.esExcalidraw(m.nombre) || NombreDelLienzo.esExcalidraw(ruta) ->
+                            abrirLienzoSuelto(actividad, m, ruta)
                         // Una lección abre su ficha, no un visor de archivos. Ver [com.forge.pixpin.lecciones.LeccionesStore].
                         com.forge.pixpin.lecciones.LeccionesStore.esLeccion(m) ->
                             com.forge.pixpin.lecciones.LeccionActivity.abrir(this, File(ruta).name.removeSuffix(com.forge.pixpin.lecciones.LeccionesStore.EXTENSION))
@@ -252,6 +257,33 @@ object AbrirMensaje {
      * código del mensaje ([com.forge.pixpin.ui.ComentariosDeNota.uidDeLaNota]) y lo anotado viaja.
      */
     fun idDeLaNota(m: Mensaje) = "md-${m.id}"
+
+    /**
+     * **El lienzo en que se abre un `.excalidraw` suelto del chat** (1-nov-2026): una copia suya en
+     * el almacén de lienzos (`suelto-<código del mensaje>`), hecha la primera vez y rehecha solo si
+     * el archivo cambia después (llegó otro). Lo que se dibuje queda en la copia, en este aparato: el
+     * archivo del mensaje no se toca, que es lo que viaja. Si no se deja leer, a otra aplicación.
+     */
+    private fun abrirLienzoSuelto(actividad: ComponentActivity, m: Mensaje, ruta: String) {
+        val dibujo = dibujoDelSuelto(m)
+        actividad.lifecycleScope.launch {
+            val listo = withContext(Dispatchers.IO) {
+                runCatching {
+                    val copia = File(com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, dibujo))
+                    val original = File(ruta)
+                    if (copia.exists() && copia.lastModified() >= original.lastModified()) return@runCatching true
+                    val escena = com.forge.pixpin.motor.ExcalidrawStore.leerSuelto(actividad, original) ?: return@runCatching false
+                    com.forge.pixpin.motor.ExcalidrawStore.guardar(actividad, dibujo, escena) != null
+                }.getOrDefault(false)
+            }
+            if (listo) com.forge.pixpin.motor.DrawEditorActivity.abrir(
+                actividad, dibujo, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(actividad, dibujo), null
+            ) else actividad.abrirFuera(ruta)
+        }
+    }
+
+    /** El id del lienzo de un `.excalidraw` suelto: fijo por mensaje, para seguir donde se dejó. */
+    fun dibujoDelSuelto(m: Mensaje): String = "suelto-" + (m.uid ?: m.id).replace(Regex("[^A-Za-z0-9_-]"), "_")
 
     /** Un APK se instala; lo demás, con la aplicación que se elija. Ver [com.forge.pixpin.ui.AbrirCon]. */
     private fun ComponentActivity.abrirFuera(ruta: String) {

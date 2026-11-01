@@ -20,14 +20,17 @@ object Detalle {
     /** Un proyecto: su nombre, cuántas hojas y cuánto pesa todo lo suyo. */
     class DelProyecto(val nombre: String, val hojas: Int, val bytes: Long)
 
-    /** Un lienzo: el `.excalidraw` comprimido más las fotos que usa. */
+    /**
+     * Un lienzo: su fichero comprimido más las fotos que usa. Se llama por su código, sin la
+     * extensión vieja (1-nov-2026): «.excalidraw» ya no se enseña en ningún sitio.
+     */
     fun delLienzo(context: Context, id: String): Archivo {
         val ruta = ExcalidrawStore.rutaDe(context, id)
         var bytes = File(ruta).length()
         ExcalidrawStore.cargar(ruta)?.files?.values?.forEach { f ->
             f.path?.let { bytes += File(it).length() }
         }
-        return Archivo("$id.excalidraw", bytes)
+        return Archivo(id, bytes)
     }
 
     fun delCroquis(context: Context, id: String): Archivo {

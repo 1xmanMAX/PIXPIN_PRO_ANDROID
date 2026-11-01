@@ -546,6 +546,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     return@DialogoDeNombre
                 }
                 val dibujo = m.referencia ?: return@DialogoDeNombre
+                // Sin cambiar nada no se escribe: «Lienzo» de serie no pisa el `<código>.excalidraw`
+                // que puso el PC (los dos se ven igual, y reescribirlo sería un cambio que viaja).
+                if (nuevo.trim() == nombreVisible(m)) return@DialogoDeNombre
                 lifecycleScope.launch(Dispatchers.IO) {
                     NombreDelLienzo.deDibujo(app, dibujo, nuevo)
                     // Un lienzo adjuntado que aún no es hoja de nadie: al menos el mensaje.
@@ -5607,9 +5610,14 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         LetraActivity.abrir(this, m.id)
     }
 
-    /** El nombre que se enseña: el puesto, o uno que diga qué es. */
+    /**
+     * El nombre que se enseña: el puesto, o uno que diga qué es. Un lienzo, sin `.excalidraw`
+     * (1-nov-2026): el del PC o el Mac llega como `<código>.excalidraw` y se llama «Lienzo», como
+     * allí. Ver [NombreDelLienzo.visible].
+     */
     private fun nombreVisible(m: Mensaje): String =
-        m.nombre.removeSuffix(".m4a").ifBlank { if (m.clase == Clase.VOZ) "Nota de voz" else m.ruta?.substringAfterLast('/') ?: "Archivo" }
+        if (m.clase == Clase.DIBUJO || NombreDelLienzo.esExcalidraw(m.nombre)) NombreDelLienzo.visible(m)
+        else m.nombre.removeSuffix(".m4a").ifBlank { if (m.clase == Clase.VOZ) "Nota de voz" else m.ruta?.substringAfterLast('/') ?: "Archivo" }
 
     /**
      * El nombre de un archivo en su burbuja. **Ya no se renombra tocándolo** (13-oct-2026, el usuario:
@@ -5691,7 +5699,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             // **Un archivo, con el icono de su tipo**: la hoja de su color con la extensión
             // escrita (30-sep-2026, pedido por el usuario: rojo los PDF, azul los Word, amarillo
             // los planos…). Ver [com.forge.pixpin.ui.IconoDeArchivo].
-            if (m.clase == Clase.ARCHIVO) com.forge.pixpin.ui.IconoDeArchivo(m.nombre.ifBlank { m.ruta }, lado = BOTON_DEL_ARCHIVO)
+            // Un `.excalidraw` suelto es un lienzo, con su lápiz y no con la hoja «exca» (1-nov-2026).
+            val lienzoSuelto = NombreDelLienzo.esExcalidraw(m.nombre.ifBlank { m.ruta })
+            if (m.clase == Clase.ARCHIVO && !lienzoSuelto) com.forge.pixpin.ui.IconoDeArchivo(m.nombre.ifBlank { m.ruta }, lado = BOTON_DEL_ARCHIVO)
             else Box(
                 Modifier
                     .size(BOTON_DEL_ARCHIVO)
@@ -5708,7 +5718,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         Clase.TABLA -> Icons.Filled.TableChart
                         Clase.CROQUIS -> Icons.Filled.ViewInAr
                         Clase.DIBUJO -> Icons.Filled.Draw
-                        else -> Icons.Filled.Description
+                        else -> if (lienzoSuelto) Icons.Filled.Draw else Icons.Filled.Description
                     },
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onPrimaryContainer
@@ -5727,7 +5737,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // deja todos los de una carpeta con el mismo aspecto.
                 NombreConLapiz(m) {
                     Text(
-                        m.nombre.ifBlank { androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_archivo) },
+                        NombreDelLienzo.visible(m, siVacio = androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_archivo)),
                         fontSize = 15.sp,
                         maxLines = 2,
                         overflow = androidx.compose.ui.text.style.TextOverflow.MiddleEllipsis,
@@ -5737,9 +5747,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // Tamaño y **extensión en mayúsculas**, como Telegram
                 // (`ChatMessageCell.java:12847`): «1,2 MB PDF» dice de un golpe qué es
                 // y cuánto pesa, que es justo lo que se pregunta antes de tocarlo.
-                val detalle = listOfNotNull(
+                //
+                // **Un lienzo dice solo su nombre** (1-nov-2026), como en el PC (`Clase::Dibujo` sin
+                // detalle): «2 kB EXCALIDRAW» de uno que llegó del PC no le decía nada a nadie. Un
+                // `.excalidraw` suelto, su peso sin la extensión vieja.
+                val detalle = if (m.clase == Clase.DIBUJO) "" else listOfNotNull(
                     tamanoLegible(m.bytes).ifBlank { null },
-                    extensionDe(m.nombre),
+                    extensionDe(m.nombre).takeUnless { lienzoSuelto },
                     m.pagina?.let { com.forge.pixpin.ui.Textos.t(com.forge.pixpin.R.string.chat_pagina_corta, "pág. %1\$d", it + 1) }
                 ).joinToString(" ")
                 if (detalle.isNotBlank()) {
@@ -7402,10 +7416,17 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             m.clase == Clase.PROYECTO -> m.referencia?.let { id -> { com.forge.pixpin.sincro.EnviarActivity.enviarProyecto(this, id) } }
             real != null && hojaReal != null && (hojaReal.dibujo != null || hojaReal.pagina != null) ->
                 { { com.forge.pixpin.sincro.EnviarActivity.enviarLienzo(this, real.id, hojaReal.id) } }
+            // **Un lienzo que no es hoja de nadie va en su `.pixpin`** (1-nov-2026), nunca su fichero:
+            // el del PC o el Mac trae de ruta su `.excalidraw.gz`, y mandarlo tal cual era un
+            // `.excalidraw` suelto. Ver [enviarLienzoSuelto].
+            m.clase == Clase.DIBUJO -> m.referencia?.let { { enviarLienzoSuelto(m) } }
             m.ruta != null && File(m.ruta).exists() -> { { com.forge.pixpin.sincro.EnviarActivity.enviarArchivo(this, m.ruta, m.nombre) } }
             else -> null
         }
-        val talCual = m.ruta?.takeIf { File(it).exists() }?.let { ruta ->
+        // **De un lienzo, lo editable es el `.pixpin`** (1-nov-2026, PC `1984938a`: «el `.excalidraw`
+        // suelto ya no se ofrece»). El que llega del PC o del Mac trae de ruta su fichero, y salía
+        // como «Archivo» tal cual: `k7q2m9x3ab.excalidraw.gz`.
+        val talCual = m.ruta?.takeIf { File(it).exists() && m.clase != Clase.DIBUJO }?.let { ruta ->
             com.forge.pixpin.ui.Compartible.Formato(
                 "original", Icons.Filled.Description, "Archivo", com.forge.pixpin.ui.Compartible.NINGUNA,
                 generar = {
@@ -7561,7 +7582,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
 
     /** Cómo se llama lo que sale, con su página si viene de un documento. */
     private fun nombreDeLoCompartido(m: Mensaje): String {
-        val base = m.nombre.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) }
+        val base = NombreDelLienzo.visible(m).ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) }
         val pagina = m.pagina ?: return base
         return "${base.substringBeforeLast('.')} - " +
             getString(com.forge.pixpin.R.string.proyecto_pagina, pagina + 1)
@@ -7572,6 +7593,28 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         m.clase == Clase.PAGINA ||
             (m.clase == Clase.IMAGEN && m.referencia != null) ||
             m.clase == Clase.DIBUJO
+
+    /**
+     * **Un lienzo del chat que no es hoja de ningún proyecto, por Wi-Fi** (1-nov-2026): su `.pixpin`
+     * con el lienzo como su hoja, como lo editable de compartir. Antes, el que llegó del PC o del Mac
+     * se mandaba como su fichero (`.excalidraw.gz`) y al otro lado no se abría en el lienzo.
+     */
+    private fun enviarLienzoSuelto(m: Mensaje) {
+        lifecycleScope.launch {
+            val paquete = withContext(Dispatchers.IO) {
+                runCatching {
+                    val p = proyectoDe(m)?.first ?: return@runCatching null
+                    val carpeta = File(cacheDir, "share").apply { mkdirs() }
+                    com.forge.pixpin.motor.PaquetePixpin.escribir(
+                        this@MensajesActivity, p,
+                        File(carpeta, com.forge.pixpin.motor.ExportarProyecto.nombreDeArchivo(p.nombre) + "." + com.forge.pixpin.motor.PaquetePixpin.EXTENSION)
+                    )
+                }.getOrNull()
+            }
+            if (paquete != null) com.forge.pixpin.sincro.EnviarActivity.enviarArchivo(this@MensajesActivity, paquete.path, paquete.name)
+            else avisarDeQueNoHay()
+        }
+    }
 
     private fun compartir(m: Mensaje) {
         runCatching {
@@ -7797,7 +7840,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     private fun resumen(m: Mensaje): String = when {
         // Una nota rica dice sus fotos como «🖼 foto 2», no con su ruta (25-oct-2026). Ver [NotaRica.sinRutasDeFotos].
         m.texto.isNotBlank() -> NotaRica.sinRutasDeFotos(m.texto).take(60)
-        m.nombre.isNotBlank() -> m.nombre
+        m.nombre.isNotBlank() -> NombreDelLienzo.visible(m)
         m.clase == Clase.VOZ -> getString(com.forge.pixpin.R.string.guardados_voz)
         else -> getString(com.forge.pixpin.R.string.guardados_titulo)
     }

@@ -73,7 +73,7 @@ object ChatDeLosProyectos {
         for (n in novedades) when (n) {
             is AvisosDelProyecto.Novedad.Lienzo -> {
                 val dibujo = n.hoja.dibujo ?: continue
-                if (!yaEsta(Clase.DIBUJO, dibujo)) chat.anadir(nuevo(Clase.DIBUJO, n.hoja.nombre.ifBlank { "Lienzo" }, dibujo))
+                if (!yaEsta(Clase.DIBUJO, dibujo)) chat.anadir(nuevo(Clase.DIBUJO, NombreDelLienzo.sinExtension(n.hoja.nombre).ifBlank { NombreDelLienzo.DE_SERIE }, dibujo))
             }
             is AvisosDelProyecto.Novedad.Tabla -> {
                 val tabla = n.hoja.tabla ?: continue

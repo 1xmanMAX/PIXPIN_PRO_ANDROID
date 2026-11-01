@@ -104,7 +104,7 @@ class AccionesDelTelefono(
             "abrir_hoja" -> {
                 val ref = texto(p["que"] as JsonObject, "referencia")!!
                 val m = almacen.leer().lastOrNull { it.referencia == ref && (it.clase == Clase.DIBUJO || it.clase == Clase.PAGINA) }
-                    ?: almacen.leer().lastOrNull { it.clase == Clase.DIBUJO && Tareas.parecido(ref, it.nombre) >= 70 }
+                    ?: almacen.leer().lastOrNull { it.clase == Clase.DIBUJO && Tareas.parecido(ref, com.forge.pixpin.guardados.NombreDelLienzo.visible(it)) >= 70 }
                 if (m != null) enPantalla { com.forge.pixpin.guardados.MensajesActivity.abrirYAbrir(contexto, m.id) }
                 else {
                     val ruta = ExcalidrawStore.rutaDe(contexto, ref)

@@ -1160,7 +1160,9 @@ class Sesion private constructor(
     )
 
     private fun nombreDe(prep: PreparadoArchivos, rel: String) =
-        (prep.mios[rel]?.etiqueta ?: prep.suyos[rel]?.etiqueta).orEmpty().ifBlank { rel.substringAfterLast('/') }
+        com.forge.pixpin.guardados.NombreDelLienzo.deEtiqueta(
+            (prep.mios[rel]?.etiqueta ?: prep.suyos[rel]?.etiqueta).orEmpty().ifBlank { rel.substringAfterLast('/') }, rel
+        )
 
     fun catalogo(): List<Chat> {
         Protocolo.enviar(canal, Protocolo.Peticion("catalogo"))

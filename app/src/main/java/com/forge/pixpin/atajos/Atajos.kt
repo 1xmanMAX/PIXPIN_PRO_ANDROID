@@ -141,7 +141,10 @@ object Atajos {
 
     /** Cómo se llama en el buscador: su nombre, o el del archivo si no tiene. */
     fun nombreDe(m: com.forge.pixpin.guardados.Mensaje): String? =
-        m.nombre.trim().ifBlank { m.ruta?.substringAfterLast('/')?.trim().orEmpty() }.takeIf { it.isNotBlank() }
+        // Un lienzo, sin `.excalidraw` (1-nov-2026). Ver [com.forge.pixpin.guardados.NombreDelLienzo.visible].
+        (if (m.clase == com.forge.pixpin.guardados.Clase.DIBUJO) com.forge.pixpin.guardados.NombreDelLienzo.visible(m)
+        else m.nombre.trim().ifBlank { m.ruta?.substringAfterLast('/')?.trim().orEmpty() }.let(com.forge.pixpin.guardados.NombreDelLienzo::sinExtension))
+            .takeIf { it.isNotBlank() }
 
     private fun iconoDe(m: com.forge.pixpin.guardados.Mensaje): Int = when (m.clase) {
         com.forge.pixpin.guardados.Clase.IMAGEN -> R.drawable.atajo_imagen
