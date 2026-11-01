@@ -93,7 +93,7 @@ object Acciones {
     val ACCIONES: List<Accion> = listOf(
         Accion("abrir_chat", "ventana_principal", "Abre (o trae delante) la ventana del chat de proyectos.", Categoria.ABRIR,
             listOf("chat", "proyecto", "ventana principal", "conversacion"), "{}", emptyList(), null, "Abriendo el chat."),
-        Accion("abrir_fichero", "abrir", "Abre un fichero en PixPin (PDF, Word, Excel, imagen, plano...), como «Abrir con PixPin».", Categoria.ABRIR,
+        Accion("abrir_fichero", "abrir", "Abre un fichero en PinDesk (PDF, Word, Excel, imagen, plano...), como «Abrir con PinDesk».", Categoria.ABRIR,
             listOf("abre", "abrir", "archivo", "fichero", "documento", "pdf", "docx", "xlsx", "dwg", ":\\"),
             """{"que":{"tipo":"fichero"}}""", listOf(a("que.ruta", p("ruta", Tipo.Ruta, true, RUTA))), null, "Abriendo {ruta}."),
         Accion("abrir_mensaje", "abrir", "Abre el chat en un mensaje concreto, resaltado.", Categoria.ABRIR,
@@ -177,7 +177,7 @@ object Acciones {
                 r(p("chat", Tipo.Texto, false, CHAT)),
                 r(p("buscar", Tipo.Texto, false, "palabras que deben tener las tareas"))
             ), null, ""),
-        Accion("abrir_ventana", "ventana", "Abre una ventana de PixPin: tareas, galeria (de capturas), lecciones o sincronizar.", Categoria.ABRIR,
+        Accion("abrir_ventana", "ventana", "Abre una ventana de PinDesk: tareas, galeria (de capturas), lecciones o sincronizar.", Categoria.ABRIR,
             listOf("ventana", "galeria", "tareas", "lecciones", "sincronizar", "abre", "ensena", "muestra"), "{}",
             listOf(p("cual", op("tareas", "galeria", "lecciones", "sincronizar"), true, "que ventana")), null, "Abriendo la ventana de {cual}."),
         Accion("capturar_pantalla", "capturar", "Empieza una captura de una zona de la pantalla (el usuario elige la zona).", Categoria.CAPTURAS,
@@ -191,7 +191,7 @@ object Acciones {
         Accion("conservar_captura", "conservar_captura", "Conserva una captura (no caduca y va a «Mensajes guardados»).", Categoria.CAPTURAS,
             listOf("conserva", "no borres", "guarda la captura", "caduc"), "{}", listOf(p("ruta", Tipo.Ruta, true, "ruta de la captura")), null,
             "Captura conservada."),
-        Accion("borrar_captura", "borrar_captura", "Manda una captura a la papelera de PixPin.", Categoria.CAPTURAS,
+        Accion("borrar_captura", "borrar_captura", "Manda una captura a la papelera de PinDesk.", Categoria.CAPTURAS,
             listOf("borra la captura", "elimina la captura", "papelera"), "{}", listOf(p("ruta", Tipo.Ruta, true, "ruta de la captura")),
             "¿Mando a la papelera la captura {ruta}?", "Captura enviada a la papelera."),
         Accion("copiar_imagen", "copiar_imagen", "Pone una imagen en el portapapeles, como imagen.", Categoria.CAPTURAS,
@@ -241,7 +241,7 @@ object Acciones {
 
     /** **La tabla de los documentos** (`acciones_documentos.rs`): las hace el ejecutor del chat. */
     val ACCIONES_DOCUMENTOS: List<Accion> = listOf(
-        Accion(TABLA, TABLA, "Pasa la tabla de una foto o un PDF (escaneado o no) a una tabla del chat o a un Excel. Las celdas las lee PixPin; tu solo eliges destino, nombre y si la primera fila es cabecera.", Categoria.NOTAS,
+        Accion(TABLA, TABLA, "Pasa la tabla de una foto o un PDF (escaneado o no) a una tabla del chat o a un Excel. Las celdas las lee PinDesk; tu solo eliges destino, nombre y si la primera fila es cabecera.", Categoria.NOTAS,
             listOf("tabla", "excel", "xlsx", "hoja de calculo", "celdas", "columnas", "filas"), "{}",
             listOf(
                 d("\"tabla\"", p("destino", op("tabla", "excel"), false, "tabla del chat o fichero Excel")),

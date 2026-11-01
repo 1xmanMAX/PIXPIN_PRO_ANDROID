@@ -581,7 +581,7 @@ class SincronizarActivity : ComponentActivity() {
 
     private fun explicar(e: Throwable, nombre: String): String = when (e) {
         is java.net.ConnectException, is java.net.SocketTimeoutException, is java.net.NoRouteToHostException ->
-            "No se pudo llegar a $nombre. Comprueba que está en la misma Wi-Fi y con PixPin abierto."
+            "No se pudo llegar a $nombre. Comprueba que está en la misma Wi-Fi y con PinDesk abierto."
         is IllegalStateException -> e.message ?: "Algo salió mal"
         is EOFException -> "$nombre cortó la conexión a medias. Lo que ya se había pasado está bien; vuelve a sincronizar para terminar."
         is java.io.IOException ->
@@ -596,7 +596,7 @@ class SincronizarActivity : ComponentActivity() {
         if (trabajo?.isActive == true) return
         trabajo = lifecycleScope.launch(Dispatchers.IO) {
             try {
-                fase = Fase.Conectando("Buscando un aparato del grupo en esta Wi-Fi…\nEn el otro aparato, ten PixPin abierto.")
+                fase = Fase.Conectando("Buscando un aparato del grupo en esta Wi-Fi…\nEn el otro aparato, ten PinDesk abierto.")
                 val (host, puerto, nombre) = if (direccion != null) {
                     val (h, p) = partirDireccion(direccion) ?: throw IllegalStateException("La dirección tiene que ser como 192.168.1.20:47474")
                     Triple(h, p, h)
@@ -605,7 +605,7 @@ class SincronizarActivity : ComponentActivity() {
                     val encontrado = CompletableDeferred<Red.Vecino>()
                     withContext(Dispatchers.Main) { red.buscar(Red.TIPO, { it["g"] == etiqueta }) { l -> l.firstOrNull()?.let { encontrado.complete(it) } } }
                     val v = kotlinx.coroutines.withTimeoutOrNull(25_000) { encontrado.await() }
-                        ?: throw IllegalStateException("No apareció ningún aparato con ese código. Comprueba el código, que los dos estáis en la misma Wi-Fi y que el otro tiene PixPin abierto. También puedes escribir su dirección.")
+                        ?: throw IllegalStateException("No apareció ningún aparato con ese código. Comprueba el código, que los dos estáis en la misma Wi-Fi y que el otro tiene PinDesk abierto. También puedes escribir su dirección.")
                     Triple(v.host.hostAddress ?: "", v.puerto, v.nombre)
                 }
                 fase = Fase.Conectando("Uniéndome al grupo con $nombre…")
@@ -958,7 +958,7 @@ class SincronizarActivity : ComponentActivity() {
             title = { Text("Unirme a un grupo") },
             text = {
                 Column {
-                    Text("El código sale en «Añadir», en un aparato del grupo con PixPin abierto y en tu misma Wi-Fi.", style = MaterialTheme.typography.bodySmall)
+                    Text("El código sale en «Añadir», en un aparato del grupo con PinDesk abierto y en tu misma Wi-Fi.", style = MaterialTheme.typography.bodySmall)
                     Spacer(Modifier.height(10.dp))
                     OutlinedTextField(
                         value = codigo, onValueChange = { codigo = it.take(14) }, singleLine = true,

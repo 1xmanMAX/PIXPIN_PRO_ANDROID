@@ -57,7 +57,7 @@ object Invitacion {
      */
     const val UNIRSE = "Unirse a un chat compartido"
     const val UNIRSE_DETALLE = "Con el código o el QR de quien te invita"
-    const val COMO_UNIRSE = "En el otro teléfono: PixPin → el «+» de abajo en la lista de chats → «$UNIRSE». " +
+    const val COMO_UNIRSE = "En el otro teléfono: PinDesk → el «+» de abajo en la lista de chats → «$UNIRSE». " +
         "Que escanee este QR o teclee el código."
     const val COMO_INVITAR = "Quien te invita mantiene pulsado el chat en su lista (o lo abre → ⋮) → Personas → Añadir, " +
         "y te enseña un QR y un código. Solo recibirás ese chat: nada más de su teléfono, y tú no le das nada tuyo."

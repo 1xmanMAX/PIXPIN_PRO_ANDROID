@@ -3,7 +3,7 @@
 <resources>
     <!-- Ajustes › Idioma -->
     <string name="ajustes_idioma">Language</string>
-    <string name="ajustes_idioma_desc">The language of PixPin\'s menus and texts. “Same as the phone”: Spanish if the phone is in Spanish; otherwise, English.</string>
+    <string name="ajustes_idioma_desc">The language of PinDesk\'s menus and texts. “Same as the phone”: Spanish if the phone is in Spanish; otherwise, English.</string>
     <string name="ajustes_idioma_sistema">Same as the phone</string>
 
     <!-- Lista de chats (ui/ListaDeChats.kt) -->
@@ -97,7 +97,7 @@
     <string name="ajustes_dias_desc">After that they go to the phone\'s trash, except the ones you keep.</string>
     <string name="ajustes_dias_nunca">Never</string>
     <string name="ajustes_pdf_titulo">PDF compression</string>
-    <string name="ajustes_pdf_desc">When you save a PDF in PixPin it is made lighter by itself, in the background, with pdfsqueeze. The original you have outside PixPin is not touched.</string>
+    <string name="ajustes_pdf_desc">When you save a PDF in PinDesk it is made lighter by itself, in the background, with pdfsqueeze. The original you have outside PinDesk is not touched.</string>
     <string name="ajustes_barra_pdf">PDF bar</string>
     <string name="ajustes_barra_pdf_desc">The tools when annotating a PDF. If untouched, the reader\'s.</string>
     <string name="ajustes_barra_documento">Word and books bar</string>
@@ -125,7 +125,7 @@
     <string name="ajustes_sec_capturar">Capture</string>
     <string name="ajustes_sec_capturar_resumen">How the screen is cropped and in which format it is copied</string>
     <string name="ajustes_sec_pdf">PDF</string>
-    <string name="ajustes_sec_pdf_resumen">How much they are compressed when saved in PixPin</string>
+    <string name="ajustes_sec_pdf_resumen">How much they are compressed when saved in PinDesk</string>
     <string name="ajustes_sec_dibujar">Draw</string>
     <string name="ajustes_sec_dibujar_resumen">Snap, hand, guide mode and which tools show up in each place</string>
     <string name="ajustes_sec_pinear">Pin</string>

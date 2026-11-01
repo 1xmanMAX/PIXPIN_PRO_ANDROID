@@ -348,7 +348,7 @@ private fun Pantalla(cerrar: () -> Unit) {
             )
         } else {
             Text(
-                "PixPin necesita la cámara para hacer las fotos de la reunión.",
+                "PinDesk necesita la cámara para hacer las fotos de la reunión.",
                 color = Color.White, modifier = Modifier.align(Alignment.Center).padding(32.dp)
             )
         }

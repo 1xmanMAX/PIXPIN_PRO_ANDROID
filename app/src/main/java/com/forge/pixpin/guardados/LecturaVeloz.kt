@@ -387,7 +387,7 @@ object LecturaVeloz {
     fun aviso(que: AlAbrir, motivo: String?): String {
         val base = when (que) {
             AlAbrir.FALTA_LA_APP -> "Hace falta instalar «Lectura Veloz» en este teléfono"
-            AlAbrir.APP_ANTIGUA -> "Pon al día «Lectura Veloz»: esta versión aún no abre documentos de PixPin"
+            AlAbrir.APP_ANTIGUA -> "Pon al día «Lectura Veloz»: esta versión aún no abre documentos de PinDesk"
             AlAbrir.NO_SE_PUEDE -> "Este documento no se puede leer en Lectura Veloz"
             AlAbrir.ABRIR -> return ""
         }

@@ -658,7 +658,7 @@ object Agente {
     private fun comoTrabaja(disponibles: Set<String>): String {
         fun hay(n: String) = n in disponibles
         val s = StringBuilder()
-        s.append("Eres el asistente de PixPin y trabajas dentro de la app del usuario, en su teléfono. ")
+        s.append("Eres el asistente de PinDesk y trabajas dentro de la app del usuario, en su teléfono. ")
         s.append("Tus herramientas leen y cambian de verdad sus lienzos (figuras, textos), notas, tareas, chats y documentos, ")
         s.append("y cada resultado te dice qué pasó: los #id de lo creado o tocado, el estado, o un ERROR con su motivo. ")
         s.append("Cuando llega el «Lienzo destino», trae lo que ya hay con sus #id, textos y cajas.\n\n")
@@ -728,7 +728,7 @@ object Agente {
         if (docs.isNotEmpty()) s.append("Con sus documentos y planos: ").append(docs.joinToString("; ")).append(". ")
         if (hay(Herramientas.BUSCAR)) s.append("Para lo que dicen sus documentos, notas y chats, buscar_en_mis_cosas, y cita las fuentes con [n]. ")
         s.append("Nunca pidas rutas ni codigos: nombra el archivo con las palabras del usuario; si te dicen que hay varios, pregunta cual con esa lista corta. ")
-        if (hay(Herramientas.AYUDA)) s.append("Si pregunta donde esta algo o como se hace en PixPin, usa ayuda_app y contesta con lo que diga, sin inventar. ")
+        if (hay(Herramientas.AYUDA)) s.append("Si pregunta donde esta algo o como se hace en PinDesk, usa ayuda_app y contesta con lo que diga, sin inventar. ")
         s.append("Despues de usar una herramienta, di en una frase lo que hiciste. ")
         return s.toString() + Conocimiento.RESUMEN
     }

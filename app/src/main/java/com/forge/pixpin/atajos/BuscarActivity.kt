@@ -148,7 +148,7 @@ class BuscarActivity : ComponentActivity() {
                     OutlinedTextField(
                         value = consulta, onValueChange = { consulta = it.take(300); vista = null },
                         modifier = Modifier.fillMaxWidth().focusRequester(foco),
-                        placeholder = { Text("Buscar en PixPin") },
+                        placeholder = { Text("Buscar en PinDesk") },
                         leadingIcon = { Icon(Icons.Filled.Search, null) },
                         trailingIcon = {
                             IconButton(onClick = { if (consulta.isEmpty()) finish() else consulta = "" }) { Icon(Icons.Filled.Close, "Borrar") }

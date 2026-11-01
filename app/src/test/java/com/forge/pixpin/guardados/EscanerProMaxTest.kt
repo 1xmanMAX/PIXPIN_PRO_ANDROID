@@ -32,7 +32,7 @@ class EscanerProMaxTest {
         assertTrue(i.getBooleanExtra("com.scannerpromax.extra.MULTI_PAGE", false))
         // Sin revisión: falso aunque el valor por defecto que se lea sea verdadero.
         assertFalse(i.getBooleanExtra("com.scannerpromax.extra.REVIEW", true))
-        assertEquals("PixPin", i.getStringExtra("com.scannerpromax.extra.CALLER_LABEL"))
+        assertEquals("PinDesk", i.getStringExtra("com.scannerpromax.extra.CALLER_LABEL"))
         // No se pide OCR: no hay dónde guardarlo sin que se vea.
         assertFalse(i.hasExtra("com.scannerpromax.extra.OCR"))
     }

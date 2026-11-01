@@ -453,7 +453,7 @@ object PaginaDelPlano {
         fun s(x: String) = destino.write(x.toByteArray(Charsets.UTF_8))
         s("<!DOCTYPE html>\n<html lang=\"es\"><head><meta charset=\"utf-8\">\n")
         s("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">\n")
-        s("<meta name=\"generator\" content=\"PixPin · plano\">\n")
+        s("<meta name=\"generator\" content=\"PinDesk · plano\">\n")
         s("<title>$titulo</title>\n")
         s(ESTILO)
         s("</head><body class=\"${if (o.claro) "claro" else "oscuro"}\">\n<div id=\"barra\">")

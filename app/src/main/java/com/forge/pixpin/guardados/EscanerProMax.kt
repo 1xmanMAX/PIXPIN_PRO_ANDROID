@@ -50,7 +50,7 @@ object EscanerProMax {
     const val ERROR_ID_INVALIDO = "invalid_document_id"
 
     /** Cómo se presenta PixPin en el escáner («Adjuntar a PixPin»). */
-    const val QUIEN_LLAMA = "PixPin"
+    const val QUIEN_LLAMA = "PinDesk"
 
     /** La petición: cámara directa, documento de varias páginas, en PDF y sin revisar. */
     fun peticion(): Intent = Intent(ACCION)

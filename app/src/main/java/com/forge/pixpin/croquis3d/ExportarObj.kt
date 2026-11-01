@@ -82,7 +82,7 @@ object ExportarObj {
             normales++
         }
 
-        obj.append("# PixPin — croquis en el espacio: ").append(nombre).append('\n')
+        obj.append("# PinDesk — croquis en el espacio: ").append(nombre).append('\n')
         obj.append("# Unidades del croquis. Ejes: y arriba, z hacia quien mira.\n")
         obj.append("mtllib ").append(nombre).append(".mtl\n")
 
@@ -207,7 +207,7 @@ object ExportarObj {
         }
 
         if (caras == 0) return null
-        val mtl = StringBuilder("# PixPin — materiales de ").append(nombre).append('\n')
+        val mtl = StringBuilder("# PinDesk — materiales de ").append(nombre).append('\n')
         for (m in materiales.values) mtl.append(m).append('\n')
         return Salida(obj.toString(), mtl.toString(), vertices, caras)
     }

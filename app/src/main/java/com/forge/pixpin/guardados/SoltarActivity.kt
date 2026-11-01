@@ -113,7 +113,7 @@ class SoltarActivity : ComponentActivity() {
                             textAlign = TextAlign.Center, style = MaterialTheme.typography.titleMedium
                         )
                         if (estado.isEmpty()) Text(
-                            "Pon PixPin al lado de la otra app (pantalla partida o ventana emergente) y arrastra lo que quieras.",
+                            "Pon PinDesk al lado de la otra app (pantalla partida o ventana emergente) y arrastra lo que quieras.",
                             textAlign = TextAlign.Center, style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp)
                         )

@@ -237,7 +237,7 @@ object Pensar {
 
     fun instruccionesDelPlan(herramientas: List<Herramienta>): String {
         val nombres = herramientas.map { it.nombre }
-        return "Eres el planificador del asistente de PixPin. NO contestes al usuario ni hagas la tarea. " +
+        return "Eres el planificador del asistente de PinDesk. NO contestes al usuario ni hagas la tarea. " +
             "Lee la hoja de trabajo y el mensaje nuevo, y escribe SOLO estas cinco lineas:\n" +
             "ENTIENDO: que quiere el usuario, en una frase completa; si dice «eso», «otra vez» o «ahora», " +
             "di a que se refiere usando la hoja de trabajo.\n" +

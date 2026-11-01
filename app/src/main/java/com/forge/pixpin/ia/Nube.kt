@@ -101,7 +101,7 @@ object Nube {
             sinSaldo -> "Tu cuenta de $n no tiene saldo. Recargala en su web o cambia a la otra nube en Ajustes → Asistente." to false
             codigo == 401 -> "$n no acepta la clave: esta mal copiada o se revoco. Pega otra en Ajustes → Asistente." to false
             codigo == 403 -> "La clave de $n no tiene permiso para usar este modelo. Revisa tu cuenta o usa otra clave." to false
-            codigo == 404 -> "$n ya no ofrece el modelo que usa PixPin. Actualiza PixPin." to false
+            codigo == 404 -> "$n ya no ofrece el modelo que usa PinDesk. Actualiza PinDesk." to false
             codigo == 413 -> "La peticion es demasiado grande para $n; prueba con una foto mas pequena." to false
             codigo == 429 -> "Demasiadas peticiones seguidas a $n; espera un momento y vuelve a pedirlo." to true
             codigo in setOf(500, 502, 503, 504, 529) -> "$n esta saturado o fallo; vuelve a intentarlo en un rato." to true
@@ -236,7 +236,7 @@ object Nube {
 
     // --------------------------------------------------------------------------- instrucciones
 
-    private const val ENTORNO = "Vives dentro de PixPin, en un telefono Android: una app de notas, chats, lienzo, capturas y pines. " +
+    private const val ENTORNO = "Vives dentro de PinDesk, en un telefono Android: una app de notas, chats, lienzo, capturas y pines. " +
         "Lo que hacen tus herramientas pasa de verdad en la app del usuario, y su resultado te llega como respuesta de la herramienta."
 
     /** Las reglas comunes (`instrucciones::REGLAS` del PC); cada una sale solo si está su herramienta. */

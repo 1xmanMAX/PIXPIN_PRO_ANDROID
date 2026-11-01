@@ -51,7 +51,7 @@ fun AjustesDeJev() {
     Text("TypeSafe (Jev)", style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(top = 10.dp))
     Text(
         (guardada?.let { "Clave $it, cifrada en este teléfono. " } ?: "Sin clave: todo va como siempre. Sácala en console.typesafe.ai. ") +
-            "Jev contesta preguntas cortas con probabilidades; las decisiones las toma PixPin. Se paga en tu cuenta (muy poco) y solo se manda lo que dice cada función.",
+            "Jev contesta preguntas cortas con probabilidades; las decisiones las toma PinDesk. Se paga en tu cuenta (muy poco) y solo se manda lo que dice cada función.",
         fontSize = 13.sp
     )
     OutlinedTextField(

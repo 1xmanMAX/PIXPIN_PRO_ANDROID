@@ -74,7 +74,7 @@ class CompartirCarpetaTest {
         // Nada se queda fuera de la hoja por no estar en la tabla.
         assertEquals(c.formatos.size, visibles.size)
         assertEquals(
-            listOf("Imagen PNG", "Imagen JPG", "PDF", "Página web (HTML)", "Word", "Markdown", "Texto", "PixPin (.pixpin)", "Original (ZIP)", "Por Wi‑Fi a mis aparatos"),
+            listOf("Imagen PNG", "Imagen JPG", "PDF", "Página web (HTML)", "Word", "Markdown", "Texto", "PinDesk (.pixpin)", "Original (ZIP)", "Por Wi‑Fi a mis aparatos"),
             visibles.map { FormatosDeCompartir.rotulo(it.id, it.nombre) }
         )
         // Abre en el PDF: lo que más se comparte de un cuaderno.

@@ -2195,7 +2195,7 @@ class Croquis3DActivity : ComponentActivity() {
                         ?: mensajes.firstOrNull { it.clase == com.forge.pixpin.guardados.Clase.CROQUIS && it.referencia == id }?.proyecto
                             ?.let { pid -> proyectos.firstOrNull { it.id == pid } }
                 }) {
-                    paquete()?.let { com.forge.pixpin.ui.Compartible.Salida(it, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, ".pixpin: se sigue editando en otro PixPin") }
+                    paquete()?.let { com.forge.pixpin.ui.Compartible.Salida(it, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, ".pixpin: se sigue editando en otro PinDesk") }
                 },
                 com.forge.pixpin.ui.ExportarVisor.original(this, Croquis3DAlmacen.ruta(this, id), "$id.croquis.gz", "Su archivo .croquis.gz tal cual")
             ),

@@ -258,7 +258,7 @@ object ExportarHtml {
             append("<meta charset=\"utf-8\"/>\n")
             append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\"/>\n")
             append("<meta name=\"color-scheme\" content=\"").append(if (oscuro) "dark" else "light").append("\"/>\n")
-            append("<meta name=\"generator\" content=\"PixPin\"/>\n")
+            append("<meta name=\"generator\" content=\"PinDesk\"/>\n")
             append("<title>").append(escapar(titulo)).append("</title>\n")
             append("<style>").append(ESTILO.replace("FONDO", fondo))
             if (hayTabla) append('\n').append(VisorTabla.ESTILO)
