@@ -64,6 +64,18 @@ class LogicaDeLosWidgetsTest {
         assertTrue(LogicaDeLosWidgets.vacioDeTareas(hayListas = false).startsWith("Aún no hay tareas"))
     }
 
+    /** Una tarea que llama por teléfono a su hora (1-nov-2026) lleva el 📞 delante de su hora. */
+    @Test
+    fun unaTareaQueLlamaLlevaElTelefonoDelanteDeSuHora() {
+        val l = lista("Obra", "Banco", 5, "- [ ] llamar al banco ⏰ 2026-10-09 10:00 ➕ 2026-10-08\n- [ ] pan ⏰ 2026-10-09 11:00")
+        val llaman = com.forge.pixpin.mini.LlamadasDeTareas.conLlamada(emptySet(), l.codigo, l.filas[0].crudo, true)
+        val filas = LogicaDeLosWidgets.filasDeTareas(listOf(l), hoy, llaman = llaman)
+        val banco = filas.first { it.indice == 0 }.detalle
+        assertTrue(banco, banco.startsWith("📞 ⏰ mañana 10:00 · "))
+        // Caso negativo: la que solo avisa no lleva el teléfono.
+        assertTrue(filas.first { it.indice == 1 }.detalle.startsWith("⏰ mañana 11:00"))
+    }
+
     @Test
     fun unaTareaQueSoloEsUnaImagenDiceQueLoEs() {
         val l = lista("Obra", "Fotos", 5, "- [ ] ![img 01](pixpin:files/guardados/tarea-1-01.png) ➕ 2026-10-08\n- [ ] ver ![img 02](x.png)  y   medir")

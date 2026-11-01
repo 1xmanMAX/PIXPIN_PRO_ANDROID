@@ -73,7 +73,9 @@ object LogicaDeLosWidgets {
         listas: List<TodasLasTareas.Lista>,
         hoy: LocalDate,
         max: Int = MAX_TAREAS,
-        compartidos: Map<String, EnElChat> = emptyMap()
+        compartidos: Map<String, EnElChat> = emptyMap(),
+        /** Las tareas que llaman por teléfono a su hora ([com.forge.pixpin.mini.LlamadasDeTareas]): su detalle lleva el 📞. */
+        llaman: Set<String> = emptySet()
     ): List<FilaDeTarea> {
         val salida = ArrayList<FilaDeTarea>()
         for (l in listas.sortedWith(TodasLasTareas.ORDEN_DE_LISTAS)) {
@@ -85,7 +87,11 @@ object LogicaDeLosWidgets {
                 if (salida.size >= max) return salida
                 salida += FilaDeTarea(
                     l.codigo, f.indice, f.crudo, textoDeFila(f.texto),
-                    detalleDeFila(l, f.creada, hoy, com.forge.pixpin.mini.Tareas.horaDe(f.crudo)), compartida, autor
+                    detalleDeFila(
+                        l, f.creada, hoy, com.forge.pixpin.mini.Tareas.horaDe(f.crudo),
+                        com.forge.pixpin.mini.LlamadasDeTareas.llama(llaman, l.codigo, f.crudo)
+                    ),
+                    compartida, autor
                 )
             }
         }
@@ -121,12 +127,18 @@ object LogicaDeLosWidgets {
      * general no se nombra: casi todo lo de «Mensajes guardados» es el Inbox, y repetirlo en cada
      * fila solo quita sitio.
      */
-    fun detalleDeFila(l: TodasLasTareas.Lista, creada: LocalDate?, hoy: LocalDate, hora: java.time.LocalDateTime? = null): String {
+    fun detalleDeFila(
+        l: TodasLasTareas.Lista, creada: LocalDate?, hoy: LocalDate, hora: java.time.LocalDateTime? = null,
+        /** Si a esa hora llama por teléfono (1-nov-2026): «📞 ⏰ hoy 10:00 · …». */
+        llama: Boolean = false
+    ): String {
         val donde = if (l.guardados || l.chat == l.titulo) l.titulo.ifBlank { l.chat } else "${l.titulo.ifBlank { "Tareas" }} · ${l.chat}"
         val edad = TodasLasTareas.edad(creada, hoy)
         val sinHora = if (edad == null) donde else "$donde · $edad"
         // Con hora de recordar (`⏰`), delante: es lo que más importa de la fila.
-        return if (hora == null) sinHora else "${com.forge.pixpin.mini.Tareas.RELOJ} ${com.forge.pixpin.mini.Tareas.textoDeHora(hora, hoy.atTime(java.time.LocalTime.now()))} · $sinHora"
+        if (hora == null) return sinHora
+        val telefono = if (llama) "${com.forge.pixpin.mini.LlamadasDeTareas.TELEFONO} " else ""
+        return "$telefono${com.forge.pixpin.mini.Tareas.RELOJ} ${com.forge.pixpin.mini.Tareas.textoDeHora(hora, hoy.atTime(java.time.LocalTime.now()))} · $sinHora"
     }
 
     /** El número de la cabecera: vacío si no queda nada (la lista ya lo dice), y «99+» si no cabe. */

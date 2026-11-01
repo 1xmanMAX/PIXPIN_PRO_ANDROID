@@ -114,10 +114,20 @@ class TareaRapidaActivity : ComponentActivity() {
         fun alInbox(context: Context, texto: String) {
             if (Tareas.saneado(texto).isEmpty()) return
             val almacen = MensajesStore(context)
-            val inbox = TodasLasTareas.inboxEn(almacen.leer())
-            if (inbox != null) {
-                almacen.actualizar(inbox.id) { m -> m.copy(texto = TodasLasTareas.conTarea(m.texto, texto)) }
-            } else {
+            // Si llegaron dos Inbox (cada aparato creó el suyo), primero se juntan: lo apuntado va
+            // al que se queda. Ver [TodasLasTareas.unirInboxes].
+            unirInboxes(almacen)
+            var apuntada = false
+            if (TodasLasTareas.inboxEn(almacen.leer()) != null) almacen.cambiar { todos ->
+                // Leído otra vez bajo la llave: el que haya ahora, no el de hace un momento.
+                val inbox = TodasLasTareas.inboxEn(todos)
+                if (inbox == null) todos
+                else {
+                    apuntada = true
+                    todos.map { if (it.id == inbox.id) it.copy(texto = TodasLasTareas.conTarea(it.texto, texto)) else it }
+                }
+            }
+            if (!apuntada) {
                 almacen.anadir(
                     Mensaje(
                         id = UUID.randomUUID().toString(), cuando = System.currentTimeMillis(), clase = Clase.MINIAPP,
@@ -126,6 +136,18 @@ class TareaRapidaActivity : ComponentActivity() {
                     )
                 )
             }
+        }
+
+        /**
+         * **Un solo Inbox** (1-nov-2026): si en el chat hay dos o más (ver
+         * [TodasLasTareas.unirInboxes]), se juntan en el más antiguo sin perder ninguna tarea y los
+         * demás se borran (y su borrado viaja). Devuelve si había que juntar. Trabajo de disco.
+         */
+        fun unirInboxes(almacen: MensajesStore): Boolean {
+            if (almacen.leer().count(TodasLasTareas::esMensajeInbox) < 2) return false
+            var unidos = false
+            almacen.cambiar { todos -> TodasLasTareas.unirInboxes(todos)?.also { unidos = true } ?: todos }
+            return unidos
         }
     }
 }
