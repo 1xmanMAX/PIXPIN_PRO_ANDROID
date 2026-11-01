@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- portugués de Brasil de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">O celular está ficando sem espaço</string>
+    <string name="sin_perder_disco_lleno">Celular quase cheio: o vídeo foi fechado e o áudio continua</string>
+    <string name="sin_perder_sin_sitio_para_video">Resta muito pouco espaço: só o áudio está sendo gravado</string>
+    <string name="sin_perder_video_cortado">O vídeo foi cortado; o áudio continua gravando</string>
+    <string name="sin_perder_hueco">O celular parou o app por %1$d min; a gravação continuou ao voltar</string>
+    <string name="sin_perder_quedo_para_recuperar">Não foi possível salvar a gravação: ela fica guardada e você poderá recuperá-la ao abrir o PinDesk</string>
+    <string name="cortada_titulo">Gravação interrompida</string>
+    <string name="cortada_texto">Uma gravação foi interrompida (%1$s, %2$d min)</string>
+    <string name="cortada_perdida">De uma gravação interrompida (%1$s) restou só um vídeo que não abre</string>
+    <string name="cortada_en_chat">em «%1$s»</string>
+    <string name="cortada_recuperar">Recuperar</string>
+    <string name="cortada_descartar">Descartar</string>
+    <string name="cortada_luego">Depois</string>
+    <string name="cortada_recuperando">Recuperando…</string>
+    <string name="cortada_recuperada">Gravação recuperada: já está no seu chat</string>
+    <string name="cortada_fallo">Não foi possível recuperar a gravação: ela fica como estava</string>
+    <string name="cortada_descartar_seguro">Apagar o que foi gravado em «%1$s»? Isso não pode ser desfeito.</string>
+    <string name="cortada_no">Não</string>
+    <string name="cortada_si_borrar">Sim, apagar</string>
+    <string name="cortada_aviso">Abra o PinDesk para recuperá-la ou descartá-la</string>
+</resources>

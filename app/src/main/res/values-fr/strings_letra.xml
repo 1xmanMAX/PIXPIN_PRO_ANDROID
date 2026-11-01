@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- francés de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">Synchro auto</string>
+    <string name="letra_sola_empieza">Synchronisation automatique des paroles : écoute de la chanson…</string>
+    <string name="letra_sola_avance">Synchronisation des paroles… %1$d %%</string>
+    <string name="letra_sola_bajando">Téléchargement de la reconnaissance vocale… %1$d %%</string>
+    <string name="letra_sola_parada">Synchronisation arrêtée</string>
+    <string name="letra_sola_ocupada">Une autre chanson est déjà en cours de synchronisation</string>
+    <string name="letra_sola_sin_reconocedor">Ce téléphone ne peut pas écouter la chanson avec Whisper. Synchronisez-la en tapotant avec l\'horloge</string>
+    <string name="letra_sola_falta_modelo">Pour placer les temps automatiquement, touchez « Synchro auto » (les sous-titres) : la reconnaissance vocale est téléchargée une fois (environ %1$d Mo)</string>
+    <string name="letra_sola_sin_red">Impossible de télécharger la reconnaissance vocale : vérifiez la connexion et touchez de nouveau « Synchro auto »</string>
+    <string name="letra_sola_no_se_oye">Les paroles n\'ont pas été reconnues dans la chanson. Synchronisez-la en tapotant avec l\'horloge</string>
+    <string name="letra_sola_fallo">Impossible de synchroniser les paroles</string>
+    <string name="letra_sola_cambio">Les paroles ont changé pendant la synchronisation : touchez de nouveau « Synchro auto »</string>
+    <string name="letra_sola_hecha">Paroles synchronisées automatiquement (%1$d vers entendus sur %2$d). Si l\'un est décalé, corrigez-le avec l\'horloge</string>
+    <string name="letra_sola_hecha_poca">Paroles synchronisées approximativement : seuls %1$d vers sur %2$d ont été entendus. Corrigez-les avec l\'horloge</string>
+    <string name="letra_con_tiempos_lista_de">Les paroles de « %1$s » ont maintenant leurs temps (%2$d vers entendus sur %3$d). Ouvrez-les pour vérifier.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">Les paroles de « %1$s » ont des temps approximatifs : seuls %2$d vers sur %3$d ont été entendus. Corrigez-les avec l\'horloge.</string>
+    <string name="letra_volver">Retour</string>
+    <string name="letra_tema_claro">Thème clair</string>
+    <string name="letra_tema_oscuro">Thème sombre</string>
+</resources>

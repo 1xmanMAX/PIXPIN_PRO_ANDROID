@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- italiano de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">Il telefono sta finendo lo spazio</string>
+    <string name="sin_perder_disco_lleno">Telefono quasi pieno: il video è stato chiuso e l\'audio continua</string>
+    <string name="sin_perder_sin_sitio_para_video">Resta pochissimo spazio: si registra solo l\'audio</string>
+    <string name="sin_perder_video_cortado">Il video si è interrotto; l\'audio continua a registrare</string>
+    <string name="sin_perder_hueco">Il telefono ha fermato l\'app per %1$d min; la registrazione è ripresa al ritorno</string>
+    <string name="sin_perder_quedo_para_recuperar">Impossibile salvare la registrazione: resta al sicuro e ti verrà proposto di recuperarla quando apri PinDesk</string>
+    <string name="cortada_titulo">Registrazione interrotta</string>
+    <string name="cortada_texto">Una registrazione è stata interrotta (%1$s, %2$d min)</string>
+    <string name="cortada_perdida">Di una registrazione interrotta (%1$s) è rimasto solo un video che non si apre</string>
+    <string name="cortada_en_chat">in «%1$s»</string>
+    <string name="cortada_recuperar">Recupera</string>
+    <string name="cortada_descartar">Scarta</string>
+    <string name="cortada_luego">Più tardi</string>
+    <string name="cortada_recuperando">Recupero…</string>
+    <string name="cortada_recuperada">Registrazione recuperata: ora è nella sua chat</string>
+    <string name="cortada_fallo">Impossibile recuperare la registrazione: resta com\'era</string>
+    <string name="cortada_descartar_seguro">Eliminare ciò che è stato registrato in «%1$s»? Non si può annullare.</string>
+    <string name="cortada_no">No</string>
+    <string name="cortada_si_borrar">Sì, elimina</string>
+    <string name="cortada_aviso">Apri PinDesk per recuperarla o scartarla</string>
+</resources>

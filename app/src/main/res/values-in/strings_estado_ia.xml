@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- indonesio de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">berfungsi</string>
+    <string name="ia_estado_sin_clave">tanpa kunci</string>
+    <string name="ia_estado_desconocido">belum diperiksa</string>
+    <string name="ia_estado_clave_mala">kunci tidak valid (%d)</string>
+    <string name="ia_estado_sin_saldo">akun tidak punya saldo</string>
+    <string name="ia_estado_limite">terlalu banyak permintaan atau kuota habis</string>
+    <string name="ia_estado_red">tidak ada koneksi</string>
+    <string name="ia_estado_servidor">layanan sedang gagal (%d)</string>
+    <string name="ia_estado_otro">tidak menjawab dengan benar (%d)</string>
+    <string name="ia_estado_comprobando">memeriksa…</string>
+    <string name="ia_estado_hace_nada">baru saja</string>
+    <string name="ia_estado_hace_min">%d mnt lalu</string>
+    <string name="ia_estado_hace_horas">%d jam lalu</string>
+    <string name="ia_estado_comprobar">Periksa sekarang</string>
+    <string name="ia_estado_claves">Kunci di Pengaturan → Asisten</string>
+    <string name="ia_estado_descripcion">Status Claude, DeepSeek, dan Jev</string>
+</resources>

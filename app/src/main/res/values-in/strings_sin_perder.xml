@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- indonesio de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">Ruang penyimpanan ponsel hampir habis</string>
+    <string name="sin_perder_disco_lleno">Ponsel hampir penuh: video ditutup dan audio berlanjut</string>
+    <string name="sin_perder_sin_sitio_para_video">Ruang sangat sedikit: hanya audio yang direkam</string>
+    <string name="sin_perder_video_cortado">Video terpotong; audio masih merekam</string>
+    <string name="sin_perder_hueco">Ponsel menghentikan aplikasi selama %1$d mnt; rekaman berlanjut saat kembali</string>
+    <string name="sin_perder_quedo_para_recuperar">Tidak dapat menyimpan rekaman: rekaman disimpan aman dan Anda akan ditawari untuk memulihkannya saat membuka PinDesk</string>
+    <string name="cortada_titulo">Rekaman terputus</string>
+    <string name="cortada_texto">Sebuah rekaman terputus (%1$s, %2$d mnt)</string>
+    <string name="cortada_perdida">Dari rekaman yang terputus (%1$s) hanya tersisa video yang tidak bisa dibuka</string>
+    <string name="cortada_en_chat">di “%1$s”</string>
+    <string name="cortada_recuperar">Pulihkan</string>
+    <string name="cortada_descartar">Buang</string>
+    <string name="cortada_luego">Nanti</string>
+    <string name="cortada_recuperando">Memulihkan…</string>
+    <string name="cortada_recuperada">Rekaman dipulihkan: sekarang ada di chat-nya</string>
+    <string name="cortada_fallo">Tidak dapat memulihkan rekaman: tetap seperti semula</string>
+    <string name="cortada_descartar_seguro">Hapus yang direkam di “%1$s”? Tindakan ini tidak bisa dibatalkan.</string>
+    <string name="cortada_no">Tidak</string>
+    <string name="cortada_si_borrar">Ya, hapus</string>
+    <string name="cortada_aviso">Buka PinDesk untuk memulihkan atau membuangnya</string>
+</resources>

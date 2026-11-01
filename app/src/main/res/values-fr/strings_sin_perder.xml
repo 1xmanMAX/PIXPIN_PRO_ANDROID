@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- francés de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">Le téléphone manque d\'espace</string>
+    <string name="sin_perder_disco_lleno">Téléphone presque plein : la vidéo a été fermée et l\'audio continue</string>
+    <string name="sin_perder_sin_sitio_para_video">Il reste très peu d\'espace : seul l\'audio est enregistré</string>
+    <string name="sin_perder_video_cortado">La vidéo a été coupée ; l\'audio continue d\'enregistrer</string>
+    <string name="sin_perder_hueco">Le téléphone a arrêté l\'appli pendant %1$d min ; l\'enregistrement a repris au retour</string>
+    <string name="sin_perder_quedo_para_recuperar">Impossible d\'enregistrer : l\'enregistrement est mis en sûreté et vous pourrez le récupérer en ouvrant PinDesk</string>
+    <string name="cortada_titulo">Enregistrement interrompu</string>
+    <string name="cortada_texto">Un enregistrement a été interrompu (%1$s, %2$d min)</string>
+    <string name="cortada_perdida">D\'un enregistrement interrompu (%1$s), il ne reste qu\'une vidéo illisible</string>
+    <string name="cortada_en_chat">dans « %1$s »</string>
+    <string name="cortada_recuperar">Récupérer</string>
+    <string name="cortada_descartar">Jeter</string>
+    <string name="cortada_luego">Plus tard</string>
+    <string name="cortada_recuperando">Récupération…</string>
+    <string name="cortada_recuperada">Enregistrement récupéré : il est maintenant dans son chat</string>
+    <string name="cortada_fallo">Impossible de récupérer l\'enregistrement : il reste tel quel</string>
+    <string name="cortada_descartar_seguro">Supprimer ce qui a été enregistré dans « %1$s » ? C\'est irréversible.</string>
+    <string name="cortada_no">Non</string>
+    <string name="cortada_si_borrar">Oui, supprimer</string>
+    <string name="cortada_aviso">Ouvrez PinDesk pour le récupérer ou le jeter</string>
+</resources>

@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- alemán de values/strings_por_su_hora.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="clase_todos_aportan">Alle im Chat Fotos hinzufügen lassen</string>
+    <string name="clase_solo_mis_fotos">Nur meine Fotos in dieser Aufnahme</string>
+    <string name="clase_todos_aportan_hecho">Fotos der Chatmitglieder kommen an ihre Minute</string>
+    <string name="clase_solo_mis_fotos_hecho">Nur Ihre Fotos kommen in diese Aufnahme</string>
+    <string name="clase_todos_aportan_detalle">Fotos, die die Personen im geteilten Chat während der Besprechung machen, kommen an ihre Minute, auch wenn sie nicht verbunden sind.</string>
+    <string name="foto_adjuntar_a_la_grabacion">An die Aufnahme anhängen</string>
+    <string name="foto_sin_grabaciones">In diesem Chat gibt es keine Aufnahmen</string>
+    <string name="foto_adjuntada_a_la_grabacion">In „%1$s“, bei %2$s</string>
+    <string name="clase_hora_sin_comprobar">Uhrzeit nicht geprüft</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="one">%d Screenshot vom PC</item>
+        <item quantity="other">%d Screenshots vom PC</item>
+    </plurals>
+</resources>

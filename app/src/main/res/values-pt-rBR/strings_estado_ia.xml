@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- portugués de Brasil de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">funciona</string>
+    <string name="ia_estado_sin_clave">sem chave</string>
+    <string name="ia_estado_desconocido">ainda não verificado</string>
+    <string name="ia_estado_clave_mala">a chave não é válida (%d)</string>
+    <string name="ia_estado_sin_saldo">a conta não tem saldo</string>
+    <string name="ia_estado_limite">pedidos demais ou cota esgotada</string>
+    <string name="ia_estado_red">sem conexão</string>
+    <string name="ia_estado_servidor">o serviço está falhando (%d)</string>
+    <string name="ia_estado_otro">não responde direito (%d)</string>
+    <string name="ia_estado_comprobando">verificando…</string>
+    <string name="ia_estado_hace_nada">agora mesmo</string>
+    <string name="ia_estado_hace_min">há %d min</string>
+    <string name="ia_estado_hace_horas">há %d h</string>
+    <string name="ia_estado_comprobar">Verificar agora</string>
+    <string name="ia_estado_claves">Chaves em Configurações → Assistente</string>
+    <string name="ia_estado_descripcion">Estado do Claude, DeepSeek e Jev</string>
+</resources>

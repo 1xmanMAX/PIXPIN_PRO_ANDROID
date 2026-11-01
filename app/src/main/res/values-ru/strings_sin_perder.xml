@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ruso de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">На телефоне заканчивается место</string>
+    <string name="sin_perder_disco_lleno">Телефон почти заполнен: видео закрыто, звук продолжается</string>
+    <string name="sin_perder_sin_sitio_para_video">Места почти не осталось: записывается только звук</string>
+    <string name="sin_perder_video_cortado">Видео оборвалось; звук продолжает записываться</string>
+    <string name="sin_perder_hueco">Телефон остановил приложение на %1$d мин; по возвращении запись продолжилась</string>
+    <string name="sin_perder_quedo_para_recuperar">Не удалось сохранить запись: она надёжно сохранена, и при открытии PinDesk вам предложат её восстановить</string>
+    <string name="cortada_titulo">Прерванная запись</string>
+    <string name="cortada_texto">Запись была прервана (%1$s, %2$d мин)</string>
+    <string name="cortada_perdida">От прерванной записи (%1$s) осталось только видео, которое не открывается</string>
+    <string name="cortada_en_chat">в «%1$s»</string>
+    <string name="cortada_recuperar">Восстановить</string>
+    <string name="cortada_descartar">Выбросить</string>
+    <string name="cortada_luego">Позже</string>
+    <string name="cortada_recuperando">Восстановление…</string>
+    <string name="cortada_recuperada">Запись восстановлена: теперь она в своём чате</string>
+    <string name="cortada_fallo">Не удалось восстановить запись: она осталась как была</string>
+    <string name="cortada_descartar_seguro">Удалить записанное в «%1$s»? Это нельзя отменить.</string>
+    <string name="cortada_no">Нет</string>
+    <string name="cortada_si_borrar">Да, удалить</string>
+    <string name="cortada_aviso">Откройте PinDesk, чтобы восстановить или выбросить её</string>
+</resources>

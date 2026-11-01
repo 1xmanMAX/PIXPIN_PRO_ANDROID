@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- indonesio de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">Sinkron otomatis</string>
+    <string name="letra_sola_empieza">Menyinkronkan lirik otomatis: mendengarkan lagu…</string>
+    <string name="letra_sola_avance">Menyinkronkan lirik… %1$d %%</string>
+    <string name="letra_sola_bajando">Mengunduh pengenal ucapan… %1$d %%</string>
+    <string name="letra_sola_parada">Sinkronisasi dihentikan</string>
+    <string name="letra_sola_ocupada">Lagu lain sedang disinkronkan</string>
+    <string name="letra_sola_sin_reconocedor">Ponsel ini tidak bisa mendengarkan lagu dengan Whisper. Sinkronkan dengan mengetuk mengikuti jam</string>
+    <string name="letra_sola_falta_modelo">Untuk mengatur waktu secara otomatis, ketuk “Sinkron otomatis” (subtitel): pengenal ucapan diunduh sekali (sekitar %1$d MB)</string>
+    <string name="letra_sola_sin_red">Tidak dapat mengunduh pengenal ucapan: periksa koneksi lalu ketuk lagi “Sinkron otomatis”</string>
+    <string name="letra_sola_no_se_oye">Lirik tidak dikenali di dalam lagu. Sinkronkan dengan mengetuk mengikuti jam</string>
+    <string name="letra_sola_fallo">Tidak dapat menyinkronkan lirik</string>
+    <string name="letra_sola_cambio">Lirik berubah saat disinkronkan: ketuk lagi “Sinkron otomatis”</string>
+    <string name="letra_sola_hecha">Lirik tersinkron otomatis (%1$d dari %2$d baris terdengar). Jika ada yang meleset, perbaiki dengan jam</string>
+    <string name="letra_sola_hecha_poca">Lirik tersinkron kasar: hanya %1$d dari %2$d baris yang terdengar. Perbaiki dengan jam</string>
+    <string name="letra_con_tiempos_lista_de">Lirik “%1$s” sekarang punya waktunya (%2$d dari %3$d baris terdengar). Buka untuk memeriksa.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">Lirik “%1$s” punya waktu perkiraan: hanya %2$d dari %3$d baris yang terdengar. Perbaiki dengan jam.</string>
+    <string name="letra_volver">Kembali</string>
+    <string name="letra_tema_claro">Tema terang</string>
+    <string name="letra_tema_oscuro">Tema gelap</string>
+</resources>

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ruso de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">Автосинхронизация</string>
+    <string name="letra_sola_empieza">Автоматическая синхронизация текста: прослушивание песни…</string>
+    <string name="letra_sola_avance">Синхронизация текста… %1$d %%</string>
+    <string name="letra_sola_bajando">Загрузка модуля распознавания речи… %1$d %%</string>
+    <string name="letra_sola_parada">Синхронизация остановлена</string>
+    <string name="letra_sola_ocupada">Уже синхронизируется другая песня</string>
+    <string name="letra_sola_sin_reconocedor">Этот телефон не может прослушать песню через Whisper. Синхронизируйте её касаниями с часами</string>
+    <string name="letra_sola_falta_modelo">Чтобы расставить время автоматически, нажмите «Автосинхронизация» (субтитры): модуль распознавания речи скачивается один раз (около %1$d МБ)</string>
+    <string name="letra_sola_sin_red">Не удалось скачать модуль распознавания речи: проверьте подключение и снова нажмите «Автосинхронизация»</string>
+    <string name="letra_sola_no_se_oye">Текст в песне не распознан. Синхронизируйте её касаниями с часами</string>
+    <string name="letra_sola_fallo">Не удалось синхронизировать текст</string>
+    <string name="letra_sola_cambio">Текст изменился во время синхронизации: снова нажмите «Автосинхронизация»</string>
+    <string name="letra_sola_hecha">Текст синхронизирован автоматически (услышано строк: %1$d из %2$d). Если какая-то сбилась, поправьте её часами</string>
+    <string name="letra_sola_hecha_poca">Текст синхронизирован приблизительно: услышано только %1$d из %2$d строк. Поправьте их часами</string>
+    <string name="letra_con_tiempos_lista_de">У текста «%1$s» теперь есть время (услышано строк: %2$d из %3$d). Откройте, чтобы проверить.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">У текста «%1$s» приблизительное время: услышано только %2$d из %3$d строк. Поправьте их часами.</string>
+    <string name="letra_volver">Назад</string>
+    <string name="letra_tema_claro">Светлая тема</string>
+    <string name="letra_tema_oscuro">Тёмная тема</string>
+</resources>
