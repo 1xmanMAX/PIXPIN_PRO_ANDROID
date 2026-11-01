@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The AI status dots (1-nov-2026): the PC's `ia-estado-*` keys from its en-US main.ftl. -->
+<resources>
+    <string name="ia_estado_funciona">working</string>
+    <string name="ia_estado_sin_clave">no key</string>
+    <string name="ia_estado_desconocido">not checked yet</string>
+    <string name="ia_estado_clave_mala">the key is not valid (%d)</string>
+    <string name="ia_estado_sin_saldo">the account has no credit</string>
+    <string name="ia_estado_limite">too many requests or quota used up</string>
+    <string name="ia_estado_red">no connection</string>
+    <string name="ia_estado_servidor">the service is failing (%d)</string>
+    <string name="ia_estado_otro">not answering properly (%d)</string>
+    <string name="ia_estado_comprobando">checking…</string>
+    <string name="ia_estado_hace_nada">just now</string>
+    <string name="ia_estado_hace_min">%d min ago</string>
+    <string name="ia_estado_hace_horas">%d h ago</string>
+    <string name="ia_estado_comprobar">Check now</string>
+    <string name="ia_estado_claves">Keys in Settings → Assistant</string>
+    <string name="ia_estado_descripcion">Status of Claude, DeepSeek and Jev</string>
+</resources>
