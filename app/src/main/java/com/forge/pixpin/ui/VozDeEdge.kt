@@ -31,8 +31,8 @@ import java.util.concurrent.TimeUnit
  */
 object VozDeEdge {
 
-    /** Si hay voces de Microsoft en esta versión: en la de Google Play, no. */
-    val DISPONIBLE: Boolean get() = !com.forge.pixpin.BuildConfig.PARA_PLAY
+    /** Si hay voces de Microsoft en esta versión (en la rama `play-store`, no). */
+    val DISPONIBLE: Boolean get() = true
 
     private val cliente by lazy {
         OkHttpClient.Builder()

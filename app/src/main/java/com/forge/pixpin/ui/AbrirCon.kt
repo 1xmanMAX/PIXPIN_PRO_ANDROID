@@ -64,8 +64,8 @@ object AbrirCon {
         runCatching {
             val uri = uriDe(context, archivo)
             if (esApk(tipo, archivo.name)) {
-                // En la versión de Play no hay permiso de instalar (Play no lo deja): se comparte.
-                if (com.forge.pixpin.BuildConfig.PARA_PLAY) compartirApk(context, uri, fuera) else instalar(context, uri, fuera)
+                // (En la rama `play-store` no hay permiso de instalar: allí se comparte.)
+                instalar(context, uri, fuera)
                 return
             }
             fun ver(t: String) = Intent(Intent.ACTION_VIEW).setDataAndType(uri, t).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

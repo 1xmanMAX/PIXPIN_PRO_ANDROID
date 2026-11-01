@@ -226,3 +226,5 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       (`docs/monetizacion-y-cuentas.md`).
 - [ ] 71. Lo que hace el usuario: cuenta de desarrollador, la clave de subida, publicar la política,
       la prueba cerrada y las declaraciones de la Play Console (ver `docs/google-play.md`).
+- [x] 72. Dos ramas principales: `main` (código general, sin restricciones de Play; el APK de GitHub)
+      y `play-store` (`main` + lo que pide Google Play; el AAB). Ver `docs/ramas.md`.
