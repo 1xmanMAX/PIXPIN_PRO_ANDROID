@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ar/strings_sin_perder.xml: traducción de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">مساحة الهاتف توشك على النفاد</string>
+    <string name="sin_perder_disco_lleno">الهاتف ممتلئ تقريبًا: أُغلق الفيديو ويستمر الصوت</string>
+    <string name="sin_perder_sin_sitio_para_video">بقيت مساحة قليلة جدًا: يُسجَّل الصوت فقط</string>
+    <string name="sin_perder_video_cortado">انقطع الفيديو؛ ما زال الصوت يُسجَّل</string>
+    <string name="sin_perder_hueco">أوقف الهاتف التطبيق %1$d د؛ استُؤنف التسجيل عند العودة</string>
+    <string name="sin_perder_quedo_para_recuperar">تعذّر حفظ التسجيل: إنه محفوظ بأمان وسيُعرض عليك استعادته عند فتح PinDesk</string>
+    <string name="cortada_titulo">تسجيل متقطع</string>
+    <string name="cortada_texto">انقطع تسجيل (%1$s، %2$d د)</string>
+    <string name="cortada_perdida">لم يبقَ من تسجيل متقطع (%1$s) سوى فيديو لا يمكن فتحه</string>
+    <string name="cortada_en_chat">في «%1$s»</string>
+    <string name="cortada_recuperar">استعادة</string>
+    <string name="cortada_descartar">تجاهل</string>
+    <string name="cortada_luego">لاحقًا</string>
+    <string name="cortada_recuperando">جارٍ الاستعادة…</string>
+    <string name="cortada_recuperada">استُعيد التسجيل: هو الآن في دردشته</string>
+    <string name="cortada_fallo">تعذّرت استعادة التسجيل: يبقى كما كان</string>
+    <string name="cortada_descartar_seguro">حذف ما سُجّل في «%1$s»؟ لا يمكن التراجع عن ذلك.</string>
+    <string name="cortada_no">لا</string>
+    <string name="cortada_si_borrar">نعم، احذف</string>
+    <string name="cortada_aviso">افتح PinDesk لاستعادته أو تجاهله</string>
+</resources>

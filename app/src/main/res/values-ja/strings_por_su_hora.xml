@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ja/strings_por_su_hora.xml: traducción de values/strings_por_su_hora.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="clase_todos_aportan">チャットの全員が写真を追加できるようにする</string>
+    <string name="clase_solo_mis_fotos">この録音には自分の写真だけ</string>
+    <string name="clase_todos_aportan_hecho">チャットのメンバーの写真がその分に入ります</string>
+    <string name="clase_solo_mis_fotos_hecho">この録音にはあなたの写真だけが入ります</string>
+    <string name="clase_todos_aportan_detalle">会議中に共有チャットのメンバーが撮った写真は、接続していなくてもその分に入ります。</string>
+    <string name="foto_adjuntar_a_la_grabacion">録音に添付</string>
+    <string name="foto_sin_grabaciones">このチャットには録音がありません</string>
+    <string name="foto_adjuntada_a_la_grabacion">「%1$s」の %2$s に</string>
+    <string name="clase_hora_sin_comprobar">時刻未確認</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="other">PC からのスクリーンショット %d 枚</item>
+    </plurals>
+</resources>

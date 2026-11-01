@@ -1,34 +1,66 @@
-# Idiomas en Android: español e inglés
+# Idiomas en Android: los catorce del PC
 
-**1-nov-2026.** PixPin para Android habla español e inglés, como el PC (`crates/pixpin-store/src/idioma.rs`
-y sus catálogos `i18n/es-ES/main.ftl` y `i18n/en-US/main.ftl`). Este documento dice cómo funciona,
+**1-nov-2026.** PinDesk para Android habla los catorce idiomas del PC (`crates/pixpin-store/src/idioma.rs`
+y sus catálogos `i18n/<locale>/main.ftl`); empezó con español e inglés. Este documento dice cómo funciona,
 qué está hecho, qué queda en español y cómo se añade un texto.
 
 ## Cómo se elige el idioma
 
-Ajustes, abajo del todo, tarjeta **Idioma**, con las tres elecciones del PC:
+**Desde el 1-nov-2026, catorce idiomas, como el PC** (commit f87a6712 «catorce idiomas con red al inglés
+y al español» y el selector de 7c7458ac): es, en, zh-CN, hi, ar, pt-BR, fr, de, ja, ru, ko, it, id, tr.
 
-| Elección | Clave guardada | Resultado |
+Ajustes, abajo del todo, tarjeta **Idioma**: un desplegable con «El del teléfono» y los catorce, cada uno
+**con su nombre en su propia lengua** (`Idioma.nombrePropio`, los `nombre_propio` del PC: «中文 (简体)»,
+«العربية», «Türkçe»…), en el orden del PC (`Idioma::TODOS`).
+
+| Elección | Clave guardada (y alias que también se leen) | Resultado |
 |---|---|---|
-| El del teléfono (de fábrica) | `sistema` | Español si el teléfono está en `es*` (es-ES, es-MX, es_419…); **cualquier otro, inglés** |
-| Español | `es` | Español |
-| English | `en` | Inglés |
+| El del teléfono (de fábrica) | `sistema` | El idioma del teléfono si es uno de los catorce; **si no, inglés** |
+| Español, English, 中文… | `es` (`es-ES`), `en` (`en-US`), `zh-CN` (`zh`, `zh-Hans`), `hi`, `ar`, `pt-BR` (`pt`), `fr`, `de`, `ja`, `ru`, `ko`, `it`, `id`, `tr` (y `xx-XX`) | Ese idioma |
 
-- La regla es `resolverIdioma` (`ajustes/Idioma.kt`), porte de `resolver_idioma` del PC, con sus mismas
-  pruebas (`IdiomaTest`). Un teléfono en francés o alemán ve **inglés**, no el español de `values/` en el
-  que caería Android por su cuenta: por eso con «El del teléfono» se fija siempre un idioma explícito.
+- La regla es `resolverIdioma` (`ajustes/Idioma.kt`), porte de `resolver_idioma`/`idioma_del_locale` del
+  PC, con sus mismas pruebas (`IdiomaTest`): se mira la parte del idioma (`fr-CA`, `ar-EG`, `es_419`,
+  `fr_FR.UTF-8`); el chino tradicional (`zh-TW`, `zh-Hant-HK`) va al simplificado, `pt-PT` al de Brasil,
+  `in` es indonesio. Un teléfono en neerlandés ve **inglés**, no el español de `values/` en el que caería
+  Android por su cuenta: por eso con «El del teléfono» se fija siempre un idioma explícito.
+- **La red** (`Idioma.cadena`, la del PC: propio → inglés → español). A Android se le da una lista
+  (`etiquetasPara`): el idioma y, si no es español ni inglés, `en` detrás. Si un idioma no tuviera
+  carpeta, Android escoge el inglés de la lista. Ojo: Android elige **una** carpeta por idioma, y una
+  clave suelta que falte en ella sale en español (`values/`), no en inglés; por eso `TraduccionesTest`
+  exige todas las claves en todas las carpetas.
 - **Se guarda en el teléfono** (preferencias `idioma`, clave `preferencia`), no en los ajustes que viajan:
   cada aparato tiene el suyo, como en el PC.
 - **Cómo se aplica** (`ajustes/IdiomaDeLaApp.kt`):
-  - Android 13+: idiomas por aplicación (`LocaleManager.applicationLocales`). Sale también en Ajustes del
+  - Android 13+: idiomas por aplicación (`LocaleManager.applicationLocales`). Salen también en Ajustes del
     sistema › Idioma de las apps gracias a `res/xml/locales_config.xml` (`android:localeConfig` en el
-    manifiesto). El sistema rehace las pantallas abiertas.
+    manifiesto), con los catorce. El sistema rehace las pantallas abiertas.
   - Android 10–12: se cambia la configuración de los recursos de la aplicación y de cada pantalla al nacer
     (`onActivityPreCreated`). La pantalla de Ajustes se rehace al elegir; las de detrás cambian al reabrirse.
   - Sin `appcompat`: no hace falta y no se tocan los temas.
   - Se vuelve a mirar al arrancar y cuando el teléfono cambia de idioma (`PixPinApp.onConfigurationChanged`).
-  - Si el teléfono habla el idioma elegido se conserva su región (`es-MX`, `en-GB`) para fechas y números.
+  - Si el teléfono habla el idioma elegido se conserva su región (`es-MX`, `en-GB`, `ar-EG`) para fechas y
+    números. El chino y el portugués van siempre como `zh-CN` y `pt-BR`: su carpeta lleva región y Android
+    no se la daría a un `zh-TW` o a un `pt-PT`.
+  - El árabe se escribe de derecha a izquierda: el manifiesto ya lleva `android:supportsRtl="true"`, así
+    que Compose voltea solo la disposición.
   - En Robolectric no se toca nada: las pruebas ven el español de fábrica.
+
+### Las carpetas
+
+| Idioma | Carpeta | Plurales (CLDR) |
+|---|---|---|
+| Español | `values/` (el de fábrica) | `one`, `other` |
+| Inglés | `values-en/` | `one`, `other` |
+| Chino simplificado | `values-zh-rCN/` | `other` |
+| Japonés, coreano | `values-ja/`, `values-ko/` | `other` |
+| Hindi, turco | `values-hi/`, `values-tr/` | `one`, `other` |
+| Árabe | `values-ar/` | `zero`, `one`, `two`, `few`, `many`, `other` |
+| Portugués (Brasil), francés, italiano, alemán, ruso, indonesio | `values-pt-rBR/`, `values-fr/`, `values-it/`, `values-de/`, `values-ru/`, `values-in/` | los suyos (`TraduccionesTest` los comprueba) |
+
+El vocabulario de cada idioma es el de su catálogo del PC (`crates/pixpin-store/i18n/<locale>/main.ftl`):
+para un concepto (Tareas, Bandeja, Capturar, Pinear, Sincronizar, Grabar, Lienzo…) se busca primero allí.
+El nombre visible de la aplicación es **PinDesk** en todas. Rutas y extensiones que son datos
+(`Pictures/PixPin`, `.pixpin`) no se traducen.
 
 ## Los textos
 
@@ -130,7 +162,8 @@ grep -rnE '(Text|makeText\([^,]*,|contentDescription =)\(?\s*"[^"]*[a-záéíó�
 
 1. En un composable, nunca `Text("…")`: `Text(stringResource(R.string.mi_texto))`. Fuera de Compose,
    `getString(R.string.mi_texto)` o, sin `Context`, `Textos.t(R.string.mi_texto, "Mi texto")`.
-2. Añadir la clave **a la vez** en `values/…xml` (español) y en `values-en/` (el mismo archivo), con los
-   mismos huecos (`%1$s`, `%2$d`) y, en plurales, al menos `one` y `other` en inglés.
-3. Escapar `'` como `\'`, `&` como `&amp;` y `<` como `&lt;`. Comillas: «…» en español, “…” en inglés.
+2. Añadir la clave **a la vez** en `values/…xml` (español), en `values-en/` y en cada `values-XX/` (el
+   mismo archivo), con los mismos huecos (`%1$s`, `%2$d`) y, en plurales, las formas de cada idioma
+   (tabla de arriba).
+3. Escapar `'` como `\'`, `&` como `&amp;` y `<` como `&lt;`. Comillas: «…» en español, “…” en inglés, las de cada idioma en el suyo (「…」 en japonés, “…” en chino…).
 4. Pasar `testDebugUnitTest`: `TraduccionesTest` dice qué falta.

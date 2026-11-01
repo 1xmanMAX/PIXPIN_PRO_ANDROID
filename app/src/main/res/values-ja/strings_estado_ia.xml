@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ja/strings_estado_ia.xml: traducción de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">動作中</string>
+    <string name="ia_estado_sin_clave">キーなし</string>
+    <string name="ia_estado_desconocido">未確認</string>
+    <string name="ia_estado_clave_mala">キーが無効です (%d)</string>
+    <string name="ia_estado_sin_saldo">アカウントの残高がありません</string>
+    <string name="ia_estado_limite">リクエストが多すぎるか、割り当てを使い切りました</string>
+    <string name="ia_estado_red">接続なし</string>
+    <string name="ia_estado_servidor">サービスで障害が発生しています (%d)</string>
+    <string name="ia_estado_otro">正常に応答していません (%d)</string>
+    <string name="ia_estado_comprobando">確認中…</string>
+    <string name="ia_estado_hace_nada">たった今</string>
+    <string name="ia_estado_hace_min">%d 分前</string>
+    <string name="ia_estado_hace_horas">%d 時間前</string>
+    <string name="ia_estado_comprobar">今すぐ確認</string>
+    <string name="ia_estado_claves">キーは 設定 → アシスタント で</string>
+    <string name="ia_estado_descripcion">Claude、DeepSeek、Jev の状態</string>
+</resources>

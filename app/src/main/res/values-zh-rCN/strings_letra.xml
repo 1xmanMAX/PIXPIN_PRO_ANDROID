@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-zh-rCN/strings_letra.xml: traducción de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">自动同步</string>
+    <string name="letra_sola_empieza">正在自动同步歌词：正在听这首歌…</string>
+    <string name="letra_sola_avance">正在同步歌词… %1$d %%</string>
+    <string name="letra_sola_bajando">正在下载语音识别器… %1$d %%</string>
+    <string name="letra_sola_parada">同步已停止</string>
+    <string name="letra_sola_ocupada">已有另一首歌正在同步</string>
+    <string name="letra_sola_sin_reconocedor">这台手机无法用 Whisper 听这首歌。请用时钟点按同步</string>
+    <string name="letra_sola_falta_modelo">要自动对时，请点按“自动同步”（字幕）：它会下载一次语音识别器（约 %1$d MB）</string>
+    <string name="letra_sola_sin_red">无法下载语音识别器：请检查网络后再次点按“自动同步”</string>
+    <string name="letra_sola_no_se_oye">在歌曲中没有识别出歌词。请用时钟点按同步</string>
+    <string name="letra_sola_fallo">无法同步歌词</string>
+    <string name="letra_sola_cambio">同步期间歌词已更改：请再次点按“自动同步”</string>
+    <string name="letra_sola_hecha">歌词已自动同步（听到 %2$d 行中的 %1$d 行）。如有偏差，用时钟修正</string>
+    <string name="letra_sola_hecha_poca">歌词已粗略同步：%2$d 行中只听到 %1$d 行。请用时钟修正</string>
+    <string name="letra_con_tiempos_lista_de">“%1$s”的歌词已有时间轴（听到 %3$d 行中的 %2$d 行）。打开查看。</string>
+    <string name="letra_con_tiempos_lista_a_ojo">“%1$s”的歌词时间轴较粗略：%3$d 行中只听到 %2$d 行。请用时钟修正。</string>
+    <string name="letra_volver">返回</string>
+    <string name="letra_tema_claro">浅色主题</string>
+    <string name="letra_tema_oscuro">深色主题</string>
+</resources>

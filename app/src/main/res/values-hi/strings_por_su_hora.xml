@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-hi/strings_por_su_hora.xml: traducción de values/strings_por_su_hora.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="clase_todos_aportan">चैट में सभी को फ़ोटो जोड़ने दें</string>
+    <string name="clase_solo_mis_fotos">इस रिकॉर्डिंग में केवल मेरी फ़ोटो</string>
+    <string name="clase_todos_aportan_hecho">चैट सदस्यों की फ़ोटो अपने मिनट पर जाएँगी</string>
+    <string name="clase_solo_mis_fotos_hecho">इस रिकॉर्डिंग में केवल आपकी फ़ोटो जाती हैं</string>
+    <string name="clase_todos_aportan_detalle">मीटिंग के दौरान शेयर की गई चैट के लोगों की ली गई फ़ोटो अपने मिनट पर जाती हैं, भले ही वे कनेक्ट न हों।</string>
+    <string name="foto_adjuntar_a_la_grabacion">रिकॉर्डिंग में अटैच करें</string>
+    <string name="foto_sin_grabaciones">इस चैट में कोई रिकॉर्डिंग नहीं है</string>
+    <string name="foto_adjuntada_a_la_grabacion">“%1$s” में, %2$s पर</string>
+    <string name="clase_hora_sin_comprobar">समय सत्यापित नहीं</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="one">PC से %d स्क्रीनशॉट</item>
+        <item quantity="other">PC से %d स्क्रीनशॉट</item>
+    </plurals>
+</resources>

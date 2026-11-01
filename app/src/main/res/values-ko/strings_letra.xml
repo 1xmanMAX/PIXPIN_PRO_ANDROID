@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ko/strings_letra.xml: traducción de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">자동 동기화</string>
+    <string name="letra_sola_empieza">가사를 자동 동기화하는 중: 노래를 듣고 있습니다…</string>
+    <string name="letra_sola_avance">가사 동기화 중… %1$d %%</string>
+    <string name="letra_sola_bajando">음성 인식기 다운로드 중… %1$d %%</string>
+    <string name="letra_sola_parada">동기화 중지됨</string>
+    <string name="letra_sola_ocupada">이미 다른 노래를 동기화하는 중입니다</string>
+    <string name="letra_sola_sin_reconocedor">이 휴대전화는 Whisper로 노래를 들을 수 없습니다. 시계로 탭해서 동기화하세요</string>
+    <string name="letra_sola_falta_modelo">타이밍을 자동으로 맞추려면 \'자동 동기화\'(자막)를 누르세요: 음성 인식기를 한 번 다운로드합니다(약 %1$d MB)</string>
+    <string name="letra_sola_sin_red">음성 인식기를 다운로드할 수 없습니다: 연결을 확인하고 \'자동 동기화\'를 다시 누르세요</string>
+    <string name="letra_sola_no_se_oye">노래에서 가사를 인식하지 못했습니다. 시계로 탭해서 동기화하세요</string>
+    <string name="letra_sola_fallo">가사를 동기화할 수 없습니다</string>
+    <string name="letra_sola_cambio">동기화 중에 가사가 바뀌었습니다: \'자동 동기화\'를 다시 누르세요</string>
+    <string name="letra_sola_hecha">가사를 자동 동기화했습니다(%2$d줄 중 %1$d줄 인식). 어긋난 줄은 시계로 고치세요</string>
+    <string name="letra_sola_hecha_poca">가사를 대략 동기화했습니다: %2$d줄 중 %1$d줄만 들렸습니다. 시계로 고치세요</string>
+    <string name="letra_con_tiempos_lista_de">\'%1$s\'의 가사에 타이밍이 생겼습니다(%3$d줄 중 %2$d줄 인식). 열어서 확인하세요.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">\'%1$s\'의 가사 타이밍은 대략적입니다: %3$d줄 중 %2$d줄만 들렸습니다. 시계로 고치세요.</string>
+    <string name="letra_volver">뒤로</string>
+    <string name="letra_tema_claro">밝은 테마</string>
+    <string name="letra_tema_oscuro">어두운 테마</string>
+</resources>
