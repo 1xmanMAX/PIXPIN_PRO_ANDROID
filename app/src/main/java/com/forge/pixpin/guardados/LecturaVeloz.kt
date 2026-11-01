@@ -17,7 +17,8 @@ import java.util.Locale
  * nativo `TtsPlugin.kt` (`copyUri`, `notifyPixpin`) y `tauri.conf.json` (el enlace `lecturaveloz://pixpin`).
  * Está contado en `docs/integracion-lectura-veloz.md`.
  *
- * - **Ida**: `lecturaveloz://pixpin/abrir?doc=…&nombre=…&uri=…&tipo=pdf|texto&pagina=…&frac=…&fraccion=…&paginas=…&t=…`
+ * - **Ida**: `lecturaveloz://pindesk/abrir?doc=…` (o `lecturaveloz://pixpin/abrir?doc=…`, el de antes:
+ *   ver [HOST])&nombre=…&uri=…&tipo=pdf|texto&pagina=…&frac=…&fraccion=…&paginas=…&t=…`
  *   ([enlace]), con `ACTION_VIEW`. `nombre` lleva la extensión buena: con ella elige ella cómo leerlo.
  * - **Vuelta**: el aviso `com.forge.pixpin.LECTURA_VELOZ` ([ACCION_DE_VUELTA]) con `doc`, `tipo`,
  *   `pagina`, `frac`, `fraccion`, `t`, `palabra` y `total` ([progresoDe]).
@@ -33,7 +34,15 @@ import java.util.Locale
 object LecturaVeloz {
     const val PAQUETE = "com.lecturaveloz.app"
     const val ESQUEMA = "lecturaveloz"
-    const val HOST = "pixpin"
+    /**
+     * **`lecturaveloz://pindesk/abrir` desde el 1-nov-2026**, como el PC (`docs/formato-pindesk-android.md`).
+     * Una Lectura Veloz sin actualizar solo recibe el de antes, `lecturaveloz://pixpin/abrir` (su
+     * filtro de Android dice el anfitrión), así que se le manda el que sepa abrir:
+     * [LecturaVelozEnElTelefono.hostQueSabe] lo pregunta al sistema antes de cada envío.
+     */
+    const val HOST = "pindesk"
+    /** El anfitrión de antes: el que entiende una Lectura Veloz sin actualizar (≤ 0.3.1). */
+    const val HOST_DE_ANTES = "pixpin"
     /** El aviso con que Lectura Veloz devuelve su punto. Ver [LecturaVelozReceiver]. */
     const val ACCION_DE_VUELTA = "com.forge.pixpin.LECTURA_VELOZ"
 
@@ -96,10 +105,10 @@ object LecturaVeloz {
      * **El enlace que abre Lectura Veloz con el documento** (`pixpinParams` de `app.js`). [doc] es el
      * código único del mensaje; [uri], el `content://` de PixPin con permiso de lectura para ella.
      */
-    fun enlace(doc: String, nombre: String, uri: String, tipo: String, pos: Posicion, paginas: Int): String {
+    fun enlace(doc: String, nombre: String, uri: String, tipo: String, pos: Posicion, paginas: Int, host: String = HOST): String {
         val p = pos.limpia()
         val t = if (tipo == TIPO_PDF) TIPO_PDF else TIPO_TEXTO
-        return "$ESQUEMA://$HOST/abrir?doc=${cod(doc)}&nombre=${cod(nombre)}&uri=${cod(uri)}&tipo=$t" +
+        return "$ESQUEMA://$host/abrir?doc=${cod(doc)}&nombre=${cod(nombre)}&uri=${cod(uri)}&tipo=$t" +
             "&pagina=${p.pagina}&frac=${num(p.frac)}&fraccion=${num(p.fraccion)}" +
             "&paginas=${paginas.coerceIn(0, MAX_PAGINAS)}&t=${p.t}"
     }
@@ -368,7 +377,7 @@ object LecturaVeloz {
     fun motivoDe(que: AlAbrir, doc: String?, nombre: String?, ruta: String?, hayDocumento: Boolean = true): String? = when (que) {
         AlAbrir.ABRIR -> null
         AlAbrir.FALTA_LA_APP -> "«Lectura Veloz» ($PAQUETE) no está instalada"
-        AlAbrir.APP_ANTIGUA -> "«Lectura Veloz» está instalada pero no recibe el enlace $ESQUEMA://$HOST"
+        AlAbrir.APP_ANTIGUA -> "«Lectura Veloz» está instalada pero no recibe el enlace $ESQUEMA://$HOST (ni $ESQUEMA://$HOST_DE_ANTES)"
         AlAbrir.NO_SE_PUEDE -> when {
             !hayDocumento -> "No es un archivo del chat ni una nota (sin código de mensaje)"
             !docValido(doc) -> "El documento no tiene un código de mensaje válido"

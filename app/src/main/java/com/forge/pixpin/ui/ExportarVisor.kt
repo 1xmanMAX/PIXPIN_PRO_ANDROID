@@ -62,7 +62,7 @@ object ExportarVisor {
      */
     fun pixpin(c: Context, ruta: String, nombre: String, junto: List<String> = emptyList()): Compartible.Formato =
         Compartible.Formato(
-            "editable", Icons.Filled.FolderZip, ".pixpin", Compartible.NINGUNA,
+            "editable", Icons.Filled.FolderZip, ".pindesk", Compartible.NINGUNA,
             generar = { paquete(c, ruta, nombre, junto) }
         )
 
@@ -113,7 +113,7 @@ object ExportarVisor {
      */
     fun pixpinDelProyecto(c: Context, deQuien: (List<com.forge.pixpin.motor.Proyecto>, List<com.forge.pixpin.guardados.Mensaje>) -> com.forge.pixpin.motor.Proyecto?, suelto: (() -> Compartible.Salida?)? = null): Compartible.Formato =
         Compartible.Formato(
-            "editable", Icons.Filled.FolderZip, ".pixpin", Compartible.NINGUNA,
+            "editable", Icons.Filled.FolderZip, ".pindesk", Compartible.NINGUNA,
             generar = {
                 val app = c.applicationContext as? com.forge.pixpin.PixPinApp
                 runCatching { com.forge.pixpin.sincro.Red.disco(c).sellar() }

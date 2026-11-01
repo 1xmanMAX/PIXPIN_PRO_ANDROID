@@ -37,7 +37,7 @@ class LecturaVelozTest {
             "K7Q2ABCDEF", "Capítulo 3 & más.pdf", "content://com.forge.pixpin.fileprovider/guardados/a b.pdf",
             LecturaVeloz.TIPO_PDF, Posicion(2, 0.5f, 0.25f, 1_700_000_000_000L), 8
         )
-        assertTrue(url, url.startsWith("lecturaveloz://pixpin/abrir?doc=K7Q2ABCDEF&"))
+        assertTrue(url, url.startsWith("lecturaveloz://pindesk/abrir?doc=K7Q2ABCDEF&"))
         // Sin espacios ni «+» sueltos: el `URLSearchParams` de ella los leería mal.
         assertFalse(url.contains(' '))
         assertFalse(url.contains('+'))
@@ -292,8 +292,22 @@ class LecturaVelozTest {
         val q = URI(url).rawQuery.split('&').associate { it.substringBefore('=') to URLDecoder.decode(it.substringAfter('='), "UTF-8") }
         assertEquals(uri, q["uri"])
         assertEquals(nombre, q["nombre"])
-        assertEquals("pixpin", URI(url).host)
+        assertEquals("pindesk", URI(url).host)
         assertEquals("/abrir", URI(url).path)
         assertFalse(url.contains('+'))
+    }
+
+    @Test
+    fun `a una Lectura Veloz sin actualizar se le manda el anfitrion de antes con lo mismo`() {
+        // 1-nov-2026: el nuevo es lecturaveloz://pindesk; una ≤ 0.3.1 solo recibe lecturaveloz://pixpin.
+        val pos = Posicion(1, 0.5f, 0.5f, 9L)
+        val nuevo = LecturaVeloz.enlace("ABCDEFGHJK", "a.pdf", "content://x/a.pdf", LecturaVeloz.TIPO_PDF, pos, 3)
+        val antes = LecturaVeloz.enlace("ABCDEFGHJK", "a.pdf", "content://x/a.pdf", LecturaVeloz.TIPO_PDF, pos, 3, LecturaVeloz.HOST_DE_ANTES)
+        assertEquals("pindesk", URI(nuevo).host)
+        assertEquals("pixpin", URI(antes).host)
+        assertEquals(URI(nuevo).rawQuery, URI(antes).rawQuery)
+        // Caso negativo: el anfitrión es lo único que cambia, no el esquema ni la ruta.
+        assertEquals(URI(nuevo).scheme, URI(antes).scheme)
+        assertEquals("/abrir", URI(antes).path)
     }
 }

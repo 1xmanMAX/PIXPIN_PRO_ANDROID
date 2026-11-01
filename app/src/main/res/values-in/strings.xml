@@ -702,7 +702,7 @@
     <string name="guardados_abrir_con">Buka dengan aplikasi lain</string>
     <string name="guardados_como_imagen">Bagikan sebagai gambar</string>
     <string name="guardados_como_web">Sebagai halaman web</string>
-    <string name="guardados_como_editable">Dapat diedit (.pixpin)</string>
+    <string name="guardados_como_editable">Dapat diedit (.pindesk)</string>
     <string name="guardados_como_pdf">Bagikan sebagai PDF</string>
     <string name="guardados_volver_al_salto">Kembali ke posisi semula</string>
     <string name="guardados_foto_de">Foto disimpan pukul %1$s</string>
@@ -866,10 +866,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">Halaman web</string>
-    <string name="formato_pixpin">Dapat diedit (.pixpin)</string>
+    <string name="formato_pixpin">Dapat diedit (.pindesk)</string>
     <string name="proyecto_paquete_corto">Dapat diedit</string>
-    <string name="proyecto_paquete">Bagikan yang dapat diedit (.pixpin)</string>
-    <string name="croquis_exportar_paquete">Dapat diedit (.pixpin)</string>
+    <string name="proyecto_paquete">Bagikan yang dapat diedit (.pindesk)</string>
+    <string name="croquis_exportar_paquete">Dapat diedit (.pindesk)</string>
     <string name="proyecto_desde_compartido">Proyek baru di PinDesk</string>
     <string name="proyecto_desde_compartido_ok">Proyek dibuat</string>
     <string name="formato_html_titulo">Gambar PinDesk</string>

@@ -21,7 +21,7 @@ import java.io.File
  * búsqueda del sistema (AppSearch, «PlatformStorage») que leen el buscador del Pixel y los
  * lanzadores que usan la búsqueda global. Cada archivo entra como un `Thing` —el tipo estándar
  * que esos buscadores saben enseñar— con su nombre, de qué chat es y una acción que lo abre:
- * la misma seña `pixpin://atajo/archivo/<id>` que usan los atajos.
+ * la misma seña `pindesk://atajo/archivo/<id>` que usan los atajos.
  *
  * Huawei y Honor sin servicios de Google tienen su propio buscador cerrado: ahí solo llegan los
  * atajos. En Android 10 y 11 este índice no existe y esto no hace nada.

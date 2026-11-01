@@ -40,15 +40,15 @@ class AccionesTest {
 
     @Test fun `el pedido sale bien armado`() {
         val a = validar("abrir_fichero", """{"ruta":" «C:\\x\\plano.pdf» "}""")
-        assertEquals("""{"que":{"tipo":"fichero","ruta":"C:\\x\\plano.pdf"},"pixpin":1,"accion":"abrir"}""", a.pedido.toString())
+        assertEquals("""{"que":{"tipo":"fichero","ruta":"C:\\x\\plano.pdf"},"pindesk":1,"accion":"abrir"}""", a.pedido.toString())
         assertTrue(a.confirmar == null && a.porResolver.isEmpty())
-        assertEquals("""{"modo":"zona","pixpin":1,"accion":"capturar"}""", validar("capturar_pantalla").pedido.toString())
+        assertEquals("""{"modo":"zona","pindesk":1,"accion":"capturar"}""", validar("capturar_pantalla").pedido.toString())
         assertEquals(JsonPrimitive("galeria"), validar("abrir_ventana", """{"cual":"Galería"}""").pedido["cual"])
     }
 
     @Test fun `las tareas se piden por su nombre`() {
         val a = validar("marcar_tarea", """{"tarea":"comprar pan","lista":"Compras"}""")
-        assertEquals("""{"pixpin":1,"accion":"marcar_tarea","hecha":true}""", a.pedido.toString())
+        assertEquals("""{"pindesk":1,"accion":"marcar_tarea","hecha":true}""", a.pedido.toString())
         assertEquals(args("""{"tarea":"comprar pan","lista":"Compras"}"""), a.porResolver)
         val b = validar("anadir_tarea", """{"texto":"pan","fecha":"mañana","lista":"  "}""")
         assertEquals(JsonPrimitive("pan"), b.pedido["texto"])

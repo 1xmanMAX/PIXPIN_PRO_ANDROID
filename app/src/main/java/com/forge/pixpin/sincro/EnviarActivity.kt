@@ -413,7 +413,7 @@ class EnviarActivity : ComponentActivity() {
                 }
             }
         }
-        r.anunciar(Envio.TIPO, "PixPin ${quien.nombre}", mapOf("g" to etiqueta, "n" to quien.nombre.take(40)))
+        r.anunciar(Envio.TIPO, Red.instancia(quien.nombre), mapOf("g" to etiqueta, "n" to quien.nombre.take(40)))
         val qr = withContext(Dispatchers.Default) { Qr.imagen(Envio.textoDelQr(codigo, Red.miDireccion(this@EnviarActivity), r.puerto)) }
         if (estado is Estado.Preparando) estado = Estado.Esperando(codigo, qr)
     }

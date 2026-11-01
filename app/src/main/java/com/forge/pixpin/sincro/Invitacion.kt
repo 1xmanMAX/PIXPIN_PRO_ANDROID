@@ -20,7 +20,8 @@ object Invitacion {
 
     /** Ocho signos sin letras que se confundan: ~40 bits, de sobra para lo que dura abierta. */
     const val LARGO = 8
-    const val TIPO = "_pixpinchat._tcp."
+    /** `_pindeskchat._tcp.` desde el 1-nov-2026; [Red] anuncia y busca también `_pixpinchat._tcp.`. */
+    const val TIPO = "_pindeskchat._tcp."
 
     fun nuevoCodigo(azar: SecureRandom = SecureRandom()): String =
         String(CharArray(LARGO) { Grupo.SIGNOS[azar.nextInt(Grupo.SIGNOS.length)] })
@@ -37,13 +38,17 @@ object Invitacion {
     /** Lo que se anuncia en la red para que quien teclea el código encuentre a quien invita. */
     fun etiqueta(codigo: String): String = Grupo.etiqueta(clave(codigo))
 
+    /**
+     * El QR de la invitación. Sigue con el prefijo de antes (`pixpin-chat`) hasta que todos los
+     * aparatos lean el nuevo (`pindesk-chat`), que [leerQr] ya acepta.
+     */
     fun textoDelQr(codigo: String, host: String?, puerto: Int): String = "pixpin-chat:1:$codigo:${host.orEmpty()}:$puerto"
 
     data class DelQr(val codigo: String, val host: String?, val puerto: Int)
 
     fun leerQr(texto: String): DelQr? {
         val p = texto.trim().split(':')
-        if (p.size < 5 || p[0] != "pixpin-chat") return null
+        if (p.size < 5 || (p[0] != "pindesk-chat" && p[0] != "pixpin-chat")) return null
         val codigo = p[2].takeIf(::valido) ?: return null
         return DelQr(codigo, p[3].ifBlank { null }, p[4].toIntOrNull() ?: 0)
     }

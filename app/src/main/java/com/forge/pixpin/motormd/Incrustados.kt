@@ -40,9 +40,13 @@ object Incrustados {
         data class Mensaje(val proyecto: String, val mensaje: String) : Enlace
     }
 
-    /** `pixpin:hoja=p/h` o `pixpin:mensaje=p/m`; null si es otra cosa. */
+    /**
+     * `pixpin:hoja=p/h` o `pixpin:mensaje=p/m`; null si es otra cosa. También con `pindesk:`
+     * (1-nov-2026): se escribe aún `pixpin:`, porque va dentro de las notas y lo lee el PC (como
+     * `pixpin:files/`, fase B de `docs/formato-pindesk-android.md`), pero el nuevo ya se entiende.
+     */
     fun enlace(url: String?): Enlace? {
-        val u = url?.trim() ?: return null
+        val u = url?.trim()?.let { if (it.startsWith("pindesk:")) "pixpin:" + it.removePrefix("pindesk:") else it } ?: return null
         fun partes(p: String) = p.split('/', limit = 2).takeIf { it.size == 2 && it[0].isNotBlank() && it[1].isNotBlank() }
         return when {
             u.startsWith("pixpin:hoja=") -> partes(u.removePrefix("pixpin:hoja="))?.let { Enlace.Hoja(it[0], it[1]) }

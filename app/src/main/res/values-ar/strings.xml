@@ -747,7 +747,7 @@
     <string name="guardados_abrir_con">الفتح بتطبيق آخر</string>
     <string name="guardados_como_imagen">مشاركة كصورة</string>
     <string name="guardados_como_web">كصفحة ويب</string>
-    <string name="guardados_como_editable">قابل للتعديل (‎.pixpin)</string>
+    <string name="guardados_como_editable">قابل للتعديل (‎.pindesk)</string>
     <string name="guardados_como_pdf">مشاركة كملف PDF</string>
     <string name="guardados_volver_al_salto">العودة إلى حيث كنت</string>
     <string name="guardados_foto_de">حُفظت الصورة في %1$s</string>
@@ -911,10 +911,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">صفحة ويب</string>
-    <string name="formato_pixpin">قابل للتعديل (‎.pixpin)</string>
+    <string name="formato_pixpin">قابل للتعديل (‎.pindesk)</string>
     <string name="proyecto_paquete_corto">قابل للتعديل</string>
-    <string name="proyecto_paquete">مشاركة قابلة للتعديل (‎.pixpin)</string>
-    <string name="croquis_exportar_paquete">قابل للتعديل (‎.pixpin)</string>
+    <string name="proyecto_paquete">مشاركة قابلة للتعديل (‎.pindesk)</string>
+    <string name="croquis_exportar_paquete">قابل للتعديل (‎.pindesk)</string>
     <string name="proyecto_desde_compartido">مشروع جديد في PinDesk</string>
     <string name="proyecto_desde_compartido_ok">أُنشئ المشروع</string>
     <string name="formato_html_titulo">رسم PinDesk</string>

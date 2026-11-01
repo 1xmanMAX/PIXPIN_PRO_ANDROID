@@ -16,7 +16,7 @@ import android.graphics.Bitmap
  *
  * 1. La **matriz** de lo anotado, medida con la caja **original**: sobre ella se dibujó.
  * 2. Si el lector tenía márgenes para anotar, la hoja se **ensancha** lo mismo ([PdfAnotado.ensanchar]).
- * 3. Lo anotado encima, **como vectores**, en la capa de PixPin, que se puede apagar
+ * 3. Lo anotado encima, **como vectores**, en la capa de PinDesk, que se puede apagar
  *    ([DrawPdf.anotarPagina]). Con la hoja ya ancha, lo de los márgenes cabe y no se recorta.
  *
  * Y al final los **marcadores** en el índice ([PdfAnotado.conMarcadores]).
@@ -25,6 +25,31 @@ import android.graphics.Bitmap
  * final el archivo no se vuelve a leer, null: mejor no compartir nada que compartir un PDF roto.
  */
 object PdfConAnotaciones {
+    /**
+     * **El nombre de la capa de lo anotado en la hoja [hoja]** (desde 1): `PinDesk · hoja N` desde
+     * el 1-nov-2026, como el PC (`con_anotaciones.rs`); antes `PixPin · hoja N`, que es lo que
+     * llevan los PDF ya anotados y lo que escriben los aparatos sin actualizar ([hojaDeLaCapa]
+     * entiende los dos, como `cocido.rs` del PC).
+     */
+    fun capaDeLaHoja(hoja: Int): String = "$NOMBRE · hoja $hoja"
+
+    /** El nombre de nuestras capas, y el de antes de PinDesk (se reconoce, ya no se escribe). */
+    const val NOMBRE = "PinDesk"
+    const val NOMBRE_DE_ANTES = "PixPin"
+
+    /** La hoja de una capa nuestra (`PinDesk · hoja N` o `PixPin · hoja N`); null si es de otro. */
+    fun hojaDeLaCapa(nombre: String): Int? {
+        val t = nombre.trim()
+        val resto = listOf(NOMBRE, NOMBRE_DE_ANTES).firstNotNullOfOrNull { n ->
+            t.takeIf { it.startsWith("$n · hoja ") }?.removePrefix("$n · hoja ")
+        } ?: return null
+        return resto.toIntOrNull()?.takeIf { it > 0 }
+    }
+
+    /** Si una capa es de las nuestras: empieza por `PinDesk` o por `PixPin` (lo que mira el PC). */
+    fun esCapaNuestra(nombre: String): Boolean =
+        nombre.trimStart().let { it.startsWith(NOMBRE) || it.startsWith(NOMBRE_DE_ANTES) }
+
 
     /**
      * [base] es el PDF **sin nada anotado dentro** (en un proyecto, su copia limpia). [escenaDe]
@@ -70,7 +95,7 @@ object PdfConAnotaciones {
             val pintada = if (escena.contenidoVisible.any { it.type == ElementType.MOSAIC }) hojaPintada(i) else null
             DrawPdf.anotarPagina(
                 context, bytes, i, escena, ancho, alto,
-                nombreDeLaCapa = "PixPin · hoja ${i + 1}",
+                nombreDeLaCapa = capaDeLaHoja(i + 1),
                 imageProvider = { id -> escena.files[id]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
                 hojaPintada = pintada,
                 matrizFija = matriz

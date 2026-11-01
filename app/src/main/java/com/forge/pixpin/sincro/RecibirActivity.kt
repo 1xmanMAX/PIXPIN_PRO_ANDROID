@@ -260,7 +260,7 @@ class RecibirActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             val etiqueta = withContext(Dispatchers.Default) { Envio.etiqueta(codigo) }
-            r.anunciar(Envio.TIPO_RECIBIR, "PixPin ${yo.nombre}", mapOf("g" to etiqueta, "n" to yo.nombre.take(40)))
+            r.anunciar(Envio.TIPO_RECIBIR, Red.instancia(yo.nombre), mapOf("g" to etiqueta, "n" to yo.nombre.take(40)))
             val qr = withContext(Dispatchers.Default) {
                 Qr.imagen(Envio.textoDelQrDeRecepcion(codigo, Red.miDireccion(this@RecibirActivity), r.puerto))
             }

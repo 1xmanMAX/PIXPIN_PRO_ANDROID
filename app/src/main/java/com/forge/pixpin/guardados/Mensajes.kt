@@ -132,7 +132,7 @@ private val EXTENSIONES_CONOCIDAS = setOf(
     "pdf", "jpg", "jpeg", "png", "webp", "gif", "heic", "bmp", "svg",
     "m4a", "mp3", "ogg", "oga", "opus", "wav", "flac", "aac", "amr", "3gp",
     "mp4", "mkv", "mov", "webm", "txt", "md", "markdown", "log", "ini", "cfg", "srt", "vtt", "csv", "json", "xml", "html", "htm", "zip",
-    "doc", "docx", "xls", "xlsx", "xlsm", "tsv", "ppt", "pptx", "odt", "ods", "dxf", "dwg", "pixpin", "excalidraw"
+    "doc", "docx", "xls", "xlsx", "xlsm", "tsv", "ppt", "pptx", "odt", "ods", "dxf", "dwg", "pindesk", "pixpin", "excalidraw"
 )
 
 /**

@@ -44,6 +44,12 @@ el punto. Un PDF de un proyecto o un archivo abierto de paso no la llevan.
 
 ## Ida: PixPin abre Lectura Veloz
 
+**Desde el 1-nov-2026 el anfitrión es `pindesk`** (`lecturaveloz://pindesk/abrir?…`), como el PC.
+Una Lectura Veloz ≤ 0.3.1 solo recibe `lecturaveloz://pixpin/abrir` (su filtro de Android dice el
+anfitrión), así que `LecturaVelozEnElTelefono.hostQueSabe` pregunta al sistema cuál resuelve y
+manda ese: el nuevo si lo recibe, si no el de antes. Lo demás del enlace no cambia. Ver
+`docs/formato-pindesk-android.md`.
+
 ```
 Intent(ACTION_VIEW, Uri.parse(
   "lecturaveloz://pixpin/abrir?doc=<código>&nombre=<nombre.ext>&uri=<content://…>&tipo=pdf|texto" +
@@ -74,7 +80,7 @@ y devuelve su punto enseguida.
 
 **PixPin detecta la app** con `<queries>`: `<package android:name="com.lecturaveloz.app"/>` y un
 `<intent>` `VIEW` con `scheme="lecturaveloz"`. «Sabe abrir» = el enlace
-`lecturaveloz://pixpin/abrir` resuelve en ese paquete; «instalada» = eso o que tenga icono.
+`lecturaveloz://pindesk/abrir` o `lecturaveloz://pixpin/abrir` resuelve en ese paquete; «instalada» = eso o que tenga icono.
 
 **Si no se puede**, el aviso dice el motivo de verdad (`LecturaVeloz.motivoDe` / `motivoDeError`:
 sin código de mensaje, formato que no lee, el archivo ya no está, el `content://` no se pudo dar…;

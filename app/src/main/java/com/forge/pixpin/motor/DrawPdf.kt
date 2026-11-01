@@ -203,7 +203,7 @@ object DrawPdf {
         scene: Scene,
         anchoImagen: Double,
         altoImagen: Double,
-        nombreDeLaCapa: String = "PixPin",
+        nombreDeLaCapa: String = PdfConAnotaciones.NOMBRE,
         imageProvider: (String) -> Bitmap? = { null },
         /**
          * La página ya pintada, si quien llama la tiene.

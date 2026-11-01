@@ -11,7 +11,7 @@ el nombre de otro producto (el de DepthPixel). Aquí se sigue su regla para los 
 | `app_name` (nombre del icono y de la app), bienvenida, canal y aviso de la bola, fallo, versión, permisos (`values/strings*.xml` y `values-en/strings*.xml`) | PixPin | PinDesk |
 | Etiquetas del manifiesto: «Soltar en…», «Buscar en…» (hoja de compartir y atajos) | PixPin | PinDesk |
 | Avisos y toasts en Kotlin (Sincronizar, Enviar a…, cámara del PC, alarmas exactas, instalar APK, imprimir, borrar datos, Lectura Veloz, Soltar, guardar compartido…) | «abre PixPin…», «actualiza PixPin…» | «abre PinDesk…», «actualiza PinDesk…» (como el PC: «Actualiza PinDesk en { $movil }») |
-| Rótulo del formato editable al compartir | «PixPin (.pixpin)» | «PinDesk (.pixpin)» (igual que `compartir-pixpin` del PC) |
+| Rótulo del formato editable al compartir | «PixPin (.pixpin)» | «PinDesk (.pixpin)»; desde el 1-nov-2026 «PinDesk (.pindesk)» (`docs/formato-pindesk-android.md`) |
 | Familia de colores de los `.pixpin` (descripción accesible del icono) | PixPin | PinDesk |
 | Asistente: instrucciones de sistema (`Agente`, `Nube`, `Memoria`), ayuda (`Conocimiento`), descripciones de las acciones (`Acciones`) y el catálogo del PC (`ia/catalogo-del-pc.json` y su volcado de prueba `herramientas-del-pc.json`) | «el asistente de PixPin» | «el asistente de PinDesk» (el PC ya lo dice así; la prueba compara byte a byte) |
 | Exportaciones: `generator` de los HTML (lienzo, clase, plano), `Application` y autor por omisión del `.docx`, cabecera de los `.obj`/`.mtl`, asunto del informe de fallo y del reporte de IA | PixPin | PinDesk |
@@ -29,12 +29,10 @@ Pruebas cambiadas, solo las que miran texto de la interfaz: `FormatosDeCompartir
 | Se queda | Por qué |
 |---|---|
 | `com.forge.pixpin` (paquete y `applicationId`), los paquetes y nombres de Kotlin (`PixPinApp`, `AbrirConPixPinActivity`, `Theme.PixPin`…) | Internos; cambiar el `applicationId` sería otra app |
-| La extensión `.pixpin`, su formato, el cuaderno, el índice, `aplicacion`/`source` de los JSON | Los leen el PC, Mac, iPad y las versiones viejas |
-| Sincronizar: `_pixpin._tcp`, los nombres de instancia «PixPin <aparato>» de `anunciar(…)`, la baliza, las etiquetas HMAC, la versión del protocolo | El PC nuevo y el viejo buscan eso; el PC enseña el nombre de instancia pero no lo compara |
-| El esquema `pixpin://` | Está en enlaces, notificaciones y Lectura Veloz |
-| Las capas de los PDF («PixPin · hoja N», «PixPin — página», la marca `(PixPin`) | Las escribe y las reconoce también el PC |
+| ~~La extensión `.pixpin`, `_pixpin._tcp`, `pixpin://`, las capas «PixPin · hoja N», los mazos «PixPin::…»~~ | **Cambiaron el 1-nov-2026**, cuando el PC pasó a escribir el formato nuevo: ver `docs/formato-pindesk-android.md` (se escribe el nuevo y se lee también el viejo) |
+| Sincronizar: la baliza, las etiquetas HMAC, la versión del protocolo | Las magias y la sal del grupo no cambian (como en el PC) |
 | Las fotos `PixPin_…` y las carpetas `Pictures/PixPin` y `Movies/PixPin` (y el texto «Guardado en Pictures/PixPin», que dice la carpeta real) | Son las carpetas donde ya están las capturas del usuario y las que lee la galería que viaja |
-| Los mazos de Anki «PixPin::…» y el modelo «PixPin Básico» | Datos del usuario en Anki: otro nombre partiría sus mazos |
+| El modelo de AnkiDroid «PixPin Básico» | Datos del usuario en Anki: otro nombre partiría sus tarjetas |
 | Las etiquetas de `Log` («PixPin») y el agente HTTP `PixPinMax/1.0` | Nadie los ve |
 | Las carpetas «PixPin Max» del PC simulado en las pruebas | Son la carpeta de datos del PC, que tampoco cambia |
 | Los comentarios del código, los documentos de desarrollo e historia (`docs/*.md` salvo la guía, `docs/superpowers/`) y las librerías de Rust de `herramientas/` | Cuentan lo que pasó con el nombre de entonces |

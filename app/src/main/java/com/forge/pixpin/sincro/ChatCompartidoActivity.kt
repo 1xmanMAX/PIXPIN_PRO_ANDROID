@@ -204,7 +204,7 @@ class ChatCompartidoActivity : ComponentActivity() {
         }
         lifecycleScope.launch {
             val etiqueta = withContext(Dispatchers.Default) { Invitacion.etiqueta(codigo) }
-            r.anunciar(Invitacion.TIPO, "PixPin ${yo?.nombre.orEmpty()}", mapOf("g" to etiqueta))
+            r.anunciar(Invitacion.TIPO, Red.instancia(yo?.nombre.orEmpty()), mapOf("g" to etiqueta))
             val qr = withContext(Dispatchers.Default) { Qr.imagen(Invitacion.textoDelQr(codigo, Red.miDireccion(this@ChatCompartidoActivity), r.puerto)) }
             if (redDeLaInvitacion === r) invitacion = codigo to qr
         }

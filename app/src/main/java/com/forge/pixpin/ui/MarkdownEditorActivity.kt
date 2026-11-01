@@ -403,7 +403,7 @@ class MarkdownEditorActivity : ComponentActivity() {
             context: Context, ruta: String, nombre: String, id: String, llano: Boolean, soloLeer: Boolean
         ): Intent = Intent(context, MarkdownEditorActivity::class.java)
             // Cada nota en su tarea. Ver el manifiesto.
-            .setData(android.net.Uri.parse("pixpin://nota/" + android.net.Uri.encode(id.ifBlank { "archivo-" + ruta.hashCode() })))
+            .setData(android.net.Uri.parse("pindesk://nota/" + android.net.Uri.encode(id.ifBlank { "archivo-" + ruta.hashCode() })))
             .putExtra(EXTRA_ID, id)
             .putExtra(EXTRA_RUTA, ruta)
             .putExtra(EXTRA_NOMBRE, nombre)
@@ -433,7 +433,7 @@ class MarkdownEditorActivity : ComponentActivity() {
             val i = Intent(context, MarkdownEditorActivity::class.java)
                 .also { if (mensaje != null) it.putExtra(EXTRA_MENSAJE, mensaje) }
                 // Cada nota en su tarea. Ver el manifiesto.
-                .setData(android.net.Uri.parse("pixpin://nota/" + android.net.Uri.encode(id.ifBlank { "suelta" })))
+                .setData(android.net.Uri.parse("pindesk://nota/" + android.net.Uri.encode(id.ifBlank { "suelta" })))
                 .putExtra(EXTRA_ID, id)
                 .putExtra(EXTRA_TEXTO, texto)
                 .putExtra(EXTRA_DESDE, desde)

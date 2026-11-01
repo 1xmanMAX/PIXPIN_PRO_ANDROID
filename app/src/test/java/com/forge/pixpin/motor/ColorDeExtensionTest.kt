@@ -32,6 +32,9 @@ class ColorDeExtensionTest {
         assertEquals("pdf", ColorDeExtension.rotulo("a.PDF"))
         assertEquals("xlsx", ColorDeExtension.rotulo("a.xlsx"))
         assertEquals("pixp", ColorDeExtension.rotulo("proyecto.pixpin"))
+        assertEquals("pind", ColorDeExtension.rotulo("proyecto.pindesk"))
+        // El nuevo y el de antes, del mismo color (1-nov-2026).
+        assertEquals(ColorDeExtension.de("a.pixpin"), ColorDeExtension.de("a.pindesk"))
         assertEquals("", ColorDeExtension.rotulo("LEEME"))
     }
 }

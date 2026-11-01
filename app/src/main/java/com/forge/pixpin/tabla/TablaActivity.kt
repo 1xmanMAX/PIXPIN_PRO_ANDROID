@@ -289,7 +289,7 @@ class TablaActivity : ComponentActivity() {
             hojas: List<String>? = null
         ) {
             val i = Intent(context, TablaActivity::class.java)
-                .setData(android.net.Uri.parse("pixpin://tabla/" + android.net.Uri.encode(id ?: "lista")))
+                .setData(android.net.Uri.parse("pindesk://tabla/" + android.net.Uri.encode(id ?: "lista")))
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             if (id != null) i.putExtra(EXTRA_ID, id)
             if (hojas != null && hojas.size > 1) i.putStringArrayListExtra(EXTRA_HOJAS, ArrayList(hojas))

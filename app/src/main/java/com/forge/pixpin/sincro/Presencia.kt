@@ -122,7 +122,7 @@ object Presencia {
                 }
                 // Sin grupo, sin «g»: Sincronizar no lo lista como aparato propio. El id y el nombre
                 // sirven para que las personas de los chats compartidos lo encuentren.
-                red.anunciar(Red.TIPO, "PixPin ${id.yo.nombre}", buildMap {
+                red.anunciar(Red.TIPO, Red.instancia(id.yo.nombre), buildMap {
                     if (etiqueta != null) put("g", etiqueta)
                     put("id", id.yo.id); put("l", id.yo.letra ?: ""); put("n", id.yo.nombre.take(40))
                 })

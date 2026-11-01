@@ -23,7 +23,7 @@ class AtajoActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val sena = intent?.data
-        val partes = sena?.takeIf { it.scheme == Atajos.ESQUEMA && it.host == Atajos.ANFITRION }
+        val partes = sena?.takeIf { Atajos.esEsquema(it.scheme) && it.host == Atajos.ANFITRION }
             ?.pathSegments.orEmpty()
         val accion = partes.firstOrNull()
         val id = partes.getOrNull(1)
@@ -43,7 +43,7 @@ class AtajoActivity : Activity() {
     private fun abrir(accion: String, id: String?) {
         when (accion) {
             // **Los pedidos de fuera**, como los del PC (`docs/protocolo-pedidos.md`), para el
-            // buscador, Tasker o cualquier otra app: `pixpin://atajo/tarea?texto=…` y compañía.
+            // buscador, Tasker o cualquier otra app: `pindesk://atajo/tarea?texto=…` (o `pixpin://`) y compañía.
             Atajos.TAREA -> com.forge.pixpin.mini.TareaRapidaActivity.abrir(this, dato("texto"))
             Atajos.TAREAS -> com.forge.pixpin.mini.TodasLasTareasActivity.abrir(this)
             Atajos.CAPTURAS -> com.forge.pixpin.ui.GaleriaDeCapturasActivity.abrir(this)

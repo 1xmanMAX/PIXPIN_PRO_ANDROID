@@ -15,7 +15,7 @@
         android:shortcutLongLabel="@string/atajo_buscar_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/buscar"
+            android:data="pindesk://atajo/buscar"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -27,7 +27,7 @@
         android:shortcutLongLabel="@string/atajo_capturar_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/capturar"
+            android:data="pindesk://atajo/capturar"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -39,7 +39,7 @@
         android:shortcutLongLabel="@string/atajo_grabar_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/grabar"
+            android:data="pindesk://atajo/grabar"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -51,7 +51,7 @@
         android:shortcutLongLabel="@string/atajo_tarea_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/tarea"
+            android:data="pindesk://atajo/tarea"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -63,7 +63,7 @@
         android:shortcutLongLabel="@string/atajo_leccion_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/leccion"
+            android:data="pindesk://atajo/leccion"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -75,7 +75,7 @@
         android:shortcutLongLabel="@string/atajo_lecciones_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/lecciones"
+            android:data="pindesk://atajo/lecciones"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -87,7 +87,7 @@
         android:shortcutLongLabel="@string/guardados_titulo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/mensajes"
+            android:data="pindesk://atajo/mensajes"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -99,7 +99,7 @@
         android:shortcutLongLabel="@string/atajo_chats_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/proyectos"
+            android:data="pindesk://atajo/proyectos"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -111,7 +111,7 @@
         android:shortcutLongLabel="@string/atajo_sincronizar_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/sincronizar"
+            android:data="pindesk://atajo/sincronizar"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>
@@ -123,7 +123,7 @@
         android:shortcutLongLabel="@string/atajo_capturas_largo">
         <intent
             android:action="android.intent.action.VIEW"
-            android:data="pixpin://atajo/capturas"
+            android:data="pindesk://atajo/capturas"
             android:targetPackage="com.forge.pixpin"
             android:targetClass="com.forge.pixpin.atajos.AtajoActivity" />
     </shortcut>

@@ -17,7 +17,8 @@ import kotlinx.serialization.json.jsonPrimitive
  * - **Una foto**: la imagen delante y su descripción (su texto, el OCR) detrás.
  * - **Una nota**: sus «pregunta :: respuesta», «P: / R:» y huecos `{{c1::…}}`.
  *
- * Van al mazo `PixPin::<chat>` con las etiquetas `pixpin` y la del chat. Sin Android: lo prueba
+ * Van al mazo `PinDesk::<chat>` con las etiquetas `pindesk` y la del chat (1-nov-2026, como el PC;
+ * antes `PixPin::<chat>` y `pixpin`: los mazos de antes se quedan en Anki como están). Sin Android: lo prueba
  * `TarjetasTest`; quien las manda es [EnviarAAnkiActivity].
  */
 object AnkiDelMensaje {
@@ -41,8 +42,13 @@ object AnkiDelMensaje {
         else -> Tarjetas.deLaNota(m.texto).isNotEmpty()
     }
 
+    /** El mazo padre de las tarjetas (antes de PinDesk, `PixPin`). */
+    const val MAZO = "PinDesk"
+    /** La etiqueta de todas las tarjetas (antes `pixpin`). */
+    const val ETIQUETA = "pindesk"
+
     /** El mazo de un chat. `::` es el separador de submazos de Anki: dentro del nombre no. */
-    fun mazoDe(nombre: String): String = "PixPin::" + nombre.trim().replace("::", ":")
+    fun mazoDe(nombre: String): String = "$MAZO::" + nombre.trim().replace("::", ":")
 
     private val MARCA = Regex("""^\s*\[(?:(\d+):)?(\d+):(\d\d)\]\s*""")
 
@@ -134,7 +140,7 @@ object AnkiDelMensaje {
             Clase.IMAGEN -> leer(m)?.let { listOf(Tarjetas.deLaFoto(it, m.texto, m.nombre)) }.orEmpty()
             else -> Tarjetas.deLaNota(m.texto)
         }
-        val etiquetas = listOf("pixpin", Tarjetas.etiqueta(chat))
+        val etiquetas = listOf(ETIQUETA, Tarjetas.etiqueta(chat))
         return v.map { it.copy(etiquetas = etiquetas) } to quitadas
     }
 }

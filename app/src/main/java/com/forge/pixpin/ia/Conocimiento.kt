@@ -57,7 +57,7 @@ object Conocimiento {
         e("Buscar en PinDesk", listOf("buscar", "busqueda", "encontrar", "buscador"),
             "«Buscar en PinDesk» busca archivos, tareas, lecciones y capturas de todos los chats; tambien hay un atajo en el buscador del telefono."),
         e("Compartir y exportar", listOf("compartir", "exportar", "html", "pagina web", "enlace", "png", "svg"),
-            "Todo se comparte con la misma hoja: imagen, PDF, SVG, pagina web, .pixpin editable o Wi-Fi, y se puede pedir un enlace que caduca."),
+            "Todo se comparte con la misma hoja: imagen, PDF, SVG, pagina web, .pindesk editable o Wi-Fi, y se puede pedir un enlace que caduca."),
         e("Sincronizar", listOf("sincroniz", "sync", "wifi", "grupo", "pc", "ordenador", "windows", "movil"),
             "En Sincronizar, los aparatos con el mismo codigo de grupo se encuentran en la misma Wi-Fi (tambien el PC con PinDesk para Windows) y juntan lo cambiado. «Enviar una vez» da un codigo de seis cifras y un QR."),
         e("Ajustes", listOf("ajustes", "configuracion", "opciones", "preferencias", "modo oscuro", "noche", "tema"),

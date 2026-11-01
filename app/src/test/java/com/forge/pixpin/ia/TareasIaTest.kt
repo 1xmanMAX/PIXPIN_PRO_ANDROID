@@ -52,7 +52,7 @@ class TareasIaTest {
 
     @Test fun `marcar mover editar y quitar por su nombre`() {
         val p = pasos("marcar_tarea", """{"tarea":"revisar el encofrado"}""")
-        assertEquals("""{"pixpin":1,"accion":"marcar_tarea","hecha":true,"codigo":"obra","proyecto":"casa","indice":0}""", p.pedidos[0].toString())
+        assertEquals("""{"pindesk":1,"accion":"marcar_tarea","hecha":true,"codigo":"obra","proyecto":"casa","indice":0}""", p.pedidos[0].toString())
         assertEquals("«revisar encofrado» marcada como hecha.", p.hecho)
         val q = pasos("marcar_tarea", """{"tarea":"pedir cemento","hecha":false}""")
         assertEquals(JsonPrimitive(1), q.pedidos[0]["indice"]); assertTrue(q.hecho.endsWith("pendiente."))
@@ -69,7 +69,7 @@ class TareasIaTest {
     @Test fun `varias tareas de un acta en una lista nueva`() {
         val p = pasos("anadir_tareas", """{"tareas":["Enviar presupuesto el viernes","Revisar planos"," "],"lista_nueva":"Acta 14-oct","chat":"Casa Lima"}""")
         assertEquals(3, p.pedidos.size)
-        assertEquals("""{"pixpin":1,"accion":"lista_nueva","titulo":"Acta 14-oct","proyecto":"casa"}""", p.pedidos[0].toString())
+        assertEquals("""{"pindesk":1,"accion":"lista_nueva","titulo":"Acta 14-oct","proyecto":"casa"}""", p.pedidos[0].toString())
         assertEquals(JsonPrimitive("Enviar presupuesto ⏰ 2026-10-16 09:00"), p.pedidos[1]["texto"])
         assertEquals(JsonPrimitive("Acta 14-oct"), p.pedidos[2]["__en_lista_nueva"])
         assertEquals("Apuntadas 2 tareas en «Acta 14-oct».", p.hecho)

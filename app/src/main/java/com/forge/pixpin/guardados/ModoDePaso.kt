@@ -248,7 +248,8 @@ object ModoDePaso {
     fun queHacerConLoCompartido(cuantos: Int, nombre: String?, mime: String?): Recibido {
         if (cuantos != 1) return Recibido.MENU
         val ext = extensionDe(nombre, mime)
-        if (ext == "pixpin") return Recibido.IMPORTAR
+        // Un paquete, con la extensión de PinDesk o la de antes (1-nov-2026).
+        if (com.forge.pixpin.motor.PaquetePixpin.esExtension(ext)) return Recibido.IMPORTAR
         // El texto que acompaña a un archivo (el enlace con que Chrome comparte un PDF, el asunto)
         // no cambia nada: el archivo se abre de paso, y «Guardar» lo deja en el chat sin él.
         return if (seVe(visorPara(nombre, mime))) Recibido.DE_PASO else Recibido.MENU

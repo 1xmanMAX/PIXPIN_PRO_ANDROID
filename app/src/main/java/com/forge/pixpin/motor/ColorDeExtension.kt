@@ -48,7 +48,7 @@ object ColorDeExtension {
         poner(TEXTO, "txt", "md", "markdown", "log", "ini", "cfg", "srt", "vtt")
         poner(LIBRO, "epub", "mobi", "azw", "azw3", "fb2", "djvu", "cbz", "cbr")
         poner(APLICACION, "apk", "aab", "xapk", "apks", "exe", "msi", "dmg", "deb", "appimage")
-        poner(PIXPIN, "pixpin", "excalidraw")
+        poner(PIXPIN, "pindesk", "pixpin", "excalidraw")
     }
 
     /** Para lo que no está en la tabla: colores que se distinguen de los de las familias. */

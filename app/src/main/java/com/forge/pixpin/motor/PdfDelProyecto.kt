@@ -157,5 +157,7 @@ object PdfDelProyecto {
     }
 
     /** Lo que se lee en el panel de capas de un lector de escritorio. */
-    private const val NOMBRE_DE_CAPA = "PixPin — página"
+    // «PinDesk — página N» desde el 1-nov-2026 (antes «PixPin — página N»): el PC reconoce las
+    // capas que empiezan por los dos nombres (`cocido.rs`). Ver [PdfConAnotaciones.capaDeLaHoja].
+    private const val NOMBRE_DE_CAPA = "PinDesk — página"
 }

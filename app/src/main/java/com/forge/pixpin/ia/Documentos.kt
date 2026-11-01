@@ -136,11 +136,11 @@ object Documentos {
 
         fun pedido(): JsonObject = when (this) {
             is Fichero -> buildJsonObject {
-                put("pixpin", 1); put("accion", "abrir")
+                put(Pedidos.VERSION, 1); put("accion", "abrir")
                 put("que", buildJsonObject { put("tipo", "fichero"); put("ruta", ruta); pagina?.let { put("pagina", it) } })
             }
             is Mensaje -> buildJsonObject {
-                put("pixpin", 1); put("accion", "abrir")
+                put(Pedidos.VERSION, 1); put("accion", "abrir")
                 put("que", buildJsonObject { put("tipo", "mensaje"); put("proyecto", proyecto?.let { JsonPrimitive(it) } ?: JsonNull); put("codigo", codigo) })
             }
         }

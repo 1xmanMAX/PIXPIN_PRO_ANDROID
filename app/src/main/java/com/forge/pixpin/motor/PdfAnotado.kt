@@ -119,7 +119,7 @@ object PdfAnotado {
      *   se pueden mirar por separado.
      *
      * [nombre] es lo que se leerá en ese panel: conviene que diga algo, como
-     * «PixPin — 9 de agosto», y no «Capa 1».
+     * «PinDesk — 9 de agosto», y no «Capa 1».
      */
     fun anotar(
         archivo: PdfArchivo,
@@ -127,7 +127,7 @@ object PdfAnotado {
         contenido: ByteArray,
         recursos: PdfValor.Dicc? = null,
         extra: List<ObjetoPdf> = emptyList(),
-        nombre: String = "PixPin"
+        nombre: String = PdfConAnotaciones.NOMBRE
     ): ByteArray? {
         if (archivo.cifrado) return null
         if (contenido.isEmpty()) return null
