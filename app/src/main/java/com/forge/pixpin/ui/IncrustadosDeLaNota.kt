@@ -59,7 +59,8 @@ class IncrustadosDeLaNota(context: Context) : ContextoDeLaNota {
                     detalle = m.ruta?.let { peso(it) }.orEmpty(), chapa = chapa, hora = hora(m.cuando), archivo = m.nombre.ifBlank { m.ruta })
                 Clase.VOZ -> VistaIncrustada("🎤 " + m.nombre.ifBlank { "Nota de voz" },
                     detalle = (m.transcripcion ?: "").take(160), chapa = chapa, hora = hora(m.cuando))
-                Clase.DIBUJO, Clase.PAGINA -> VistaIncrustada(m.nombre.ifBlank { "Lienzo" }, chapa = chapa, hora = hora(m.cuando), miniatura = lienzo(m.referencia))
+                // El de un lienzo, sin `.excalidraw` (1-nov-2026). Ver [com.forge.pixpin.guardados.NombreDelLienzo.visible].
+                Clase.DIBUJO, Clase.PAGINA -> VistaIncrustada(com.forge.pixpin.guardados.NombreDelLienzo.visible(m, "Lienzo"), chapa = chapa, hora = hora(m.cuando), miniatura = lienzo(m.referencia))
                 else -> VistaIncrustada(m.texto.ifBlank { m.nombre }.take(400), chapa = chapa, hora = hora(m.cuando))
             }
         }

@@ -81,7 +81,10 @@ object ChatDelAsistente {
     fun nombreDeLienzo(m: Mensaje): String {
         val n = m.nombre.trim()
         return when {
-            n.isNotEmpty() && !n.endsWith(".excalidraw") -> n
+            // El de serie del PC (`<código>.excalidraw`) no es un nombre; uno puesto, sin la
+            // extensión vieja (1-nov-2026). Ver [com.forge.pixpin.guardados.NombreDelLienzo].
+            n.isNotEmpty() && !com.forge.pixpin.guardados.NombreDelLienzo.esDeSerie(n, m.referencia) ->
+                com.forge.pixpin.guardados.NombreDelLienzo.sinExtension(n)
             m.clase == Clase.PAGINA -> "Hoja ${m.pagina?.let { it + 1 } ?: m.numero}"
             else -> "Lienzo ${m.numero}"
         }
@@ -236,7 +239,7 @@ object ChatDelAsistente {
                     Clase.NOTA -> m.texto
                     Clase.IMAGEN -> "[foto] " + m.texto
                     Clase.ARCHIVO, Clase.PAGINA -> "[archivo «${m.nombre}»] " + m.texto
-                    Clase.DIBUJO -> "[lienzo «${m.nombre}»]"
+                    Clase.DIBUJO -> "[lienzo «${nombreDeLienzo(m)}»]"
                     else -> m.texto.take(200)
                 }.trim()
                 if (t.isBlank()) continue

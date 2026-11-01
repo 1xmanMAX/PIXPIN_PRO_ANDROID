@@ -92,7 +92,7 @@ object UnirAlProyecto {
     fun devolver(context: Context, proyectos: ProyectosRepository, m: Mensaje, ahora: Long): Int {
         val p = proyectos.porId(m.proyecto) ?: return 0
         val ref = m.referencia
-        val nombre = m.nombre.ifBlank { primeraLinea(m.texto) }
+        val nombre = if (m.clase == Clase.DIBUJO) NombreDelLienzo.deLaHoja(m) else m.nombre.ifBlank { primeraLinea(m.texto) }
         when (m.clase) {
             Clase.DIBUJO -> proyectos.conHoja(p, Hoja(id = "hoja-$ahora", nombre = nombre, dibujo = ref ?: return 0), ahora)
             Clase.TABLA -> proyectos.conHoja(p, Hoja(id = "hoja-$ahora", nombre = nombre, tabla = ref ?: return 0), ahora)
@@ -168,7 +168,8 @@ object UnirAlProyecto {
     }
 
     private fun hojasDe(context: Context, proyectos: ProyectosRepository, proyecto: Proyecto, m: Mensaje, ahora: Long, n: Int): List<Hoja> {
-        val nombre = m.nombre.substringBeforeLast('.').ifBlank { primeraLinea(m.texto) }
+        // Un lienzo del PC o del Mac entra como «Lienzo», no como su `<código>` (1-nov-2026).
+        val nombre = if (m.clase == Clase.DIBUJO) NombreDelLienzo.deLaHoja(m) else m.nombre.substringBeforeLast('.').ifBlank { primeraLinea(m.texto) }
         return when (m.clase) {
             Clase.NOTA -> listOf(Hoja(id = "hoja-$ahora-$n", nombre = nombre, nota = m.texto))
             Clase.DIBUJO -> listOfNotNull(copiaDelDibujo(context, m.referencia, "hoja-$ahora-$n", nombre, ahora, n))

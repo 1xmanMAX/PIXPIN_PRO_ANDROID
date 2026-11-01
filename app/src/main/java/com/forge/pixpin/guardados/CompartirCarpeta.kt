@@ -9,7 +9,6 @@ import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.PictureAsPdf
 import androidx.compose.material.icons.filled.Wifi
 import com.forge.pixpin.PixPinApp
-import com.forge.pixpin.motor.ExcalidrawJson
 import com.forge.pixpin.motor.ExcalidrawStore
 import com.forge.pixpin.motor.ExportarHtml
 import com.forge.pixpin.motor.ExportarProyecto
@@ -81,7 +80,7 @@ object CompartirCarpeta {
         val vivas = c.vivas(todos).map { (i, p) -> todos[i] to p }
             .let { l -> if (c.esGrabacion) l.sortedBy { it.second.adjunto } else l }
         return vivas.mapIndexed { i, (m, p) ->
-            Pagina(m, p.titulo.ifBlank { m.nombre.ifBlank { CarpetasDelChat.PAGINA } }, i + 1)
+            Pagina(m, p.titulo.ifBlank { NombreDelLienzo.visible(m).ifBlank { CarpetasDelChat.PAGINA } }, i + 1)
         }
     }
 
@@ -394,8 +393,13 @@ object CompartirCarpeta {
     // ------------------------------------------------------------------ el original y la Wi-Fi
 
     /**
-     * **Cada página tal cual, en un ZIP** («01 - Día 1.png»…): el archivo de un adjunto, el lienzo en
-     * `.excalidraw` y la nota en `.md`. [paginas] dice si admite elegir páginas.
+     * **Cada página tal cual, en un ZIP** («01 - Día 1.png»…): el archivo de un adjunto y la nota en
+     * `.md`. [paginas] dice si admite elegir páginas.
+     *
+     * **Un lienzo no va** (1-nov-2026, PC `1984938a`: «el `.excalidraw` suelto ya no se ofrece»): lo
+     * editable de un lienzo es el `.pixpin`, que está al lado, y su imagen sale en PNG, PDF o la web.
+     * Antes iba como `01 - Día 1.excalidraw`, y el que llegó del PC o del Mac, que trae de ruta su
+     * fichero, como `01 - Día 1.gz`.
      */
     private fun original(context: Context, todas: List<Pagina>, titulo: String, paginas: Int, detalle: String): Compartible.Formato {
         val porId = todas.associateBy { it.mensaje.id }
@@ -418,10 +422,8 @@ object CompartirCarpeta {
                     val m = p.mensaje
                     val archivo = m.ruta?.let(::File)?.takeIf { it.isFile }
                     when {
+                        m.clase == Clase.DIBUJO -> Unit
                         archivo != null -> entrada(p, archivo.extension) { o -> archivo.inputStream().use { it.copyTo(o) } }
-                        m.clase == Clase.DIBUJO && m.referencia != null -> ExcalidrawStore.cargar(ExcalidrawStore.rutaDe(context, m.referencia))?.let { e ->
-                            entrada(p, "excalidraw") { o -> o.write(ExcalidrawJson.encodeToString(com.forge.pixpin.motor.Scene.serializer(), e).toByteArray()) }
-                        }
                         m.clase == Clase.NOTA && m.texto.isNotBlank() -> entrada(p, "md") { o -> o.write(m.texto.toByteArray()) }
                     }
                 }

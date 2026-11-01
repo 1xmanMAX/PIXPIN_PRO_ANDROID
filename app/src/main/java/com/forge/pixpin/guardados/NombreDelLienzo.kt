@@ -12,6 +12,74 @@ import com.forge.pixpin.PixPinApp
  */
 object NombreDelLienzo {
 
+    /** Cómo se llama un lienzo sin nombre propio, como en el PC (`chat-lienzo`) y el Mac. */
+    const val DE_SERIE = "Lienzo"
+
+    /**
+     * **La extensión vieja del lienzo, que ya no se enseña** (1-nov-2026). El PC y el Mac guardan el
+     * lienzo de un chat en `lienzos/<código>.excalidraw` y su mensaje `DIBUJO` sale con ese fichero
+     * de nombre (`ventana_chat::escribir_lienzo`, `Nucleo.crearLienzo`); allí la fila se llama
+     * «Lienzo» (`nombre_de_la_fila`). Aquí llegaba tal cual: «k7q2m9x3ab.excalidraw · 2 kB
+     * EXCALIDRAW» en la burbuja (el usuario: «Excalidraw es una extensión que ya quitamos»). Lo que
+     * hay en disco no cambia —el PC tampoco lo renombra y la sincronización empareja por la ruta—:
+     * solo deja de verse.
+     */
+    private val EXTENSIONES_VIEJAS = listOf(".excalidraw.gz", ".excalidraw")
+
+    /** [nombre] sin la extensión vieja del lienzo (`.excalidraw`, o `.excalidraw.gz` de este aparato). */
+    fun sinExtension(nombre: String): String {
+        val n = nombre.trim()
+        val fin = EXTENSIONES_VIEJAS.firstOrNull { n.endsWith(it, ignoreCase = true) } ?: return n
+        return n.dropLast(fin.length).trim()
+    }
+
+    /** Si [nombre] (de un mensaje o un fichero) es un `.excalidraw` suelto. */
+    fun esExcalidraw(nombre: String?): Boolean =
+        nombre != null && EXTENSIONES_VIEJAS.any { nombre.trim().endsWith(it, ignoreCase = true) }
+
+    /**
+     * **Si es el nombre de serie de un lienzo**: vacío, «Lienzo» (el del teléfono) o el fichero con
+     * que lo crean el PC y el Mac (`<referencia>.excalidraw`). Es la regla de `nombre_de_la_fila` del
+     * PC, y además un `.excalidraw` sin nada delante.
+     */
+    fun esDeSerie(nombre: String, referencia: String?): Boolean {
+        val n = nombre.trim()
+        if (n.isEmpty() || n == DE_SERIE) return true
+        if (!esExcalidraw(n)) return false
+        val base = sinExtension(n)
+        return base.isEmpty() || base == referencia
+    }
+
+    /**
+     * **El nombre que se enseña de un mensaje** (1-nov-2026): el de un lienzo, «Lienzo» si es el de
+     * serie y si no el suyo sin `.excalidraw`; el de cualquier otro, sin un `.excalidraw` que traiga
+     * detrás. [siVacio]: lo que se pone a lo que no es un lienzo y no tiene nombre.
+     */
+    fun visible(m: Mensaje, siVacio: String = ""): String = when {
+        m.clase == Clase.DIBUJO -> if (esDeSerie(m.nombre, m.referencia)) DE_SERIE else sinExtension(m.nombre)
+        esExcalidraw(m.nombre) -> sinExtension(m.nombre).ifBlank { DE_SERIE }
+        else -> m.nombre.ifBlank { siVacio }
+    }
+
+    /**
+     * **La etiqueta de un fichero en la sincronización** («#47·K7Q2 · k7q2m9x3ab.excalidraw», la
+     * que da el otro aparato), con el lienzo dicho como en el chat: «#47·K7Q2 · Lienzo». [rel] es la
+     * ruta del fichero (`pins/draw/<código>.excalidraw.gz`), que dice el código del lienzo.
+     */
+    fun deEtiqueta(etiqueta: String, rel: String): String {
+        if (!esExcalidraw(etiqueta)) return etiqueta
+        val dibujo = sinExtension(rel.substringAfterLast('/'))
+        val sena = etiqueta.substringBeforeLast(" · ", "").let { if (it.isEmpty()) "" else "$it · " }
+        val nombre = etiqueta.substringAfterLast(" · ")
+        return sena + if (esDeSerie(nombre, dibujo)) DE_SERIE else sinExtension(nombre)
+    }
+
+    /**
+     * El nombre con que un lienzo entra como hoja de un proyecto: el suyo sin `.excalidraw`, o
+     * «Lienzo» si es el de serie (no «k7q2m9x3ab.excalidraw»).
+     */
+    fun deLaHoja(m: Mensaje): String = if (esDeSerie(m.nombre, m.referencia)) DE_SERIE else sinExtension(m.nombre)
+
     /** El nombre de la hoja [hojaId] de [proyectoId], y el de todo lo que señala lo mismo. */
     fun deHoja(app: PixPinApp, proyectoId: String, hojaId: String, nombre: String) {
         val limpio = nombre.trim().take(80)

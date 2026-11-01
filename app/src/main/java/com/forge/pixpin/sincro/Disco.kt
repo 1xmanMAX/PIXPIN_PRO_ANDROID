@@ -802,7 +802,8 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
 
     private fun etiquetaDe(m: Mensaje): String {
         val sena = senaDe(m)?.let { "#$it · " }.orEmpty()
-        return sena + m.nombre.ifBlank { m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(60) }
+        // Un lienzo del PC o del Mac, «Lienzo» y no su `<código>.excalidraw` (1-nov-2026).
+        return sena + com.forge.pixpin.guardados.NombreDelLienzo.visible(m).ifBlank { m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().take(60) }
             .ifBlank { m.clase.name.lowercase() }
     }
 

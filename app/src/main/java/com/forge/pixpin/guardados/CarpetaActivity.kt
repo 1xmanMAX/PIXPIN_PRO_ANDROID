@@ -398,7 +398,7 @@ class CarpetaActivity : ComponentActivity() {
                     else FilaDePagina(
                         numero = i + 1,
                         m = m,
-                        titulo = p.titulo.ifBlank { m.nombre.ifBlank { CarpetasDelChat.PAGINA } },
+                        titulo = p.titulo.ifBlank { NombreDelLienzo.visible(m).ifBlank { CarpetasDelChat.PAGINA } },
                         primera = i == 0,
                         ultima = i == vista.lastIndex,
                         // La que se arrastra va por encima, debajo del dedo; las demás se apartan con su animación.

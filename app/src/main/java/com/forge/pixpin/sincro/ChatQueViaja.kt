@@ -78,6 +78,10 @@ object ChatQueViaja {
             val viaja = when {
                 ruta == null -> m
                 ruta == p.pdfLimpio || ruta == p.pdfOrigen -> m.copy(ruta = EL_DOCUMENTO)
+                // **Un lienzo viaja como su hoja, no como fichero** (1-nov-2026): el del PC o el Mac
+                // trae de ruta su `.excalidraw.gz`, y aquí iba de adjunto, un `.excalidraw` suelto
+                // dentro del `.pixpin`. Sin ruta, como los de este aparato: lo señala su referencia.
+                m.clase == Clase.DIBUJO && m.referencia != null -> m.copy(ruta = null)
                 File(ruta).isFile -> {
                     val clave = "${m.id}-${Envio.nombreSano(File(ruta).name)}"
                     adjuntos[clave] = File(ruta)

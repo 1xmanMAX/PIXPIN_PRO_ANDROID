@@ -703,7 +703,8 @@ private fun VerMas(n: Int, alTocar: () -> Unit) {
 internal fun vistazo(m: Mensaje): String = when (m.clase) {
     Clase.VOZ -> "🎙 " + m.nombre.removeSuffix(".m4a").ifBlank { "Nota de voz" }
     Clase.IMAGEN -> "🖼 " + m.texto.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty().ifBlank { "Foto" }
-    Clase.DIBUJO, Clase.PAGINA -> "✏️ " + m.nombre.ifBlank { "Lienzo" }
+    // Un lienzo del PC o del Mac se llama «Lienzo», no `<código>.excalidraw` (1-nov-2026).
+    Clase.DIBUJO, Clase.PAGINA -> "✏️ " + com.forge.pixpin.guardados.NombreDelLienzo.visible(m, "Lienzo")
     Clase.TABLA -> "📊 " + m.nombre.ifBlank { "Tabla" }
     Clase.CROQUIS -> "🧊 " + m.nombre.ifBlank { "Croquis 3D" }
     Clase.PROYECTO -> "📁 " + m.nombre.ifBlank { "Proyecto" }
