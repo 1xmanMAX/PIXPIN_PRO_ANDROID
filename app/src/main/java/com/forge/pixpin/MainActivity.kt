@@ -365,21 +365,8 @@ fun TarjetaDeConfiguracion(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
-            // **Sincronizar con los otros aparatos**, por la Wi-Fi y sin servidor. Ver
-            // [com.forge.pixpin.sincro.SincronizarActivity].
-            androidx.compose.material3.OutlinedButton(
-                onClick = {
-                    // Pulsarlo es ver el fallo: la pantalla de Sincronizar dice qué pasó.
-                    com.forge.pixpin.sincro.VueltasEnMarcha.olvidarFallo()
-                    context.startActivity(Intent(context, com.forge.pixpin.sincro.SincronizarActivity::class.java))
-                },
-                modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) {
-                // **Gira mientras se sincroniza** y se marca en rojo si falló (25-oct-2026). Ver [com.forge.pixpin.ui.IconoDeSincronizar].
-                com.forge.pixpin.ui.IconoDeSincronizar(androidx.compose.material3.LocalContentColor.current, MaterialTheme.colorScheme.background, 20.dp)
-                Text("Sincronizar", modifier = Modifier.padding(start = 8.dp))
-            }
+            // **Sin botón de «Sincronizar» (1-nov-2026)**: ya está en la lista de chats, que es donde
+            // se usa; aquí repetía lo mismo (pedido del usuario).
 
             // **Los grupos de pestañas guardados, desde el menú** (19-sep-2026): un toque abre el
             // grupo entero en la multitarea. Se guardan desde la baraja (cuatro dedos arriba).

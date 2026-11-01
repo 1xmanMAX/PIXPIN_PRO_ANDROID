@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -62,6 +63,11 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -234,8 +240,17 @@ fun PanelDelHorario(
         }
     }
 
-    /** Guarda lo de la rejilla (cambia solo las líneas de clases y de asignaturas). */
-    fun guardar(s: Semana) = guardarTexto(Semana.reescribir(original ?: Horario.PLANTILLA, s))
+    /**
+     * Guarda lo de la rejilla (cambia solo las líneas de clases y de asignaturas).
+     *
+     * **Nada hasta haber leído el de disco** (1-nov-2026): con `original` aún sin leer se escribía
+     * la plantilla con lo nuevo encima del horario del usuario, y luego la lectura pisaba lo nuevo.
+     */
+    fun guardar(s: Semana) {
+        val base = original
+        if (base == null) Toast.makeText(contexto, "Un momento: aún se está leyendo el horario", Toast.LENGTH_SHORT).show()
+        else guardarTexto(Semana.reescribir(base, s))
+    }
 
     LaunchedEffect(Unit) { ponerTexto(withContext(Dispatchers.IO) { AvisosDelHorario.texto(contexto) }) }
     val lunes = remember { lunesDe(AvisosDelHorario.ahoraLocal()) }
@@ -244,6 +259,17 @@ fun PanelDelHorario(
     @Composable
     fun LasAsignaturas(enColumna: Boolean) {
         val chapas: @Composable () -> Unit = {
+            // **«+ Asignatura» el primero** (1-nov-2026): al final de la fila, con varias asignaturas
+            // quedaba fuera de la pantalla y había que desplazarla para encontrarlo.
+            Row(
+                Modifier.clip(RoundedCornerShape(18.dp)).cristal(RoundedCornerShape(18.dp)).clickable { nueva = true }
+                    .padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(Icons.Filled.Add, contentDescription = null, tint = Cristal.tinta, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(4.dp))
+                Text("Asignatura", color = Cristal.tinta, fontWeight = FontWeight.Medium)
+            }
             semana.asignaturas.forEachIndexed { i, a ->
                 androidx.compose.runtime.key(a.nombre) {
                     val puesta = elegida?.let { Horario.norm(it) == Horario.norm(a.nombre) } == true
@@ -251,9 +277,6 @@ fun PanelDelHorario(
                         onToque = { elegida = if (puesta) null else a.nombre },
                         onLargo = { deAsignatura = i })
                 }
-            }
-            Box(Modifier.clip(RoundedCornerShape(18.dp)).cristal(RoundedCornerShape(18.dp)).clickable { nueva = true }.padding(horizontal = 14.dp, vertical = 8.dp)) {
-                Text("+ Asignatura", color = Cristal.tinta)
             }
         }
         if (enColumna) FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) { chapas() }
@@ -348,26 +371,51 @@ fun PanelDelHorario(
 
     if (nueva) {
         var escrito by remember { mutableStateOf("") }
+        val foco = remember { FocusRequester() }
+        val previa = semana.previaDeNueva(escrito)
+        /**
+         * **Añadir la asignatura escrita** (1-nov-2026): con el botón o con la tecla de Intro del
+         * teclado, que antes no hacía nada. Si ya estaba, se elige esa (como el PC); si de lo
+         * escrito no sale un nombre, el diálogo se queda abierto contando por qué.
+         */
+        fun anadir() {
+            val s = copia(semana)
+            when (val r = s.anadirAsignatura(escrito)) {
+                is Semana.Resultado.Repetida -> {
+                    elegida = s.asignaturas[r.i].nombre
+                    Toast.makeText(contexto, "«${s.asignaturas[r.i].nombre}» ya está en la lista", Toast.LENGTH_SHORT).show()
+                    nueva = false
+                }
+                is Semana.Resultado.Nueva -> r.i?.let { i ->
+                    val nombre = s.asignaturas[i].nombre
+                    guardar(s)
+                    elegida = nombre
+                    nueva = false
+                    // Su lista de tareas, en el chat «Asignaturas».
+                    alcance.launch(Dispatchers.IO) { runCatching { Asignaturas.asegurarLista(app, nombre) } }
+                }
+            }
+        }
         AlertDialog(
             onDismissRequest = { nueva = false },
             title = { Text("Nueva asignatura") },
-            text = { OutlinedTextField(escrito, { escrito = it }, label = { Text("Nombre (@aula opcional)") }, singleLine = true) },
-            confirmButton = {
-                TextButton(onClick = {
-                    val s = copia(semana)
-                    when (val r = s.anadirAsignatura(escrito)) {
-                        is Semana.Resultado.Repetida -> Toast.makeText(contexto, "«${s.asignaturas[r.i].nombre}» ya está en la lista", Toast.LENGTH_SHORT).show()
-                        is Semana.Resultado.Nueva -> r.i?.let { i ->
-                            val nombre = s.asignaturas[i].nombre
-                            guardar(s)
-                            elegida = nombre
-                            // Su lista de tareas, en el chat «Asignaturas».
-                            alcance.launch(Dispatchers.IO) { runCatching { Asignaturas.asegurarLista(app, nombre) } }
-                        }
-                    }
-                    nueva = false
-                }) { Text("Añadir") }
+            text = {
+                Column {
+                    OutlinedTextField(
+                        escrito, { escrito = it },
+                        label = { Text("Nombre") },
+                        placeholder = { Text("Geometría @A-12") },
+                        supportingText = { Text(previa.texto ?: "El aula, si quieres, detrás de una @") },
+                        isError = escrito.isNotBlank() && !previa.vale,
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(onDone = { if (previa.vale) anadir() }),
+                        modifier = Modifier.fillMaxWidth().focusRequester(foco)
+                    )
+                }
+                LaunchedEffect(Unit) { runCatching { foco.requestFocus() } }
             },
+            confirmButton = { TextButton(onClick = { anadir() }, enabled = previa.vale && original != null) { Text("Añadir") } },
             dismissButton = { TextButton(onClick = { nueva = false }) { Text("Cancelar") } }
         )
     }

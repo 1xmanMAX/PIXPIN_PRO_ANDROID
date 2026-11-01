@@ -75,6 +75,27 @@ data class Semana(
         return Resultado.Nueva(asignaturas.size - 1)
     }
 
+    /**
+     * **Lo que dice «Nueva asignatura» mientras se escribe** (1-nov-2026). Antes el diálogo
+     * aceptaba cualquier cosa y, si de lo escrito no salía un nombre, se cerraba sin hacer nada:
+     * «Laboratorio de Física» se lee como el aula «Laboratorio de» y la asignatura «Física» (así lee
+     * el horario la palabra «lab», «aula», «sala»… en el PC y aquí, y la línea escrita se vuelve a
+     * leer igual), y «Lab 2» no deja nombre. Ahora el diálogo enseña qué se va a guardar, y el
+     * botón solo se puede pulsar si hay nombre ([Previa.vale]).
+     */
+    fun previaDeNueva(escrito: String): Previa {
+        if (escrito.isBlank()) return Previa(false, null)
+        val (nombre, aula) = Horario.nombreYAula(Horario.palabras(escrito))
+        if (nombre.isEmpty()) {
+            return Previa(false, if (aula != null) "Falta el nombre: «$aula» se lee como el aula" else "Falta el nombre")
+        }
+        asignatura(nombre)?.let { return Previa(true, "«${asignaturas[it].nombre}» ya está: se elegirá esa") }
+        return Previa(true, if (aula != null) "Se añadirá «$nombre» en el aula «$aula»" else null)
+    }
+
+    /** Lo que da [previaDeNueva]: si se puede añadir y qué contar debajo de la caja. */
+    data class Previa(val vale: Boolean, val texto: String?)
+
     /** Lo que da [anadirAsignatura] (el `Result<Option<usize>, usize>` del PC). */
     sealed class Resultado {
         data class Nueva(val i: Int?) : Resultado()
