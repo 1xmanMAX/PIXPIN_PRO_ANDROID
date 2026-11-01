@@ -88,7 +88,7 @@ object AlarmaExacta {
             runCatching {
                 Toast.makeText(
                     app,
-                    "Sonará con algún minuto de retraso: permite «Alarmas y recordatorios» para PixPin (toca el aviso)",
+                    "Sonará con algún minuto de retraso: permite «Alarmas y recordatorios» para PinDesk (toca el aviso)",
                     Toast.LENGTH_LONG
                 ).show()
             }
@@ -105,10 +105,10 @@ object AlarmaExacta {
             val n = androidx.core.app.NotificationCompat.Builder(app, CANAL)
                 .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
                 .setContentTitle("Recordatorios a la hora exacta")
-                .setContentText("Toca para permitir «Alarmas y recordatorios» a PixPin")
+                .setContentText("Toca para permitir «Alarmas y recordatorios» a PinDesk")
                 .setStyle(
                     androidx.core.app.NotificationCompat.BigTextStyle().bigText(
-                        "Sin este permiso los recordatorios, las alarmas y las llamadas del horario suenan con algún minuto de retraso. Toca para permitir «Alarmas y recordatorios» a PixPin."
+                        "Sin este permiso los recordatorios, las alarmas y las llamadas del horario suenan con algún minuto de retraso. Toca para permitir «Alarmas y recordatorios» a PinDesk."
                     )
                 )
                 .setContentIntent(abrir)

@@ -1,5 +1,7 @@
 package com.forge.pixpin.mini
 
+import androidx.compose.ui.res.stringResource
+import com.forge.pixpin.R
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -106,6 +108,15 @@ import kotlin.math.roundToInt
  * cambia de una a otra y la elegida se recuerda ([VistaDeTareas.Vista]; quien tenía la lista abre
  * en las tarjetas). El mosaico Horario de Funciones abre aquí, en el Horario.
  *
+ * **«Unificado en todos los aparatos» y «con todo»** (1-nov-2026): un solo Inbox aunque cada aparato
+ * creara el suyo ([TodasLasTareas.unirInboxes]), y las listas de todos los chats, también las de un
+ * chat sin ficha de proyecto y los grupos aún vacíos ([TodasLasTareas.reunir]).
+ *
+ * **Lo que llama por teléfono, a la vista** (1-nov-2026, [LlamadasDeTareas]): el encabezado de una
+ * asignatura del horario dice «📞 Te llamará de lunes a viernes a las 7:50» y la tarjeta de una tarea
+ * con la llamada puesta «📞 Te llamará hoy 10:00»; un toque en la chapa la apaga o la enciende, y
+ * «Llamarme…» del menú pone hora y llamada a la vez. Solo de este teléfono ([LlamadasGuardadas]).
+ *
  * Toda la lógica está en [TodasLasTareas] y [Kanban], sin Android y probada. Leer el chat y agrupar va
  * fuera del hilo que pinta; aquí solo se enseña lo ya calculado.
  */
@@ -124,6 +135,15 @@ class TodasLasTareasActivity : ComponentActivity() {
      * [Encabezado] y [Tarjeta] sin pasarlo por todas partes.
      */
     private var compartidos by mutableStateOf<Map<String, com.forge.pixpin.sincro.EnElChat>>(emptyMap())
+
+    /**
+     * **Lo que llama por teléfono** (1-nov-2026, [LlamadasDeTareas]): las tareas con la llamada
+     * puesta, las asignaturas con la llamada apagada y el horario (cuándo llama cada grupo). Solo de
+     * este teléfono ([LlamadasGuardadas]). Aquí, como [compartidos], para [Encabezado] y [Tarjeta].
+     */
+    private var llamanTareas by mutableStateOf<Set<String>>(emptySet())
+    private var clasesApagadas by mutableStateOf<Set<String>>(emptySet())
+    private var horario by mutableStateOf(com.forge.pixpin.horario.Horario.Leido())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -170,6 +190,9 @@ class TodasLasTareasActivity : ComponentActivity() {
             // Con Jev (28-oct-2026), la prioridad de cada tarea por su contexto; sin clave, nada cambia.
             suspend fun leer() {
                 listas = withContext(Dispatchers.IO) {
+                    // **Un solo Inbox** (1-nov-2026): si llegaron dos (cada aparato creó el suyo antes
+                    // de sincronizar), se juntan antes de enseñarlos. Ver [TodasLasTareas.unirInboxes].
+                    runCatching { TareaRapidaActivity.unirInboxes(almacen) }
                     com.forge.pixpin.jev.UrgenciaEnLaApp.aplicar(this@TodasLasTareasActivity, TodasLasTareas.reunir(almacen.leer(), nombres))
                 }
             }
@@ -192,6 +215,17 @@ class TodasLasTareasActivity : ComponentActivity() {
         fun cambiarModo(m: VistaDeTareas.Vista) {
             modo = m
             runCatching { preferencias().edit().putString(VISTA, m.texto).apply() }
+        }
+        // Lo que llama, al día: con cada cambio de las llamadas y al volver del Horario (que puede
+        // cambiar las clases).
+        val versionDeLlamadas by LlamadasGuardadas.version.collectAsState()
+        LaunchedEffect(versionDeLlamadas, modo) {
+            withContext(Dispatchers.IO) {
+                val t = LlamadasGuardadas.tareas(this@TodasLasTareasActivity)
+                val a = LlamadasGuardadas.apagadas(this@TodasLasTareasActivity)
+                val h = runCatching { com.forge.pixpin.horario.AvisosDelHorario.leer(this@TodasLasTareasActivity) }.getOrNull()
+                withContext(Dispatchers.Main) { llamanTareas = t; clasesApagadas = a; if (h != null) horario = h }
+            }
         }
         LaunchedEffect(vistaPedida) {
             val pedida = vistaPedida ?: return@LaunchedEffect
@@ -229,7 +263,8 @@ class TodasLasTareasActivity : ComponentActivity() {
             vista = withContext(Dispatchers.Default) {
                 val hoy = LocalDate.now()
                 val sigue = { l: Lista, f: Fila -> clave(l, f) in recienes }
-                Vista(ls, TodasLasTareas.agrupar(ls, palabras, hoy, sigue), hoy, Kanban.columnas(ls, palabras, hoy, sigue))
+                // Sin buscar, también los grupos aún vacíos: uno recién creado en un chat se ve ya (1-nov-2026).
+                Vista(ls, TodasLasTareas.agrupar(ls, palabras, hoy, conVacias = true, sigueArriba = sigue), hoy, Kanban.columnas(ls, palabras, hoy, sigue))
             }
         }
 
@@ -245,7 +280,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                         else TodasLasTareas.marcar(m.texto, f, hecha)?.let { m.copy(texto = it) } ?: m.also { cambio = true }
                     }
                 }
-                if (cambio) withContext(Dispatchers.Main) { avisar("La lista cambió mientras tanto; ya está al día. Vuelve a marcarla.") }
+                if (cambio) withContext(Dispatchers.Main) { avisar(getString(R.string.tareas_cambio_marcar)) }
             }
         }
 
@@ -262,11 +297,11 @@ class TodasLasTareasActivity : ComponentActivity() {
                 }
                 withContext(Dispatchers.Main) {
                     val q = hecha
-                    if (q == null) { avisar("La lista cambió mientras tanto; ya está al día. Vuelve a quitarla."); return@withContext }
+                    if (q == null) { avisar(getString(R.string.tareas_cambio_quitar)); return@withContext }
                     alcance.launch {
                         avisos.currentSnackbarData?.dismiss()
                         val r = withTimeoutOrNull(TodasLasTareas.DURA_DESHACER_MS) {
-                            avisos.showSnackbar("«${q.texto.ifBlank { "Tarea" }}» quitada", "Deshacer", duration = SnackbarDuration.Indefinite)
+                            avisos.showSnackbar(getString(R.string.tareas_quitada, q.texto.ifBlank { getString(R.string.tareas_tarea) }), getString(R.string.tareas_deshacer), duration = SnackbarDuration.Indefinite)
                         }
                         if (r == null) avisos.currentSnackbarData?.dismiss()
                         if (r == SnackbarResult.ActionPerformed) app.scope.launch(Dispatchers.IO) {
@@ -277,7 +312,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                     else { esta = true; m.copy(texto = TodasLasTareas.reponer(m.texto, q.indice, q.tarea)) }
                                 }
                             }
-                            withContext(Dispatchers.Main) { avisar(if (esta) "Tarea devuelta a su lista" else "Esa lista ya no está") }
+                            withContext(Dispatchers.Main) { avisar(if (esta) getString(R.string.tareas_devuelta) else getString(R.string.tareas_lista_ya_no)) }
                         }
                     }
                 }
@@ -296,9 +331,9 @@ class TodasLasTareasActivity : ComponentActivity() {
                 }
                 withContext(Dispatchers.Main) {
                     avisar(when {
-                        cambio -> "La lista cambió mientras tanto; ya está al día. Vuelve a intentarlo."
-                        hora == null -> "Ya no se recuerda"
-                        else -> "Te la recuerdo ${Tareas.textoDeHora(hora)}"
+                        cambio -> getString(R.string.tareas_cambio_intentar)
+                        hora == null -> getString(R.string.tareas_ya_no_recuerda)
+                        else -> getString(R.string.tareas_te_la_recuerdo, Tareas.textoDeHora(hora))
                     })
                 }
             }
@@ -306,13 +341,20 @@ class TodasLasTareasActivity : ComponentActivity() {
 
         fun recordar(l: Lista, f: Fila) = ElegirHora.pedir(this@TodasLasTareasActivity, Tareas.horaDe(f.crudo)) { ponerHora(l, f, it) }
 
+        /** **«Llamarme…»** (1-nov-2026): elegir la hora y que, a esa hora, la tarea llame por teléfono ([LlamadasDeTareas]). */
+        fun llamarA(l: Lista, f: Fila) = ElegirHora.pedir(this@TodasLasTareasActivity, Tareas.horaDe(f.crudo)) { hora ->
+            llamanTareas = LlamadasDeTareas.conLlamada(llamanTareas, l.codigo, f.crudo, true)
+            app.scope.launch(Dispatchers.IO) { LlamadasGuardadas.ponerTarea(applicationContext, l.codigo, f.crudo, true) }
+            ponerHora(l, f, hora)
+        }
+
         fun mover(desde: Lista, f: Fila, hasta: Lista) {
             if (desde.clave == hasta.clave) return
             app.scope.launch(Dispatchers.IO) {
                 // Las imágenes, copiadas al chat de destino antes de tocar nada (`tareas::mover`).
                 val crudo = if (desde.proyecto == hasta.proyecto) f.crudo
                 else TodasLasTareas.conImagenesCopiadas(f.crudo, filesDir, almacen.carpetaDeAdjuntos(), System.currentTimeMillis())
-                if (crudo == null) { withContext(Dispatchers.Main) { avisar("No se pudieron copiar sus imágenes") }; return@launch }
+                if (crudo == null) { withContext(Dispatchers.Main) { avisar(getString(R.string.tareas_sin_imagenes)) }; return@launch }
                 var hecho = false
                 almacen.cambiar { todos ->
                     val o = todos.firstOrNull { it.id == desde.codigo }
@@ -331,7 +373,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                     }
                 }
                 withContext(Dispatchers.Main) {
-                    avisar(if (hecho) "Movida a ${hasta.titulo}" else "La lista cambió mientras tanto; ya está al día. Vuelve a moverla.")
+                    avisar(if (hecho) getString(R.string.tareas_movida_a, hasta.titulo) else getString(R.string.tareas_cambio_mover))
                 }
             }
         }
@@ -359,7 +401,7 @@ class TodasLasTareasActivity : ComponentActivity() {
             app.scope.launch(Dispatchers.IO) {
                 TareaRapidaActivity.alInbox(applicationContext, t)
                 val dice = TareaInteligente.tituloDe(t).ifBlank { Tareas.saneado(t) }
-                withContext(Dispatchers.Main) { avisar("«$dice» añadida a «${TodasLasTareas.INBOX}».") }
+                withContext(Dispatchers.Main) { avisar(getString(R.string.tareas_anadida_a, dice, TodasLasTareas.INBOX)) }
             }
         }
 
@@ -370,14 +412,14 @@ class TodasLasTareasActivity : ComponentActivity() {
             Column(Modifier.fillMaxSize().padding(relleno)) {
                 // Cabecera.
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BotonRedondo(Icons.AutoMirrored.Filled.ArrowBack, "Volver", { finish() }, tamano = 44.dp)
+                    BotonRedondo(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.tareas_volver), { finish() }, tamano = 44.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Tareas", style = MaterialTheme.typography.titleLarge, color = Cristal.tinta, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.tareas_titulo), style = MaterialTheme.typography.titleLarge, color = Cristal.tinta, fontWeight = FontWeight.SemiBold)
                         val v = vista
                         if (v != null) Text(
                             if (palabras.isNotEmpty()) TodasLasTareas.encontradas(v.grupos.sumOf { it.arriba.size + it.hechas.size })
-                            else TodasLasTareas.resumen(v.listas.sumOf { it.pendientes }, v.listas.count { it.filas.isNotEmpty() }),
+                            else TodasLasTareas.resumen(v.listas.sumOf { it.pendientes }, v.listas.size),
                             style = MaterialTheme.typography.labelMedium, color = Cristal.tinta.copy(alpha = 0.7f)
                         )
                     }
@@ -407,7 +449,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                         Spacer(Modifier.width(8.dp))
                         Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                             if (consulta.isEmpty()) Text(
-                                "Buscar… («hoy», «ayer»)", color = Cristal.tinta.copy(alpha = 0.5f),
+                                stringResource(R.string.tareas_buscar), color = Cristal.tinta.copy(alpha = 0.5f),
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                             BasicTextField(
@@ -416,7 +458,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                 cursorBrush = SolidColor(Cristal.tinta), modifier = Modifier.fillMaxWidth()
                             )
                         }
-                        if (consulta.isNotEmpty()) IconButton(onClick = { consulta = "" }) { Icon(Icons.Filled.Close, "Vaciar", tint = Cristal.tinta) }
+                        if (consulta.isNotEmpty()) IconButton(onClick = { consulta = "" }) { Icon(Icons.Filled.Close, stringResource(R.string.tareas_vaciar), tint = Cristal.tinta) }
                     }
                     Spacer(Modifier.height(8.dp))
 
@@ -429,7 +471,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                         Spacer(Modifier.width(8.dp))
                         Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                             if (apuntar.isEmpty()) Text(
-                                "Apunta una tarea en el Inbox", color = Cristal.tinta.copy(alpha = 0.5f),
+                                stringResource(R.string.tareas_apunta), color = Cristal.tinta.copy(alpha = 0.5f),
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                             BasicTextField(
@@ -440,7 +482,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                 keyboardActions = KeyboardActions(onDone = { apuntarAhora() })
                             )
                         }
-                        TextButton(onClick = { apuntarAhora() }, enabled = apuntar.isNotBlank()) { Text("Apuntar") }
+                        TextButton(onClick = { apuntarAhora() }, enabled = apuntar.isNotBlank()) { Text(stringResource(R.string.tareas_apuntar)) }
                     }
 
                     val v = vista
@@ -451,7 +493,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                         modo == VistaDeTareas.Vista.KANBAN -> Tablero(
                             v, palabras, abiertas, Modifier.weight(1f),
                             tarjeta = { l, f, color, mod ->
-                                Tarjeta(l, f, color, palabras, v.hoy, false, ::marcar, { moviendo = l to f }, ::quitar, ::recordar, mod) { a, b -> ponerHora(a, b, null) }
+                                Tarjeta(l, f, color, palabras, v.hoy, false, ::marcar, { moviendo = l to f }, ::quitar, ::recordar, ::llamarA, mod) { a, b -> ponerHora(a, b, null) }
                             },
                             soltar = { desde, f, hasta -> mover(desde, f, hasta) }
                         )
@@ -477,7 +519,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                 val color = Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[g.lista]])
                                 item(key = "e:" + l.clave, span = ancha) { Encabezado(l, g.pendientes(l), color) }
                                 items(g.arriba, key = { "a:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                    Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar, resalte(l, l.filas[i], color)) { a, b -> ponerHora(a, b, null) }
+                                    Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar, ::llamarA, resalte(l, l.filas[i], color)) { a, b -> ponerHora(a, b, null) }
                                 }
                                 if (g.hechas.isNotEmpty()) {
                                     // Buscando, lo hecho que coincide se ve.
@@ -490,11 +532,11 @@ class TodasLasTareasActivity : ComponentActivity() {
                                         ) {
                                             Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = Cristal.tinta.copy(alpha = 0.7f))
                                             Spacer(Modifier.width(6.dp))
-                                            Text("Hechas (${g.hechas.size})", color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+                                            Text(stringResource(R.string.tareas_hechas, g.hechas.size), color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
                                         }
                                     }
                                     if (abierta) items(g.hechas, key = { "h:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
-                                        Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar) { a, b -> ponerHora(a, b, null) }
+                                        Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar, ::llamarA) { a, b -> ponerHora(a, b, null) }
                                     }
                                 }
                                 item(key = "s:" + l.clave, span = ancha) { Spacer(Modifier.height(8.dp)) }
@@ -571,9 +613,9 @@ class TodasLasTareasActivity : ComponentActivity() {
             VistaDeTareas.Vista.entries.forEach { v ->
                 val puesta = v == modo
                 val (icono, nombre) = when (v) {
-                    VistaDeTareas.Vista.TARJETAS -> Icons.Filled.ViewAgenda to "Tarjetas"
-                    VistaDeTareas.Vista.KANBAN -> Icons.Filled.ViewKanban to "Kanban"
-                    VistaDeTareas.Vista.HORARIO -> Icons.Filled.CalendarMonth to "Horario"
+                    VistaDeTareas.Vista.TARJETAS -> Icons.Filled.ViewAgenda to stringResource(R.string.tareas_vista_tarjetas)
+                    VistaDeTareas.Vista.KANBAN -> Icons.Filled.ViewKanban to stringResource(R.string.tareas_vista_kanban)
+                    VistaDeTareas.Vista.HORARIO -> Icons.Filled.CalendarMonth to stringResource(R.string.tareas_vista_horario)
                 }
                 Box(
                     Modifier.size(40.dp).clip(forma).background(if (puesta) Cristal.puesto else Color.Transparent, forma)
@@ -696,7 +738,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                             Encabezado(l, g.pendientes(l), color)
                             g.arriba.forEach { i -> key("a" + l.filas[i].crudo + i) { Agarrable(g.lista, i) } }
                             if (g.arriba.isEmpty() && g.hechas.isEmpty()) Text(
-                                "Suelta aquí una tarea para pasarla a esta lista",
+                                stringResource(R.string.tareas_suelta_aqui),
                                 color = Cristal.tinta.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp)
                             )
@@ -710,7 +752,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                 ) {
                                     Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = Cristal.tinta.copy(alpha = 0.7f))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Hechas (${g.hechas.size})", color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+                                    Text(stringResource(R.string.tareas_hechas, g.hechas.size), color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
                                 }
                                 if (abierta) g.hechas.forEach { i -> key("h" + l.filas[i].crudo + i) { Agarrable(g.lista, i) } }
                             }
@@ -735,8 +777,78 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * **Encender o apagar la llamada de una tarea** (1-nov-2026, [LlamadasDeTareas]): con ella, su
+     * hora (`⏰`) suena como una llamada y no como un aviso. Solo en este teléfono.
+     */
+    private fun cambiarLlamada(l: Lista, f: Fila, llamar: Boolean) {
+        llamanTareas = LlamadasDeTareas.conLlamada(llamanTareas, l.codigo, f.crudo, llamar)
+        val contexto = applicationContext
+        (application as PixPinApp).scope.launch(Dispatchers.IO) { LlamadasGuardadas.ponerTarea(contexto, l.codigo, f.crudo, llamar) }
+        val hora = Tareas.horaDe(f.crudo)
+        android.widget.Toast.makeText(
+            this,
+            if (!llamar) "Ya no te llamará: sonará como un aviso"
+            else if (hora != null) "${LlamadasDeTareas.TELEFONO} ${LlamadasDeTareas.textoDeTarea(hora)}"
+            else "${LlamadasDeTareas.TELEFONO} Te llamará cuando le pongas hora",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    /** **Encender o apagar las llamadas de un grupo** (las de su clase del horario), solo en este teléfono. */
+    private fun cambiarLlamadaDeGrupo(nombre: String, encender: Boolean) {
+        clasesApagadas = LlamadasDeTareas.conGrupo(clasesApagadas, nombre, encender)
+        val contexto = applicationContext
+        (application as PixPinApp).scope.launch(Dispatchers.IO) { LlamadasGuardadas.ponerGrupo(contexto, nombre, encender) }
+        val g = LlamadasDeTareas.deGrupo(nombre, com.forge.pixpin.horario.Asignaturas.NOMBRE_CHAT, horario, clasesApagadas)
+        android.widget.Toast.makeText(
+            this,
+            if (!encender || g == null) "«$nombre» ya no te llamará antes de clase"
+            else "${LlamadasDeTareas.TELEFONO} ${LlamadasDeTareas.textoDeGrupo(g)}",
+            android.widget.Toast.LENGTH_SHORT
+        ).show()
+    }
+
+    /**
+     * **La chapa del teléfono** (1-nov-2026): encendida, «📞 Te llamará …» en el color de lo puesto;
+     * apagada, el teléfono tachado y atenuado. Tocarla la enciende o la apaga.
+     */
+    @Composable
+    private fun ChapaDeLlamada(texto: String, encendida: Boolean, alTocar: () -> Unit) {
+        val forma = RoundedCornerShape(50)
+        val tinta = if (encendida) Cristal.puesto else Cristal.tinta.copy(alpha = 0.55f)
+        Row(
+            Modifier.clip(forma)
+                .background(if (encendida) Cristal.puesto.copy(alpha = 0.16f) else Color.Transparent)
+                .border(1.dp, tinta.copy(alpha = if (encendida) 0.5f else 0.35f), forma)
+                .clickable(onClickLabel = if (encendida) "Apagar la llamada" else "Encender la llamada") { alTocar() }
+                .padding(horizontal = 8.dp, vertical = 3.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                if (encendida) Icons.Filled.Call else Icons.Filled.PhoneDisabled,
+                contentDescription = if (encendida) "Te llamará por teléfono" else "Sin llamada",
+                tint = tinta, modifier = Modifier.size(14.dp)
+            )
+            Spacer(Modifier.width(4.dp))
+            Text(texto, color = tinta, style = MaterialTheme.typography.labelMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+        }
+    }
+
     @Composable
     private fun Encabezado(l: Lista, pendientes: Int, color: Color) {
+        // Si es una asignatura del horario, cuándo llama (y tocar la apaga o la enciende).
+        val llamada = remember(l.titulo, l.chat, horario, clasesApagadas) { LlamadasDeTareas.deGrupo(l.titulo, l.chat, horario, clasesApagadas) }
+        Column(Modifier.fillMaxWidth()) {
+            EncabezadoFila(l, pendientes, color)
+            if (llamada != null) Box(Modifier.padding(start = 20.dp, bottom = 4.dp)) {
+                ChapaDeLlamada(LlamadasDeTareas.textoDeGrupo(llamada), !llamada.apagada) { cambiarLlamadaDeGrupo(l.titulo, llamada.apagada) }
+            }
+        }
+    }
+
+    @Composable
+    private fun EncabezadoFila(l: Lista, pendientes: Int, color: Color) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                 .clickable { MiniActivity.abrir(this, l.codigo) }.padding(horizontal = 6.dp, vertical = 6.dp),
@@ -747,7 +859,7 @@ class TodasLasTareasActivity : ComponentActivity() {
             Spacer(Modifier.width(8.dp))
             MarcaDeCompartida(l)
             Text(
-                l.titulo.ifBlank { "Tareas" }, color = Cristal.tinta, fontWeight = FontWeight.SemiBold,
+                l.titulo.ifBlank { stringResource(R.string.tareas_titulo) }, color = Cristal.tinta, fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
             )
@@ -771,7 +883,7 @@ class TodasLasTareasActivity : ComponentActivity() {
         val verde = Color(com.forge.pixpin.sincro.EntrePersonas.VERDE_COMPARTIDO)
         val autor = TareasCompartidas.autor(l, compartidos)
         Icon(
-            Icons.Filled.Groups, contentDescription = autor?.let { "De un chat compartido, apuntada por $it" } ?: "De un chat compartido",
+            Icons.Filled.Groups, contentDescription = autor?.let { stringResource(R.string.tareas_compartida_por, it) } ?: stringResource(R.string.tareas_compartida),
             tint = verde, modifier = Modifier.size(lado)
         )
         autor?.let { TareasCompartidas.inicial(it) }?.takeIf { it.isNotEmpty() }?.let {
@@ -784,9 +896,11 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun Tarjeta(
         l: Lista, f: Fila, color: Color, palabras: List<String>, hoy: LocalDate, conSuLista: Boolean,
         marcar: (Lista, Fila, Boolean) -> Unit, moverA: () -> Unit, quitar: (Lista, Fila) -> Unit,
-        recordar: (Lista, Fila) -> Unit, modifier: Modifier = Modifier, olvidarHora: (Lista, Fila) -> Unit
+        recordar: (Lista, Fila) -> Unit, llamarA: (Lista, Fila) -> Unit, modifier: Modifier = Modifier, olvidarHora: (Lista, Fila) -> Unit
     ) {
         val hora = remember(f.crudo) { Tareas.horaDe(f.crudo) }
+        // Si llama por teléfono a su hora (1-nov-2026, [LlamadasDeTareas]).
+        val llama = LlamadasDeTareas.llama(llamanTareas, l.codigo, f.crudo)
         val atenuada = if (f.hecha) 0.55f else 1f
         val resalte = Color(0x61B38F00)
         // Tareas inteligentes (PC, 18-oct-2026): el título limpio; la urgencia, las etiquetas y la
@@ -842,6 +956,8 @@ class TodasLasTareasActivity : ComponentActivity() {
                         color = if (pasada) Color(0xFFFF6B6B) else Cristal.puesto,
                         style = MaterialTheme.typography.labelMedium, maxLines = 1
                     )
+                    // Si a esa hora llama por teléfono o solo avisa; un toque lo cambia.
+                    ChapaDeLlamada(if (llama) LlamadasDeTareas.textoDeTarea(hora) else "Llamarme", llama) { cambiarLlamada(l, f, !llama) }
                 }
                 if (pie.isNotEmpty()) Row(verticalAlignment = Alignment.CenterVertically) {
                     // Nombrando su lista (buscando), también si es de un chat compartido.
@@ -853,22 +969,31 @@ class TodasLasTareasActivity : ComponentActivity() {
                 }
             }
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Más", tint = Cristal.tinta.copy(alpha = 0.7f)) }
+                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.tareas_mas), tint = Cristal.tinta.copy(alpha = 0.7f)) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
-                        text = { Text("Mover a…") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) },
+                        text = { Text(stringResource(R.string.tareas_mover_a)) }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) },
                         onClick = { menu = false; moverA() }
                     )
                     if (!f.hecha) DropdownMenuItem(
-                        text = { Text(if (hora == null) "Recordar…" else "Otra hora…") }, leadingIcon = { Icon(Icons.Filled.Alarm, null) },
+                        text = { Text(if (hora == null) stringResource(R.string.tareas_recordar) else stringResource(R.string.tareas_otra_hora)) }, leadingIcon = { Icon(Icons.Filled.Alarm, null) },
                         onClick = { menu = false; recordar(l, f) }
                     )
+                    if (!f.hecha && hora == null) DropdownMenuItem(
+                        text = { Text("Llamarme…") }, leadingIcon = { Icon(Icons.Filled.Call, null) },
+                        onClick = { menu = false; llamarA(l, f) }
+                    )
+                    if (!f.hecha && hora != null) DropdownMenuItem(
+                        text = { Text(if (llama) "No llamarme" else "Llamarme a esa hora") },
+                        leadingIcon = { Icon(if (llama) Icons.Filled.PhoneDisabled else Icons.Filled.Call, null) },
+                        onClick = { menu = false; cambiarLlamada(l, f, !llama) }
+                    )
                     if (hora != null) DropdownMenuItem(
-                        text = { Text("No recordar") }, leadingIcon = { Icon(Icons.Filled.AlarmOff, null) },
+                        text = { Text(stringResource(R.string.tareas_no_recordar)) }, leadingIcon = { Icon(Icons.Filled.AlarmOff, null) },
                         onClick = { menu = false; olvidarHora(l, f) }
                     )
                     DropdownMenuItem(
-                        text = { Text("Quitar") }, leadingIcon = { Icon(Icons.Filled.Close, null) },
+                        text = { Text(stringResource(R.string.tareas_quitar)) }, leadingIcon = { Icon(Icons.Filled.Close, null) },
                         onClick = { menu = false; quitar(l, f) }
                     )
                 }
@@ -909,22 +1034,22 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun MoverA(f: Fila, otras: List<Lista>, cerrar: () -> Unit, elegir: (Lista) -> Unit) {
         AlertDialog(
             onDismissRequest = cerrar,
-            title = { Text("Mover «${f.marcas.titulo.ifBlank { f.texto }.ifBlank { "Tarea" }.take(40)}» a…", maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            title = { Text(stringResource(R.string.tareas_mover_titulo, f.marcas.titulo.ifBlank { f.texto }.ifBlank { stringResource(R.string.tareas_tarea) }.take(40)), maxLines = 2, overflow = TextOverflow.Ellipsis) },
             text = {
-                if (otras.isEmpty()) Text("Aún no hay otros grupos de tareas. Crea una lista de tareas en un chat y saldrá aquí.")
+                if (otras.isEmpty()) Text(stringResource(R.string.tareas_sin_grupos))
                 else LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(otras, key = { it.clave }) { l ->
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { elegir(l) }.padding(horizontal = 8.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(l.titulo.ifBlank { "Tareas" }, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            Text(l.titulo.ifBlank { stringResource(R.string.tareas_titulo) }, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                             Text("  ·  ${l.chat}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = cerrar) { Text("Cerrar") } }
+            confirmButton = { TextButton(onClick = cerrar) { Text(stringResource(R.string.tareas_cerrar)) } }
         )
     }
 
@@ -932,7 +1057,7 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun Vacia(modifier: Modifier) {
         Box(modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) {
             Text(
-                "Aún no hay tareas. Escribe arriba y pulsa Intro: irá al Inbox y desde ahí la pasas a su grupo.",
+                stringResource(R.string.tareas_vacio),
                 color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyLarge
             )
         }
@@ -944,12 +1069,12 @@ class TodasLasTareasActivity : ComponentActivity() {
             modifier.fillMaxWidth().padding(28.dp), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Nada coincide con «${consulta.trim().take(40)}»", color = Cristal.tinta, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.tareas_nada_coincide, consulta.trim().take(40)), color = Cristal.tinta, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Se busca en el texto de cada tarea y en el nombre de su lista y de su chat, sin mirar tildes ni mayúsculas. Prueba con menos palabras, o con «hoy» o «ayer».",
+                stringResource(R.string.tareas_nada_coincide_desc),
                 color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium
             )
-            FilledTonalButton(onClick = vaciar) { Text("Vaciar la búsqueda") }
+            FilledTonalButton(onClick = vaciar) { Text(stringResource(R.string.tareas_vaciar_busqueda)) }
         }
     }
 

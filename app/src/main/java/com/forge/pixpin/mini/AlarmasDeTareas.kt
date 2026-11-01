@@ -56,13 +56,20 @@ object AlarmasDeTareas {
      * **Ya sonó**: el documento con la hora quitada de la tarea pendiente que la llevaba, y su
      * texto para enseñarlo. null si ya no está (hecha, quitada, o la quitó el PC al sonar allí).
      */
-    fun sono(documento: String, hora: LocalDateTime): Pair<String, String>? {
+    fun sono(documento: String, hora: LocalDateTime): Pair<String, String>? =
+        sonada(documento, hora)?.let { it.documento to it.dicho }
+
+    /** Lo que deja una tarea al sonar: el documento sin su hora, lo que dice y su texto crudo de antes. */
+    data class Sonada(val documento: String, val dicho: String, val crudo: String)
+
+    /** Como [sono], con el texto crudo de la tarea (para saber si llama, [LlamadasDeTareas.clave]). */
+    fun sonada(documento: String, hora: LocalDateTime): Sonada? {
         val tareas = Tareas.leer(documento)
         val i = tareas.indexOfFirst { !it.hecha && Tareas.horaDe(it.texto) == hora }
         if (i < 0) return null
         val t = tareas[i]
         val nuevas = tareas.toMutableList().also { it[i] = t.copy(texto = Tareas.conHora(t.texto, null)) }
-        return Tareas.escribir(Cabecera.titulo(documento), nuevas) to dicho(t.texto)
+        return Sonada(Tareas.escribir(Cabecera.titulo(documento), nuevas), dicho(t.texto), t.texto)
     }
 
     /**

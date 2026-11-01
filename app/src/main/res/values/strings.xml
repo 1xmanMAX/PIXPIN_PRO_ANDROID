@@ -1,16 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">PixPin</string>
+    <!-- La app se llama PinDesk (1-nov-2026), como el PC: «PixPin» es de otro producto. Solo cambia
+         el nombre visible; el paquete, el formato .pixpin y Sincronizar siguen igual
+         (docs/nombre-pindesk-android.md). -->
+    <string name="app_name">PinDesk</string>
 
     <!-- Onboarding -->
-    <string name="onboarding_title">Bienvenido a PixPin</string>
+    <string name="onboarding_title">Bienvenido a PinDesk</string>
     <string name="onboarding_subtitle">Captura, anota y fija notas flotantes sobre cualquier app. Necesito estos permisos para funcionar:</string>
     <string name="perm_overlay_title">Mostrar sobre otras apps</string>
     <string name="perm_overlay_desc">Imprescindible: los pines y la bola flotante son ventanas sobre las demás apps.</string>
     <string name="perm_notif_title">Notificaciones</string>
     <string name="perm_notif_desc">Barra persistente con botones de Capturar y Pinear.</string>
     <string name="perm_battery_title">Excluir de ahorro de batería</string>
-    <string name="perm_battery_desc">Evita que el sistema cierre PixPin y desaparezcan tus pines.</string>
+    <string name="perm_battery_desc">Evita que el sistema cierre PinDesk y desaparezcan tus pines.</string>
     <string name="granted">Concedido</string>
     <string name="grant">Conceder</string>
     <string name="start_app">Comenzar</string>
@@ -31,7 +34,7 @@
     <string name="hoja_pauta">Pauta</string>
     <string name="imagen_titulo">Imagen</string>
     <string name="imagen_plano">Plano</string>
-    <string name="app_started">PixPin activo — la bola flotante aparece en tu pantalla</string>
+    <string name="app_started">PinDesk activo — la bola flotante aparece en tu pantalla</string>
     <string name="need_overlay">Concede «Mostrar sobre otras apps» para continuar</string>
     <string name="onboarding_listo">Todo listo. Pulsa Comenzar y aparecerá la bola flotante.</string>
     <string name="permisos_listos">Permisos concedidos</string>
@@ -117,7 +120,7 @@
     <string name="iman_eje">Eje de coordenadas</string>
     <string name="iman_borde_guia">Borde de las guías</string>
     <string name="iman_borde_figura">Borde de las figuras</string>
-    <string name="version">PixPin %1$s (%2$d)</string>
+    <string name="version">PinDesk %1$s (%2$d)</string>
 
     <!-- Modo de captura -->
     <string name="capture_mode_title">Modo de captura</string>
@@ -127,22 +130,22 @@
     <string name="capture_mode_discreet_desc">La sesión se cierra tras cada captura: sin icono permanente ni gasto de batería, pero Android pide permiso cada vez.</string>
 
     <!-- Informe de fallo -->
-    <string name="crash_title">PixPin se cerró de forma inesperada</string>
-    <string name="crash_desc">Hay un informe guardado con el detalle técnico del fallo. Mientras no lo descartes, PixPin no se activará sola al reiniciar el móvil.</string>
+    <string name="crash_title">PinDesk se cerró de forma inesperada</string>
+    <string name="crash_desc">Hay un informe guardado con el detalle técnico del fallo. Mientras no lo descartes, PinDesk no se activará sola al reiniciar el móvil.</string>
     <string name="safe_mode">Modo seguro: los pines guardados no se han restaurado. Descarta el informe de fallo para recuperarlos.</string>
     <string name="crash_share">Compartir informe</string>
     <string name="crash_dismiss">Descartar</string>
 
     <!-- Notificación persistente -->
-    <string name="notif_channel_name">PixPin</string>
+    <string name="notif_channel_name">PinDesk</string>
     <string name="notif_channel_desc">Accesos rápidos de captura y pines</string>
-    <string name="notif_title">PixPin activo</string>
+    <string name="notif_title">PinDesk activo</string>
     <string name="notif_text">Captura y fija notas sobre cualquier app</string>
     <string name="action_capture">Capturar</string>
     <string name="action_pin">Pin</string>
     <string name="action_done">Listo</string>
     <string name="action_cancel">Cancelar</string>
-    <string name="scroll_hint">Desplaza despacio con el dedo. PixPin va cosiendo.</string>
+    <string name="scroll_hint">Desplaza despacio con el dedo. PinDesk va cosiendo.</string>
     <string name="scroll_progress">%.1f pantallas</string>
     <string name="scroll_slower">Vas muy rápido: desplaza más despacio</string>
     <string name="scroll_full">Alto máximo alcanzado</string>
@@ -178,7 +181,7 @@
     <string name="pins_empty">No hay pines activos</string>
     <string name="copied_hex">Copiado %1$s</string>
     <string name="copied_text">Texto copiado</string>
-    <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PixPin</string>
+    <string name="need_overlay_toast">Concede «Mostrar sobre otras apps» en PinDesk</string>
     <string name="cd_clickthrough">Permitir toques a través</string>
     <string name="cd_clickthrough_off">Volver a recibir toques</string>
     <string name="pin_transparente_aviso">Los toques pasan de largo. Usa el botón de la esquina para volver.</string>
@@ -300,7 +303,7 @@
     <string name="cd_tools">Herramientas</string>
     <string name="cd_done">Listo</string>
     <string name="priority_chip">PRIORIDAD</string>
-    <string name="pin_image_default">PixPin</string>
+    <string name="pin_image_default">PinDesk</string>
     <string name="pin_image_priority">Prioridad</string>
     <string name="checklist_seed">Primera tarea\nSegunda tarea</string>
     <string name="ledger_seed">+1000 Sueldo\n-250 Compra</string>
@@ -311,7 +314,7 @@
     <string name="pin_type_table">Tabla</string>
     <string name="pin_type_draw">Dibujo</string>
     <string name="cd_draw_edit">Seguir dibujando</string>
-    <string name="cd_draw_export">Compartir como .excalidraw</string>
+    <string name="cd_draw_export">Compartir como .pixpin</string>
     <string name="cd_redo">Rehacer</string>
     <string name="cd_duplicate">Duplicar</string>
     <string name="cd_delete">Borrar</string>
@@ -358,7 +361,7 @@
     <string name="guardados_escaner_antiguo_titulo">Actualiza el escáner</string>
     <string name="guardados_escaner_antiguo">Tu versión de «Escáner Pro Max» todavía no sabe abrir un escaneo para editarlo. Actualízala, o escanea el documento otra vez.</string>
     <string name="guardados_escaner_no_esta_titulo">Este escaneo ya no está en el escáner</string>
-    <string name="guardados_escaner_no_esta">No se puede reabrir para editarlo: el documento se borró de «Escáner Pro Max», se reinstaló la aplicación o se escaneó antes de que PixPin apuntara qué documento era. El archivo de este mensaje sigue intacto. Puedes escanearlo otra vez o buscarlo en el escáner.</string>
+    <string name="guardados_escaner_no_esta">No se puede reabrir para editarlo: el documento se borró de «Escáner Pro Max», se reinstaló la aplicación o se escaneó antes de que PinDesk apuntara qué documento era. El archivo de este mensaje sigue intacto. Puedes escanearlo otra vez o buscarlo en el escáner.</string>
     <string name="guardados_escaner_escanear_otra_vez">Escanear otra vez</string>
     <string name="guardados_escaner_abrir">Abrir el escáner</string>
     <string name="guardados_escaner_editado">Escaneo actualizado</string>
@@ -368,7 +371,7 @@
     <string name="guardados_lectura_veloz_falta_titulo">Falta «Lectura Veloz»</string>
     <string name="guardados_lectura_veloz_falta">Para leer este documento a toda velocidad hace falta instalar la aplicación «Lectura Veloz». Cuando esté instalada, esta opción la abrirá con el documento ya cargado y desde tu marcador verde.</string>
     <string name="guardados_lectura_veloz_antigua_titulo">Pon al día «Lectura Veloz»</string>
-    <string name="guardados_lectura_veloz_antigua">Tu versión de «Lectura Veloz» todavía no sabe abrir documentos de PixPin. Actualízala y vuelve a probar.</string>
+    <string name="guardados_lectura_veloz_antigua">Tu versión de «Lectura Veloz» todavía no sabe abrir documentos de PinDesk. Actualízala y vuelve a probar.</string>
     <string name="guardados_lectura_veloz_no_se_puede">Este documento no se puede leer en «Lectura Veloz».</string>
     <string name="guardados_lectura_veloz_abrir">Abrir Lectura Veloz</string>
     <string name="guardados_escaner_editado_nuevo">El mensaje ya no estaba: el escaneo editado entra como uno nuevo</string>
@@ -606,7 +609,7 @@
     <string name="plano_faltan_letras">Faltan %1$d letras del plano: toca Aa arriba para añadirlas</string>
     <string name="plano_letras_faltan">Este plano pide letras que no están en el teléfono; sus textos salen con otras parecidas y pueden no caber en sus recuadros:</string>
     <string name="plano_letras_no_falta">No falta ninguna letra que el plano diga por su nombre.</string>
-    <string name="plano_letras_donde">Cópialas de tu PC y añádelas aquí: las SHX están en C:\\Program Files\\Autodesk\\AutoCAD 20xx\\Fonts y las TrueType en C:\\Windows\\Fonts. PixPin no puede traerlas: son de Autodesk y de Microsoft.</string>
+    <string name="plano_letras_donde">Cópialas de tu PC y añádelas aquí: las SHX están en C:\\Program Files\\Autodesk\\AutoCAD 20xx\\Fonts y las TrueType en C:\\Windows\\Fonts. PinDesk no puede traerlas: son de Autodesk y de Microsoft.</string>
     <string name="plano_letras_de_windows">Las que no son .shx no vienen con AutoCAD: son TrueType de Windows y Office. Cópialas de C:\\Windows\\Fonts (el archivo va entre paréntesis) y añádelas con «Añadir letras…».</string>
     <string name="plano_letras_mias">Letras tuyas: %1$d</string>
     <string name="plano_letras_quitar">Quitar las mías</string>
@@ -927,9 +930,9 @@
     <string name="proyecto_paquete_corto">Editable</string>
     <string name="proyecto_paquete">Compartir editable (.pixpin)</string>
     <string name="croquis_exportar_paquete">Editable (.pixpin)</string>
-    <string name="proyecto_desde_compartido">Nuevo proyecto en PixPin</string>
+    <string name="proyecto_desde_compartido">Nuevo proyecto en PinDesk</string>
     <string name="proyecto_desde_compartido_ok">Proyecto creado</string>
-    <string name="formato_html_titulo">Dibujo de PixPin</string>
+    <string name="formato_html_titulo">Dibujo de PinDesk</string>
     <string name="formato_editable">Archivo editable</string>
 
     <!-- Letra de la edición simple -->
@@ -993,7 +996,7 @@
     <string name="guardados_entrar_en_chat">Unirse a un chat compartido</string>
     <string name="guardados_cambiar_nombre">Cambiar nombre</string>
     <string name="atajo_buscar">Buscar</string>
-    <string name="atajo_buscar_largo">PixPin: buscar en todo</string>
+    <string name="atajo_buscar_largo">PinDesk: buscar en todo</string>
     <string name="atajo_capturas">Capturas</string>
     <string name="atajo_capturas_largo">Galería de capturas</string>
     <string name="atajo_grabar">Grabar</string>
@@ -1179,4 +1182,21 @@
     <string name="chat_buscar_ir_al_mensaje">Ir al mensaje</string>
     <string name="chat_buscar_en">en %s</string>
     <string name="sincronizar_boton">Sincronizar</string>
+    <!-- Escuchar la reunión en vivo con Vosk (1-nov-2026, `[voz] en_vivo` del PC). -->
+    <string name="motor_voz_en_vivo">Escuchar la reunión en vivo con</string>
+    <string name="motor_voz_en_vivo_sistema">El del teléfono o Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Para los temas y lo demás de la reunión con Jev. Vosk enseña lo que se va diciendo y cierra cada frase a las décimas de callarse (con Whisper, unos 3 s), sin red. Al elegirlo se bajan %1$d MB (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Se escucha con Vosk, sin red: lo que se va diciendo sale en la pantalla completa de la grabación. Si alguna vez no carga, con el del teléfono o Whisper.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk no tiene modelo de este idioma: se escucha con el del teléfono o Whisper.</string>
+    <string name="motor_voz_en_vivo_bajando">Bajando Vosk… %1$d %%. Mientras tanto se escucha con el del teléfono o Whisper.</string>
+    <string name="motor_voz_en_vivo_fallo">No se pudo bajar Vosk. Vuelve a elegirlo para reintentar.</string>
+    <string name="motor_voz_vosk_borrar">Borrar Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">Libera lo bajado (unos 50 MB en disco por idioma). Se vuelve a bajar al elegirlo.</string>
+    <!-- Si Jev no contesta al repasar o al dictar, se dice por qué (1-nov-2026, como el PC). -->
+    <string name="repaso_jev_fallo">Jev no contestó: los puntos se quedan como estaban.</string>
+    <string name="repaso_jev_fallo_red">Sin conexión.</string>
+    <string name="chat_anotar_fallo_red">Sin conexión: Jev no pudo mirar si había que anotarlo en otro chat. Lo dictado sigue en la caja.</string>
+    <string name="chat_anotar_fallo">Jev no contestó (%1$s). Lo dictado sigue en la caja.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev no contestó. Lo dictado sigue en la caja.</string>
 </resources>

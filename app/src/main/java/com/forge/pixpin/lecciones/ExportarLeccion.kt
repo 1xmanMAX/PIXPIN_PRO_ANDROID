@@ -89,7 +89,7 @@ object ExportarLeccion {
             })
             if (ruta.isNotBlank()) {
                 add(ExportarVisor.pixpin(c, ruta, "$nombre.leccion", junto = adjuntos.map { it.id }))
-                add(ExportarVisor.original(c, ruta, "$nombre.leccion", "Su archivo .leccion, el que leen PixPin y el PC"))
+                add(ExportarVisor.original(c, ruta, "$nombre.leccion", "Su archivo .leccion, el que leen PinDesk y el PC"))
             }
             add(Compartible.Formato("texto", Icons.Filled.TextFields, "TXT", Compartible.NINGUNA, generar = {
                 val destino = File(ExportarVisor.carpeta(c), ExportarVisor.nombre(nombre, "txt")).also { it.writeText(texto(l)) }

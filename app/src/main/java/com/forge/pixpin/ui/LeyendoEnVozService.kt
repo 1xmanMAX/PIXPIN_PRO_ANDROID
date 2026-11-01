@@ -138,7 +138,7 @@ class LeyendoEnVozService : Service() {
             MediaMetadata.Builder()
                 .putString(MediaMetadata.METADATA_KEY_TITLE, e.titulo.ifBlank { "Documento" })
                 .putString(MediaMetadata.METADATA_KEY_ARTIST, donde(e))
-                .putString(MediaMetadata.METADATA_KEY_ALBUM, "PixPin")
+                .putString(MediaMetadata.METADATA_KEY_ALBUM, "PinDesk")
                 .build()
         )
         getSystemService(NotificationManager::class.java).notify(AVISO, aviso(e))

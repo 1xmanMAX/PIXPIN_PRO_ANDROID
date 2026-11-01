@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ko/strings_estado_ia.xml: traducción de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">작동 중</string>
+    <string name="ia_estado_sin_clave">키 없음</string>
+    <string name="ia_estado_desconocido">아직 확인 안 함</string>
+    <string name="ia_estado_clave_mala">키가 유효하지 않습니다(%d)</string>
+    <string name="ia_estado_sin_saldo">계정에 잔액이 없습니다</string>
+    <string name="ia_estado_limite">요청이 너무 많거나 할당량을 다 썼습니다</string>
+    <string name="ia_estado_red">연결 없음</string>
+    <string name="ia_estado_servidor">서비스에 장애가 있습니다(%d)</string>
+    <string name="ia_estado_otro">제대로 응답하지 않습니다(%d)</string>
+    <string name="ia_estado_comprobando">확인 중…</string>
+    <string name="ia_estado_hace_nada">방금</string>
+    <string name="ia_estado_hace_min">%d분 전</string>
+    <string name="ia_estado_hace_horas">%d시간 전</string>
+    <string name="ia_estado_comprobar">지금 확인</string>
+    <string name="ia_estado_claves">키는 설정 → 어시스턴트에서</string>
+    <string name="ia_estado_descripcion">Claude, DeepSeek, Jev 상태</string>
+</resources>

@@ -60,7 +60,7 @@ object Export {
 
     fun copyToClipboard(context: Context, bitmap: Bitmap): Boolean {
         val uri = writeShareFile(context, bitmap) ?: return false
-        val clip = ClipData.newUri(context.contentResolver, "PixPin", uri)
+        val clip = ClipData.newUri(context.contentResolver, "PinDesk", uri)
         val cm = context.getSystemService(ClipboardManager::class.java) ?: return false
         cm.setPrimaryClip(clip)
         return true

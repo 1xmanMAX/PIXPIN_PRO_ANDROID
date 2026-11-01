@@ -55,10 +55,75 @@ object MotorVosk {
         File(carpetaDe(context, modeloPara(idioma)), ".listo").exists()
 
     /**
+     * Si Vosk tiene modelo **de ese idioma** (no el de español de reserva de [modeloPara]): para escuchar
+     * en vivo ([VoskEnVivo]) no vale oír una reunión en inglés con el modelo de español.
+     */
+    fun tieneModelo(idioma: String): Boolean = idioma.substringBefore('-').lowercase() in MODELOS
+
+    /** Lo que pesa bajar el modelo de un idioma, en MB (los pequeños, unos 40). */
+    fun megasDe(idioma: String): Int = when (idioma.substringBefore('-').lowercase()) {
+        "es" -> 40
+        "en" -> 41
+        else -> 40
+    }
+
+    /** Si hay algún modelo bajado (para ofrecer borrarlo). */
+    fun algoBajado(context: Context): Boolean =
+        carpeta(context).listFiles()?.any { File(it, ".listo").exists() } == true
+
+    /**
+     * **Borra los modelos bajados** (1-nov-2026, «Borrar Vosk» de Ajustes › Voz del PC). Se vuelven a bajar
+     * al elegir Vosk o en la primera nota que lo pida.
+     */
+    fun borrar(context: Context) {
+        // El cargado no se cierra: una escucha o una nota pueden estar usándolo (Vosk le cuenta las
+        // referencias, pero un reconocedor nuevo sobre uno cerrado tumbaría la app). Solo se suelta.
+        synchronized(this) { cargado = null }
+        carpeta(context).deleteRecursively()
+    }
+
+    /**
+     * **El modelo ya bajado, cargado** (se reutiliza: cargar tarda un par de segundos). null si no está
+     * bajado o no carga. No baja nada. Hilo de fondo.
+     */
+    fun modelo(context: Context, idioma: String): Model? {
+        val carpeta = carpetaDe(context, modeloPara(idioma))
+        if (!File(carpeta, ".listo").exists()) return null
+        return runCatching { cargar(carpeta) }.getOrNull()
+    }
+
+    private fun cargar(carpeta: File): Model = synchronized(this) {
+        cargado?.takeIf { it.first == carpeta.absolutePath }?.second ?: run {
+            LibVosk.setLogLevel(LogLevel.WARNINGS)
+            Model(carpeta.absolutePath).also { cargado = carpeta.absolutePath to it }
+        }
+    }
+
+    /**
+     * **Un reconocedor de corriente para escuchar en vivo** ([VoskEnVivo.Corriente]), con el tiempo de cada
+     * palabra y **sin las palabras del parcial** (con ellas Vosk tarda 1,5-2 s en darlo; medido en el PC).
+     * null si el modelo de ese idioma no está bajado o no carga. Hay que cerrarlo ([ReconocedorEnVivo.close]).
+     */
+    fun reconocedorEnVivo(context: Context, idioma: String): ReconocedorEnVivo? {
+        if (!tieneModelo(idioma)) return null
+        val m = modelo(context, idioma) ?: return null
+        return runCatching { ReconocedorEnVivo(Recognizer(m, HERCIOS).apply { setWords(true) }) }.getOrNull()
+    }
+
+    /** El reconocedor de Vosk de verdad, para [VoskEnVivo.Corriente]. */
+    class ReconocedorEnVivo internal constructor(private val rec: Recognizer) : VoskEnVivo.Reconocedor, AutoCloseable {
+        override fun comer(muestras: ShortArray): Boolean = rec.acceptWaveForm(muestras, muestras.size)
+        override fun resultado(): String = rec.result
+        override fun parcial(): String = rec.partialResult
+        override fun acabar(): String = rec.finalResult
+        override fun close() { runCatching { rec.close() } }
+    }
+
+    /**
      * Baja y desempaqueta el modelo si falta. [avance] va de 0 a 1. Devuelve la carpeta, o
      * null si no se pudo (sin red, sin sitio). Hilo de fondo.
      */
-    fun asegurarModelo(context: Context, idioma: String, avance: (Float) -> Unit = {}): File? {
+    fun asegurarModelo(context: Context, idioma: String, cancelar: () -> Boolean = { false }, avance: (Float) -> Unit = {}): File? {
         val modelo = modeloPara(idioma)
         val destino = carpetaDe(context, modelo)
         if (File(destino, ".listo").exists()) return destino
@@ -72,6 +137,8 @@ object MotorVosk {
                     val buf = ByteArray(64 * 1024)
                     var leidos = 0L
                     while (true) {
+                        // Volver a «lo de siempre» en Ajustes corta la descarga a medias.
+                        if (cancelar()) throw java.io.InterruptedIOException("cancelada")
                         val n = entrada.read(buf); if (n < 0) break
                         salida.write(buf, 0, n); leidos += n
                         avance(0.9f * leidos / total)
@@ -165,12 +232,7 @@ object MotorVosk {
      */
     fun reconocer(context: Context, pcm: File, idioma: String, avance: (Float) -> Unit = {}): List<Transcriptor.Segmento>? {
         val carpeta = asegurarModelo(context, idioma) ?: return null
-        val modelo = synchronized(this) {
-            cargado?.takeIf { it.first == carpeta.absolutePath }?.second ?: run {
-                LibVosk.setLogLevel(LogLevel.WARNINGS)
-                Model(carpeta.absolutePath).also { cargado = carpeta.absolutePath to it }
-            }
-        }
+        val modelo = cargar(carpeta)
         val segmentos = ArrayList<Transcriptor.Segmento>()
         val total = pcm.length().coerceAtLeast(1)
         fun apuntar(texto: String) = apuntar(texto, segmentos)

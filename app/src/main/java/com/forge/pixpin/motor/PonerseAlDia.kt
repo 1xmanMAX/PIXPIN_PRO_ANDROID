@@ -75,7 +75,7 @@ fun PonerseAlDia(chat: String, rel: String, onCerrar: () -> Unit, alTraer: () ->
                 when {
                     mirando -> Fila("Buscando tus aparatos en la Wi-Fi…", cargando = true)
                     estados.isEmpty() -> Text(
-                        "No se encontró ninguno. Comprueba que el otro aparato tenga PixPin abierto " +
+                        "No se encontró ninguno. Comprueba que el otro aparato tenga PinDesk abierto " +
                             "y esté en esta misma Wi-Fi; si acaba de encenderse, su anuncio tarda unos segundos.",
                         style = MaterialTheme.typography.bodyMedium
                     )

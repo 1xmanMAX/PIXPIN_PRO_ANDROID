@@ -250,6 +250,7 @@
         android:fullBackupContent="@xml/copia_de_seguridad"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.PixPin">
 
@@ -338,7 +339,7 @@
         <activity
             android:name=".guardados.SoltarActivity"
             android:exported="false"
-            android:label="Soltar en PixPin"
+            android:label="Soltar en PinDesk"
             android:resizeableActivity="true"
             android:taskAffinity="${applicationId}.soltar"
             android:theme="@style/Theme.PixPin" />
@@ -355,7 +356,7 @@
         <activity
             android:name=".atajos.BuscarActivity"
             android:exported="false"
-            android:label="Buscar en PixPin"
+            android:label="Buscar en PinDesk"
             android:excludeFromRecents="true"
             android:autoRemoveFromRecents="true"
             android:taskAffinity="${applicationId}.buscar"

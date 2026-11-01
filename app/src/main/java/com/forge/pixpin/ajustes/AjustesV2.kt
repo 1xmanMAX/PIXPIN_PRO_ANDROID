@@ -87,13 +87,18 @@ fun AjustesV2(
      * pantalla aparte delante de los ajustes. Solo en la portada, sin buscar.
      */
     cabecera: @Composable () -> Unit = {},
+    /**
+     * La sección abierta al entrar (1-nov-2026): el nombre de una [Seccion], o null para la
+     * portada. «Claves en Ajustes → Asistente» de los puntitos de las IA abre `ASISTENTE`.
+     */
+    seccionInicial: String? = null,
     tarjeta: @Composable (id: String) -> Unit
 ) {
     val app = LocalContext.current.applicationContext as PixPinApp
     val scope = rememberCoroutineScope()
     val ajustes by app.settings.settings.collectAsState(initial = Settings())
     var busqueda by rememberSaveable { mutableStateOf("") }
-    var abierta by rememberSaveable { mutableStateOf<String?>(null) }
+    var abierta by rememberSaveable { mutableStateOf(seccionInicial?.takeIf { n -> Seccion.entries.any { it.name == n } }) }
     val seccion = abierta?.let { n -> Seccion.entries.firstOrNull { it.name == n } }
 
     // **Deshacer**: se mira lo guardado y se apunta cómo estaba antes de cada cambio. Vive lo que
@@ -124,7 +129,7 @@ fun AjustesV2(
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(com.forge.pixpin.R.string.cd_close))
                 }
                 Text(
-                    if (seccion != null && busqueda.isEmpty()) seccion.titulo else stringResource(com.forge.pixpin.R.string.ajustes_titulo),
+                    if (seccion != null && busqueda.isEmpty()) tituloDe(seccion) else stringResource(com.forge.pixpin.R.string.ajustes_titulo),
                     style = MaterialTheme.typography.headlineSmall,
                     modifier = Modifier.weight(1f)
                 )
@@ -135,7 +140,7 @@ fun AjustesV2(
                 ) {
                     Icon(Icons.AutoMirrored.Filled.Undo, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(Modifier.width(4.dp))
-                    Text("Deshacer", maxLines = 1)
+                    Text(stringResource(com.forge.pixpin.R.string.ajustes_deshacer), maxLines = 1)
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -143,10 +148,10 @@ fun AjustesV2(
                 value = busqueda,
                 onValueChange = { busqueda = it.take(120) },
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Buscar en los ajustes") },
+                placeholder = { Text(stringResource(com.forge.pixpin.R.string.ajustes_buscar)) },
                 leadingIcon = { Icon(Icons.Filled.Search, null) },
                 trailingIcon = {
-                    if (busqueda.isNotEmpty()) IconButton(onClick = { busqueda = "" }) { Icon(Icons.Filled.Close, "Borrar") }
+                    if (busqueda.isNotEmpty()) IconButton(onClick = { busqueda = "" }) { Icon(Icons.Filled.Close, stringResource(com.forge.pixpin.R.string.ajustes_borrar)) }
                 },
                 singleLine = true,
                 shape = RoundedCornerShape(18.dp)
@@ -177,11 +182,11 @@ private fun FilaDeSeccion(s: Seccion, ajustes: Settings, alTocar: () -> Unit) {
         ) {
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(s.titulo, style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                    Text(tituloDe(s), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
                     if (algoMovido) Punto(Modifier.padding(start = 8.dp))
                 }
                 Text(
-                    s.resumen,
+                    resumenDe(s),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp)
@@ -200,14 +205,14 @@ private fun ContenidoDeSeccion(s: Seccion, ajustes: Settings, tarjeta: @Composab
     val claves = CatalogoDeAjustes.clavesARestablecer(s, ajustes)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Text(
-            s.resumen,
+            resumenDe(s),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.weight(1f).padding(end = 8.dp)
         )
         // «Restablecer <sección>»: solo lo de esta sección, y solo si hay algo movido.
         OutlinedButton(enabled = claves.isNotEmpty(), onClick = { scope.launch { app.settings.quitar(claves) } }) {
-            Text("Restablecer ${s.titulo}", maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(stringResource(com.forge.pixpin.R.string.ajustes_restablecer, tituloDe(s)), maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
     }
     Spacer(Modifier.height(12.dp))
@@ -224,7 +229,7 @@ private fun Resultados(busqueda: String, ajustes: Settings, tarjeta: @Composable
     val halladas = remember(busqueda) { CatalogoDeAjustes.buscar(busqueda) }
     if (halladas.isEmpty()) {
         Text(
-            "Nada con «${busqueda.trim()}»",
+            stringResource(com.forge.pixpin.R.string.ajustes_nada_con, busqueda.trim()),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(8.dp)
         )
@@ -232,7 +237,7 @@ private fun Resultados(busqueda: String, ajustes: Settings, tarjeta: @Composable
     }
     for ((s, opciones) in halladas) {
         Text(
-            s.titulo,
+            tituloDe(s),
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.padding(start = 4.dp, bottom = 8.dp)
@@ -255,16 +260,61 @@ private fun ConPunto(o: Opcion, ajustes: Settings, contenido: @Composable () -> 
             Spacer(Modifier.weight(1f))
             Punto()
             Text(
-                "Cambiado",
+                stringResource(com.forge.pixpin.R.string.ajustes_cambiado),
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(start = 6.dp)
             )
-            TextButton(onClick = { scope.launch { app.settings.quitar(o.claves) } }) { Text("De fábrica", maxLines = 1) }
+            TextButton(onClick = { scope.launch { app.settings.quitar(o.claves) } }) { Text(stringResource(com.forge.pixpin.R.string.ajustes_de_fabrica), maxLines = 1) }
         }
     }
     Spacer(Modifier.height(12.dp))
 }
+
+/**
+ * **El nombre y el resumen de una sección, en el idioma puesto** (1-nov-2026). Los de
+ * [CatalogoDeAjustes.Seccion] siguen en español: son por donde busca el buscador, y se prueban sin Android.
+ */
+@Composable
+private fun tituloDe(s: Seccion): String = stringResource(
+    when (s) {
+        Seccion.CAPTURAR -> com.forge.pixpin.R.string.ajustes_sec_capturar
+        Seccion.PDF -> com.forge.pixpin.R.string.ajustes_sec_pdf
+        Seccion.DIBUJAR -> com.forge.pixpin.R.string.ajustes_sec_dibujar
+        Seccion.PINEAR -> com.forge.pixpin.R.string.ajustes_sec_pinear
+        Seccion.VOZ -> com.forge.pixpin.R.string.ajustes_sec_voz
+        Seccion.ASISTENTE -> com.forge.pixpin.R.string.ajustes_sec_asistente
+        Seccion.ASPECTO -> com.forge.pixpin.R.string.ajustes_sec_aspecto
+    }
+)
+
+/** El nombre de cada sitio de las barras en el idioma puesto; [Sitio.rotulo] es el español. */
+@Composable
+private fun rotuloDe(s: Sitio): String = when (s) {
+    Sitio.PANTALLA -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_pantalla)
+    Sitio.PIN -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_pin)
+    Sitio.LIENZO -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_lienzo)
+    Sitio.LECTOR -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_lector)
+    Sitio.PLANO -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_plano)
+    Sitio.DOCUMENTO -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_documento)
+    Sitio.WEB -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_web)
+    Sitio.NOTA -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_nota)
+    Sitio.MODELO -> stringResource(com.forge.pixpin.R.string.ajustes_sitio_modelo)
+    else -> s.rotulo
+}
+
+@Composable
+private fun resumenDe(s: Seccion): String = stringResource(
+    when (s) {
+        Seccion.CAPTURAR -> com.forge.pixpin.R.string.ajustes_sec_capturar_resumen
+        Seccion.PDF -> com.forge.pixpin.R.string.ajustes_sec_pdf_resumen
+        Seccion.DIBUJAR -> com.forge.pixpin.R.string.ajustes_sec_dibujar_resumen
+        Seccion.PINEAR -> com.forge.pixpin.R.string.ajustes_sec_pinear_resumen
+        Seccion.VOZ -> com.forge.pixpin.R.string.ajustes_sec_voz_resumen
+        Seccion.ASISTENTE -> com.forge.pixpin.R.string.ajustes_sec_asistente_resumen
+        Seccion.ASPECTO -> com.forge.pixpin.R.string.ajustes_sec_aspecto_resumen
+    }
+)
 
 @Composable
 private fun Punto(modifier: Modifier = Modifier) {
@@ -282,12 +332,12 @@ private fun HerramientasPorSitioCard(ajustes: Settings, tarjeta: @Composable (St
     var donde by rememberSaveable { mutableStateOf<String?>(null) }
     val sitio = donde?.let { n -> Sitio.entries.firstOrNull { it.name == n } }
     Text(
-        "Herramientas: dónde",
+        stringResource(com.forge.pixpin.R.string.ajustes_herramientas_donde),
         style = MaterialTheme.typography.titleSmall,
         modifier = Modifier.padding(start = 4.dp)
     )
     Text(
-        "En todos los sitios a la vez o en uno solo, para que no salgan siempre todas.",
+        stringResource(com.forge.pixpin.R.string.ajustes_herramientas_donde_desc),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 4.dp, top = 2.dp)
@@ -296,7 +346,7 @@ private fun HerramientasPorSitioCard(ajustes: Settings, tarjeta: @Composable (St
         Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        FilterChip(selected = sitio == null, onClick = { donde = null }, label = { Text("Todos") })
+        FilterChip(selected = sitio == null, onClick = { donde = null }, label = { Text(stringResource(com.forge.pixpin.R.string.ajustes_todos)) })
         for (s in Sitio.entries) {
             val id = "barra-${s.nombre}"
             FilterChip(
@@ -304,7 +354,7 @@ private fun HerramientasPorSitioCard(ajustes: Settings, tarjeta: @Composable (St
                 onClick = { donde = s.name },
                 label = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(s.rotulo)
+                        Text(rotuloDe(s))
                         CatalogoDeAjustes.porId(id)?.let { if (CatalogoDeAjustes.cambiada(it, ajustes)) Punto(Modifier.padding(start = 6.dp)) }
                     }
                 }
@@ -327,9 +377,9 @@ fun HerramientasEnTodosCard() {
     val reparto = ajustes.reparto
     Card(Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Herramientas en todos los sitios", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(com.forge.pixpin.R.string.ajustes_herramientas_todos), style = MaterialTheme.typography.titleSmall)
             Text(
-                "Una apagada aquí no sale en ninguna barra: ni en el lienzo, ni en el pin, ni en la pantalla, ni en el lector.",
+                stringResource(com.forge.pixpin.R.string.ajustes_herramientas_todos_desc),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)

@@ -211,7 +211,7 @@ object SubidaALaGrabacion {
         var negadas = 0
         var reintentar = false
         var motivo: String? = null
-        if (!con.sabeDeCamara) return Pasada(0, 0, true, "El PC no sabe de la cámara del móvil: actualiza PixPin en el PC")
+        if (!con.sabeDeCamara) return Pasada(0, 0, true, "El PC no sabe de la cámara del móvil: actualiza PinDesk en el PC")
         // Lo de este PC y lo que va por su hora (a cualquier PC del grupo, §12.4).
         val tomas = cola.pendientes().filter { it.pc == pc || it.pc.isEmpty() }
         // **Por su hora, con el reloj medido ahora** si la toma no lo sabía: lo que va adelantado este

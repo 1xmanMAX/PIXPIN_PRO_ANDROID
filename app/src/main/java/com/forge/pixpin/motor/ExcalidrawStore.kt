@@ -207,6 +207,47 @@ object ExcalidrawStore {
         )
     }.getOrNull()
 
+    /**
+     * **Un `.excalidraw` suelto, para abrirlo en el lienzo** (1-nov-2026). El editable de un lienzo
+     * ya es el `.pixpin` (PC `1984938a`), pero los `.excalidraw` que uno tenga se siguen abriendo,
+     * como en el PC: el de excalidraw.com o el de antes del PC, con sus fotos en `dataURL`
+     * ([importar]), y si no se deja, sus figuras sin las fotos ([escenaSinFotos]). En texto o
+     * comprimido (`.excalidraw.gz`, el de este aparato).
+     */
+    fun leerSuelto(context: Context, archivo: File): Scene? {
+        val bytes = runCatching { archivo.readBytes() }.getOrNull() ?: return null
+        val texto = textoDe(bytes) ?: return null
+        return importar(context, texto) ?: escenaSinFotos(texto)
+    }
+
+    /** Los bytes de un `.excalidraw` en texto, descomprimidos si vienen en gzip. */
+    fun textoDe(bytes: ByteArray): String? = runCatching {
+        val gzip = bytes.size >= 2 && bytes[0] == 0x1f.toByte() && bytes[1] == 0x8b.toByte()
+        if (gzip) GZIPInputStream(bytes.inputStream()).use { it.readBytes().decodeToString() } else bytes.decodeToString()
+    }.getOrNull()
+
+    /**
+     * **El texto de un `.excalidraw` como escena, sin sus fotos**: lo que se lee sin tocar el disco.
+     * Vale para el `.excalidraw` de Excalidraw o del PC (el papel en `appState.viewBackgroundColor`)
+     * y para la escena de aquí (`backgroundColor`). Cada figura por su cuenta: una que no se entienda
+     * (de una versión más nueva) se queda fuera y no se lleva las demás. Null si no es un lienzo.
+     */
+    fun escenaSinFotos(texto: String): Scene? = runCatching {
+        val raiz = ExcalidrawJson.parseToJsonElement(texto) as? kotlinx.serialization.json.JsonObject ?: return null
+        val figuras = raiz["elements"] as? kotlinx.serialization.json.JsonArray ?: return null
+        fun cadena(e: kotlinx.serialization.json.JsonElement?) = (e as? kotlinx.serialization.json.JsonPrimitive)?.takeIf { it.isString }?.content
+        val fondo = cadena(raiz["backgroundColor"])
+            ?: cadena((raiz["appState"] as? kotlinx.serialization.json.JsonObject)?.get("viewBackgroundColor"))?.takeIf { it != "transparent" }
+            ?: "#ffffff"
+        // Sin `seed` (un `.excalidraw` hecho a mano o muy viejo) se le pone uno fijo, sacado de su id.
+        fun conSemilla(e: kotlinx.serialization.json.JsonElement) =
+            if (e is kotlinx.serialization.json.JsonObject && "seed" !in e)
+                kotlinx.serialization.json.JsonObject(e + ("seed" to kotlinx.serialization.json.JsonPrimitive((cadena(e["id"]) ?: "").hashCode() and 0x7fffffff)))
+            else e
+        val elementos = figuras.mapNotNull { runCatching { ExcalidrawJson.decodeFromJsonElement(Element.serializer(), conSemilla(it)) }.getOrNull() }
+        Scene(elements = IdsRepetidos.arreglar(elementos), backgroundColor = fondo)
+    }.getOrNull()
+
     const val EXPORT_TYPE = "excalidraw"
     const val EXPORT_VERSION = 2
     const val MIME_TYPE = "application/vnd.excalidraw+json"

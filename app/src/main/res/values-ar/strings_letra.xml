@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ar/strings_letra.xml: traducción de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">مزامنة تلقائية</string>
+    <string name="letra_sola_empieza">جارٍ مزامنة الكلمات تلقائيًا: الاستماع إلى الأغنية…</string>
+    <string name="letra_sola_avance">جارٍ مزامنة الكلمات… %1$d %%</string>
+    <string name="letra_sola_bajando">جارٍ تنزيل مُعرّف الكلام… %1$d %%</string>
+    <string name="letra_sola_parada">توقفت المزامنة</string>
+    <string name="letra_sola_ocupada">تجري مزامنة أغنية أخرى بالفعل</string>
+    <string name="letra_sola_sin_reconocedor">لا يستطيع هذا الهاتف الاستماع إلى الأغنية بـWhisper. زامنها بالنقر مع الساعة</string>
+    <string name="letra_sola_falta_modelo">لضبط التوقيت تلقائيًا، اضغط «مزامنة تلقائية» (الترجمة): ينزّل مُعرّف الكلام مرة واحدة (نحو %1$d MB)</string>
+    <string name="letra_sola_sin_red">تعذّر تنزيل مُعرّف الكلام: تحقق من الاتصال واضغط «مزامنة تلقائية» مجددًا</string>
+    <string name="letra_sola_no_se_oye">لم يُتعرّف على الكلمات في الأغنية. زامنها بالنقر مع الساعة</string>
+    <string name="letra_sola_fallo">تعذّرت مزامنة الكلمات</string>
+    <string name="letra_sola_cambio">تغيّرت الكلمات أثناء المزامنة: اضغط «مزامنة تلقائية» مجددًا</string>
+    <string name="letra_sola_hecha">زُومنت الكلمات تلقائيًا (سُمع %1$d من %2$d سطر). إن كان أحدها منحرفًا فأصلحه بالساعة</string>
+    <string name="letra_sola_hecha_poca">زُومنت الكلمات تقريبيًا: سُمع %1$d فقط من %2$d سطر. أصلحها بالساعة</string>
+    <string name="letra_con_tiempos_lista_de">أصبح لكلمات «%1$s» توقيتها (سُمع %2$d من %3$d سطر). افتحها للمراجعة.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">لكلمات «%1$s» توقيت تقريبي: سُمع %2$d فقط من %3$d سطر. أصلحها بالساعة.</string>
+    <string name="letra_volver">رجوع</string>
+    <string name="letra_tema_claro">سمة فاتحة</string>
+    <string name="letra_tema_oscuro">سمة داكنة</string>
+</resources>

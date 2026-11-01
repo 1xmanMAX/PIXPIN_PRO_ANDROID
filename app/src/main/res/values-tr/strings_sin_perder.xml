@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-tr/strings_sin_perder.xml: traducción de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">Telefonda yer azalıyor</string>
+    <string name="sin_perder_disco_lleno">Telefon neredeyse dolu: video kapatıldı, ses devam ediyor</string>
+    <string name="sin_perder_sin_sitio_para_video">Çok az yer kaldı: yalnızca ses kaydediliyor</string>
+    <string name="sin_perder_video_cortado">Video kesildi; ses hâlâ kaydediliyor</string>
+    <string name="sin_perder_hueco">Telefon uygulamayı %1$d dk durdurdu; dönüşte kayıt sürdü</string>
+    <string name="sin_perder_quedo_para_recuperar">Kayıt kaydedilemedi: güvenle saklanıyor ve PinDesk\'i açtığınızda kurtarmanız önerilecek</string>
+    <string name="cortada_titulo">Yarıda kalan kayıt</string>
+    <string name="cortada_texto">Bir kayıt yarıda kaldı (%1$s, %2$d dk)</string>
+    <string name="cortada_perdida">Yarıda kalan bir kayıttan (%1$s) yalnızca açılamayan bir video kaldı</string>
+    <string name="cortada_en_chat">“%1$s” içinde</string>
+    <string name="cortada_recuperar">Kurtar</string>
+    <string name="cortada_descartar">At</string>
+    <string name="cortada_luego">Sonra</string>
+    <string name="cortada_recuperando">Kurtarılıyor…</string>
+    <string name="cortada_recuperada">Kayıt kurtarıldı: artık kendi sohbetinde</string>
+    <string name="cortada_fallo">Kayıt kurtarılamadı: olduğu gibi kalıyor</string>
+    <string name="cortada_descartar_seguro">“%1$s” içinde kaydedilenler silinsin mi? Bu geri alınamaz.</string>
+    <string name="cortada_no">Hayır</string>
+    <string name="cortada_si_borrar">Evet, sil</string>
+    <string name="cortada_aviso">Kurtarmak ya da atmak için PinDesk\'i açın</string>
+</resources>

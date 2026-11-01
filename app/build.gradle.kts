@@ -22,8 +22,8 @@ android {
         // que Android no tenía forma de saber que uno era más nuevo que otro
         // —a veces se niega a instalar encima— y desde el móvil no había manera
         // de comprobar cuál estaba puesto.
-        versionCode = 252
-        versionName = "0.153.0"
+        versionCode = 253
+        versionName = "0.154.0"
     }
 
     // **La clave de subida a Google Play** (30-oct-2026): fuera del repositorio. Se lee de

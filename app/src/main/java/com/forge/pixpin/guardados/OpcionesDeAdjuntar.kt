@@ -24,29 +24,33 @@ package com.forge.pixpin.guardados
  */
 object OpcionesDeAdjuntar {
 
-    enum class Adjunto(val rotulo: String, val palabras: String, val color: Long) {
-        FOTO("Foto o vídeo", "imagen foto video galeria photo image", 0xFF0A6CD6),
-        ARCHIVO("Archivo", "pdf documento word excel fichero file", 0xFF636366),
-        LIENZO("Lienzo", "dibujo pizarra canvas draw nuevo", 0xFFC77700),
-        NOTA("Nota", "nota markdown texto note", 0xFF248A3D),
-        TAREAS("Lista de tareas", "tareas lista todo checklist mini-app", 0xFF1E7A4A),
-        CONVERSACION("Conversación", "conversacion voz turnos traducir conversation", 0xFF9A3FC4),
-        ESCANEAR("Escanear", "escanear camara documento captura scan", 0xFFC93C35),
-        CLASE("Grabar clase", "grabar clase reunion audio capturas", 0xFFB0306A),
-        FIGURA("Figura", "figura plantilla biblioteca dibujo shape mejorar", 0xFF8E44B8),
-        PAGINA("Página de un proyecto", "pagina hoja proyecto page", 0xFF5B6B7F),
-        PROYECTO("Proyecto entero", "proyecto entero project", 0xFF5B6B7F),
-        CARPETA("Carpeta de páginas", "carpeta cuaderno diario libreta folder notebook", 0xFF5B6B7F),
-        CROQUIS("Croquis 3D", "croquis 3d modelo boceto", 0xFF5B6B7F),
-        MUSICA("Música", "musica cancion letra karaoke lrc mp3 song lyrics", 0xFF5B6B7F),
-        TELEPRONTER("Teleprónter", "teleprompter leer en voz alta", 0xFF5B6B7F),
-        PRONUNCIAR("Pronunciar", "pronunciar ingles pronounce", 0xFF5B6B7F),
+    /**
+     * [rotulo] es el español, el que se busca; [texto], el rótulo en el idioma puesto (1-nov-2026).
+     * Las [palabras] llevan también las inglesas, para que el buscador sirva en los dos idiomas.
+     */
+    enum class Adjunto(val rotulo: String, @androidx.annotation.StringRes val texto: Int, val palabras: String, val color: Long) {
+        FOTO("Foto o vídeo", com.forge.pixpin.R.string.adjuntar_foto, "imagen foto video galeria photo image gallery", 0xFF0A6CD6),
+        ARCHIVO("Archivo", com.forge.pixpin.R.string.adjuntar_archivo, "pdf documento word excel fichero file document", 0xFF636366),
+        LIENZO("Lienzo", com.forge.pixpin.R.string.adjuntar_lienzo, "dibujo pizarra canvas draw nuevo board new", 0xFFC77700),
+        NOTA("Nota", com.forge.pixpin.R.string.adjuntar_nota, "nota markdown texto note text", 0xFF248A3D),
+        TAREAS("Lista de tareas", com.forge.pixpin.R.string.adjuntar_tareas, "tareas lista todo checklist mini-app tasks task list to-do", 0xFF1E7A4A),
+        CONVERSACION("Conversación", com.forge.pixpin.R.string.adjuntar_conversacion, "conversacion voz turnos traducir conversation voice translate", 0xFF9A3FC4),
+        ESCANEAR("Escanear", com.forge.pixpin.R.string.adjuntar_escanear, "escanear camara documento captura scan camera", 0xFFC93C35),
+        CLASE("Grabar clase", com.forge.pixpin.R.string.adjuntar_clase, "grabar clase reunion audio capturas record class meeting", 0xFFB0306A),
+        FIGURA("Figura", com.forge.pixpin.R.string.adjuntar_figura, "figura plantilla biblioteca dibujo shape mejorar template library", 0xFF8E44B8),
+        PAGINA("Página de un proyecto", com.forge.pixpin.R.string.adjuntar_pagina, "pagina hoja proyecto page sheet project", 0xFF5B6B7F),
+        PROYECTO("Proyecto entero", com.forge.pixpin.R.string.adjuntar_proyecto, "proyecto entero project whole", 0xFF5B6B7F),
+        CARPETA("Carpeta de páginas", com.forge.pixpin.R.string.adjuntar_carpeta, "carpeta cuaderno diario libreta folder notebook diary", 0xFF5B6B7F),
+        CROQUIS("Croquis 3D", com.forge.pixpin.R.string.adjuntar_croquis, "croquis 3d modelo boceto sketch model", 0xFF5B6B7F),
+        MUSICA("Música", com.forge.pixpin.R.string.adjuntar_musica, "musica cancion letra karaoke lrc mp3 song lyrics music", 0xFF5B6B7F),
+        TELEPRONTER("Teleprónter", com.forge.pixpin.R.string.adjuntar_telepronter, "teleprompter leer en voz alta read aloud", 0xFF5B6B7F),
+        PRONUNCIAR("Pronunciar", com.forge.pixpin.R.string.adjuntar_pronunciar, "pronunciar ingles pronounce english", 0xFF5B6B7F),
         /**
          * **Sin «Cámara para la reunión del PC»** (29-oct-2026, pedido del usuario): aquí quedaba
          * demasiado escondida. Ahora es el botón de la cámara junto al «+» de la lista de chats, que
          * solo sale mientras un PC del grupo graba. Ver `ui/ListaDeChats`.
          */
-        MINIAPPS("Mini apps", "mini-app cronometro temporizador contador ruleta gastos alarma", 0xFF5B6B7F);
+        MINIAPPS("Mini apps", com.forge.pixpin.R.string.adjuntar_miniapps, "mini-app cronometro temporizador contador ruleta gastos alarma stopwatch timer counter wheel expenses alarm", 0xFF5B6B7F);
 
         /** Donde busca el buscador: el nombre y sus sinónimos, sin tildes. */
         val buscable: String = sinAcentos("$rotulo $palabras")

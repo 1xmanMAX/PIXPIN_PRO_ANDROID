@@ -55,7 +55,7 @@ object CompartirNativo {
         }
         intent.type = mime
         titulo?.let { intent.putExtra(Intent.EXTRA_TITLE, it) }
-        intent.clipData = ClipData.newUri(context.contentResolver, titulo ?: "PixPin", uris[0]).apply {
+        intent.clipData = ClipData.newUri(context.contentResolver, titulo ?: "PinDesk", uris[0]).apply {
             for (u in uris.drop(1)) addItem(ClipData.Item(u))
         }
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inglés de values/strings_letra.xml (1-nov-2026), con las palabras de `musica-sola-*` del PC. -->
+<resources>
+    <string name="letra_sola">Auto-sync</string>
+    <string name="letra_sola_empieza">Auto-syncing the lyrics: listening to the song…</string>
+    <string name="letra_sola_avance">Syncing the lyrics… %1$d %%</string>
+    <string name="letra_sola_bajando">Downloading the speech recognizer… %1$d %%</string>
+    <string name="letra_sola_parada">Sync stopped</string>
+    <string name="letra_sola_ocupada">Another song is already being synced</string>
+    <string name="letra_sola_sin_reconocedor">This phone can\'t listen to the song with Whisper. Sync it by tapping with the clock</string>
+    <string name="letra_sola_falta_modelo">To set the timings automatically, tap “Auto-sync” (the subtitles): it downloads the speech recognizer once (about %1$d MB)</string>
+    <string name="letra_sola_sin_red">Could not download the speech recognizer: check the connection and tap “Auto-sync” again</string>
+    <string name="letra_sola_no_se_oye">The lyrics were not recognized in the song. Sync it by tapping with the clock</string>
+    <string name="letra_sola_fallo">Could not sync the lyrics</string>
+    <string name="letra_sola_cambio">The lyrics changed while syncing: tap “Auto-sync” again</string>
+    <string name="letra_sola_hecha">Lyrics auto-synced (%1$d of %2$d lines heard). If any is off, fix it with the clock</string>
+    <string name="letra_sola_hecha_poca">Lyrics synced roughly: only %1$d of %2$d lines were heard. Fix them with the clock</string>
+    <string name="letra_con_tiempos_lista_de">The lyrics of “%1$s” now have their timings (%2$d of %3$d lines heard). Open them to review.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">The lyrics of “%1$s” have rough timings: only %2$d of %3$d lines were heard. Fix them with the clock.</string>
+    <string name="letra_volver">Back</string>
+    <string name="letra_tema_claro">Light theme</string>
+    <string name="letra_tema_oscuro">Dark theme</string>
+</resources>

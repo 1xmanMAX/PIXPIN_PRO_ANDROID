@@ -110,7 +110,7 @@ class Canal private constructor(
             val din = DataInputStream(entrada)
             val suMagia = ByteArray(4)
             din.readFully(suMagia)
-            if (!suMagia.contentEquals(magia)) throw IOException("No es PixPin")
+            if (!suMagia.contentEquals(magia)) throw IOException("No es PinDesk")
             val suyo = ByteArray(32)
             din.readFully(suyo)
             val (delQueInicia, delQueResponde) = if (inicia) mio to suyo else suyo to mio
@@ -152,7 +152,7 @@ class Canal private constructor(
             val din = DataInputStream(entrada)
             val magia = ByteArray(4)
             din.readFully(magia)
-            if (!magia.contentEquals(MAGIA_DE_PERSONA)) throw IOException("No es PixPin")
+            if (!magia.contentEquals(MAGIA_DE_PERSONA)) throw IOException("No es PinDesk")
             val largo = din.readUnsignedShort()
             if (largo !in 1..TOPE_DE_CLAVE) throw IOException("Clave de $largo bytes")
             val suClave = ByteArray(largo).also { din.readFully(it) }

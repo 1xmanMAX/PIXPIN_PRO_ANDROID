@@ -1,4 +1,4 @@
-# PixPin Android · Guía completa
+# PinDesk Android · Guía completa
 
 Todo lo que hace la aplicación, con detalle. Para la versión corta, vuelve a la
 [página principal](../README.md).
@@ -51,7 +51,7 @@ todas las muestras del sistema y la presión; con lápiz a la vista, el dedo pas
 
 ### Multitarea: varios lienzos a la vez
 
-Android no tiene una multitarea cómoda **dentro** de una app, así que PixPin trae la suya, hecha
+Android no tiene una multitarea cómoda **dentro** de una app, así que PinDesk trae la suya, hecha
 a imagen de la de los plegables: **hasta tres lienzos abiertos, todos vivos**, uno al lado de otro.
 
 | Gesto | Qué hace |
@@ -104,7 +104,7 @@ ya está, y ordena sola por lo único que uno recuerda de verdad, que es cuándo
 
 #### Documentos que se abren dentro
 
-Un **PDF**, una **página web** (`.html`, también las que exporta PixPin), un **Word** (`.docx`) y
+Un **PDF**, una **página web** (`.html`, también las que exporta PinDesk), un **Word** (`.docx`) y
 un **libro** (`.epub`) se leen sin salir de la aplicación, a pantalla completa y sin barras: solo
 el nombre en una pastilla semitransparente que sale al tocar y se va al mover la página; tocarla
 cambia el nombre. En una página exportada funcionan sus propios botones —**guardar** reescribe el
@@ -128,7 +128,7 @@ pantalla, con **el motor de voz de Google que ya trae el teléfono** y **solo co
 conexión**: el texto no sale del aparato. El idioma se adivina por el propio texto (un Word en
 inglés se lee con la voz inglesa), el párrafo que suena se resalta y la página lo sigue, y una
 barra abajo lleva pausa, párrafo anterior y siguiente, y la velocidad (de 0,75× a 2×). Si falta
-la voz del idioma, PixPin abre la pantalla de Google para bajarla; también desde el engranaje,
+la voz del idioma, PinDesk abre la pantalla de Google para bajarla; también desde el engranaje,
 «Voces sin conexión».
 
 **Sigue sonando al salir**, como un audio: con el visor cerrado o el teléfono bloqueado, la
@@ -176,7 +176,7 @@ lado** para escribir; desde que hay algo anotado la letra queda fijada, para que
 su sitio.
 
 Todos estos tipos —y las imágenes, las hojas de cálculo y las notas en Markdown— salen en **«Abrir
-con»** del sistema, y PixPin pregunta qué hacer: **abrirlo** (se guarda una copia en Guardados, sin
+con»** del sistema, y PinDesk pregunta qué hacer: **abrirlo** (se guarda una copia en Guardados, sin
 duplicar), **enviarlo por Wi-Fi** o **ponerlo como pin**.
 
 <!-- CAPTURA 5: capturas/05-chat.png — el chat con una foto, un PDF, una nota de voz transcrita y los puntos rojo/verde -->
@@ -266,14 +266,14 @@ un lienzo propio para resolver encima, con «Viene de: PDF «Plano» → página
 origen que lleva a él. En proyectos, los sublienzos se pliegan bajo su página, y en el lector de PDF
 se ven al lado de cada página alejándola con dos dedos.
 
-### Lo nuevo: lecciones, buscar en PixPin y la lista de chats
+### Lo nuevo: lecciones, buscar en PinDesk y la lista de chats
 
 | | |
 |---|---|
 | **Lecciones aprendidas** | Apuntar en dos toques lo que aprendiste —escrito o dictado—, con **foto y audio**. Se proponen solas las etiquetas, el área y las causas; si se parece a una que ya tienes, ofrece «pasó otra vez». Repaso espaciado y lista de comprobación. Viven aparte del chat (💡 en Proyectos) |
-| **Buscar en PixPin** | Una tarjeta flotante que busca **solo** en PixPin: funciones, proyectos, lecciones, archivos, notas y tareas, sin acentos ni mayúsculas. Sale del atajo «Buscar» del icono; en el buscador del teléfono, «p tesis» deja arriba lo de PixPin |
+| **Buscar en PinDesk** | Una tarjeta flotante que busca **solo** en PinDesk: funciones, proyectos, lecciones, archivos, notas y tareas, sin acentos ni mayúsculas. Sale del atajo «Buscar» del icono; en el buscador del teléfono, «p tesis» deja arriba lo de PinDesk |
 | **La lista de chats** | El botón de chat de Proyectos convierte la pantalla en la lista de chats, como una app de mensajería; el mismo botón vuelve a los proyectos |
-| **Micrófono flotante** | Una tarjetita graba la nota de voz encima de cualquier app, sin abrir PixPin (atajo «Grabar» o la bola) |
+| **Micrófono flotante** | Una tarjetita graba la nota de voz encima de cualquier app, sin abrir PinDesk (atajo «Grabar» o la bola) |
 | **Cambiar nombre** | Cualquier archivo del chat, audios incluidos: lápiz junto al nombre y primero en el menú |
 | **Galería de capturas** | Todas las capturas de `Pictures/PixPin` (🖼 en Proyectos) |
 
@@ -348,7 +348,7 @@ Al terminar el código deja de existir. **El chat viaja con lo que se manda**, c
 Si los códigos no coinciden, entra aparte sin tocar nada: ante la duda, duplicar y no pisar.
 
 > **Con un ordenador**: sincronizar y enviar por Wi-Fi funcionan hoy **entre aparatos Android con
-> PixPin**. Con Windows, Mac o Linux el puente es la página web: el HTML exportado —o su enlace— se
+> PinDesk**. Con Windows, Mac o Linux el puente es la página web: el HTML exportado —o su enlace— se
 > abre, se anota y se vuelve a guardar en cualquier navegador. Un cliente de escritorio para la
 > sincronización está en el roadmap.
 
@@ -547,5 +547,5 @@ una captura). Todo se lee.
 
 ## Licencia
 
-MIT. Ver [LICENSE](LICENSE). El nombre **PixPin** pertenece a DepthPixel; este proyecto es una
+MIT. Ver [LICENSE](LICENSE). La app se llama **PinDesk** desde el 1-nov-2026: el nombre «PixPin» pertenece a DepthPixel y este proyecto es una
 implementación personal e independiente.

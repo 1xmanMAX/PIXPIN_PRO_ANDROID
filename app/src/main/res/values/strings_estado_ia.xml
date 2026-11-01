@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  **El estado de las IA junto al botón de sincronizar** (1-nov-2026): las frases de los puntitos de
+  Claude, DeepSeek y Jev. Son las claves `ia-estado-*` del `main.ftl` del PC, tal cual.
+-->
+<resources>
+    <string name="ia_estado_funciona">funciona</string>
+    <string name="ia_estado_sin_clave">sin clave</string>
+    <string name="ia_estado_desconocido">aún sin comprobar</string>
+    <string name="ia_estado_clave_mala">la clave no es válida (%d)</string>
+    <string name="ia_estado_sin_saldo">la cuenta no tiene saldo</string>
+    <string name="ia_estado_limite">demasiadas peticiones o cuota agotada</string>
+    <string name="ia_estado_red">sin conexión</string>
+    <string name="ia_estado_servidor">el servicio falla (%d)</string>
+    <string name="ia_estado_otro">no contesta bien (%d)</string>
+    <string name="ia_estado_comprobando">comprobando…</string>
+    <string name="ia_estado_hace_nada">ahora mismo</string>
+    <string name="ia_estado_hace_min">hace %d min</string>
+    <string name="ia_estado_hace_horas">hace %d h</string>
+    <string name="ia_estado_comprobar">Comprobar ahora</string>
+    <string name="ia_estado_claves">Claves en Ajustes → Asistente</string>
+    <string name="ia_estado_descripcion">Estado de Claude, DeepSeek y Jev</string>
+</resources>

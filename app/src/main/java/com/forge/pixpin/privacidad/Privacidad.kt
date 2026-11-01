@@ -73,7 +73,7 @@ object Privacidad {
     )
 
     /** Lo que **no** se hace, para que el resumen no deje dudas. */
-    const val LO_QUE_NO = "Sin anuncios, sin analíticas, sin cuenta y sin servidores de PixPin: lo demás se queda en el teléfono. " +
+    const val LO_QUE_NO = "Sin anuncios, sin analíticas, sin cuenta y sin servidores de PinDesk: lo demás se queda en el teléfono. " +
         "El dictado usa el reconocedor del propio teléfono, sin red."
 
     /** El resumen en texto plano (una línea por destino), para el correo o para copiarlo. */

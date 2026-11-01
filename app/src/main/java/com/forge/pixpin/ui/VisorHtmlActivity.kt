@@ -319,7 +319,7 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun imprimirLosMarcos() {
         lifecycleScope.launch {
             ImprimirMarcos.imprimir(
-                this@VisorHtmlActivity, marcosDoc, sinExtension(elDocumento?.name ?: "PixPin"),
+                this@VisorHtmlActivity, marcosDoc, sinExtension(elDocumento?.name ?: "PinDesk"),
                 ir = { m -> irAlMarco(m) },
                 cajaEnVentana = { m ->
                     val e = escalaWeb.coerceAtLeast(0.01f)
@@ -339,7 +339,7 @@ class VisorHtmlActivity : ComponentActivity() {
     private fun imprimirTodo() {
         val vista = web ?: return
         if (anotando) { anotando = false; guardarLaCapa(); ponerLaTintaEnLaPagina() }
-        val titulo = sinExtension(elDocumento?.name ?: "PixPin").ifBlank { "PixPin" }
+        val titulo = sinExtension(elDocumento?.name ?: "PinDesk").ifBlank { "PinDesk" }
         val gestor = getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
         runCatching { gestor.print(titulo, vista.createPrintDocumentAdapter(titulo), null) }
             .onFailure { Toast.makeText(this, "No se pudo imprimir", Toast.LENGTH_SHORT).show() }
@@ -2070,7 +2070,7 @@ class VisorHtmlActivity : ComponentActivity() {
         val vista = web ?: return
         runCatching {
             val servicio = getSystemService(Context.PRINT_SERVICE) as android.print.PrintManager
-            servicio.print(nombre.ifBlank { "PixPin" }, vista.createPrintDocumentAdapter(nombre.ifBlank { "PixPin" }), android.print.PrintAttributes.Builder().build())
+            servicio.print(nombre.ifBlank { "PinDesk" }, vista.createPrintDocumentAdapter(nombre.ifBlank { "PinDesk" }), android.print.PrintAttributes.Builder().build())
         }.onFailure { Toast.makeText(this, "No se pudo imprimir", Toast.LENGTH_SHORT).show() }
     }
 

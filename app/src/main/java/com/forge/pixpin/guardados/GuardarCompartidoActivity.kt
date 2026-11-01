@@ -131,7 +131,7 @@ class GuardarCompartidoActivity : ComponentActivity() {
     private suspend fun guardarEn(almacen: MensajesStore, proyecto: String?, temporales: List<Temporal>, texto: String) {
         // **Que se note que el toque llegó**: un PDF se aligera al entrar y eso son unos segundos
         // sin nada en pantalla, que se leían como «no funciona» (usuario, 21-sep-2026).
-        if (temporales.any { it.nombre.endsWith(".pdf", ignoreCase = true) }) Toast.makeText(this, "Guardando en PixPin…", Toast.LENGTH_SHORT).show()
+        if (temporales.any { it.nombre.endsWith(".pdf", ignoreCase = true) }) Toast.makeText(this, "Guardando en PinDesk…", Toast.LENGTH_SHORT).show()
         val guardados = withContext(Dispatchers.IO) {
             var cuantos = 0
             // **El texto, de descripción de la primera foto** (4-oct-2026, como el PC y como el

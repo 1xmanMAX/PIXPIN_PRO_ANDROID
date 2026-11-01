@@ -90,12 +90,12 @@ internal fun MenuDeChatNuevo(
     abierto: Boolean, alCerrar: () -> Unit, alUnirse: () -> Unit, alElegir: (compartido: Boolean) -> Unit
 ) {
     DropdownMenu(expanded = abierto, onDismissRequest = alCerrar) {
-        FilaDeChatNuevo(Icons.Filled.ChatBubbleOutline, "Chat normal", "Solo tú y tus aparatos") { alCerrar(); alElegir(false) }
-        FilaDeChatNuevo(Icons.Filled.Groups, "Chat compartido", "Con otras personas, cada una en su lado") { alCerrar(); alElegir(true) }
+        FilaDeChatNuevo(Icons.Filled.ChatBubbleOutline, androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_normal), androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_normal_detalle)) { alCerrar(); alElegir(false) }
+        FilaDeChatNuevo(Icons.Filled.Groups, androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_compartido), androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_compartido_detalle)) { alCerrar(); alElegir(true) }
         // **Unirse al de otro** (27-oct-2026): se podía crear un chat compartido pero no entrar en
         // uno; la puerta estaba en el ⋮ de «Mensajes guardados» y nadie la encontraba. Aquí, junto a
         // crearlo, como el menú del «+» del PC (`cc-menu-entrar`).
-        FilaDeChatNuevo(Icons.Filled.GroupAdd, com.forge.pixpin.sincro.Invitacion.UNIRSE, com.forge.pixpin.sincro.Invitacion.UNIRSE_DETALLE) {
+        FilaDeChatNuevo(Icons.Filled.GroupAdd, androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_unirse), androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_unirse_detalle)) {
             alCerrar(); alUnirse()
         }
     }

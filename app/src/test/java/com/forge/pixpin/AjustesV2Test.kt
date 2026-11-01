@@ -63,7 +63,7 @@ class AjustesV2Test {
             "formato_pdf_tools", "formato_pdf_groups", "formato_documento_tools", "formato_documento_groups", "formato_hoja_tools", "formato_hoja_groups",
             "formato_web_tools", "formato_web_groups", "formato_nota_tools", "formato_nota_groups", "formato_modelo_tools", "formato_modelo_groups",
             "plano_avanzado", "palabras_magicas",
-            "motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas",
+            "motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas", "voz_en_vivo",
             "asistente_motor", "asistente_pensar", "asistente_documentos_nube",
             "asistente_revisar_dicho", "asistente_leer_respuestas", "asistente_web",
             "maxima_fluidez", "modo_noche", "oled_negro", "pin_font"

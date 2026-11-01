@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ruso de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">работает</string>
+    <string name="ia_estado_sin_clave">нет ключа</string>
+    <string name="ia_estado_desconocido">ещё не проверено</string>
+    <string name="ia_estado_clave_mala">ключ недействителен (%d)</string>
+    <string name="ia_estado_sin_saldo">на счёте нет средств</string>
+    <string name="ia_estado_limite">слишком много запросов или квота исчерпана</string>
+    <string name="ia_estado_red">нет подключения</string>
+    <string name="ia_estado_servidor">сервис даёт сбой (%d)</string>
+    <string name="ia_estado_otro">отвечает неправильно (%d)</string>
+    <string name="ia_estado_comprobando">проверка…</string>
+    <string name="ia_estado_hace_nada">только что</string>
+    <string name="ia_estado_hace_min">%d мин назад</string>
+    <string name="ia_estado_hace_horas">%d ч назад</string>
+    <string name="ia_estado_comprobar">Проверить сейчас</string>
+    <string name="ia_estado_claves">Ключи в Параметры → Помощник</string>
+    <string name="ia_estado_descripcion">Состояние Claude, DeepSeek и Jev</string>
+</resources>

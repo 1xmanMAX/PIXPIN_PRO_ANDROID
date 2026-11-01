@@ -198,11 +198,22 @@ object DictarAlChat {
         AlChat.meterTexto(context, juntar("", texto), chatId)
     }
 
-    /** El aviso de un fallo de Jev: lo dictado sigue en la caja y se dice por qué (nunca es un «no»). */
+    /**
+     * El aviso de un fallo de Jev: lo dictado sigue en la caja y se dice por qué (nunca es un «no»). Con las
+     * mismas palabras que el PC (`chat-anotar-fallo-red` y `chat-anotar-fallo`, 1-nov-2026), y en el idioma
+     * puesto ([com.forge.pixpin.ui.Textos]).
+     */
     fun avisoDeFallo(e: Throwable): String = when (e) {
-        is ErrorJev.Red -> "Sin conexión: Jev no pudo mirar si había que anotarlo en otro chat. Lo dictado sigue en la caja."
-        is ErrorJev -> "Jev no contestó (${e.message}). Lo dictado sigue en la caja."
-        else -> "Jev no contestó. Lo dictado sigue en la caja."
+        is ErrorJev.Red -> com.forge.pixpin.ui.Textos.t(
+            com.forge.pixpin.R.string.chat_anotar_fallo_red,
+            "Sin conexión: Jev no pudo mirar si había que anotarlo en otro chat. Lo dictado sigue en la caja."
+        )
+        is ErrorJev -> com.forge.pixpin.ui.Textos.t(
+            com.forge.pixpin.R.string.chat_anotar_fallo, "Jev no contestó (%1\$s). Lo dictado sigue en la caja.", e.message.orEmpty()
+        )
+        else -> com.forge.pixpin.ui.Textos.t(
+            com.forge.pixpin.R.string.chat_anotar_fallo_sin_motivo, "Jev no contestó. Lo dictado sigue en la caja."
+        )
     }
 
     /** Una frase por preguntar: ella, las de antes y los chats de entonces. */

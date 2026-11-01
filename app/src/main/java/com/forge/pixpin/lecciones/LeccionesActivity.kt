@@ -663,7 +663,7 @@ class LeccionesActivity : ComponentActivity() {
             Spacer(Modifier.height(8.dp))
             Text(
                 "Pulsa Dictar y cuéntalo de corrido: «pasó que…, porque…, la próxima vez…». " +
-                    "PixPin lo reparte, le pone etiquetas y te avisa si ya te pasó antes.",
+                    "PinDesk lo reparte, le pone etiquetas y te avisa si ya te pasó antes.",
                 color = Cristal.tinta.copy(alpha = 0.75f), style = MaterialTheme.typography.bodyMedium
             )
         }

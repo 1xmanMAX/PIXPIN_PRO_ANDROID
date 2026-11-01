@@ -96,7 +96,7 @@ object ReportesDeIa {
 
     /** El asunto del correo. */
     fun asunto(r: Reporte): String =
-        "PixPin · Reporte de IA · ${Motivo.deId(r.motivo).rotulo} · ${Funcion.entries.firstOrNull { it.id == r.funcion }?.rotulo ?: r.funcion}"
+        "PinDesk · Reporte de IA · ${Motivo.deId(r.motivo).rotulo} · ${Funcion.entries.firstOrNull { it.id == r.funcion }?.rotulo ?: r.funcion}"
 
     /** **El cuerpo del correo**: lo que se reporta y por qué, en texto plano. */
     fun cuerpo(r: Reporte): String = buildString {

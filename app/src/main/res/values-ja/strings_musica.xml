@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ja/strings_musica.xml: traducción de values/strings_musica.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="guardados_adj_musica">音楽</string>
+</resources>

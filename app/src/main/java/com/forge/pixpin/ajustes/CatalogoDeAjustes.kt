@@ -25,7 +25,7 @@ object CatalogoDeAjustes {
     /** Las secciones, en su orden. Los nombres son los de siempre de Android, que el usuario ya conoce. */
     enum class Seccion(val titulo: String, val resumen: String) {
         CAPTURAR("Capturar", "Cómo se recorta la pantalla y en qué formato se copia"),
-        PDF("PDF", "Cuánto se comprimen al guardarlos en PixPin"),
+        PDF("PDF", "Cuánto se comprimen al guardarlos en PinDesk"),
         DIBUJAR("Dibujar", "Imán, mano, modo guía y qué herramientas salen en cada sitio"),
         PINEAR("Pinear", "Las palabras que se convierten en mini-app al pinearlas"),
         VOZ("Voz", "Con qué se pasan los audios a texto, en qué idioma, y bajar los modelos"),
@@ -81,7 +81,7 @@ object CatalogoDeAjustes {
         ) { it.ocrVocabulario },
         Opcion(
             "pdf", Seccion.PDF, "Compresión de los PDF",
-            "Al guardar un PDF en PixPin se aligera solo, en segundo plano, con pdfsqueeze.",
+            "Al guardar un PDF en PinDesk se aligera solo, en segundo plano, con pdfsqueeze.",
             listOf("compresion_pdf"), "comprimir aligerar pdfsqueeze nivel"
         ) { it.compresionPdf },
         Opcion(
@@ -181,10 +181,10 @@ object CatalogoDeAjustes {
         ) { it.palabras },
         Opcion(
             "voz", Seccion.VOZ, "Motor de voz",
-            "Con qué se pasan los audios a texto (Google, Vosk, Whisper o Qwen3-ASR), en qué idioma y el segundo idioma.",
-            listOf("motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas"),
-            "transcribir audio whisper vosk google qwen qwen3 asr idioma modelo clase reunion"
-        ) { listOf(it.motorDeVoz, it.idiomaDeVoz, it.segundoIdiomaDeVoz, it.modeloWhisper, it.modoDeIdiomas) },
+            "Con qué se pasan los audios a texto (Google, Vosk, Whisper o Qwen3-ASR), en qué idioma y el segundo idioma, y con qué se escucha la reunión en vivo.",
+            listOf("motor_de_voz", "idioma_de_voz", "segundo_idioma_de_voz", "modelo_whisper", "modo_de_idiomas", "voz_en_vivo"),
+            "transcribir audio whisper vosk google qwen qwen3 asr idioma modelo clase reunion en vivo escuchar"
+        ) { listOf(it.motorDeVoz, it.idiomaDeVoz, it.segundoIdiomaDeVoz, it.modeloWhisper, it.modoDeIdiomas, it.motorEnVivo) },
         Opcion(
             "asistente", Seccion.ASISTENTE, "Asistente",
             "Quién contesta: Claude o DeepSeek con tu clave, que se guarda cifrada y no viaja. Pensar, documentos a la nube y voz.",

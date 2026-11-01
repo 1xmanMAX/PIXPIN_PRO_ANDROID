@@ -74,7 +74,7 @@ class CompartirCarpetaTest {
         // Nada se queda fuera de la hoja por no estar en la tabla.
         assertEquals(c.formatos.size, visibles.size)
         assertEquals(
-            listOf("Imagen PNG", "Imagen JPG", "PDF", "Página web (HTML)", "Word", "Markdown", "Texto", "PixPin (.pixpin)", "Original (ZIP)", "Por Wi‑Fi a mis aparatos"),
+            listOf("Imagen PNG", "Imagen JPG", "PDF", "Página web (HTML)", "Word", "Markdown", "Texto", "PinDesk (.pixpin)", "Original (ZIP)", "Por Wi‑Fi a mis aparatos"),
             visibles.map { FormatosDeCompartir.rotulo(it.id, it.nombre) }
         )
         // Abre en el PDF: lo que más se comparte de un cuaderno.
@@ -196,7 +196,9 @@ class CompartirCarpetaTest {
     fun elOriginalEsUnZipConCadaPaginaNumerada() {
         val f = runBlocking { hoja().formatos.single { it.id == "original" }.generar!!(listOf("p1", "p2")) }!!.archivo
         val nombres = ZipFile(f).use { z -> z.entries().toList().map { it.name } }
-        assertEquals(listOf("01 - Día 1.excalidraw", "02 - Día 2.md"), nombres)
+        // El lienzo no va suelto (1-nov-2026, PC `1984938a`): lo editable es el `.pixpin`.
+        assertEquals(listOf("02 - Día 2.md"), nombres)
+        assertTrue(nombres.none { it.endsWith(".excalidraw") || it.endsWith(".gz") })
     }
 
     @Test

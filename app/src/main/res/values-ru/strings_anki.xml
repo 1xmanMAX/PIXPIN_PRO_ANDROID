@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ruso de values/strings_anki.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="guardados_enviar_anki">Отправить в Anki</string>
+</resources>

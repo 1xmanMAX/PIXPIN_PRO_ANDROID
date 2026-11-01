@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-tr/strings_estado_ia.xml: traducción de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">çalışıyor</string>
+    <string name="ia_estado_sin_clave">anahtar yok</string>
+    <string name="ia_estado_desconocido">henüz kontrol edilmedi</string>
+    <string name="ia_estado_clave_mala">anahtar geçerli değil (%d)</string>
+    <string name="ia_estado_sin_saldo">hesapta bakiye yok</string>
+    <string name="ia_estado_limite">çok fazla istek ya da kota doldu</string>
+    <string name="ia_estado_red">bağlantı yok</string>
+    <string name="ia_estado_servidor">hizmet hata veriyor (%d)</string>
+    <string name="ia_estado_otro">düzgün yanıt vermiyor (%d)</string>
+    <string name="ia_estado_comprobando">kontrol ediliyor…</string>
+    <string name="ia_estado_hace_nada">az önce</string>
+    <string name="ia_estado_hace_min">%d dk önce</string>
+    <string name="ia_estado_hace_horas">%d sa önce</string>
+    <string name="ia_estado_comprobar">Şimdi kontrol et</string>
+    <string name="ia_estado_claves">Anahtarlar Ayarlar → Asistan\'da</string>
+    <string name="ia_estado_descripcion">Claude, DeepSeek ve Jev\'in durumu</string>
+</resources>

@@ -107,7 +107,7 @@ object AlGrupo {
 
     /** El aviso de cada fila, con los textos del PC (`al-movil-*`, `ew-grupo-*`). */
     fun texto(e: Estado?, seVe: Boolean): String = when (e) {
-        null -> if (seVe) "En la misma Wi-Fi" else "No se ve ahora: abre PixPin en ese aparato"
+        null -> if (seVe) "En la misma Wi-Fi" else "No se ve ahora: abre PinDesk en ese aparato"
         is Estado.Saliendo -> "Enviando…"
         is Estado.Hecho -> texto(e.entregado)
         is Estado.Fallo -> texto(e.fallo)
@@ -129,11 +129,11 @@ object AlGrupo {
     }
 
     fun texto(f: Fallo): String = when (f) {
-        is Fallo.NoEsta -> "${f.aparato} no contesta: abre PixPin en ese aparato"
+        is Fallo.NoEsta -> "${f.aparato} no contesta: abre PinDesk en ese aparato"
         // El del PC dice «te abro Enviar por Wi-Fi»: aquí ya está abierta, con el código debajo.
-        is Fallo.SinSoporte -> "Actualiza PixPin en ${f.aparato}: aún no recibe archivos directos. Que use el código de abajo."
+        is Fallo.SinSoporte -> "Actualiza PinDesk en ${f.aparato}: aún no recibe archivos directos. Que use el código de abajo."
         is Fallo.Ocupado -> "${f.aparato} está sincronizando con otro aparato. Prueba otra vez en un momento."
-        is Fallo.OtraVersion -> "${f.aparato} tiene otra versión de PixPin: actualiza los dos"
+        is Fallo.OtraVersion -> "${f.aparato} tiene otra versión de PinDesk: actualiza los dos"
         is Fallo.SoloFotos -> "${f.aparato} tiene un lienzo abierto: solo acepta fotos. Que abra un chat para recibir archivos."
         is Fallo.Cortado -> "No se pudo enviar a ${f.aparato}: ${f.motivo}"
     }

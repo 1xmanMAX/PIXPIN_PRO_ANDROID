@@ -195,4 +195,34 @@ class DictarYRepasarTest {
     fun `sin marcas como el PC`() {
         assertEquals("Título\ntexto en negrita", RepasarClase.sinMarcas("## Título\n![img](x.png)\ntexto en **negrita**"))
     }
+
+    // --- Si Jev no contesta, se dice por qué (1-nov-2026, 3d6d8e9c y a4b16eb3 del PC) -----------------
+
+    @Test
+    fun `si Jev no contesta al dictar se dice por que y sin red aparte`() {
+        assertEquals(
+            "Sin conexión: Jev no pudo mirar si había que anotarlo en otro chat. Lo dictado sigue en la caja.",
+            DictarAlChat.avisoDeFallo(com.forge.pixpin.jev.ErrorJev.Red("dns"))
+        )
+        assertEquals(
+            "Jev no contestó (falta la clave de TypeSafe). Lo dictado sigue en la caja.",
+            DictarAlChat.avisoDeFallo(com.forge.pixpin.jev.ErrorJev.SinClave())
+        )
+        // Caso negativo: un fallo que no es de Jev no inventa motivo.
+        assertEquals("Jev no contestó. Lo dictado sigue en la caja.", DictarAlChat.avisoDeFallo(IllegalStateException("x")))
+    }
+
+    @Test
+    fun `si Jev no contesta al repasar se dice por que`() {
+        assertEquals(
+            "Jev no contestó: los puntos se quedan como estaban. Sin conexión.",
+            RepasarClase.avisoDeFallo(com.forge.pixpin.jev.ErrorJev.Red("dns"))
+        )
+        assertEquals(
+            "Jev no contestó: los puntos se quedan como estaban. (falta la clave de TypeSafe)",
+            RepasarClase.avisoDeFallo(com.forge.pixpin.jev.ErrorJev.SinClave())
+        )
+        // Caso negativo: sin motivo, solo lo de los puntos.
+        assertEquals("Jev no contestó: los puntos se quedan como estaban.", RepasarClase.avisoDeFallo(Exception()))
+    }
 }

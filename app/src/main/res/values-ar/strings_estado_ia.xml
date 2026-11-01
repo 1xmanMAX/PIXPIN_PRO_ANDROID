@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ar/strings_estado_ia.xml: traducción de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">يعمل</string>
+    <string name="ia_estado_sin_clave">بلا مفتاح</string>
+    <string name="ia_estado_desconocido">لم يُتحقق منه بعد</string>
+    <string name="ia_estado_clave_mala">المفتاح غير صالح (%d)</string>
+    <string name="ia_estado_sin_saldo">لا رصيد في الحساب</string>
+    <string name="ia_estado_limite">طلبات كثيرة جدًا أو استُنفدت الحصة</string>
+    <string name="ia_estado_red">لا اتصال</string>
+    <string name="ia_estado_servidor">الخدمة تتعطل (%d)</string>
+    <string name="ia_estado_otro">لا يستجيب كما ينبغي (%d)</string>
+    <string name="ia_estado_comprobando">جارٍ التحقق…</string>
+    <string name="ia_estado_hace_nada">الآن</string>
+    <string name="ia_estado_hace_min">منذ %d د</string>
+    <string name="ia_estado_hace_horas">منذ %d س</string>
+    <string name="ia_estado_comprobar">التحقق الآن</string>
+    <string name="ia_estado_claves">المفاتيح في الإعدادات ← المساعد</string>
+    <string name="ia_estado_descripcion">حالة Claude وDeepSeek وJev</string>
+</resources>

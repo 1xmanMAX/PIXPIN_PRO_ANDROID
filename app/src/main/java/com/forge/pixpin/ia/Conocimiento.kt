@@ -11,7 +11,7 @@ package com.forge.pixpin.ia
  * la app (15-oct-2026). Si cambia un menú, hay que cambiarlo aquí.
  */
 object Conocimiento {
-    const val RESUMEN = "PixPin es una app de Android para escribir y dibujar con el lapiz (lienzos con el mismo motor en todas partes), " +
+    const val RESUMEN = "PinDesk es una app de Android para escribir y dibujar con el lapiz (lienzos con el mismo motor en todas partes), " +
         "con un chat por proyectos (con «Mensajes guardados») que guarda fotos, archivos, notas de voz, notas, lienzos y tablas, " +
         "y lectores de PDF, Word, libros, Excel y planos. Ademas: capturas de pantalla y pines flotantes con la bola, " +
         "galeria de capturas, Tareas con Inbox, Lecciones aprendidas, buscador y sincronizacion por Wi-Fi con los otros aparatos y con el PC."
@@ -54,12 +54,12 @@ object Conocimiento {
             "Las listas de tareas son mensajes del chat con casillas. La pantalla Tareas las junta todas, con el Inbox primero; una tarea con ⏰ fecha avisa a su hora. Tambien hay un widget de tareas."),
         e("Lecciones aprendidas", listOf("leccion", "lecciones", "aprendi", "repaso"),
             "Lecciones aprendidas (en Proyectos): una ficha con que paso, por que y la proxima vez; se buscan y se repasan."),
-        e("Buscar en PixPin", listOf("buscar", "busqueda", "encontrar", "buscador"),
-            "«Buscar en PixPin» busca archivos, tareas, lecciones y capturas de todos los chats; tambien hay un atajo en el buscador del telefono."),
+        e("Buscar en PinDesk", listOf("buscar", "busqueda", "encontrar", "buscador"),
+            "«Buscar en PinDesk» busca archivos, tareas, lecciones y capturas de todos los chats; tambien hay un atajo en el buscador del telefono."),
         e("Compartir y exportar", listOf("compartir", "exportar", "html", "pagina web", "enlace", "png", "svg"),
             "Todo se comparte con la misma hoja: imagen, PDF, SVG, pagina web, .pixpin editable o Wi-Fi, y se puede pedir un enlace que caduca."),
         e("Sincronizar", listOf("sincroniz", "sync", "wifi", "grupo", "pc", "ordenador", "windows", "movil"),
-            "En Sincronizar, los aparatos con el mismo codigo de grupo se encuentran en la misma Wi-Fi (tambien el PC con PixPin para Windows) y juntan lo cambiado. «Enviar una vez» da un codigo de seis cifras y un QR."),
+            "En Sincronizar, los aparatos con el mismo codigo de grupo se encuentran en la misma Wi-Fi (tambien el PC con PinDesk para Windows) y juntan lo cambiado. «Enviar una vez» da un codigo de seis cifras y un QR."),
         e("Ajustes", listOf("ajustes", "configuracion", "opciones", "preferencias", "modo oscuro", "noche", "tema"),
             "Los Ajustes estan en el menu de la pantalla principal; cada herramienta del lienzo, gesto o funcion se enciende o apaga ahi. El modo noche se ajusta solo por la hora y la luz."),
         e("El asistente: ponerlo", listOf("asistente", "ia", "inteligencia", "modelo", "clave", "claude", "deepseek", "nube"),
@@ -98,7 +98,7 @@ object Conocimiento {
         val palabras = q.split(Regex("[^\\p{L}\\p{N}+]+")).filter { it.isNotEmpty() && it !in VACIAS }
         val cuantas = palabras.map { p -> INDICE.count { toca(it, p) } }
         val puntuadas = INDICE.map { puntos(it, q, palabras, cuantas) to it }.filter { it.first > 0.0 }.sortedByDescending { it.first }
-        if (puntuadas.isEmpty()) return "No encuentro eso en la ayuda de PixPin. Di que no lo sabes; no inventes menus."
+        if (puntuadas.isEmpty()) return "No encuentro eso en la ayuda de PinDesk. Di que no lo sabes; no inventes menus."
         val mejor = puntuadas[0].first
         return puntuadas.take(2).filter { it.first >= mejor * 0.6 }.joinToString("\n") { "${it.second.tema}: ${it.second.respuesta}" }
     }

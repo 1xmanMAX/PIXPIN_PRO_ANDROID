@@ -122,7 +122,7 @@ object AbrirCon {
     private fun compartirApk(context: Context, uri: Uri, fuera: Boolean) {
         Toast.makeText(
             context,
-            "Esta versión de PixPin no instala apps: compártelo o guárdalo en Archivos para instalarlo desde ahí",
+            "Esta versión de PinDesk no instala apps: compártelo o guárdalo en Archivos para instalarlo desde ahí",
             Toast.LENGTH_LONG
         ).show()
         val enviar = Intent(Intent.ACTION_SEND)
@@ -141,7 +141,7 @@ object AbrirCon {
 
     private fun instalar(context: Context, uri: Uri, fuera: Boolean) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !context.packageManager.canRequestPackageInstalls()) {
-            Toast.makeText(context, "Permite «Instalar apps desconocidas» para PixPin y vuelve a tocar el APK", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "Permite «Instalar apps desconocidas» para PinDesk y vuelve a tocar el APK", Toast.LENGTH_LONG).show()
             context.startActivity(
                 Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}"))
                     .apply { if (fuera) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK) }

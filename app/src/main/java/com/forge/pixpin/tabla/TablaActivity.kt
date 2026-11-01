@@ -393,7 +393,7 @@ private fun ListaDeTablas(
                 val lista = tablas
                 if (lista != null && lista.isEmpty()) {
                     Text(
-                        "Todavía no hay tablas.\n\nCrea una y escribe números y fórmulas como en Excel: =SUMA(B2:B9), =SI(A1>0;\"sí\";\"no\"). También puedes pegar lo que copies de Excel o de Google Sheets, importar un .xlsx, .ods o .csv, o compartirlo al chat de PixPin.",
+                        "Todavía no hay tablas.\n\nCrea una y escribe números y fórmulas como en Excel: =SUMA(B2:B9), =SI(A1>0;\"sí\";\"no\"). También puedes pegar lo que copies de Excel o de Google Sheets, importar un .xlsx, .ods o .csv, o compartirlo al chat de PinDesk.",
                         Modifier.padding(24.dp),
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -594,7 +594,7 @@ private fun EditorDeTabla(
         val crudos = tabla.crudos(f1, c1, f2, c2)
         val tsv = PortapapelesDeTabla.aTsv(valores)
         val html = PortapapelesDeTabla.aHtml(valores, crudos, f1, c1) { f, c -> tabla.estilo(f, c)?.n == true }
-        portapapeles().setPrimaryClip(ClipData.newHtmlText("PixPin", tsv, html))
+        portapapeles().setPrimaryClip(ClipData.newHtmlText("PinDesk", tsv, html))
         copia = CopiaInterna(tsv, crudos, f1, c1)
         if (cortar) { tabla.borrar(f1, c1, f2, c2); cambio(); cargarBarra() }
         Toast.makeText(contexto, if (cortar) "Cortado" else "Copiado: ${f2 - f1 + 1} × ${c2 - c1 + 1}", Toast.LENGTH_SHORT).show()

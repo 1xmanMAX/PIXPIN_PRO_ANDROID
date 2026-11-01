@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-ar/strings_por_su_hora.xml: traducción de values/strings_por_su_hora.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="clase_todos_aportan">السماح لكل من في الدردشة بإضافة صور</string>
+    <string name="clase_solo_mis_fotos">صوري فقط في هذا التسجيل</string>
+    <string name="clase_todos_aportan_hecho">ستدخل صور أعضاء الدردشة في دقيقتها</string>
+    <string name="clase_solo_mis_fotos_hecho">تدخل صورك فقط في هذا التسجيل</string>
+    <string name="clase_todos_aportan_detalle">الصور التي يلتقطها أعضاء الدردشة المشتركة أثناء الاجتماع تدخل في دقيقتها، حتى إن لم يكونوا متصلين.</string>
+    <string name="foto_adjuntar_a_la_grabacion">إرفاق بالتسجيل</string>
+    <string name="foto_sin_grabaciones">لا توجد تسجيلات في هذه الدردشة</string>
+    <string name="foto_adjuntada_a_la_grabacion">في «%1$s»، عند %2$s</string>
+    <string name="clase_hora_sin_comprobar">الوقت غير مُتحقق منه</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="zero">%d لقطة من الحاسوب</item>
+        <item quantity="one">لقطة واحدة من الحاسوب</item>
+        <item quantity="two">لقطتان من الحاسوب</item>
+        <item quantity="few">%d لقطات من الحاسوب</item>
+        <item quantity="many">%d لقطة من الحاسوب</item>
+        <item quantity="other">%d لقطة من الحاسوب</item>
+    </plurals>
+</resources>

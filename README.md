@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/img/portada.svg" alt="PixPin: tu cuaderno de ingeniería en Android" width="100%">
+  <img src="docs/img/portada.svg" alt="PinDesk: tu cuaderno de ingeniería en Android" width="100%">
 </p>
 
 <p align="center">
@@ -38,9 +38,9 @@
 | 💬 | **Un chat para guardarlo todo**, y uno por proyecto | Encuentras las cosas por *cuándo* fueron, que es como las recuerdas |
 | 🎙️ | **Notas de voz** con micrófono flotante, que se pasan a texto en el teléfono | Grabas encima de cualquier app y la voz nunca sale del aparato |
 | 💡 | **Lecciones aprendidas**, con foto y audio, y repaso | Lo que se aprende de un error se olvida en una semana si no se apunta y se repasa |
-| 🔎 | **Buscar en PixPin**: una tarjeta que busca solo en tus cosas | Tus apuntes, proyectos y funciones a un toque, sin mezclarse con el resto del teléfono |
+| 🔎 | **Buscar en PinDesk**: una tarjeta que busca solo en tus cosas | Tus apuntes, proyectos y funciones a un toque, sin mezclarse con el resto del teléfono |
 | 🧊 | **Croquis 3D, tablas con fórmulas y notas en Markdown** | No todo es un dibujo plano: aquí cabe el modelo, el cálculo y la explicación |
-| 📖 | **Lee Word, EPUB, PowerPoint, Excel y PDF** y deja anotarlos | Lo que te mandan se abre y se anota sin salir de PixPin |
+| 📖 | **Lee Word, EPUB, PowerPoint, Excel y PDF** y deja anotarlos | Lo que te mandan se abre y se anota sin salir de PinDesk |
 
 <!-- CAPTURAS 2 y 5: docs/capturas/02-lienzo.png · docs/capturas/05-chat.png -->
 
@@ -55,7 +55,7 @@
 
 > **¿Por qué sin nube?** Porque tus apuntes son tuyos. Sin servidor no hay cuenta que hackear, cuota que pagar ni empresa que lea lo que escribes, y funciona con el avión puesto.
 
-## 🌐 Compartir con quien no tiene PixPin
+## 🌐 Compartir con quien no tiene PinDesk
 
 Cualquier dibujo, proyecto, croquis 3D o tabla se exporta como **una página web en un solo archivo**. Se abre en cualquier móvil u ordenador, sin instalar nada y sin conexión, y quien la recibe puede anotar encima y volver a guardarla.
 
@@ -73,7 +73,7 @@ Cualquier dibujo, proyecto, croquis 3D o tabla se exporta como **una página web
 | **AES-GCM + PBKDF2** | Cifrar la sincronización | Criptografía estándar y revisada, no inventada en casa |
 | **Whisper y Vosk** (en el teléfono) | Pasar voz a texto | Whisper entiende el habla natural; Vosk va rápido en cualquier móvil. La voz no sale del aparato |
 | **Lector de PDF propio** + el de Android | Planos y documentos | Lee el plano como líneas, no como foto: nítido a cualquier zoom y con sus capas |
-| **Rust** (app de PC) | PixPin para Windows | Rápida y ligera; habla el mismo protocolo, copiado byte a byte |
+| **Rust** (app de PC) | PinDesk para Windows | Rápida y ligera; habla el mismo protocolo, copiado byte a byte |
 
 ## 📲 Instalar en 3 pasos
 

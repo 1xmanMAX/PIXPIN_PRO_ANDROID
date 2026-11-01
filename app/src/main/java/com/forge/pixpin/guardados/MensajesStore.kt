@@ -172,7 +172,7 @@ class MensajesStore(private val context: Context) {
                     app.proyectos.conHoja(
                         p,
                         com.forge.pixpin.motor.Hoja(
-                            id = "hoja-$ahora", nombre = m.nombre.ifBlank { "Lienzo" },
+                            id = "hoja-$ahora", nombre = NombreDelLienzo.deLaHoja(m),
                             dibujo = m.referencia, deMensaje = m.id
                         ),
                         ahora

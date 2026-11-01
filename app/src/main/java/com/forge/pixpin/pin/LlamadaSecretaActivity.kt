@@ -240,6 +240,28 @@ class LlamadaSecretaActivity : ComponentActivity() {
             colgar()
             return
         }
+        com.forge.pixpin.mini.LlamadasDeTareas.deIdDeLlamada(id)?.let { (lista, sinHora) ->
+            // **Una tarea que llama** (1-nov-2026): su hora otra vez en su texto, que es lo que la hace
+            // sonar (y viaja). Si ya no está pendiente, no se vuelve a llamar.
+            val contexto = applicationContext
+            val hora = java.time.Instant.ofEpochMilli(cuando).atZone(java.time.ZoneId.systemDefault()).toLocalDateTime().withSecond(0).withNano(0)
+            Thread {
+                runCatching {
+                    com.forge.pixpin.guardados.MensajesStore(contexto).cambiar { todos ->
+                        todos.map { m ->
+                            if (m.id != lista) m
+                            else com.forge.pixpin.mini.LlamadasDeTareas.conHoraOtraVez(m.texto, sinHora, hora)?.let { m.copy(texto = it) } ?: m
+                        }
+                    }
+                    RecordatoriosDeTareas.reprogramar(contexto)
+                }
+            }.start()
+            AlarmaExacta.ofrecerSiFalta(this)
+            val aLas = android.text.format.DateFormat.getTimeFormat(this).format(java.util.Date(cuando))
+            android.widget.Toast.makeText(this, "Te vuelve a llamar a las $aLas", android.widget.Toast.LENGTH_SHORT).show()
+            colgar()
+            return
+        }
         Recordatorios.poner(this, RecordatorioReceiver.DE_UN_MENSAJE + id, cuando)
         AlarmaExacta.ofrecerSiFalta(this)
         val contexto = applicationContext

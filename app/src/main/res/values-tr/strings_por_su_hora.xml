@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-tr/strings_por_su_hora.xml: traducción de values/strings_por_su_hora.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="clase_todos_aportan">Sohbetteki herkes fotoğraf ekleyebilsin</string>
+    <string name="clase_solo_mis_fotos">Bu kayıtta yalnızca benim fotoğraflarım</string>
+    <string name="clase_todos_aportan_hecho">Sohbet üyelerinin fotoğrafları kendi dakikalarına girecek</string>
+    <string name="clase_solo_mis_fotos_hecho">Bu kayda yalnızca sizin fotoğraflarınız girer</string>
+    <string name="clase_todos_aportan_detalle">Toplantı sırasında paylaşılan sohbetteki kişilerin çektiği fotoğraflar, bağlı olmasalar bile kendi dakikalarına girer.</string>
+    <string name="foto_adjuntar_a_la_grabacion">Kayda ekle</string>
+    <string name="foto_sin_grabaciones">Bu sohbette kayıt yok</string>
+    <string name="foto_adjuntada_a_la_grabacion">“%1$s” içinde, %2$s anında</string>
+    <string name="clase_hora_sin_comprobar">saat doğrulanmadı</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="one">PC\'den %d ekran görüntüsü</item>
+        <item quantity="other">PC\'den %d ekran görüntüsü</item>
+    </plurals>
+</resources>

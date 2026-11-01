@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inglés de values/strings_sin_perder.xml (1-nov-2026). -->
+<resources>
+    <string name="sin_perder_poco_sitio">The phone is running out of space</string>
+    <string name="sin_perder_disco_lleno">Phone almost full: the video was closed and the audio continues</string>
+    <string name="sin_perder_sin_sitio_para_video">Very little space left: only the audio is recorded</string>
+    <string name="sin_perder_video_cortado">The video was cut; the audio is still recording</string>
+    <string name="sin_perder_hueco">The phone stopped the app for %1$d min; the recording resumed on return</string>
+    <string name="sin_perder_quedo_para_recuperar">Could not save the recording: it is kept safe and you will be offered to recover it when you open PinDesk</string>
+    <string name="cortada_titulo">Interrupted recording</string>
+    <string name="cortada_texto">A recording was interrupted (%1$s, %2$d min)</string>
+    <string name="cortada_perdida">Of an interrupted recording (%1$s) only a video that can\'t be opened remained</string>
+    <string name="cortada_en_chat">in “%1$s”</string>
+    <string name="cortada_recuperar">Recover</string>
+    <string name="cortada_descartar">Discard</string>
+    <string name="cortada_luego">Later</string>
+    <string name="cortada_recuperando">Recovering…</string>
+    <string name="cortada_recuperada">Recording recovered: it is now in its chat</string>
+    <string name="cortada_fallo">Could not recover the recording: it stays as it was</string>
+    <string name="cortada_descartar_seguro">Delete what was recorded in “%1$s”? This can\'t be undone.</string>
+    <string name="cortada_no">No</string>
+    <string name="cortada_si_borrar">Yes, delete</string>
+    <string name="cortada_aviso">Open PinDesk to recover or discard it</string>
+</resources>

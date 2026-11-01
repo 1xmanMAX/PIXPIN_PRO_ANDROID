@@ -365,21 +365,8 @@ fun TarjetaDeConfiguracion(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
-            // **Sincronizar con los otros aparatos**, por la Wi-Fi y sin servidor. Ver
-            // [com.forge.pixpin.sincro.SincronizarActivity].
-            androidx.compose.material3.OutlinedButton(
-                onClick = {
-                    // Pulsarlo es ver el fallo: la pantalla de Sincronizar dice qué pasó.
-                    com.forge.pixpin.sincro.VueltasEnMarcha.olvidarFallo()
-                    context.startActivity(Intent(context, com.forge.pixpin.sincro.SincronizarActivity::class.java))
-                },
-                modifier = Modifier.fillMaxWidth().height(52.dp)
-            ) {
-                // **Gira mientras se sincroniza** y se marca en rojo si falló (25-oct-2026). Ver [com.forge.pixpin.ui.IconoDeSincronizar].
-                com.forge.pixpin.ui.IconoDeSincronizar(androidx.compose.material3.LocalContentColor.current, MaterialTheme.colorScheme.background, 20.dp)
-                Text("Sincronizar", modifier = Modifier.padding(start = 8.dp))
-            }
+            // **Sin botón de «Sincronizar» (1-nov-2026)**: ya está en la lista de chats, que es donde
+            // se usa; aquí repetía lo mismo (pedido del usuario).
 
             // **Los grupos de pestañas guardados, desde el menú** (19-sep-2026): un toque abre el
             // grupo entero en la multitarea. Se guardan desde la baraja (cuatro dedos arriba).
@@ -388,7 +375,7 @@ fun TarjetaDeConfiguracion(
             if (grupos.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Grupos guardados",
+                    stringResource(R.string.ajustes_grupos_guardados),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -442,16 +429,19 @@ private fun TodoConcedido() {
  * opción, y son las de siempre: no se pierde ninguna.
  */
 @Composable
-fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {}) {
+fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {}, seccionInicial: String? = null) {
     com.forge.pixpin.ajustes.AjustesV2(
         onVolver = onVolver,
         cabecera = cabecera,
+        seccionInicial = seccionInicial,
         // **La versión, aquí abajo.** Si el número solo vive en el archivo de compilación, desde el
         // móvil no hay forma de saber qué build tienes puesto — y con los APK repartidos por enlace,
         // esa era la pregunta que no se podía responder.
         pie = {
             // **«Privacidad y datos»** (30-oct-2026, para Google Play): la política, qué sale del
             // teléfono, reportar lo que escribe la IA y borrar todo. Ver [com.forge.pixpin.privacidad.PrivacidadYDatos].
+            // **El idioma** (1-nov-2026): español o inglés, como el PC. Ver [com.forge.pixpin.ajustes.IdiomaCard].
+            com.forge.pixpin.ajustes.IdiomaCard()
             com.forge.pixpin.privacidad.PrivacidadYDatos()
             Text(
                 stringResource(R.string.version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
@@ -478,12 +468,12 @@ fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {
             "barra-pantalla" -> BarraDeLaCapaCard()
             "barra-lector" -> BarraDelLectorCard()
             "barra-plano" -> BarraDelPlanoCard()
-            "barra-pdf" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF, "Barra del PDF", "Las herramientas al anotar un PDF. Sin tocar, las del lector.")
-            "barra-documento" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO, "Barra de Word y libros", "Las herramientas al anotar un Word, un PowerPoint o un libro. Sin tocar, las del lector.")
-            "barra-web" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB, "Barra de las páginas web", "Las herramientas al anotar una página HTML. Sin tocar, las del lector.")
-            "barra-nota" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA, "Barra de las notas", "Las herramientas al anotar una nota. Sin tocar, las del lector.")
-            "barra-modelo" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO, "Barra del modelo 3D", "Las herramientas al anotar un modelo IFC o Revit. Sin tocar, las del lector.")
-            "barra-hoja" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA, "Barra de Excel", "Las herramientas al anotar una hoja de cálculo. Sin tocar, las del lector.")
+            "barra-pdf" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF, stringResource(R.string.ajustes_barra_pdf), stringResource(R.string.ajustes_barra_pdf_desc))
+            "barra-documento" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO, stringResource(R.string.ajustes_barra_documento), stringResource(R.string.ajustes_barra_documento_desc))
+            "barra-web" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB, stringResource(R.string.ajustes_barra_web), stringResource(R.string.ajustes_barra_web_desc))
+            "barra-nota" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA, stringResource(R.string.ajustes_barra_nota), stringResource(R.string.ajustes_barra_nota_desc))
+            "barra-modelo" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO, stringResource(R.string.ajustes_barra_modelo), stringResource(R.string.ajustes_barra_modelo_desc))
+            "barra-hoja" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA, stringResource(R.string.ajustes_barra_hoja), stringResource(R.string.ajustes_barra_hoja_desc))
             "editor-plano" -> EditorDelPlanoCard()
             "palabras" -> PalabrasMagicasCard()
             "voz" -> MotorDeVozCard()
@@ -1060,7 +1050,7 @@ private fun MotorDeVozCard() {
                 )
                 TextButton(onClick = {
                     runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS)) }
-                }) { Text("Ajustes") }
+                }) { Text(stringResource(R.string.ajustes_abrir_ajustes_sistema)) }
             }
             Text(
                 stringResource(R.string.motor_voz_google_desc),
@@ -1095,6 +1085,7 @@ private fun MotorDeVozCard() {
                 }
             }
             Qwen3Asr(settings.motorDeVoz == com.forge.pixpin.data.MOTOR_QWEN3, version) { scope.launch { app.settings.setMotorDeVoz(com.forge.pixpin.data.MOTOR_QWEN3) } }
+            EscucharEnVivo(settings.motorEnVivo, idioma, version, ocupado = descargando != null) { version++ }
             // **El tamaño de Whisper**: tiny, base o small. Cada uno se baja aparte.
             Text(stringResource(R.string.motor_voz_tamano_whisper), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1165,6 +1156,89 @@ private fun MotorDeVozCard() {
 }
 
 /**
+ * **«Escuchar la reunión en vivo con»** (1-nov-2026, Ajustes › Voz del PC, `[voz] en_vivo`): lo de siempre
+ * (el reconocedor del teléfono sin red o Whisper ligero) o **Vosk**, que da lo que se va diciendo y cierra
+ * cada frase a las décimas de callarse ([com.forge.pixpin.guardados.VoskEnVivo]). Como en el PC, elegir
+ * Vosk es pedirlo: si falta su modelo, se baja ya, con el avance en la propia fila; volver a lo de siempre
+ * corta una descarga a medias. «Borrar Vosk» libera lo bajado. Sin modelo del idioma, se dice.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun EscucharEnVivo(elegido: String, idioma: String, version: Int, ocupado: Boolean, cambio: () -> Unit) {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val vosk = com.forge.pixpin.guardados.MotorVosk
+    var avance by remember { mutableStateOf<Float?>(null) }
+    var fallo by remember { mutableStateOf(false) }
+    val cancelar = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val conVosk = elegido == com.forge.pixpin.data.EN_VIVO_VOSK
+    val tiene = vosk.tieneModelo(idioma)
+    val listo = remember(version, idioma, avance) { vosk.modeloListo(context, idioma) }
+    val algo = remember(version, avance) { vosk.algoBajado(context) }
+    fun bajar() {
+        if (avance != null || ocupado || !tiene || listo) return
+        cancelar.set(false); fallo = false; avance = 0f
+        Thread {
+            val ok = vosk.asegurarModelo(context, idioma, cancelar = { cancelar.get() }) { a -> avance = a } != null
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                fallo = !ok && !cancelar.get()
+                avance = null
+                cambio()
+            }
+        }.start()
+    }
+    Text(stringResource(R.string.motor_voz_en_vivo), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        androidx.compose.material3.FilterChip(
+            selected = !conVosk,
+            onClick = {
+                if (avance != null) cancelar.set(true)
+                scope.launch { app.settings.setMotorEnVivo(com.forge.pixpin.data.EN_VIVO_SISTEMA) }
+            },
+            label = { Text(stringResource(R.string.motor_voz_en_vivo_sistema)) }
+        )
+        androidx.compose.material3.FilterChip(
+            selected = conVosk,
+            onClick = {
+                scope.launch { app.settings.setMotorEnVivo(com.forge.pixpin.data.EN_VIVO_VOSK) }
+                // Elegir Vosk es pedirlo: si falta, se baja ya (la línea de debajo dice antes cuánto pesa).
+                bajar()
+            },
+            label = { Text(stringResource(R.string.motor_voz_en_vivo_vosk)) }
+        )
+    }
+    val enCurso = avance
+    Text(
+        when {
+            enCurso != null -> stringResource(R.string.motor_voz_en_vivo_bajando, (enCurso * 100).toInt())
+            fallo -> stringResource(R.string.motor_voz_en_vivo_fallo)
+            !tiene -> stringResource(R.string.motor_voz_en_vivo_sin_idioma)
+            conVosk && listo -> stringResource(R.string.motor_voz_en_vivo_listo)
+            else -> stringResource(R.string.motor_voz_en_vivo_ayuda, if (listo) 0 else vosk.megasDe(idioma))
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    if (algo && enCurso == null) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.motor_voz_vosk_borrar_ayuda),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = {
+                Thread {
+                    vosk.borrar(context)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { cambio() }
+                }.start()
+            }) { Text(stringResource(R.string.motor_voz_vosk_borrar)) }
+        }
+    }
+}
+
+/**
  * **Qwen3-ASR en Ajustes › Voz** (25-oct-2026, Ajustes › Voz del PC): elegirlo empieza a bajarlo
  * (988 MB, con el sha256 de cada fichero), con su avance en la propia fila; volver a otro motor lo
  * corta. La línea de debajo dice lo que pesa, la memoria que pide y su licencia, o el avance, o el
@@ -1229,10 +1303,15 @@ private fun Qwen3Asr(elegido: Boolean, version: Int, elegir: () -> Unit) {
 }
 
 /** Los idiomas que se ofrecen para los audios: los que tienen modelo pequeño de Vosk (y Whisper los entiende todos). */
-private val IDIOMAS_DE_VOZ = listOf(
-    "es" to "Español", "en" to "Inglés", "pt" to "Portugués", "fr" to "Francés",
-    "de" to "Alemán", "it" to "Italiano", "ca" to "Catalán"
-)
+/**
+ * El nombre de cada idioma, **en el idioma puesto** (1-nov-2026): lo da Java, así que en inglés
+ * sale «Spanish» y en español «Español», sin una lista que traducir.
+ */
+private val IDIOMAS_DE_VOZ: List<Pair<String, String>>
+    get() = listOf("es", "en", "pt", "fr", "de", "it", "ca").map { codigo ->
+        val aqui = java.util.Locale.getDefault()
+        codigo to java.util.Locale.forLanguageTag(codigo).getDisplayLanguage(aqui).replaceFirstChar { it.titlecase(aqui) }
+    }
 
 /**
  * **Máxima fluidez.**
@@ -1433,8 +1512,8 @@ private fun DialogoDePalabras(
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onAceptar(texto) }) { Text("Aceptar") } },
-        dismissButton = { TextButton(onClick = onCerrar) { Text("Cancelar") } }
+        confirmButton = { TextButton(onClick = { onAceptar(texto) }) { Text(stringResource(R.string.ajustes_aceptar)) } },
+        dismissButton = { TextButton(onClick = onCerrar) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -1595,9 +1674,9 @@ private fun CaducidadDeCapturasCard() {
     val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Días hasta borrar", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.ajustes_dias_titulo), style = MaterialTheme.typography.titleSmall)
             Text(
-                "Pasado el plazo se van a la papelera del teléfono, salvo las conservadas.",
+                stringResource(R.string.ajustes_dias_desc),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
@@ -1606,7 +1685,7 @@ private fun CaducidadDeCapturasCard() {
                     androidx.compose.material3.FilterChip(
                         selected = settings.diasCaducidad == dias,
                         onClick = { scope.launch { app.settings.setDiasCaducidad(dias) } },
-                        label = { Text(if (dias == 0) "Nunca" else "$dias") }
+                        label = { Text(if (dias == 0) stringResource(R.string.ajustes_dias_nunca) else "$dias") }
                     )
                 }
             }
@@ -1627,9 +1706,9 @@ private fun CompresionDePdfCard() {
     val niveles = com.forge.pixpin.pdf.ComprimirPdf.NIVELES.map { it to com.forge.pixpin.pdf.ComprimirPdf.ROTULOS.getValue(it) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Compresión de los PDF", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.ajustes_pdf_titulo), style = MaterialTheme.typography.titleSmall)
             Text(
-                "Al guardar un PDF en PixPin se aligera solo, en segundo plano, con pdfsqueeze. El original que tengas fuera de PixPin no se toca.",
+                stringResource(R.string.ajustes_pdf_desc),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))

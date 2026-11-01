@@ -486,14 +486,14 @@ object ExportarDocx {
     }
 
     private fun core(titulo: String, autor: String, ms: Long): String {
-        val a = esc(autor.trim().ifEmpty { "PixPin" })
+        val a = esc(autor.trim().ifEmpty { "PinDesk" })
         val f = fecha(ms)
         return CABECERA + """<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">""" +
             "<dc:title>${esc(titulo)}</dc:title><dc:creator>$a</dc:creator><cp:lastModifiedBy>$a</cp:lastModifiedBy>" +
             """<dcterms:created xsi:type="dcterms:W3CDTF">$f</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">$f</dcterms:modified></cp:coreProperties>"""
     }
 
-    private const val APP = CABECERA + """<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>PixPin</Application></Properties>"""
+    private const val APP = CABECERA + """<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Application>PinDesk</Application></Properties>"""
 
     private const val AJUSTES = CABECERA + """<w:settings xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:zoom w:percent="100"/><w:defaultTabStop w:val="708"/><w:characterSpacingControl w:val="doNotCompress"/><w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat></w:settings>"""
 
@@ -578,7 +578,7 @@ object ExportarDocx {
         val c = StringBuilder("""$CABECERA<w:comments xmlns:w="$W" xmlns:w14="$W14" xmlns:mc="$MC" mc:Ignorable="w14">""")
         val ex = StringBuilder("""$CABECERA<w15:commentsEx xmlns:w15="$W15" xmlns:mc="$MC" mc:Ignorable="w15">""")
         for (h in hilos) {
-            val autor = h.autor.trim().ifEmpty { "PixPin" }
+            val autor = h.autor.trim().ifEmpty { "PinDesk" }
             c.append("""<w:comment w:id="${h.id}" w:author="${esc(autor)}" w:date="${fecha(h.cuando)}" w:initials="${esc(iniciales(autor))}">""")
             val renglones = h.texto.split('\n').map { it.trimEnd('\r') }
             renglones.forEachIndexed { i, r ->

@@ -87,7 +87,7 @@ object CrashLog {
         val report = read(context) ?: return null
         return Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
-            putExtra(Intent.EXTRA_SUBJECT, "PixPin — informe de fallo")
+            putExtra(Intent.EXTRA_SUBJECT, "PinDesk — informe de fallo")
             putExtra(Intent.EXTRA_TEXT, report.take(60_000))
         }
     }
@@ -97,7 +97,7 @@ object CrashLog {
         val stamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         file(context).writeText(
             buildString {
-                appendLine("PixPin crash — $stamp")
+                appendLine("PinDesk crash — $stamp")
                 appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
                 appendLine("${Build.MANUFACTURER} ${Build.MODEL}")
                 appendLine("Hilo: ${thread.name}")
@@ -185,7 +185,7 @@ object CrashLog {
             }
             val f = file(context)
             if (f.exists()) f.appendText(texto) else f.writeText(
-                "PixPin — muertes recogidas del sistema\n" +
+                "PinDesk — muertes recogidas del sistema\n" +
                     "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})\n" +
                     "${Build.MANUFACTURER} ${Build.MODEL}\n" + texto
             )

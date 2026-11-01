@@ -206,7 +206,7 @@ class AlGrupoTest {
         val r = mandar(listOf(archivo("foto.png", bytes(10))), gancho = null)
         val f = AlGrupo.falloDe(r.exceptionOrNull()!!)
         assertTrue(f is AlGrupo.Fallo.SinSoporte)
-        assertEquals("Actualiza PixPin en Tablet: aún no recibe archivos directos. Que use el código de abajo.", AlGrupo.texto(f))
+        assertEquals("Actualiza PinDesk en Tablet: aún no recibe archivos directos. Que use el código de abajo.", AlGrupo.texto(f))
         assertTrue(llegadas.isEmpty())
     }
 
@@ -240,14 +240,14 @@ class AlGrupoTest {
         val r = AlGrupo.mandarA(otro, AlGrupo.Fila(Aparato("id-tablet", "Tablet")), listOf(archivo("a.png", bytes(5))), 0) { _, _ -> }
         val f = AlGrupo.falloDe(r.exceptionOrNull()!!)
         assertTrue(f is AlGrupo.Fallo.NoEsta)
-        assertEquals("Tablet no contesta: abre PixPin en ese aparato", AlGrupo.texto(f))
+        assertEquals("Tablet no contesta: abre PinDesk en ese aparato", AlGrupo.texto(f))
         assertNull(AlGrupo.Fila(Aparato("x", "x")).host)
     }
 
     @Test
     fun `los textos de cada fila`() {
         assertEquals("En la misma Wi-Fi", AlGrupo.texto(null, true))
-        assertEquals("No se ve ahora: abre PixPin en ese aparato", AlGrupo.texto(null, false))
+        assertEquals("No se ve ahora: abre PinDesk en ese aparato", AlGrupo.texto(null, false))
         assertEquals("Enviando…", AlGrupo.texto(AlGrupo.Estado.Saliendo(), true))
         assertEquals(
             "Tablet lo guardó en la conversación general (no tenía un chat ni un lienzo abierto)",

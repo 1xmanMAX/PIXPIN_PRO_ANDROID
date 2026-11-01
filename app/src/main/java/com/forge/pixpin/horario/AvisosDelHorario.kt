@@ -69,7 +69,9 @@ object AvisosDelHorario {
         val app = context.applicationContext
         val ahora = System.currentTimeMillis()
         val h = runCatching { leer(app) }.getOrNull() ?: return
-        val quieren = Horario.avisos(h, ahoraLocal(ahora), Horario.DIAS_A_LA_VISTA)
+        // Sin las clases con la llamada apagada desde Tareas (1-nov-2026, [com.forge.pixpin.mini.LlamadasDeTareas]).
+        val apagadas = com.forge.pixpin.mini.LlamadasGuardadas.apagadas(app)
+        val quieren = com.forge.pixpin.mini.LlamadasDeTareas.avisosQueLlaman(h, Horario.avisos(h, ahoraLocal(ahora), Horario.DIAS_A_LA_VISTA), apagadas)
             .associate { it.id to aUtc(it.cuando) }.toMutableMap()
         pospuestos(app).forEach { id ->
             val cuando = id.substringAfterLast('|').toLongOrNull()

@@ -116,9 +116,8 @@ class TodasLasTareasTest {
             mensaje("a", "# Obra\n\n- [ ] yeso", proyecto = "p1", cuando = 5),
             mensaje("b", "# Inbox\n\n- [ ] pan", cuando = 6),
             mensaje("vacia", "# Nada\n\n", proyecto = "p1", cuando = 7),
-            // Caso negativo: una nota con casillas no es una lista, y la de un proyecto que ya no está no sale.
+            // Caso negativo: una nota con casillas no es una lista.
             mensaje("nota", "- [ ] no soy lista", clase = Clase.NOTA),
-            mensaje("huerfana", "# X\n\n- [ ] y", proyecto = "borrado")
         )
         val listas = TodasLasTareas.reunir(mensajes, mapOf("p1" to "Obra"))
         assertEquals("el Inbox, luego lo pendiente", listOf("b", "a", "vacia"), listas.map { it.codigo })
@@ -126,6 +125,81 @@ class TodasLasTareasTest {
         assertTrue(TodasLasTareas.esInbox(listas[0]))
         assertEquals("Obra", listas[1].chat)
         assertTrue("la vacía sale sin tareas: es adonde mover", listas[2].filas.isEmpty())
+    }
+
+    /**
+     * **«Un grupo que creo en otro chat no aparece en Tareas»** (1-nov-2026): la lista de un chat que
+     * no está en los proyectos de este teléfono (llegado del PC o de un chat compartido antes que su
+     * ficha) se quedaba fuera. Ahora sale, nombrada con su id como en la lista de chats.
+     */
+    @Test
+    fun `las listas de un chat sin ficha de proyecto tambien salen`() {
+        val mensajes = listOf(
+            mensaje("a", "# Obra\n\n- [ ] yeso", proyecto = "p1", cuando = 5),
+            mensaje("otro", "# Compra\n\n- [ ] pan", proyecto = "chat-del-pc", cuando = 9),
+            mensaje("nueva", "# Grupo nuevo\n\n", proyecto = "chat-del-pc", cuando = 10),
+        )
+        val listas = TodasLasTareas.reunir(mensajes, mapOf("p1" to "Obra"))
+        assertEquals(setOf("a", "otro", "nueva"), listas.map { it.codigo }.toSet())
+        assertEquals("chat-del-pc", listas.first { it.codigo == "otro" }.chat)
+        assertEquals("Obra", listas.first { it.codigo == "a" }.chat)
+        // Y en las tarjetas sale también el grupo recién creado, aún vacío (sin buscar).
+        val g = TodasLasTareas.agrupar(listas, emptyList(), dia(3), conVacias = true)
+        assertEquals(3, g.size)
+        assertTrue(g.any { listas[it.lista].codigo == "nueva" && it.arriba.isEmpty() })
+        // Caso negativo: buscando, un grupo vacío no sale (no tiene nada que coincida).
+        assertTrue(TodasLasTareas.agrupar(listas, listOf("nuevo"), dia(3), conVacias = true).none { listas[it.lista].codigo == "nueva" })
+    }
+
+    /**
+     * **«En Tareas veo dos Inbox»** (1-nov-2026): el PC y el teléfono crearon cada uno el suyo antes
+     * de sincronizar. Se juntan en el más antiguo sin perder ni repetir ninguna tarea.
+     */
+    @Test
+    fun `dos inbox de dos aparatos se juntan en uno sin perder tareas`() {
+        val delPc = mensaje("pc-inbox", "# Inbox\n\n- [ ] pan ➕ 2026-10-01\n- [x] luz ➕ 2026-10-02", cuando = 5)
+        val delMovil = mensaje("tel-inbox", "# inbox\n\n- [ ] pan ➕ 2026-10-01\n- [ ] llamar ⏰ 2026-10-09 10:00 ➕ 2026-10-03\n- [x] yeso", cuando = 9)
+        val otros = listOf(
+            mensaje("obra", "# Pendientes\n\n- [ ] puntales", proyecto = "p1", cuando = 3),
+            // Casos negativos: un «Inbox» de un proyecto o en el buzón no es el Inbox y no se toca.
+            mensaje("inbox-de-proyecto", "# Inbox\n\n- [ ] x", proyecto = "p1", cuando = 1),
+            mensaje("en-el-buzon", "# Inbox\n\n- [ ] y", cuando = 2, enBuzon = true),
+        )
+        val antes = listOf(otros[0], delMovil, otros[1], delPc, otros[2])
+        // Lo que se veía: dos Inbox.
+        assertEquals(2, TodasLasTareas.reunir(antes.filter { !it.enBuzon }, mapOf("p1" to "Obra")).count { TodasLasTareas.esInbox(it) })
+
+        val despues = TodasLasTareas.unirInboxes(antes)!!
+        val inboxes = despues.filter(TodasLasTareas::esMensajeInbox)
+        assertEquals("queda uno, el más antiguo", listOf("pc-inbox"), inboxes.map { it.id })
+        assertEquals(
+            "las de los dos, con su fecha, su hora y su estado, y la repetida una vez",
+            listOf("pan ➕ 2026-10-01" to false, "luz ➕ 2026-10-02" to true, "llamar ⏰ 2026-10-09 10:00 ➕ 2026-10-03" to false, "yeso" to true),
+            Tareas.leer(inboxes[0].texto).map { it.texto to it.hecha }
+        )
+        assertEquals("# Inbox", inboxes[0].texto.lineSequence().first())
+        assertEquals(listOf("obra", "inbox-de-proyecto", "pc-inbox", "en-el-buzon"), despues.map { it.id })
+        assertEquals(otros, despues.filter { it.id != "pc-inbox" })
+        assertEquals(1, TodasLasTareas.reunir(despues.filter { !it.enBuzon }, mapOf("p1" to "Obra")).count { TodasLasTareas.esInbox(it) })
+        assertEquals("pc-inbox", TodasLasTareas.inboxEn(despues)?.id)
+
+        // Juntarlo otra vez no hace nada; y juntarlo en otro aparato (en otro orden) da lo mismo.
+        assertNull(TodasLasTareas.unirInboxes(despues))
+        assertEquals(inboxes[0], TodasLasTareas.unirInboxes(antes.reversed())!!.single(TodasLasTareas::esMensajeInbox))
+        // Caso negativo: con uno solo (o ninguno) no se toca nada.
+        assertNull(TodasLasTareas.unirInboxes(listOf(delPc) + otros))
+        assertNull(TodasLasTareas.unirInboxes(otros))
+    }
+
+    @Test
+    fun `el inbox que se queda es el mas antiguo aunque no sea el primero`() {
+        val m = listOf(
+            mensaje("nuevo", "# Inbox\n\n- [ ] a", cuando = 20),
+            mensaje("viejo", "# Inbox\n\n- [ ] b", cuando = 10),
+        )
+        assertEquals("viejo", TodasLasTareas.inboxEn(m)?.id)
+        // A igual hora, por su id: el mismo en todos los aparatos.
+        assertEquals("a", TodasLasTareas.inboxEn(listOf(mensaje("b", "# Inbox\n\n"), mensaje("a", "# Inbox\n\n")))?.id)
     }
 
     @Test
@@ -187,6 +261,24 @@ class TodasLasTareasTest {
         assertNull(TodasLasTareas.diaDe("2026"))
         assertNull(TodasLasTareas.diaDe("hoyo"))
         assertEquals(TodasLasTareas.Dia.Hace(2), TodasLasTareas.diaDe("ANTEAYER"))
+    }
+
+    @Test
+    fun `hoy y ayer en los catorce idiomas del PC`() {
+        // Con lo que dice la pista del buscador de cada uno (e0dd32c2 del PC).
+        for (hoy in listOf("今天", "今日", "Сегодня", "aujourd’hui", "aujourd'hui", "bugün", "오늘", "HEUTE", "oggi", "hoje", "आज", "اليوم")) {
+            assertEquals(hoy, TodasLasTareas.Dia.Hace(0), TodasLasTareas.diaDe(hoy))
+        }
+        for (ayer in listOf("昨天", "вчера", "Gestern", "dün", "أمس", "kemarin", "hier", "ontem", "ieri", "어제", "कल")) {
+            assertEquals(ayer, TodasLasTareas.Dia.Hace(1), TodasLasTareas.diaDe(ayer))
+        }
+        // «hari ini» son dos palabras que nombran un día: van juntas.
+        assertEquals(listOf("tarea", "hari ini"), TodasLasTareas.palabras("tarea hari ini"))
+        assertEquals(TodasLasTareas.Dia.Hace(0), TodasLasTareas.diaDe(TodasLasTareas.palabras("Hari Ini")[0]))
+        // Caso negativo: «ini» sola, o «hari» sin «ini», no se juntan ni son días.
+        assertEquals(listOf("ini", "hari"), TodasLasTareas.palabras("ini hari"))
+        assertNull(TodasLasTareas.diaDe("hari"))
+        assertNull(TodasLasTareas.diaDe("heuter"))
     }
 
     @Test

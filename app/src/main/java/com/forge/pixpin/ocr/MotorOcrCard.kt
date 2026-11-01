@@ -106,7 +106,7 @@ fun MotorOcrCard() {
                 }) { Text("Borrar Indra") }
             }
             Text(
-                "El código de Indra es Apache 2.0; los pesos, OpenRAIL-M modificada de Datalab. PixPin no los incluye: " +
+                "El código de Indra es Apache 2.0; los pesos, OpenRAIL-M modificada de Datalab. PinDesk no los incluye: " +
                     "los bajas tú desde Hugging Face al elegir Indra. «Borrar Indra» quita sus ${CatalogoIndra.megas()} MB.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

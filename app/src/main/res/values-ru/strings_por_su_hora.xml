@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ruso de values/strings_por_su_hora.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="clase_todos_aportan">Разрешить всем в чате добавлять фото</string>
+    <string name="clase_solo_mis_fotos">Только мои фото в этой записи</string>
+    <string name="clase_todos_aportan_hecho">Фото участников чата встанут на свою минуту</string>
+    <string name="clase_solo_mis_fotos_hecho">В эту запись попадают только ваши фото</string>
+    <string name="clase_todos_aportan_detalle">Фото, сделанные людьми из общего чата во время встречи, встают на свою минуту, даже если они не подключены.</string>
+    <string name="foto_adjuntar_a_la_grabacion">Прикрепить к записи</string>
+    <string name="foto_sin_grabaciones">В этом чате нет записей</string>
+    <string name="foto_adjuntada_a_la_grabacion">В «%1$s», на %2$s</string>
+    <string name="clase_hora_sin_comprobar">время не проверено</string>
+    <plurals name="reunion_capturas_del_pc">
+        <item quantity="one">%d снимок с ПК</item>
+        <item quantity="few">%d снимка с ПК</item>
+        <item quantity="many">%d снимков с ПК</item>
+        <item quantity="other">%d снимка с ПК</item>
+    </plurals>
+</resources>

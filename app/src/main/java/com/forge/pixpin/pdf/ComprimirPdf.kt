@@ -73,13 +73,17 @@ object ComprimirPdf {
     val NIVELES = listOf(NO_COMPRIMIR, SIN_PERDIDA, EQUILIBRADO, PEQUENO, EXTREMO)
 
     /** Cómo se llama cada nivel y qué hace, para enseñarlo: en Ajustes y al aligerar a mano. */
-    val ROTULOS = mapOf(
-        NO_COMPRIMIR to ("No comprimir" to "El PDF se guarda tal como llega."),
-        SIN_PERDIDA to ("Sin pérdida" to "Ni un píxel cambia: solo se ordena y se aprieta por dentro. Gana poco en escaneos, más en documentos de oficina."),
-        EQUILIBRADO to ("Equilibrado" to "No se nota a la vista: fotos a 200 ppp, cada una comprobada. Un escaneo queda en torno a la cuarta parte."),
-        PEQUENO to ("Pequeño" to "Para leer en pantalla: 150 ppp, y en los escaneos el texto se separa del papel y sigue nítido. En torno a la sexta parte."),
-        EXTREMO to ("Extremo" to "Lo mínimo que se sigue leyendo bien: el texto nítido, el papel y las fotos muy simplificados. Menos de la décima parte en escaneos.")
-    )
+    /** En el idioma puesto (1-nov-2026, ver [com.forge.pixpin.ui.Textos]); sin aplicación, el español. */
+    val ROTULOS: Map<String, Pair<String, String>>
+        get() = mapOf(
+            NO_COMPRIMIR to (t(com.forge.pixpin.R.string.pdf_no_comprimir, "No comprimir") to t(com.forge.pixpin.R.string.pdf_no_comprimir_desc, "El PDF se guarda tal como llega.")),
+            SIN_PERDIDA to (t(com.forge.pixpin.R.string.pdf_sin_perdida, "Sin pérdida") to t(com.forge.pixpin.R.string.pdf_sin_perdida_desc, "Ni un píxel cambia: solo se ordena y se aprieta por dentro. Gana poco en escaneos, más en documentos de oficina.")),
+            EQUILIBRADO to (t(com.forge.pixpin.R.string.pdf_equilibrado, "Equilibrado") to t(com.forge.pixpin.R.string.pdf_equilibrado_desc, "No se nota a la vista: fotos a 200 ppp, cada una comprobada. Un escaneo queda en torno a la cuarta parte.")),
+            PEQUENO to (t(com.forge.pixpin.R.string.pdf_pequeno, "Pequeño") to t(com.forge.pixpin.R.string.pdf_pequeno_desc, "Para leer en pantalla: 150 ppp, y en los escaneos el texto se separa del papel y sigue nítido. En torno a la sexta parte.")),
+            EXTREMO to (t(com.forge.pixpin.R.string.pdf_extremo, "Extremo") to t(com.forge.pixpin.R.string.pdf_extremo_desc, "Lo mínimo que se sigue leyendo bien: el texto nítido, el papel y las fotos muy simplificados. Menos de la décima parte en escaneos."))
+        )
+
+    private fun t(id: Int, es: String) = com.forge.pixpin.ui.Textos.t(id, es)
 
     /** El nivel puesto. Lo mantiene al día la aplicación desde los ajustes. */
     @Volatile var nivel: String = NIVEL_POR_DEFECTO

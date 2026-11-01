@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-hi/strings_letra.xml: traducción de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">ऑटो-सिंक</string>
+    <string name="letra_sola_empieza">बोल ऑटो-सिंक हो रहे हैं: गाना सुना जा रहा है…</string>
+    <string name="letra_sola_avance">बोल सिंक हो रहे हैं… %1$d %%</string>
+    <string name="letra_sola_bajando">स्पीच पहचानकर्ता डाउनलोड हो रहा है… %1$d %%</string>
+    <string name="letra_sola_parada">सिंक रुक गया</string>
+    <string name="letra_sola_ocupada">दूसरा गाना पहले से सिंक हो रहा है</string>
+    <string name="letra_sola_sin_reconocedor">यह फ़ोन Whisper से गाना नहीं सुन सकता। घड़ी से टैप करके सिंक करें</string>
+    <string name="letra_sola_falta_modelo">समय अपने आप तय करने के लिए “ऑटो-सिंक” (सबटाइटल) पर टैप करें: यह स्पीच पहचानकर्ता एक बार डाउनलोड करता है (लगभग %1$d MB)</string>
+    <string name="letra_sola_sin_red">स्पीच पहचानकर्ता डाउनलोड नहीं हो सका: कनेक्शन जाँचें और फिर से “ऑटो-सिंक” पर टैप करें</string>
+    <string name="letra_sola_no_se_oye">गाने में बोल पहचाने नहीं गए। घड़ी से टैप करके सिंक करें</string>
+    <string name="letra_sola_fallo">बोल सिंक नहीं हो सके</string>
+    <string name="letra_sola_cambio">सिंक के दौरान बोल बदल गए: फिर से “ऑटो-सिंक” पर टैप करें</string>
+    <string name="letra_sola_hecha">बोल ऑटो-सिंक हुए (%2$d में से %1$d पंक्तियाँ सुनी गईं)। कोई ग़लत हो तो घड़ी से ठीक करें</string>
+    <string name="letra_sola_hecha_poca">बोल मोटे तौर पर सिंक हुए: %2$d में से केवल %1$d पंक्तियाँ सुनी गईं। घड़ी से ठीक करें</string>
+    <string name="letra_con_tiempos_lista_de">“%1$s” के बोलों का अब समय तय है (%3$d में से %2$d पंक्तियाँ सुनी गईं)। देखने के लिए खोलें।</string>
+    <string name="letra_con_tiempos_lista_a_ojo">“%1$s” के बोलों का समय मोटा-मोटा है: %3$d में से केवल %2$d पंक्तियाँ सुनी गईं। घड़ी से ठीक करें।</string>
+    <string name="letra_volver">वापस</string>
+    <string name="letra_tema_claro">हल्की थीम</string>
+    <string name="letra_tema_oscuro">गहरी थीम</string>
+</resources>

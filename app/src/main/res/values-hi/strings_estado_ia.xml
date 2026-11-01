@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-hi/strings_estado_ia.xml: traducción de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">काम कर रहा है</string>
+    <string name="ia_estado_sin_clave">कोई कुंजी नहीं</string>
+    <string name="ia_estado_desconocido">अभी जाँचा नहीं गया</string>
+    <string name="ia_estado_clave_mala">कुंजी मान्य नहीं है (%d)</string>
+    <string name="ia_estado_sin_saldo">खाते में कोई क्रेडिट नहीं है</string>
+    <string name="ia_estado_limite">बहुत ज़्यादा अनुरोध या कोटा ख़त्म</string>
+    <string name="ia_estado_red">कोई कनेक्शन नहीं</string>
+    <string name="ia_estado_servidor">सेवा में गड़बड़ी है (%d)</string>
+    <string name="ia_estado_otro">ठीक से जवाब नहीं दे रहा (%d)</string>
+    <string name="ia_estado_comprobando">जाँच हो रही है…</string>
+    <string name="ia_estado_hace_nada">अभी-अभी</string>
+    <string name="ia_estado_hace_min">%d मिनट पहले</string>
+    <string name="ia_estado_hace_horas">%d घंटे पहले</string>
+    <string name="ia_estado_comprobar">अभी जाँचें</string>
+    <string name="ia_estado_claves">कुंजियाँ सेटिंग्स → असिस्टेंट में</string>
+    <string name="ia_estado_descripcion">Claude, DeepSeek और Jev की स्थिति</string>
+</resources>

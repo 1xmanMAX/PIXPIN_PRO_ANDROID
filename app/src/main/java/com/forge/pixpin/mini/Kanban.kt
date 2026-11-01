@@ -37,7 +37,7 @@ object Kanban {
         hoy: LocalDate,
         sigueArriba: (TodasLasTareas.Lista, TodasLasTareas.Fila) -> Boolean = { _, _ -> false }
     ): List<TodasLasTareas.Grupo> {
-        val grupos = TodasLasTareas.agrupar(listas, palabras, hoy, sigueArriba)
+        val grupos = TodasLasTareas.agrupar(listas, palabras, hoy, sigueArriba = sigueArriba)
         if (palabras.isNotEmpty()) return grupos
         val porLista = grupos.associateBy { it.lista }
         return listas.indices.map { porLista[it] ?: TodasLasTareas.Grupo(it, emptyList(), emptyList()) }

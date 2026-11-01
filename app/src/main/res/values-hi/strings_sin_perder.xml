@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- values-hi/strings_sin_perder.xml: traducción de values/strings_sin_perder.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="sin_perder_poco_sitio">फ़ोन में जगह कम हो रही है</string>
+    <string name="sin_perder_disco_lleno">फ़ोन लगभग भर गया: वीडियो बंद किया गया और ऑडियो जारी है</string>
+    <string name="sin_perder_sin_sitio_para_video">बहुत कम जगह बची है: केवल ऑडियो रिकॉर्ड हो रहा है</string>
+    <string name="sin_perder_video_cortado">वीडियो कट गया; ऑडियो अब भी रिकॉर्ड हो रहा है</string>
+    <string name="sin_perder_hueco">फ़ोन ने ऐप को %1$d मिनट के लिए रोका; लौटने पर रिकॉर्डिंग फिर शुरू हुई</string>
+    <string name="sin_perder_quedo_para_recuperar">रिकॉर्डिंग सहेजी नहीं जा सकी: यह सुरक्षित रखी गई है और PinDesk खोलने पर आपको इसे वापस पाने का विकल्प मिलेगा</string>
+    <string name="cortada_titulo">बाधित रिकॉर्डिंग</string>
+    <string name="cortada_texto">एक रिकॉर्डिंग बाधित हुई (%1$s, %2$d मिनट)</string>
+    <string name="cortada_perdida">एक बाधित रिकॉर्डिंग (%1$s) में केवल एक वीडियो बचा जो खुल नहीं सकता</string>
+    <string name="cortada_en_chat">“%1$s” में</string>
+    <string name="cortada_recuperar">वापस पाएँ</string>
+    <string name="cortada_descartar">छोड़ दें</string>
+    <string name="cortada_luego">बाद में</string>
+    <string name="cortada_recuperando">वापस पाया जा रहा है…</string>
+    <string name="cortada_recuperada">रिकॉर्डिंग वापस मिली: अब यह अपनी चैट में है</string>
+    <string name="cortada_fallo">रिकॉर्डिंग वापस नहीं पाई जा सकी: यह जैसी थी वैसी रहती है</string>
+    <string name="cortada_descartar_seguro">“%1$s” में जो रिकॉर्ड हुआ उसे हटाएँ? इसे पूर्ववत नहीं किया जा सकता।</string>
+    <string name="cortada_no">नहीं</string>
+    <string name="cortada_si_borrar">हाँ, हटाएँ</string>
+    <string name="cortada_aviso">इसे वापस पाने या छोड़ने के लिए PinDesk खोलें</string>
+</resources>
