@@ -6,7 +6,7 @@
     <string name="sin_perder_sin_sitio_para_video">Sehr wenig Speicher übrig: nur das Audio wird aufgenommen</string>
     <string name="sin_perder_video_cortado">Das Video wurde abgeschnitten; das Audio wird weiter aufgenommen</string>
     <string name="sin_perder_hueco">Das Handy hat die App %1$d Min. lang gestoppt; die Aufnahme lief bei der Rückkehr weiter</string>
-    <string name="sin_perder_quedo_para_recuperar">Die Aufnahme konnte nicht gespeichert werden: sie bleibt sicher verwahrt, und beim Öffnen von PinDesk wird dir angeboten, sie wiederherzustellen</string>
+    <string name="sin_perder_quedo_para_recuperar">Die Aufnahme konnte nicht gespeichert werden: sie bleibt sicher verwahrt, und beim Öffnen von PinDesk wird Ihnen angeboten, sie wiederherzustellen</string>
     <string name="cortada_titulo">Unterbrochene Aufnahme</string>
     <string name="cortada_texto">Eine Aufnahme wurde unterbrochen (%1$s, %2$d Min.)</string>
     <string name="cortada_perdida">Von einer unterbrochenen Aufnahme (%1$s) ist nur ein Video geblieben, das sich nicht öffnen lässt</string>
@@ -20,5 +20,5 @@
     <string name="cortada_descartar_seguro">Löschen, was in „%1$s“ aufgenommen wurde? Das lässt sich nicht rückgängig machen.</string>
     <string name="cortada_no">Nein</string>
     <string name="cortada_si_borrar">Ja, löschen</string>
-    <string name="cortada_aviso">Öffne PinDesk, um sie wiederherzustellen oder zu verwerfen</string>
+    <string name="cortada_aviso">Öffnen Sie PinDesk, um sie wiederherzustellen oder zu verwerfen</string>
 </resources>
