@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- italiano de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">Sincronizza da sola</string>
+    <string name="letra_sola_empieza">Sincronizzazione automatica del testo: ascolto della canzone…</string>
+    <string name="letra_sola_avance">Sincronizzazione del testo… %1$d %%</string>
+    <string name="letra_sola_bajando">Download del riconoscimento vocale… %1$d %%</string>
+    <string name="letra_sola_parada">Sincronizzazione interrotta</string>
+    <string name="letra_sola_ocupada">Si sta già sincronizzando un\'altra canzone</string>
+    <string name="letra_sola_sin_reconocedor">Questo telefono non riesce ad ascoltare la canzone con Whisper. Sincronizzala toccando con l\'orologio</string>
+    <string name="letra_sola_falta_modelo">Per mettere i tempi in automatico, tocca «Sincronizza da sola» (i sottotitoli): scarica una volta il riconoscimento vocale (circa %1$d MB)</string>
+    <string name="letra_sola_sin_red">Impossibile scaricare il riconoscimento vocale: controlla la connessione e tocca di nuovo «Sincronizza da sola»</string>
+    <string name="letra_sola_no_se_oye">Il testo non è stato riconosciuto nella canzone. Sincronizzala toccando con l\'orologio</string>
+    <string name="letra_sola_fallo">Impossibile sincronizzare il testo</string>
+    <string name="letra_sola_cambio">Il testo è cambiato durante la sincronizzazione: tocca di nuovo «Sincronizza da sola»</string>
+    <string name="letra_sola_hecha">Testo sincronizzato in automatico (%1$d di %2$d versi sentiti). Se qualcuno è fuori tempo, correggilo con l\'orologio</string>
+    <string name="letra_sola_hecha_poca">Testo sincronizzato a occhio: sono stati sentiti solo %1$d di %2$d versi. Correggili con l\'orologio</string>
+    <string name="letra_con_tiempos_lista_de">Il testo di «%1$s» ha ora i suoi tempi (%2$d di %3$d versi sentiti). Aprilo per controllarlo.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">Il testo di «%1$s» ha tempi approssimativi: sono stati sentiti solo %2$d di %3$d versi. Correggili con l\'orologio.</string>
+    <string name="letra_volver">Indietro</string>
+    <string name="letra_tema_claro">Tema chiaro</string>
+    <string name="letra_tema_oscuro">Tema scuro</string>
+</resources>

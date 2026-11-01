@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- portugués de Brasil de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">Sincronizar sozinho</string>
+    <string name="letra_sola_empieza">Sincronizando a letra automaticamente: ouvindo a música…</string>
+    <string name="letra_sola_avance">Sincronizando a letra… %1$d %%</string>
+    <string name="letra_sola_bajando">Baixando o reconhecedor de voz… %1$d %%</string>
+    <string name="letra_sola_parada">Sincronização interrompida</string>
+    <string name="letra_sola_ocupada">Outra música já está sendo sincronizada</string>
+    <string name="letra_sola_sin_reconocedor">Este celular não consegue ouvir a música com o Whisper. Sincronize tocando com o relógio</string>
+    <string name="letra_sola_falta_modelo">Para pôr os tempos automaticamente, toque em «Sincronizar sozinho» (as legendas): baixa o reconhecedor de voz uma vez (cerca de %1$d MB)</string>
+    <string name="letra_sola_sin_red">Não foi possível baixar o reconhecedor de voz: verifique a conexão e toque de novo em «Sincronizar sozinho»</string>
+    <string name="letra_sola_no_se_oye">A letra não foi reconhecida na música. Sincronize tocando com o relógio</string>
+    <string name="letra_sola_fallo">Não foi possível sincronizar a letra</string>
+    <string name="letra_sola_cambio">A letra mudou durante a sincronização: toque de novo em «Sincronizar sozinho»</string>
+    <string name="letra_sola_hecha">Letra sincronizada automaticamente (%1$d de %2$d versos ouvidos). Se algum estiver fora, corrija com o relógio</string>
+    <string name="letra_sola_hecha_poca">Letra sincronizada por alto: só %1$d de %2$d versos foram ouvidos. Corrija com o relógio</string>
+    <string name="letra_con_tiempos_lista_de">A letra de «%1$s» já tem seus tempos (%2$d de %3$d versos ouvidos). Abra para revisar.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">A letra de «%1$s» tem tempos aproximados: só %2$d de %3$d versos foram ouvidos. Corrija com o relógio.</string>
+    <string name="letra_volver">Voltar</string>
+    <string name="letra_tema_claro">Tema claro</string>
+    <string name="letra_tema_oscuro">Tema escuro</string>
+</resources>

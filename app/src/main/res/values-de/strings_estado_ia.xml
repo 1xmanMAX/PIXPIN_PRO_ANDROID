@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- alemán de values/strings_estado_ia.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="ia_estado_funciona">funktioniert</string>
+    <string name="ia_estado_sin_clave">kein Schlüssel</string>
+    <string name="ia_estado_desconocido">noch nicht geprüft</string>
+    <string name="ia_estado_clave_mala">der Schlüssel ist ungültig (%d)</string>
+    <string name="ia_estado_sin_saldo">das Konto hat kein Guthaben</string>
+    <string name="ia_estado_limite">zu viele Anfragen oder Kontingent aufgebraucht</string>
+    <string name="ia_estado_red">keine Verbindung</string>
+    <string name="ia_estado_servidor">der Dienst hat Störungen (%d)</string>
+    <string name="ia_estado_otro">antwortet nicht richtig (%d)</string>
+    <string name="ia_estado_comprobando">wird geprüft…</string>
+    <string name="ia_estado_hace_nada">gerade eben</string>
+    <string name="ia_estado_hace_min">vor %d Min.</string>
+    <string name="ia_estado_hace_horas">vor %d Std.</string>
+    <string name="ia_estado_comprobar">Jetzt prüfen</string>
+    <string name="ia_estado_claves">Schlüssel unter Einstellungen → Assistent</string>
+    <string name="ia_estado_descripcion">Status von Claude, DeepSeek und Jev</string>
+</resources>

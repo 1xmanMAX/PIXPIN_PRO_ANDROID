@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- alemán de values/strings_letra.xml (1-nov-2026). Ver docs/idiomas-android.md. -->
+<resources>
+    <string name="letra_sola">Auto-Sync</string>
+    <string name="letra_sola_empieza">Liedtext wird automatisch synchronisiert: Song wird angehört…</string>
+    <string name="letra_sola_avance">Liedtext wird synchronisiert… %1$d %%</string>
+    <string name="letra_sola_bajando">Spracherkennung wird heruntergeladen… %1$d %%</string>
+    <string name="letra_sola_parada">Synchronisierung gestoppt</string>
+    <string name="letra_sola_ocupada">Es wird bereits ein anderer Song synchronisiert</string>
+    <string name="letra_sola_sin_reconocedor">Dieses Handy kann den Song nicht mit Whisper anhören. Synchronisiere ihn per Tippen mit der Uhr</string>
+    <string name="letra_sola_falta_modelo">Um die Zeiten automatisch zu setzen, tippe auf „Auto-Sync“ (die Untertitel): die Spracherkennung wird einmal heruntergeladen (etwa %1$d MB)</string>
+    <string name="letra_sola_sin_red">Die Spracherkennung konnte nicht heruntergeladen werden: prüfe die Verbindung und tippe erneut auf „Auto-Sync“</string>
+    <string name="letra_sola_no_se_oye">Der Liedtext wurde im Song nicht erkannt. Synchronisiere ihn per Tippen mit der Uhr</string>
+    <string name="letra_sola_fallo">Der Liedtext konnte nicht synchronisiert werden</string>
+    <string name="letra_sola_cambio">Der Liedtext hat sich beim Synchronisieren geändert: tippe erneut auf „Auto-Sync“</string>
+    <string name="letra_sola_hecha">Liedtext automatisch synchronisiert (%1$d von %2$d Zeilen gehört). Wenn eine danebenliegt, korrigiere sie mit der Uhr</string>
+    <string name="letra_sola_hecha_poca">Liedtext grob synchronisiert: nur %1$d von %2$d Zeilen wurden gehört. Korrigiere sie mit der Uhr</string>
+    <string name="letra_con_tiempos_lista_de">Der Liedtext von „%1$s“ hat jetzt seine Zeiten (%2$d von %3$d Zeilen gehört). Öffne ihn zum Prüfen.</string>
+    <string name="letra_con_tiempos_lista_a_ojo">Der Liedtext von „%1$s“ hat grobe Zeiten: nur %2$d von %3$d Zeilen wurden gehört. Korrigiere sie mit der Uhr.</string>
+    <string name="letra_volver">Zurück</string>
+    <string name="letra_tema_claro">Helles Design</string>
+    <string name="letra_tema_oscuro">Dunkles Design</string>
+</resources>
