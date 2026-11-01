@@ -1093,4 +1093,20 @@
     <string name="chat_buscar_ir_al_mensaje">메시지로 이동</string>
     <string name="chat_buscar_en">%s에서</string>
     <string name="sincronizar_boton">동기화</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">회의를 실시간으로 들을 엔진</string>
+    <string name="motor_voz_en_vivo_sistema">휴대폰 기본 인식 또는 Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Jev와 함께하는 회의 주제 등에 사용합니다. Vosk는 말하는 내용을 보여 주고, 말이 멈추면 바로 각 문장을 끊습니다(Whisper는 약 3초). 오프라인으로 작동합니다. 선택하면 %1$d MB를 내려받습니다(Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Vosk로 오프라인 듣는 중: 말한 내용이 녹음 전체 화면에 표시됩니다. 불러오지 못하면 휴대폰 기본 인식이나 Whisper를 사용합니다.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk에 이 언어의 모델이 없습니다: 휴대폰 기본 인식이나 Whisper가 듣습니다.</string>
+    <string name="motor_voz_en_vivo_bajando">Vosk 내려받는 중… %1$d %%. 그동안 휴대폰 기본 인식이나 Whisper가 듣습니다.</string>
+    <string name="motor_voz_en_vivo_fallo">Vosk를 내려받지 못했습니다. 다시 선택하면 재시도합니다.</string>
+    <string name="motor_voz_vosk_borrar">Vosk 삭제</string>
+    <string name="motor_voz_vosk_borrar_ayuda">내려받은 데이터를 지웁니다(언어당 약 50 MB). 다시 선택하면 다시 내려받습니다.</string>
+    <string name="repaso_jev_fallo">Jev가 응답하지 않았습니다: 항목은 그대로입니다.</string>
+    <string name="repaso_jev_fallo_red">연결이 없습니다.</string>
+    <string name="chat_anotar_fallo_red">연결이 없습니다: Jev가 다른 채팅에 적어야 하는지 확인하지 못했습니다. 받아쓴 내용은 입력란에 남아 있습니다.</string>
+    <string name="chat_anotar_fallo">Jev가 응답하지 않았습니다(%1$s). 받아쓴 내용은 입력란에 남아 있습니다.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev가 응답하지 않았습니다. 받아쓴 내용은 입력란에 남아 있습니다.</string>
 </resources>

@@ -1106,4 +1106,20 @@
     <string name="chat_buscar_ir_al_mensaje">Mesaja git</string>
     <string name="chat_buscar_en">%s içinde</string>
     <string name="sincronizar_boton">Eşitle</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">Toplantıyı canlı dinleme motoru</string>
+    <string name="motor_voz_en_vivo_sistema">Telefonunki veya Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Jev ile toplantının konuları ve geri kalanı için. Vosk söyleneni gösterir ve susunca her cümleyi saniyenin bir kesrinde kapatır (Whisper yaklaşık 3 sn), çevrimdışı. Seçince %1$d MB indirilir (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Vosk ile çevrimdışı dinleniyor: söylenenler kaydın tam ekranında görünür. Yüklenemezse telefonun tanıyıcısı veya Whisper kullanılır.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk\'ta bu dil için model yok: telefonun tanıyıcısı veya Whisper dinler.</string>
+    <string name="motor_voz_en_vivo_bajando">Vosk indiriliyor… %%%1$d. Bu sırada telefonun tanıyıcısı veya Whisper dinler.</string>
+    <string name="motor_voz_en_vivo_fallo">Vosk indirilemedi. Yeniden denemek için tekrar seçin.</string>
+    <string name="motor_voz_vosk_borrar">Vosk\'u sil</string>
+    <string name="motor_voz_vosk_borrar_ayuda">İndirileni kaldırır (dil başına yaklaşık 50 MB). Seçince yeniden indirilir.</string>
+    <string name="repaso_jev_fallo">Jev yanıt vermedi: maddeler olduğu gibi kalıyor.</string>
+    <string name="repaso_jev_fallo_red">Bağlantı yok.</string>
+    <string name="chat_anotar_fallo_red">Bağlantı yok: Jev bunun başka bir sohbete not edilmesi gerekip gerekmediğini kontrol edemedi. Dikte ettiğiniz metin kutuda duruyor.</string>
+    <string name="chat_anotar_fallo">Jev yanıt vermedi (%1$s). Dikte ettiğiniz metin kutuda duruyor.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev yanıt vermedi. Dikte ettiğiniz metin kutuda duruyor.</string>
 </resources>

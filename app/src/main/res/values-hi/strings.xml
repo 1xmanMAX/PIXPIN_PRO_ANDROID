@@ -1106,4 +1106,20 @@
     <string name="chat_buscar_ir_al_mensaje">संदेश पर जाएँ</string>
     <string name="chat_buscar_en">%s में</string>
     <string name="sincronizar_boton">सिंक करें</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">मीटिंग को लाइव सुनने के लिए</string>
+    <string name="motor_voz_en_vivo_sistema">फ़ोन वाला या Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Jev के साथ मीटिंग के विषयों और बाकी के लिए। Vosk जो कहा जा रहा है वह दिखाता है और रुकते ही हर वाक्य बंद कर देता है (Whisper लगभग 3 सेकंड लेता है), बिना इंटरनेट के। चुनने पर %1$d MB डाउनलोड होता है (Apache-2.0)।</string>
+    <string name="motor_voz_en_vivo_listo">Vosk से बिना इंटरनेट के सुना जा रहा है: जो कहा जाता है वह रिकॉर्डिंग की पूरी स्क्रीन पर दिखता है। अगर यह लोड न हो, तो फ़ोन की पहचान या Whisper इस्तेमाल होता है।</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk के पास इस भाषा का मॉडल नहीं है: फ़ोन की पहचान या Whisper सुनता है।</string>
+    <string name="motor_voz_en_vivo_bajando">Vosk डाउनलोड हो रहा है… %1$d %%। तब तक फ़ोन की पहचान या Whisper सुनता है।</string>
+    <string name="motor_voz_en_vivo_fallo">Vosk डाउनलोड नहीं हो सका। फिर से कोशिश करने के लिए इसे दोबारा चुनें।</string>
+    <string name="motor_voz_vosk_borrar">Vosk हटाएँ</string>
+    <string name="motor_voz_vosk_borrar_ayuda">डाउनलोड की गई जगह खाली करता है (हर भाषा के लिए लगभग 50 MB)। चुनने पर फिर से डाउनलोड होता है।</string>
+    <string name="repaso_jev_fallo">Jev ने जवाब नहीं दिया: बिंदु जैसे थे वैसे ही रहेंगे।</string>
+    <string name="repaso_jev_fallo_red">कोई कनेक्शन नहीं।</string>
+    <string name="chat_anotar_fallo_red">कोई कनेक्शन नहीं: Jev यह नहीं देख सका कि इसे किसी दूसरी चैट में लिखना है या नहीं। बोला गया लेख बॉक्स में ही है।</string>
+    <string name="chat_anotar_fallo">Jev ने जवाब नहीं दिया (%1$s)। बोला गया लेख बॉक्स में ही है।</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev ने जवाब नहीं दिया। बोला गया लेख बॉक्स में ही है।</string>
 </resources>

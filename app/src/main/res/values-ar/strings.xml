@@ -1158,4 +1158,20 @@
     <string name="chat_buscar_ir_al_mensaje">الانتقال إلى الرسالة</string>
     <string name="chat_buscar_en">في %s</string>
     <string name="sincronizar_boton">مزامنة</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">الاستماع إلى الاجتماع مباشرة باستخدام</string>
+    <string name="motor_voz_en_vivo_sistema">تعرّف الهاتف أو Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">لمواضيع الاجتماع وبقية ما يجري مع Jev. يعرض Vosk ما يُقال ويُنهي كل جملة بعد جزء من الثانية من التوقف (يستغرق Whisper نحو 3 ثوانٍ)، دون اتصال. عند اختياره يُنزَّل %1$d ميغابايت (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">الاستماع باستخدام Vosk دون اتصال: يظهر ما يُقال في ملء الشاشة للتسجيل. إذا تعذّر تحميله يُستخدم تعرّف الهاتف أو Whisper.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">لا يملك Vosk نموذجًا لهذه اللغة: يستمع تعرّف الهاتف أو Whisper.</string>
+    <string name="motor_voz_en_vivo_bajando">جارٍ تنزيل Vosk… %1$d %%. في الأثناء يستمع تعرّف الهاتف أو Whisper.</string>
+    <string name="motor_voz_en_vivo_fallo">تعذّر تنزيل Vosk. اختره مرة أخرى لإعادة المحاولة.</string>
+    <string name="motor_voz_vosk_borrar">حذف Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">يحرّر ما تم تنزيله (نحو 50 ميغابايت لكل لغة). يُنزَّل من جديد عند اختياره.</string>
+    <string name="repaso_jev_fallo">لم يردّ Jev: تبقى النقاط كما كانت.</string>
+    <string name="repaso_jev_fallo_red">لا يوجد اتصال.</string>
+    <string name="chat_anotar_fallo_red">لا يوجد اتصال: لم يتمكن Jev من التحقق مما إذا كان يجب تدوينه في محادثة أخرى. ما أمليته باقٍ في المربع.</string>
+    <string name="chat_anotar_fallo">لم يردّ Jev (%1$s). ما أمليته باقٍ في المربع.</string>
+    <string name="chat_anotar_fallo_sin_motivo">لم يردّ Jev. ما أمليته باقٍ في المربع.</string>
 </resources>

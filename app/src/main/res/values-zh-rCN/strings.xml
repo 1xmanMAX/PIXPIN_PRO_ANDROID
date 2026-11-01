@@ -1093,4 +1093,20 @@
     <string name="chat_buscar_ir_al_mensaje">转到该消息</string>
     <string name="chat_buscar_en">在 %s 中</string>
     <string name="sincronizar_boton">同步</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">实时收听会议使用</string>
+    <string name="motor_voz_en_vivo_sistema">手机自带或 Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">用于与 Jev 开会时的议题和其他内容。Vosk 实时显示正在说的话，停顿片刻即结束每句话（Whisper 约 3 秒），无需联网。选择后将下载 %1$d MB（Apache-2.0）。</string>
+    <string name="motor_voz_en_vivo_listo">正在用 Vosk 离线收听：说的内容会显示在录制的全屏界面。如果加载失败，则使用手机自带识别或 Whisper。</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk 没有该语言的模型：由手机自带识别或 Whisper 收听。</string>
+    <string name="motor_voz_en_vivo_bajando">正在下载 Vosk… %1$d %%。在此期间由手机自带识别或 Whisper 收听。</string>
+    <string name="motor_voz_en_vivo_fallo">无法下载 Vosk。请重新选择以重试。</string>
+    <string name="motor_voz_vosk_borrar">删除 Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">释放已下载的内容（每种语言约 50 MB）。再次选择时会重新下载。</string>
+    <string name="repaso_jev_fallo">Jev 没有回复：要点保持原样。</string>
+    <string name="repaso_jev_fallo_red">无网络连接。</string>
+    <string name="chat_anotar_fallo_red">无网络连接：Jev 无法确认是否要记到其他聊天中。听写内容仍在输入框里。</string>
+    <string name="chat_anotar_fallo">Jev 没有回复（%1$s）。听写内容仍在输入框里。</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev 没有回复。听写内容仍在输入框里。</string>
 </resources>

@@ -1093,4 +1093,20 @@
     <string name="chat_buscar_ir_al_mensaje">Buka pesan</string>
     <string name="chat_buscar_en">di %s</string>
     <string name="sincronizar_boton">Sinkronkan</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">Dengarkan rapat secara langsung dengan</string>
+    <string name="motor_voz_en_vivo_sistema">Milik ponsel atau Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Untuk topik dan bagian lain rapat dengan Jev. Vosk menampilkan apa yang sedang diucapkan dan menutup setiap kalimat sepersekian detik setelah diam (Whisper sekitar 3 dtk), tanpa jaringan. Memilihnya mengunduh %1$d MB (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Mendengarkan dengan Vosk, tanpa jaringan: yang diucapkan muncul di layar penuh rekaman. Jika gagal dimuat, memakai pengenal ponsel atau Whisper.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk tidak punya model untuk bahasa ini: pengenal ponsel atau Whisper yang mendengarkan.</string>
+    <string name="motor_voz_en_vivo_bajando">Mengunduh Vosk… %1$d %%. Sementara itu pengenal ponsel atau Whisper yang mendengarkan.</string>
+    <string name="motor_voz_en_vivo_fallo">Gagal mengunduh Vosk. Pilih lagi untuk mencoba ulang.</string>
+    <string name="motor_voz_vosk_borrar">Hapus Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">Mengosongkan yang diunduh (sekitar 50 MB per bahasa). Akan diunduh lagi saat dipilih.</string>
+    <string name="repaso_jev_fallo">Jev tidak menjawab: poin-poin tetap seperti semula.</string>
+    <string name="repaso_jev_fallo_red">Tidak ada koneksi.</string>
+    <string name="chat_anotar_fallo_red">Tidak ada koneksi: Jev tidak bisa memeriksa apakah perlu dicatat di chat lain. Yang didikte tetap di kotak.</string>
+    <string name="chat_anotar_fallo">Jev tidak menjawab (%1$s). Yang didikte tetap di kotak.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev tidak menjawab. Yang didikte tetap di kotak.</string>
 </resources>

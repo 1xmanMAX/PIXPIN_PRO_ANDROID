@@ -1106,4 +1106,20 @@
     <string name="chat_buscar_ir_al_mensaje">Aller au message</string>
     <string name="chat_buscar_en">dans %s</string>
     <string name="sincronizar_boton">Synchroniser</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">Écouter la réunion en direct avec</string>
+    <string name="motor_voz_en_vivo_sistema">Celle du téléphone ou Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Pour les thèmes et le reste de la réunion avec Jev. Vosk affiche ce qui se dit et clôt chaque phrase une fraction de seconde après le silence (Whisper prend environ 3 s), hors ligne. Le choisir télécharge %1$d Mo (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Écoute avec Vosk, hors ligne : ce qui se dit s’affiche dans le plein écran de l’enregistrement. S’il ne se charge pas, la reconnaissance du téléphone ou Whisper prend le relais.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk n’a pas de modèle pour cette langue : la reconnaissance du téléphone ou Whisper écoute.</string>
+    <string name="motor_voz_en_vivo_bajando">Téléchargement de Vosk… %1$d %%. En attendant, la reconnaissance du téléphone ou Whisper écoute.</string>
+    <string name="motor_voz_en_vivo_fallo">Impossible de télécharger Vosk. Choisissez-le à nouveau pour réessayer.</string>
+    <string name="motor_voz_vosk_borrar">Supprimer Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">Libère l’espace téléchargé (environ 50 Mo par langue). Il se télécharge à nouveau quand vous le choisissez.</string>
+    <string name="repaso_jev_fallo">Jev n’a pas répondu : les points restent tels quels.</string>
+    <string name="repaso_jev_fallo_red">Pas de connexion.</string>
+    <string name="chat_anotar_fallo_red">Pas de connexion : Jev n’a pas pu vérifier s’il fallait le noter dans un autre chat. Le texte dicté reste dans la zone.</string>
+    <string name="chat_anotar_fallo">Jev n’a pas répondu (%1$s). Le texte dicté reste dans la zone.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev n’a pas répondu. Le texte dicté reste dans la zone.</string>
 </resources>

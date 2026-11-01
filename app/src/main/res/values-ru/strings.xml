@@ -1132,4 +1132,20 @@
     <string name="chat_buscar_ir_al_mensaje">Перейти к сообщению</string>
     <string name="chat_buscar_en">в %s</string>
     <string name="sincronizar_boton">Синхронизировать</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">Слушать встречу в реальном времени с помощью</string>
+    <string name="motor_voz_en_vivo_sistema">Распознавание телефона или Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Для тем и остального на встрече с Jev. Vosk показывает, что говорится, и закрывает каждую фразу через доли секунды после паузы (Whisper — около 3 с), без сети. При выборе загружается %1$d МБ (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Слушает Vosk, без сети: сказанное появляется на полноэкранном экране записи. Если он не загрузится, используется распознавание телефона или Whisper.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">У Vosk нет модели для этого языка: слушает распознавание телефона или Whisper.</string>
+    <string name="motor_voz_en_vivo_bajando">Загрузка Vosk… %1$d %%. Пока слушает распознавание телефона или Whisper.</string>
+    <string name="motor_voz_en_vivo_fallo">Не удалось загрузить Vosk. Выберите его снова, чтобы повторить.</string>
+    <string name="motor_voz_vosk_borrar">Удалить Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">Освобождает загруженное (около 50 МБ на язык). При повторном выборе загрузится снова.</string>
+    <string name="repaso_jev_fallo">Jev не ответил: пункты остаются как были.</string>
+    <string name="repaso_jev_fallo_red">Нет соединения.</string>
+    <string name="chat_anotar_fallo_red">Нет соединения: Jev не смог проверить, нужно ли записать это в другой чат. Надиктованное осталось в поле.</string>
+    <string name="chat_anotar_fallo">Jev не ответил (%1$s). Надиктованное осталось в поле.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev не ответил. Надиктованное осталось в поле.</string>
 </resources>

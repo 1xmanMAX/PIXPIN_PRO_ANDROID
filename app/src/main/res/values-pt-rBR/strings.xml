@@ -1106,4 +1106,20 @@
     <string name="chat_buscar_ir_al_mensaje">Ir para a mensagem</string>
     <string name="chat_buscar_en">em %s</string>
     <string name="sincronizar_boton">Sincronizar</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">Ouvir a reunião ao vivo com</string>
+    <string name="motor_voz_en_vivo_sistema">O do telefone ou Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Para os temas e o resto da reunião com o Jev. O Vosk mostra o que está sendo dito e fecha cada frase frações de segundo após o silêncio (o Whisper leva uns 3 s), sem internet. Ao escolhê-lo, baixa %1$d MB (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Ouvindo com Vosk, sem internet: o que é dito aparece na tela cheia da gravação. Se não carregar, usa o reconhecimento do telefone ou o Whisper.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">O Vosk não tem modelo deste idioma: ouve o reconhecimento do telefone ou o Whisper.</string>
+    <string name="motor_voz_en_vivo_bajando">Baixando o Vosk… %1$d %%. Enquanto isso, ouve o reconhecimento do telefone ou o Whisper.</string>
+    <string name="motor_voz_en_vivo_fallo">Não foi possível baixar o Vosk. Escolha-o de novo para tentar outra vez.</string>
+    <string name="motor_voz_vosk_borrar">Apagar Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">Libera o que foi baixado (cerca de 50 MB por idioma). Baixa de novo ao escolhê-lo.</string>
+    <string name="repaso_jev_fallo">O Jev não respondeu: os pontos ficam como estavam.</string>
+    <string name="repaso_jev_fallo_red">Sem conexão.</string>
+    <string name="chat_anotar_fallo_red">Sem conexão: o Jev não pôde verificar se era para anotar em outro chat. O ditado continua na caixa.</string>
+    <string name="chat_anotar_fallo">O Jev não respondeu (%1$s). O ditado continua na caixa.</string>
+    <string name="chat_anotar_fallo_sin_motivo">O Jev não respondeu. O ditado continua na caixa.</string>
 </resources>

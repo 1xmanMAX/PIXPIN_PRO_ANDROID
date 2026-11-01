@@ -1106,4 +1106,20 @@
     <string name="chat_buscar_ir_al_mensaje">Vai al messaggio</string>
     <string name="chat_buscar_en">in %s</string>
     <string name="sincronizar_boton">Sincronizza</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">Ascolta la riunione dal vivo con</string>
+    <string name="motor_voz_en_vivo_sistema">Quello del telefono o Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Per gli argomenti e il resto della riunione con Jev. Vosk mostra ciò che si sta dicendo e chiude ogni frase una frazione di secondo dopo il silenzio (Whisper circa 3 s), offline. Sceglierlo scarica %1$d MB (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Ascolto con Vosk, offline: ciò che si dice appare nello schermo intero della registrazione. Se non si carica, si usa il riconoscimento del telefono o Whisper.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk non ha un modello per questa lingua: ascolta il riconoscimento del telefono o Whisper.</string>
+    <string name="motor_voz_en_vivo_bajando">Download di Vosk… %1$d %%. Nel frattempo ascolta il riconoscimento del telefono o Whisper.</string>
+    <string name="motor_voz_en_vivo_fallo">Impossibile scaricare Vosk. Sceglilo di nuovo per riprovare.</string>
+    <string name="motor_voz_vosk_borrar">Elimina Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">Libera ciò che è stato scaricato (circa 50 MB per lingua). Si riscarica quando lo scegli.</string>
+    <string name="repaso_jev_fallo">Jev non ha risposto: i punti restano com’erano.</string>
+    <string name="repaso_jev_fallo_red">Nessuna connessione.</string>
+    <string name="chat_anotar_fallo_red">Nessuna connessione: Jev non ha potuto verificare se annotarlo in un’altra chat. Il dettato resta nella casella.</string>
+    <string name="chat_anotar_fallo">Jev non ha risposto (%1$s). Il dettato resta nella casella.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev non ha risposto. Il dettato resta nella casella.</string>
 </resources>

@@ -1093,4 +1093,20 @@
     <string name="chat_buscar_ir_al_mensaje">メッセージへ移動</string>
     <string name="chat_buscar_en">%s 内</string>
     <string name="sincronizar_boton">同期</string>
+    <!-- Vosk en vivo y lo de Jev sin contestar (1-nov-2026) -->
+    <string name="motor_voz_en_vivo">会議をライブで聞き取るエンジン</string>
+    <string name="motor_voz_en_vivo_sistema">端末の認識または Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Jev との会議の議題などに使います。Vosk は話している内容を表示し、話が止まると一瞬で各文を区切ります（Whisper は約 3 秒）。オフラインで動作します。選ぶと %1$d MB をダウンロードします（Apache-2.0）。</string>
+    <string name="motor_voz_en_vivo_listo">Vosk でオフラインで聞き取り中：話した内容は録音の全画面に表示されます。読み込めない場合は端末の認識または Whisper を使います。</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk にはこの言語のモデルがありません：端末の認識または Whisper が聞き取ります。</string>
+    <string name="motor_voz_en_vivo_bajando">Vosk をダウンロード中… %1$d %%。その間は端末の認識または Whisper が聞き取ります。</string>
+    <string name="motor_voz_en_vivo_fallo">Vosk をダウンロードできませんでした。もう一度選ぶと再試行します。</string>
+    <string name="motor_voz_vosk_borrar">Vosk を削除</string>
+    <string name="motor_voz_vosk_borrar_ayuda">ダウンロードしたデータを削除します（言語ごとに約 50 MB）。再び選ぶとダウンロードされます。</string>
+    <string name="repaso_jev_fallo">Jev が応答しませんでした：ポイントはそのままです。</string>
+    <string name="repaso_jev_fallo_red">接続がありません。</string>
+    <string name="chat_anotar_fallo_red">接続がありません：Jev は別のチャットに記録すべきか確認できませんでした。口述した内容は入力欄に残っています。</string>
+    <string name="chat_anotar_fallo">Jev が応答しませんでした（%1$s）。口述した内容は入力欄に残っています。</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev が応答しませんでした。口述した内容は入力欄に残っています。</string>
 </resources>
