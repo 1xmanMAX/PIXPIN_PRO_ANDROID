@@ -375,7 +375,7 @@ fun TarjetaDeConfiguracion(
             if (grupos.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Grupos guardados",
+                    stringResource(R.string.ajustes_grupos_guardados),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -440,6 +440,8 @@ fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {
         pie = {
             // **«Privacidad y datos»** (30-oct-2026, para Google Play): la política, qué sale del
             // teléfono, reportar lo que escribe la IA y borrar todo. Ver [com.forge.pixpin.privacidad.PrivacidadYDatos].
+            // **El idioma** (1-nov-2026): español o inglés, como el PC. Ver [com.forge.pixpin.ajustes.IdiomaCard].
+            com.forge.pixpin.ajustes.IdiomaCard()
             com.forge.pixpin.privacidad.PrivacidadYDatos()
             Text(
                 stringResource(R.string.version, BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE),
@@ -466,12 +468,12 @@ fun PantallaDeAjustes(onVolver: () -> Unit, cabecera: @Composable () -> Unit = {
             "barra-pantalla" -> BarraDeLaCapaCard()
             "barra-lector" -> BarraDelLectorCard()
             "barra-plano" -> BarraDelPlanoCard()
-            "barra-pdf" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF, "Barra del PDF", "Las herramientas al anotar un PDF. Sin tocar, las del lector.")
-            "barra-documento" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO, "Barra de Word y libros", "Las herramientas al anotar un Word, un PowerPoint o un libro. Sin tocar, las del lector.")
-            "barra-web" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB, "Barra de las páginas web", "Las herramientas al anotar una página HTML. Sin tocar, las del lector.")
-            "barra-nota" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA, "Barra de las notas", "Las herramientas al anotar una nota. Sin tocar, las del lector.")
-            "barra-modelo" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO, "Barra del modelo 3D", "Las herramientas al anotar un modelo IFC o Revit. Sin tocar, las del lector.")
-            "barra-hoja" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA, "Barra de Excel", "Las herramientas al anotar una hoja de cálculo. Sin tocar, las del lector.")
+            "barra-pdf" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF, stringResource(R.string.ajustes_barra_pdf), stringResource(R.string.ajustes_barra_pdf_desc))
+            "barra-documento" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO, stringResource(R.string.ajustes_barra_documento), stringResource(R.string.ajustes_barra_documento_desc))
+            "barra-web" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB, stringResource(R.string.ajustes_barra_web), stringResource(R.string.ajustes_barra_web_desc))
+            "barra-nota" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.NOTA, stringResource(R.string.ajustes_barra_nota), stringResource(R.string.ajustes_barra_nota_desc))
+            "barra-modelo" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.MODELO, stringResource(R.string.ajustes_barra_modelo), stringResource(R.string.ajustes_barra_modelo_desc))
+            "barra-hoja" -> BarraDeFormatoCard(com.forge.pixpin.motor.HerramientasPorSitio.Sitio.HOJA, stringResource(R.string.ajustes_barra_hoja), stringResource(R.string.ajustes_barra_hoja_desc))
             "editor-plano" -> EditorDelPlanoCard()
             "palabras" -> PalabrasMagicasCard()
             "voz" -> MotorDeVozCard()
@@ -1048,7 +1050,7 @@ private fun MotorDeVozCard() {
                 )
                 TextButton(onClick = {
                     runCatching { context.startActivity(android.content.Intent(android.provider.Settings.ACTION_VOICE_INPUT_SETTINGS)) }
-                }) { Text("Ajustes") }
+                }) { Text(stringResource(R.string.ajustes_abrir_ajustes_sistema)) }
             }
             Text(
                 stringResource(R.string.motor_voz_google_desc),
@@ -1217,10 +1219,15 @@ private fun Qwen3Asr(elegido: Boolean, version: Int, elegir: () -> Unit) {
 }
 
 /** Los idiomas que se ofrecen para los audios: los que tienen modelo pequeño de Vosk (y Whisper los entiende todos). */
-private val IDIOMAS_DE_VOZ = listOf(
-    "es" to "Español", "en" to "Inglés", "pt" to "Portugués", "fr" to "Francés",
-    "de" to "Alemán", "it" to "Italiano", "ca" to "Catalán"
-)
+/**
+ * El nombre de cada idioma, **en el idioma puesto** (1-nov-2026): lo da Java, así que en inglés
+ * sale «Spanish» y en español «Español», sin una lista que traducir.
+ */
+private val IDIOMAS_DE_VOZ: List<Pair<String, String>>
+    get() = listOf("es", "en", "pt", "fr", "de", "it", "ca").map { codigo ->
+        val aqui = java.util.Locale.getDefault()
+        codigo to java.util.Locale.forLanguageTag(codigo).getDisplayLanguage(aqui).replaceFirstChar { it.titlecase(aqui) }
+    }
 
 /**
  * **Máxima fluidez.**
@@ -1421,8 +1428,8 @@ private fun DialogoDePalabras(
                 )
             }
         },
-        confirmButton = { TextButton(onClick = { onAceptar(texto) }) { Text("Aceptar") } },
-        dismissButton = { TextButton(onClick = onCerrar) { Text("Cancelar") } }
+        confirmButton = { TextButton(onClick = { onAceptar(texto) }) { Text(stringResource(R.string.ajustes_aceptar)) } },
+        dismissButton = { TextButton(onClick = onCerrar) { Text(stringResource(R.string.cancel)) } }
     )
 }
 
@@ -1583,9 +1590,9 @@ private fun CaducidadDeCapturasCard() {
     val settings by app.settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Días hasta borrar", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.ajustes_dias_titulo), style = MaterialTheme.typography.titleSmall)
             Text(
-                "Pasado el plazo se van a la papelera del teléfono, salvo las conservadas.",
+                stringResource(R.string.ajustes_dias_desc),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))
@@ -1594,7 +1601,7 @@ private fun CaducidadDeCapturasCard() {
                     androidx.compose.material3.FilterChip(
                         selected = settings.diasCaducidad == dias,
                         onClick = { scope.launch { app.settings.setDiasCaducidad(dias) } },
-                        label = { Text(if (dias == 0) "Nunca" else "$dias") }
+                        label = { Text(if (dias == 0) stringResource(R.string.ajustes_dias_nunca) else "$dias") }
                     )
                 }
             }
@@ -1615,9 +1622,9 @@ private fun CompresionDePdfCard() {
     val niveles = com.forge.pixpin.pdf.ComprimirPdf.NIVELES.map { it to com.forge.pixpin.pdf.ComprimirPdf.ROTULOS.getValue(it) }
     Card(modifier = Modifier.fillMaxWidth()) {
         Column(Modifier.padding(16.dp)) {
-            Text("Compresión de los PDF", style = MaterialTheme.typography.titleSmall)
+            Text(stringResource(R.string.ajustes_pdf_titulo), style = MaterialTheme.typography.titleSmall)
             Text(
-                "Al guardar un PDF en PixPin se aligera solo, en segundo plano, con pdfsqueeze. El original que tengas fuera de PixPin no se toca.",
+                stringResource(R.string.ajustes_pdf_desc),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             Spacer(Modifier.height(8.dp))

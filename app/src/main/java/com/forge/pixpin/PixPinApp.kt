@@ -71,6 +71,10 @@ class PixPinApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        // **El idioma, lo primero** (1-nov-2026): español o inglés con la regla del PC, antes de que
+        // nada lea un texto. Ver [com.forge.pixpin.ajustes.IdiomaDeLaApp].
+        com.forge.pixpin.ajustes.IdiomaDeLaApp.alArrancar(this)
+        com.forge.pixpin.ui.Textos.app = this
         com.forge.pixpin.motor.DrawFonts.app = this
         // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].
         // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
@@ -83,8 +87,10 @@ class PixPinApp : Application() {
         // **Por dónde suena todo** (27-oct-2026): altavoz, auricular de llamadas o audífonos. Ver [com.forge.pixpin.audio.SalidaDeAudio].
         runCatching { com.forge.pixpin.audio.SalidaDeAudio.iniciar(this) }
         // El símbolo del formato «moneda» de las celdas: el del aparato, como el PC usa el de Windows.
+        // El del **sistema** y no `Locale.getDefault()`, que con el idioma de la app puesto es «en» a
+        // secas, sin país ni moneda.
         runCatching {
-            val l = java.util.Locale.getDefault()
+            val l = android.content.res.Resources.getSystem().configuration.locales[0]
             java.util.Currency.getInstance(l).getSymbol(l).trim().takeIf { it.isNotEmpty() && it.length <= 4 }
         }.getOrNull()?.let { com.forge.pixpin.motor.TablaViva.moneda = it }
         com.forge.pixpin.pdf.ComprimirPdf.despues = { archivo, nivel -> com.forge.pixpin.pdf.PdfSqueezeService.encolar(this, archivo, nivel) }
@@ -201,4 +207,14 @@ class PixPinApp : Application() {
                 }
         }
     }
+
+    /**
+     * **El teléfono cambió de idioma** (1-nov-2026): con «el del teléfono» puede tocar pasar del
+     * español al inglés o al revés. Si no cambia nada, no hace nada.
+     */
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        com.forge.pixpin.ajustes.IdiomaDeLaApp.aplicar(this)
+    }
+
 }

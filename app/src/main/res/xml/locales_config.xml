@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    **Los idiomas de PixPin** (1-nov-2026): los que salen en Ajustes del sistema › Idioma de las
+    apps (Android 13+). Los mismos dos del PC. Ver ajustes/IdiomaDeLaApp.kt.
+-->
+<locale-config xmlns:android="http://schemas.android.com/apk/res/android">
+    <locale android:name="es" />
+    <locale android:name="en" />
+</locale-config>

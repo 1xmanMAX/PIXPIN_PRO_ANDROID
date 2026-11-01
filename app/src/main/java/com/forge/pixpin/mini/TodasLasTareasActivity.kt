@@ -1,5 +1,7 @@
 package com.forge.pixpin.mini
 
+import androidx.compose.ui.res.stringResource
+import com.forge.pixpin.R
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -245,7 +247,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                         else TodasLasTareas.marcar(m.texto, f, hecha)?.let { m.copy(texto = it) } ?: m.also { cambio = true }
                     }
                 }
-                if (cambio) withContext(Dispatchers.Main) { avisar("La lista cambió mientras tanto; ya está al día. Vuelve a marcarla.") }
+                if (cambio) withContext(Dispatchers.Main) { avisar(getString(R.string.tareas_cambio_marcar)) }
             }
         }
 
@@ -262,11 +264,11 @@ class TodasLasTareasActivity : ComponentActivity() {
                 }
                 withContext(Dispatchers.Main) {
                     val q = hecha
-                    if (q == null) { avisar("La lista cambió mientras tanto; ya está al día. Vuelve a quitarla."); return@withContext }
+                    if (q == null) { avisar(getString(R.string.tareas_cambio_quitar)); return@withContext }
                     alcance.launch {
                         avisos.currentSnackbarData?.dismiss()
                         val r = withTimeoutOrNull(TodasLasTareas.DURA_DESHACER_MS) {
-                            avisos.showSnackbar("«${q.texto.ifBlank { "Tarea" }}» quitada", "Deshacer", duration = SnackbarDuration.Indefinite)
+                            avisos.showSnackbar(getString(R.string.tareas_quitada, q.texto.ifBlank { getString(R.string.tareas_tarea) }), getString(R.string.tareas_deshacer), duration = SnackbarDuration.Indefinite)
                         }
                         if (r == null) avisos.currentSnackbarData?.dismiss()
                         if (r == SnackbarResult.ActionPerformed) app.scope.launch(Dispatchers.IO) {
@@ -277,7 +279,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                     else { esta = true; m.copy(texto = TodasLasTareas.reponer(m.texto, q.indice, q.tarea)) }
                                 }
                             }
-                            withContext(Dispatchers.Main) { avisar(if (esta) "Tarea devuelta a su lista" else "Esa lista ya no está") }
+                            withContext(Dispatchers.Main) { avisar(if (esta) getString(R.string.tareas_devuelta) else getString(R.string.tareas_lista_ya_no)) }
                         }
                     }
                 }
@@ -296,9 +298,9 @@ class TodasLasTareasActivity : ComponentActivity() {
                 }
                 withContext(Dispatchers.Main) {
                     avisar(when {
-                        cambio -> "La lista cambió mientras tanto; ya está al día. Vuelve a intentarlo."
-                        hora == null -> "Ya no se recuerda"
-                        else -> "Te la recuerdo ${Tareas.textoDeHora(hora)}"
+                        cambio -> getString(R.string.tareas_cambio_intentar)
+                        hora == null -> getString(R.string.tareas_ya_no_recuerda)
+                        else -> getString(R.string.tareas_te_la_recuerdo, Tareas.textoDeHora(hora))
                     })
                 }
             }
@@ -312,7 +314,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                 // Las imágenes, copiadas al chat de destino antes de tocar nada (`tareas::mover`).
                 val crudo = if (desde.proyecto == hasta.proyecto) f.crudo
                 else TodasLasTareas.conImagenesCopiadas(f.crudo, filesDir, almacen.carpetaDeAdjuntos(), System.currentTimeMillis())
-                if (crudo == null) { withContext(Dispatchers.Main) { avisar("No se pudieron copiar sus imágenes") }; return@launch }
+                if (crudo == null) { withContext(Dispatchers.Main) { avisar(getString(R.string.tareas_sin_imagenes)) }; return@launch }
                 var hecho = false
                 almacen.cambiar { todos ->
                     val o = todos.firstOrNull { it.id == desde.codigo }
@@ -331,7 +333,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                     }
                 }
                 withContext(Dispatchers.Main) {
-                    avisar(if (hecho) "Movida a ${hasta.titulo}" else "La lista cambió mientras tanto; ya está al día. Vuelve a moverla.")
+                    avisar(if (hecho) getString(R.string.tareas_movida_a, hasta.titulo) else getString(R.string.tareas_cambio_mover))
                 }
             }
         }
@@ -359,7 +361,7 @@ class TodasLasTareasActivity : ComponentActivity() {
             app.scope.launch(Dispatchers.IO) {
                 TareaRapidaActivity.alInbox(applicationContext, t)
                 val dice = TareaInteligente.tituloDe(t).ifBlank { Tareas.saneado(t) }
-                withContext(Dispatchers.Main) { avisar("«$dice» añadida a «${TodasLasTareas.INBOX}».") }
+                withContext(Dispatchers.Main) { avisar(getString(R.string.tareas_anadida_a, dice, TodasLasTareas.INBOX)) }
             }
         }
 
@@ -370,10 +372,10 @@ class TodasLasTareasActivity : ComponentActivity() {
             Column(Modifier.fillMaxSize().padding(relleno)) {
                 // Cabecera.
                 Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BotonRedondo(Icons.AutoMirrored.Filled.ArrowBack, "Volver", { finish() }, tamano = 44.dp)
+                    BotonRedondo(Icons.AutoMirrored.Filled.ArrowBack, stringResource(R.string.tareas_volver), { finish() }, tamano = 44.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        Text("Tareas", style = MaterialTheme.typography.titleLarge, color = Cristal.tinta, fontWeight = FontWeight.SemiBold)
+                        Text(stringResource(R.string.tareas_titulo), style = MaterialTheme.typography.titleLarge, color = Cristal.tinta, fontWeight = FontWeight.SemiBold)
                         val v = vista
                         if (v != null) Text(
                             if (palabras.isNotEmpty()) TodasLasTareas.encontradas(v.grupos.sumOf { it.arriba.size + it.hechas.size })
@@ -407,7 +409,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                         Spacer(Modifier.width(8.dp))
                         Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                             if (consulta.isEmpty()) Text(
-                                "Buscar… («hoy», «ayer»)", color = Cristal.tinta.copy(alpha = 0.5f),
+                                stringResource(R.string.tareas_buscar), color = Cristal.tinta.copy(alpha = 0.5f),
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                             BasicTextField(
@@ -416,7 +418,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                 cursorBrush = SolidColor(Cristal.tinta), modifier = Modifier.fillMaxWidth()
                             )
                         }
-                        if (consulta.isNotEmpty()) IconButton(onClick = { consulta = "" }) { Icon(Icons.Filled.Close, "Vaciar", tint = Cristal.tinta) }
+                        if (consulta.isNotEmpty()) IconButton(onClick = { consulta = "" }) { Icon(Icons.Filled.Close, stringResource(R.string.tareas_vaciar), tint = Cristal.tinta) }
                     }
                     Spacer(Modifier.height(8.dp))
 
@@ -429,7 +431,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                         Spacer(Modifier.width(8.dp))
                         Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                             if (apuntar.isEmpty()) Text(
-                                "Apunta una tarea en el Inbox", color = Cristal.tinta.copy(alpha = 0.5f),
+                                stringResource(R.string.tareas_apunta), color = Cristal.tinta.copy(alpha = 0.5f),
                                 maxLines = 1, overflow = TextOverflow.Ellipsis
                             )
                             BasicTextField(
@@ -440,7 +442,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                 keyboardActions = KeyboardActions(onDone = { apuntarAhora() })
                             )
                         }
-                        TextButton(onClick = { apuntarAhora() }, enabled = apuntar.isNotBlank()) { Text("Apuntar") }
+                        TextButton(onClick = { apuntarAhora() }, enabled = apuntar.isNotBlank()) { Text(stringResource(R.string.tareas_apuntar)) }
                     }
 
                     val v = vista
@@ -490,7 +492,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                         ) {
                                             Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = Cristal.tinta.copy(alpha = 0.7f))
                                             Spacer(Modifier.width(6.dp))
-                                            Text("Hechas (${g.hechas.size})", color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+                                            Text(stringResource(R.string.tareas_hechas, g.hechas.size), color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
                                         }
                                     }
                                     if (abierta) items(g.hechas, key = { "h:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
@@ -571,9 +573,9 @@ class TodasLasTareasActivity : ComponentActivity() {
             VistaDeTareas.Vista.entries.forEach { v ->
                 val puesta = v == modo
                 val (icono, nombre) = when (v) {
-                    VistaDeTareas.Vista.TARJETAS -> Icons.Filled.ViewAgenda to "Tarjetas"
-                    VistaDeTareas.Vista.KANBAN -> Icons.Filled.ViewKanban to "Kanban"
-                    VistaDeTareas.Vista.HORARIO -> Icons.Filled.CalendarMonth to "Horario"
+                    VistaDeTareas.Vista.TARJETAS -> Icons.Filled.ViewAgenda to stringResource(R.string.tareas_vista_tarjetas)
+                    VistaDeTareas.Vista.KANBAN -> Icons.Filled.ViewKanban to stringResource(R.string.tareas_vista_kanban)
+                    VistaDeTareas.Vista.HORARIO -> Icons.Filled.CalendarMonth to stringResource(R.string.tareas_vista_horario)
                 }
                 Box(
                     Modifier.size(40.dp).clip(forma).background(if (puesta) Cristal.puesto else Color.Transparent, forma)
@@ -696,7 +698,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                             Encabezado(l, g.pendientes(l), color)
                             g.arriba.forEach { i -> key("a" + l.filas[i].crudo + i) { Agarrable(g.lista, i) } }
                             if (g.arriba.isEmpty() && g.hechas.isEmpty()) Text(
-                                "Suelta aquí una tarea para pasarla a esta lista",
+                                stringResource(R.string.tareas_suelta_aqui),
                                 color = Cristal.tinta.copy(alpha = 0.55f), style = MaterialTheme.typography.bodySmall,
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 16.dp)
                             )
@@ -710,7 +712,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                                 ) {
                                     Icon(if (abierta) Icons.Filled.ExpandLess else Icons.Filled.ExpandMore, null, tint = Cristal.tinta.copy(alpha = 0.7f))
                                     Spacer(Modifier.width(6.dp))
-                                    Text("Hechas (${g.hechas.size})", color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
+                                    Text(stringResource(R.string.tareas_hechas, g.hechas.size), color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.labelLarge)
                                 }
                                 if (abierta) g.hechas.forEach { i -> key("h" + l.filas[i].crudo + i) { Agarrable(g.lista, i) } }
                             }
@@ -747,7 +749,7 @@ class TodasLasTareasActivity : ComponentActivity() {
             Spacer(Modifier.width(8.dp))
             MarcaDeCompartida(l)
             Text(
-                l.titulo.ifBlank { "Tareas" }, color = Cristal.tinta, fontWeight = FontWeight.SemiBold,
+                l.titulo.ifBlank { stringResource(R.string.tareas_titulo) }, color = Cristal.tinta, fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f, fill = false)
             )
@@ -771,7 +773,7 @@ class TodasLasTareasActivity : ComponentActivity() {
         val verde = Color(com.forge.pixpin.sincro.EntrePersonas.VERDE_COMPARTIDO)
         val autor = TareasCompartidas.autor(l, compartidos)
         Icon(
-            Icons.Filled.Groups, contentDescription = autor?.let { "De un chat compartido, apuntada por $it" } ?: "De un chat compartido",
+            Icons.Filled.Groups, contentDescription = autor?.let { stringResource(R.string.tareas_compartida_por, it) } ?: stringResource(R.string.tareas_compartida),
             tint = verde, modifier = Modifier.size(lado)
         )
         autor?.let { TareasCompartidas.inicial(it) }?.takeIf { it.isNotEmpty() }?.let {
@@ -853,22 +855,22 @@ class TodasLasTareasActivity : ComponentActivity() {
                 }
             }
             Box {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, "Más", tint = Cristal.tinta.copy(alpha = 0.7f)) }
+                IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, stringResource(R.string.tareas_mas), tint = Cristal.tinta.copy(alpha = 0.7f)) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(
-                        text = { Text("Mover a…") }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) },
+                        text = { Text(stringResource(R.string.tareas_mover_a)) }, leadingIcon = { Icon(Icons.AutoMirrored.Filled.ArrowForward, null) },
                         onClick = { menu = false; moverA() }
                     )
                     if (!f.hecha) DropdownMenuItem(
-                        text = { Text(if (hora == null) "Recordar…" else "Otra hora…") }, leadingIcon = { Icon(Icons.Filled.Alarm, null) },
+                        text = { Text(if (hora == null) stringResource(R.string.tareas_recordar) else stringResource(R.string.tareas_otra_hora)) }, leadingIcon = { Icon(Icons.Filled.Alarm, null) },
                         onClick = { menu = false; recordar(l, f) }
                     )
                     if (hora != null) DropdownMenuItem(
-                        text = { Text("No recordar") }, leadingIcon = { Icon(Icons.Filled.AlarmOff, null) },
+                        text = { Text(stringResource(R.string.tareas_no_recordar)) }, leadingIcon = { Icon(Icons.Filled.AlarmOff, null) },
                         onClick = { menu = false; olvidarHora(l, f) }
                     )
                     DropdownMenuItem(
-                        text = { Text("Quitar") }, leadingIcon = { Icon(Icons.Filled.Close, null) },
+                        text = { Text(stringResource(R.string.tareas_quitar)) }, leadingIcon = { Icon(Icons.Filled.Close, null) },
                         onClick = { menu = false; quitar(l, f) }
                     )
                 }
@@ -909,22 +911,22 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun MoverA(f: Fila, otras: List<Lista>, cerrar: () -> Unit, elegir: (Lista) -> Unit) {
         AlertDialog(
             onDismissRequest = cerrar,
-            title = { Text("Mover «${f.marcas.titulo.ifBlank { f.texto }.ifBlank { "Tarea" }.take(40)}» a…", maxLines = 2, overflow = TextOverflow.Ellipsis) },
+            title = { Text(stringResource(R.string.tareas_mover_titulo, f.marcas.titulo.ifBlank { f.texto }.ifBlank { stringResource(R.string.tareas_tarea) }.take(40)), maxLines = 2, overflow = TextOverflow.Ellipsis) },
             text = {
-                if (otras.isEmpty()) Text("Aún no hay otros grupos de tareas. Crea una lista de tareas en un chat y saldrá aquí.")
+                if (otras.isEmpty()) Text(stringResource(R.string.tareas_sin_grupos))
                 else LazyColumn(Modifier.heightIn(max = 420.dp)) {
                     items(otras, key = { it.clave }) { l ->
                         Row(
                             Modifier.fillMaxWidth().clip(RoundedCornerShape(10.dp)).clickable { elegir(l) }.padding(horizontal = 8.dp, vertical = 12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(l.titulo.ifBlank { "Tareas" }, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            Text(l.titulo.ifBlank { stringResource(R.string.tareas_titulo) }, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                             Text("  ·  ${l.chat}", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         }
                     }
                 }
             },
-            confirmButton = { TextButton(onClick = cerrar) { Text("Cerrar") } }
+            confirmButton = { TextButton(onClick = cerrar) { Text(stringResource(R.string.tareas_cerrar)) } }
         )
     }
 
@@ -932,7 +934,7 @@ class TodasLasTareasActivity : ComponentActivity() {
     private fun Vacia(modifier: Modifier) {
         Box(modifier.fillMaxWidth().padding(28.dp), contentAlignment = Alignment.Center) {
             Text(
-                "Aún no hay tareas. Escribe arriba y pulsa Intro: irá al Inbox y desde ahí la pasas a su grupo.",
+                stringResource(R.string.tareas_vacio),
                 color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyLarge
             )
         }
@@ -944,12 +946,12 @@ class TodasLasTareasActivity : ComponentActivity() {
             modifier.fillMaxWidth().padding(28.dp), verticalArrangement = Arrangement.spacedBy(10.dp, Alignment.CenterVertically),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text("Nada coincide con «${consulta.trim().take(40)}»", color = Cristal.tinta, style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.tareas_nada_coincide, consulta.trim().take(40)), color = Cristal.tinta, style = MaterialTheme.typography.titleMedium)
             Text(
-                "Se busca en el texto de cada tarea y en el nombre de su lista y de su chat, sin mirar tildes ni mayúsculas. Prueba con menos palabras, o con «hoy» o «ayer».",
+                stringResource(R.string.tareas_nada_coincide_desc),
                 color = Cristal.tinta.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium
             )
-            FilledTonalButton(onClick = vaciar) { Text("Vaciar la búsqueda") }
+            FilledTonalButton(onClick = vaciar) { Text(stringResource(R.string.tareas_vaciar_busqueda)) }
         }
     }
 
