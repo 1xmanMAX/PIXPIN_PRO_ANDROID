@@ -33,7 +33,7 @@ object OidoEnVivo {
     const val TARDANZA_MAXIMA = 0.8f
     /** Batería por debajo de esto (0-100): no se pasa a texto. */
     const val BATERIA_MINIMA = 20
-    private const val RMS_VOZ = 300.0
+    internal const val RMS_VOZ = 300.0
     private const val PARTE_CON_VOZ = 0.1
 
     /** **Cuándo se corta una frase.** */

@@ -1182,4 +1182,21 @@
     <string name="chat_buscar_ir_al_mensaje">Ir al mensaje</string>
     <string name="chat_buscar_en">en %s</string>
     <string name="sincronizar_boton">Sincronizar</string>
+    <!-- Escuchar la reunión en vivo con Vosk (1-nov-2026, `[voz] en_vivo` del PC). -->
+    <string name="motor_voz_en_vivo">Escuchar la reunión en vivo con</string>
+    <string name="motor_voz_en_vivo_sistema">El del teléfono o Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">Para los temas y lo demás de la reunión con Jev. Vosk enseña lo que se va diciendo y cierra cada frase a las décimas de callarse (con Whisper, unos 3 s), sin red. Al elegirlo se bajan %1$d MB (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Se escucha con Vosk, sin red: lo que se va diciendo sale en la pantalla completa de la grabación. Si alguna vez no carga, con el del teléfono o Whisper.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk no tiene modelo de este idioma: se escucha con el del teléfono o Whisper.</string>
+    <string name="motor_voz_en_vivo_bajando">Bajando Vosk… %1$d %%. Mientras tanto se escucha con el del teléfono o Whisper.</string>
+    <string name="motor_voz_en_vivo_fallo">No se pudo bajar Vosk. Vuelve a elegirlo para reintentar.</string>
+    <string name="motor_voz_vosk_borrar">Borrar Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">Libera lo bajado (unos 50 MB en disco por idioma). Se vuelve a bajar al elegirlo.</string>
+    <!-- Si Jev no contesta al repasar o al dictar, se dice por qué (1-nov-2026, como el PC). -->
+    <string name="repaso_jev_fallo">Jev no contestó: los puntos se quedan como estaban.</string>
+    <string name="repaso_jev_fallo_red">Sin conexión.</string>
+    <string name="chat_anotar_fallo_red">Sin conexión: Jev no pudo mirar si había que anotarlo en otro chat. Lo dictado sigue en la caja.</string>
+    <string name="chat_anotar_fallo">Jev no contestó (%1$s). Lo dictado sigue en la caja.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev no contestó. Lo dictado sigue en la caja.</string>
 </resources>

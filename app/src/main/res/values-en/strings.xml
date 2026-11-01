@@ -1113,4 +1113,21 @@
     <string name="chat_buscar_ir_al_mensaje">Go to the message</string>
     <string name="chat_buscar_en">in %s</string>
     <string name="sincronizar_boton">Sync</string>
+    <!-- Listen to the meeting live with Vosk (1-Nov-2026, `[voz] en_vivo` on the PC). -->
+    <string name="motor_voz_en_vivo">Listen to the meeting live with</string>
+    <string name="motor_voz_en_vivo_sistema">The phone\'s or Whisper</string>
+    <string name="motor_voz_en_vivo_vosk">Vosk</string>
+    <string name="motor_voz_en_vivo_ayuda">For the meeting topics and the rest of the meeting with Jev. Vosk shows what is being said and closes each sentence a fraction of a second after you stop (Whisper takes about 3 s), offline. Choosing it downloads %1$d MB (Apache-2.0).</string>
+    <string name="motor_voz_en_vivo_listo">Listening with Vosk, offline: what is being said shows in the recording\'s full screen. If it ever fails to load, the phone\'s recognizer or Whisper is used.</string>
+    <string name="motor_voz_en_vivo_sin_idioma">Vosk has no model for this language: the phone\'s recognizer or Whisper listens.</string>
+    <string name="motor_voz_en_vivo_bajando">Downloading Vosk… %1$d %%. The phone\'s recognizer or Whisper listens meanwhile.</string>
+    <string name="motor_voz_en_vivo_fallo">Could not download Vosk. Choose it again to retry.</string>
+    <string name="motor_voz_vosk_borrar">Delete Vosk</string>
+    <string name="motor_voz_vosk_borrar_ayuda">Frees what was downloaded (about 50 MB on disk per language). It downloads again when you choose it.</string>
+    <!-- If Jev does not answer when reviewing or dictating, say why (1-Nov-2026, like the PC). -->
+    <string name="repaso_jev_fallo">Jev did not answer: the points stay as they were.</string>
+    <string name="repaso_jev_fallo_red">No connection.</string>
+    <string name="chat_anotar_fallo_red">No connection: Jev could not check whether to note it in another chat. What you dictated is still in the box.</string>
+    <string name="chat_anotar_fallo">Jev did not answer (%1$s). What you dictated is still in the box.</string>
+    <string name="chat_anotar_fallo_sin_motivo">Jev did not answer. What you dictated is still in the box.</string>
 </resources>

@@ -202,16 +202,26 @@ object ReunionConJev {
             s.agendaIds = temas.map { it.id }
         }
         val pendientes = TemasDeLaReunion.paraJev(temas).map { Temas.Pendiente(it.id, it.texto) }
+        val idiomaDeVoz = Transcriptor.idiomaElegido(app)
         val escucha = EscuchaDeLaReunion(
             app, nombre, agenda, pendientes,
             clienteTemas = if (temasPorJev) Cliente(clave!!, tiempoMs = TIEMPO_TEMAS_MS) else null,
             mesa = mesa,
             clienteMesa = if (conLoDemas) Cliente(clave!!, tiempoMs = TIEMPO_REUNION_MS) else null,
-            idioma = Transcriptor.idiomaElegido(app),
+            idioma = idiomaDeVoz,
+            conVosk = conVosk(app, idiomaDeVoz),
             alVolver = { v -> principal.post { volver(s, v) } }
         )
         return escucha to (porQueNoTemas ?: TextosDeLaReunion.PREPARANDO)
     }
+
+    /**
+     * **Si la reunión se escucha con Vosk** (1-nov-2026, `voz_en_vivo::con_vosk` del PC): elegido en
+     * Ajustes › Voz y con el modelo de ese idioma bajado. Si no, lo de siempre.
+     */
+    private fun conVosk(app: Context, idioma: String): Boolean =
+        (app as? PixPinApp)?.ajustes?.motorEnVivo == com.forge.pixpin.data.EN_VIVO_VOSK &&
+            MotorVosk.tieneModelo(idioma) && MotorVosk.modeloListo(app, idioma)
 
     /**
      * **Las tareas pendientes que pueden cambiar de urgencia**: las del chat de la reunión primero y luego

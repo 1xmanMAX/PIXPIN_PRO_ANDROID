@@ -49,6 +49,13 @@ import kotlin.concurrent.withLock
  *    fallo: [Temas.Ritmo]); la tabla [Temas.Seguimiento] decide.
  * 4. **Jev, lo demás de la reunión**: cada frase, partida en oraciones ([Vivo.partir]), a la mesa
  *    ([EnLaReunion.Mesa]) en **una sola petición por oración**; lo que llega mientras tanto va junto.
+ * 5. **Con Vosk** (1-nov-2026, `[voz] en_vivo = "vosk"` del PC: Ajustes › Voz › «Escuchar la reunión en
+ *    vivo con» Vosk y su modelo bajado, [conVosk]): el oído no corta frases, le da el PCM de corrido a
+ *    [VoskEnVivo.Corriente] (en su mismo hilo, por debajo de lo normal: Vosk muele a ~0,1 del tiempo real)
+ *    y lo que va oyendo vuelve como [Vuelta.Parcial] para la pantalla completa. Cada frase cerrada (a las
+ *    ~0,25 s de callarse, frente a los ~3 s de Whisper) sigue el mismo camino que las demás. Con el teléfono
+ *    justo no se le da nada (lo saltado es un hueco: la frase de antes se cierra ahí) y se dice. Si Vosk no
+ *    carga, lo de siempre.
  *
  * Lo que sale ([Vuelta]) lo recoge [ReunionConJev] en el hilo principal. **Sin clave, sin red o si Jev
  * falla, no se marca ni se propone nada solo** (un fallo nunca es un «no»): se dice y se marca a mano.
@@ -65,6 +72,8 @@ class EscuchaDeLaReunion(
     private val mesa: EnLaReunion.Mesa?,
     private val clienteMesa: Cliente?,
     private val idioma: String,
+    /** Escuchar con Vosk ([Settings.motorEnVivo][com.forge.pixpin.data.Settings.motorEnVivo] y bajado). */
+    private val conVosk: Boolean = false,
     private val alVolver: (Vuelta) -> Unit
 ) {
     private val app = context.applicationContext
@@ -89,7 +98,7 @@ class EscuchaDeLaReunion(
     /** Cómo va la escucha (la cabecera de la lista de los temas). */
     enum class Como { ESCUCHANDO, SIN_MODELO, JEV_FALLA, JUSTO, REUNION_FALLA, SIN_PCM }
 
-    private enum class Motor { RECONOCEDOR, WHISPER }
+    private enum class Motor { RECONOCEDOR, WHISPER, VOSK }
 
     private class Bloque(val muestras: ShortArray, val posicion: Long)
 
@@ -197,14 +206,30 @@ class EscuchaDeLaReunion(
 
     /**
      * **El oído**: del PCM a lo que pide el motor. Con el reconocedor, el sonido a 16 kHz a su tubería;
-     * con Whisper, frases cortadas en un silencio a la cola de tres. Mientras el teléfono hace de cámara
-     * del PC no se oye nada: escucha el PC.
+     * con Vosk, de corrido a su [VoskEnVivo.Corriente]; con Whisper, frases cortadas en un silencio a la
+     * cola de tres. Mientras el teléfono hace de cámara del PC no se oye nada: escucha el PC.
      */
     private fun oido() {
+        try {
+            oidoSinCerrar()
+        } finally {
+            soltarVosk()
+            if (motor == Motor.VOSK) {
+                sinTexto = true
+                cerrojo.withLock { hay.signalAll() }
+            }
+        }
+    }
+
+    private fun oidoSinCerrar() {
         val frasero = OidoEnVivo.Frasero(OidoEnVivo.PARA_WHISPER)
         while (!parar) {
             val b = bloques.poll(200, TimeUnit.MILLISECONDS) ?: continue
             if (com.forge.pixpin.sincro.CamaraDelPc.haciendoDeCamara()) continue
+            if (motor == Motor.VOSK) {
+                aVosk(b)
+                continue
+            }
             if (motor == Motor.RECONOCEDOR) {
                 alReconocedor(b)
                 continue
@@ -232,8 +257,12 @@ class EscuchaDeLaReunion(
         }
     }
 
-    /** Con qué se pasa a texto: el reconocedor sin red si lo hay, y si no, Whisper; si no, se dice. */
+    /**
+     * Con qué se pasa a texto: Vosk si se eligió y carga; si no, el reconocedor sin red si lo hay, y si
+     * no, Whisper; si no, se dice.
+     */
     private fun elegirElMotor() {
+        if (conVosk && cargarVosk()) return
         if (Build.VERSION.SDK_INT >= 31 && runCatching { SpeechRecognizer.isOnDeviceRecognitionAvailable(app) }.getOrDefault(false)) {
             val etiqueta = if (Build.VERSION.SDK_INT >= 33) {
                 when (val i = MotorGoogle.idiomaInstalado(app, idioma)) {
@@ -250,6 +279,67 @@ class EscuchaDeLaReunion(
             }
         }
         aWhisper()
+    }
+
+    // --- Vosk, de corrido (1-nov-2026) ---------------------------------------------------------------
+
+    private val candadoVosk = Any()
+    /** La corriente de Vosk: solo la toca el hilo del oído, en cuanto [motor] es [Motor.VOSK]. */
+    @Volatile private var corriente: VoskEnVivo.Corriente? = null
+    private var reconocedorVosk: MotorVosk.ReconocedorEnVivo? = null
+    /** Lo último dicho de lo justo del teléfono, para avisar solo al cambiar. */
+    private var justoDicho = false
+
+    /** **Carga Vosk** (medio segundo o uno) y, si carga, el oído pasa a dárselo de corrido. */
+    private fun cargarVosk(): Boolean {
+        val empezo = reloj()
+        val rec = MotorVosk.reconocedorEnVivo(app, idioma)
+        if (rec == null) {
+            android.util.Log.w("PixPinReunion", "Vosk no carga: se escucha como siempre")
+            return false
+        }
+        synchronized(candadoVosk) {
+            if (parar) { rec.close(); return false }
+            reconocedorVosk = rec
+            corriente = VoskEnVivo.Corriente(rec, idioma)
+            motor = Motor.VOSK
+        }
+        android.util.Log.i("PixPinReunion", "Vosk cargado en ${reloj() - empezo} ms: se escucha de corrido")
+        alVolver(Vuelta.Aviso(Como.ESCUCHANDO))
+        return true
+    }
+
+    /** En el hilo del oído: el bloque, a la corriente de Vosk (o nada si el teléfono va justo). */
+    private fun aVosk(b: Bloque) {
+        val c = corriente ?: return
+        val j = justo()
+        if (j != justoDicho) {
+            justoDicho = j
+            alVolver(Vuelta.Aviso(if (j) Como.JUSTO else Como.ESCUCHANDO))
+        }
+        if (j) return
+        for (o in c.meter(b.posicion, muestreo, b.muestras)) deVosk(o)
+    }
+
+    /** Lo que oyó Vosk: lo a medias, a la barra; una frase, adonde van todas. */
+    private fun deVosk(o: VoskEnVivo.Oido) {
+        when (o) {
+            is VoskEnVivo.Oido.Parcial -> if (!parar) alVolver(Vuelta.Parcial(o.texto))
+            is VoskEnVivo.Oido.Frase -> {
+                val f = o.frase
+                // Se dejó de hablar lo callado del final antes de ahora.
+                entregar(f.ms, f.finVozMs, f.texto, reloj() - f.calladoAlFinalMs.coerceAtLeast(0))
+            }
+        }
+    }
+
+    private fun soltarVosk() {
+        synchronized(candadoVosk) {
+            corriente?.descartadas?.takeIf { it > 0 }?.let { android.util.Log.d("PixPinReunion", "frases de Vosk que no eran creíbles: $it") }
+            reconocedorVosk?.close()
+            reconocedorVosk = null
+            corriente = null
+        }
     }
 
     /** **A Whisper**: carga el ligero y pasa a texto lo que deja el oído, frase a frase. */
