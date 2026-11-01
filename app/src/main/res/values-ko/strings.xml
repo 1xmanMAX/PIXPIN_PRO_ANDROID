@@ -702,7 +702,7 @@
     <string name="guardados_abrir_con">다른 앱으로 열기</string>
     <string name="guardados_como_imagen">이미지로 공유</string>
     <string name="guardados_como_web">웹페이지로</string>
-    <string name="guardados_como_editable">편집 가능(.pixpin)</string>
+    <string name="guardados_como_editable">편집 가능(.pindesk)</string>
     <string name="guardados_como_pdf">PDF로 공유</string>
     <string name="guardados_volver_al_salto">이전 위치로 돌아가기</string>
     <string name="guardados_foto_de">%1$s에 사진 저장됨</string>
@@ -866,10 +866,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">웹페이지</string>
-    <string name="formato_pixpin">편집 가능(.pixpin)</string>
+    <string name="formato_pixpin">편집 가능(.pindesk)</string>
     <string name="proyecto_paquete_corto">편집 가능</string>
-    <string name="proyecto_paquete">편집 가능하게 공유(.pixpin)</string>
-    <string name="croquis_exportar_paquete">편집 가능(.pixpin)</string>
+    <string name="proyecto_paquete">편집 가능하게 공유(.pindesk)</string>
+    <string name="croquis_exportar_paquete">편집 가능(.pindesk)</string>
     <string name="proyecto_desde_compartido">PinDesk에서 새 프로젝트</string>
     <string name="proyecto_desde_compartido_ok">프로젝트를 만들었습니다</string>
     <string name="formato_html_titulo">PinDesk 그림</string>

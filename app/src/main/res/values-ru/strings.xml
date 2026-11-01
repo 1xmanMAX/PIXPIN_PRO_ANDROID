@@ -729,7 +729,7 @@
     <string name="guardados_abrir_con">Открыть в другом приложении</string>
     <string name="guardados_como_imagen">Поделиться как изображением</string>
     <string name="guardados_como_web">Как веб-страницу</string>
-    <string name="guardados_como_editable">Редактируемый (.pixpin)</string>
+    <string name="guardados_como_editable">Редактируемый (.pindesk)</string>
     <string name="guardados_como_pdf">Поделиться как PDF</string>
     <string name="guardados_volver_al_salto">Вернуться туда, где были</string>
     <string name="guardados_foto_de">Фото сохранено в %1$s</string>
@@ -893,10 +893,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">Веб-страница</string>
-    <string name="formato_pixpin">Редактируемый (.pixpin)</string>
+    <string name="formato_pixpin">Редактируемый (.pindesk)</string>
     <string name="proyecto_paquete_corto">Редактируемый</string>
-    <string name="proyecto_paquete">Поделиться редактируемым (.pixpin)</string>
-    <string name="croquis_exportar_paquete">Редактируемый (.pixpin)</string>
+    <string name="proyecto_paquete">Поделиться редактируемым (.pindesk)</string>
+    <string name="croquis_exportar_paquete">Редактируемый (.pindesk)</string>
     <string name="proyecto_desde_compartido">Новый проект в PinDesk</string>
     <string name="proyecto_desde_compartido_ok">Проект создан</string>
     <string name="formato_html_titulo">Рисунок PinDesk</string>

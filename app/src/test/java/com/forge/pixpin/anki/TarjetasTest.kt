@@ -65,8 +65,9 @@ class TarjetasTest {
     }
 
     @Test fun `el mazo cuelga de pixpin sin romper los submazos`() {
-        assertEquals("PixPin::Física", AnkiDelMensaje.mazoDe(" Física "))
-        assertEquals("PixPin::A:B", AnkiDelMensaje.mazoDe("A::B"))
+        // Mazo nuevo de PinDesk (1-nov-2026); los PixPin:: de antes se quedan en Anki como están.
+        assertEquals("PinDesk::Física", AnkiDelMensaje.mazoDe(" Física "))
+        assertEquals("PinDesk::A:B", AnkiDelMensaje.mazoDe("A::B"))
     }
 
     // ---- Lo del teléfono: de qué mensajes salen.
@@ -88,7 +89,7 @@ class TarjetasTest {
         assertEquals(2, t.size)
         assertEquals("pixpin-c1.jpg", t[0].imagenes[0].nombre)
         assertTrue(t[0].reverso, t[0].reverso.startsWith("La celula. El nucleo."))
-        assertEquals(listOf("pixpin", "Clase_de_física"), t[0].etiquetas)
+        assertEquals(listOf("pindesk", "Clase_de_física"), t[0].etiquetas)
         // Caso negativo: una nota de voz sin capturas no se ofrece.
         assertFalse(AnkiDelMensaje.sePuede(voz.copy(capturas = null)))
     }

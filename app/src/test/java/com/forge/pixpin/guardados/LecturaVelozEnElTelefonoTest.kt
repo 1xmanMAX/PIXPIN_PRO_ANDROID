@@ -177,4 +177,23 @@ class LecturaVelozEnElTelefonoTest {
             LecturaVelozEnElTelefono.avisoCorto(LecturaVeloz.AlAbrir.NO_SE_PUEDE, "algo")
         )
     }
+
+    @Test
+    fun `el anfitrion nuevo solo se manda si la Lectura Veloz instalada lo recibe`() {
+        // 1-nov-2026: una Lectura Veloz ≤ 0.3.1 solo tiene el filtro de lecturaveloz://pixpin.
+        val pm = c.packageManager
+        val sombra = org.robolectric.Shadows.shadowOf(pm)
+        val lv = android.content.ComponentName(LecturaVeloz.PAQUETE, "com.lecturaveloz.app.MainActivity")
+        sombra.addActivityIfNotPresent(lv)
+        fun filtro(host: String) = android.content.IntentFilter(Intent.ACTION_VIEW).apply {
+            addCategory(Intent.CATEGORY_DEFAULT); addCategory(Intent.CATEGORY_BROWSABLE)
+            addDataScheme(LecturaVeloz.ESQUEMA); addDataAuthority(host, null)
+        }
+        sombra.addIntentFilterForActivity(lv, filtro(LecturaVeloz.HOST_DE_ANTES))
+        // Caso negativo: sin el filtro nuevo no se le manda el nuevo, que no le llegaría.
+        assertEquals(LecturaVeloz.HOST_DE_ANTES, LecturaVelozEnElTelefono.hostQueSabe(pm))
+        assertTrue(LecturaVelozEnElTelefono.sabeAbrir(pm))
+        sombra.addIntentFilterForActivity(lv, filtro(LecturaVeloz.HOST))
+        assertEquals(LecturaVeloz.HOST, LecturaVelozEnElTelefono.hostQueSabe(pm))
+    }
 }

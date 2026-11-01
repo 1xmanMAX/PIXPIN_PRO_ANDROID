@@ -711,7 +711,7 @@
     <string name="guardados_abrir_con">Abrir com outro app</string>
     <string name="guardados_como_imagen">Compartilhar como imagem</string>
     <string name="guardados_como_web">Como página web</string>
-    <string name="guardados_como_editable">Editável (.pixpin)</string>
+    <string name="guardados_como_editable">Editável (.pindesk)</string>
     <string name="guardados_como_pdf">Compartilhar como PDF</string>
     <string name="guardados_volver_al_salto">Voltar para onde você estava</string>
     <string name="guardados_foto_de">Foto salva às %1$s</string>
@@ -875,10 +875,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">Página web</string>
-    <string name="formato_pixpin">Editável (.pixpin)</string>
+    <string name="formato_pixpin">Editável (.pindesk)</string>
     <string name="proyecto_paquete_corto">Editável</string>
-    <string name="proyecto_paquete">Compartilhar editável (.pixpin)</string>
-    <string name="croquis_exportar_paquete">Editável (.pixpin)</string>
+    <string name="proyecto_paquete">Compartilhar editável (.pindesk)</string>
+    <string name="croquis_exportar_paquete">Editável (.pindesk)</string>
     <string name="proyecto_desde_compartido">Novo projeto no PinDesk</string>
     <string name="proyecto_desde_compartido_ok">Projeto criado</string>
     <string name="formato_html_titulo">Desenho do PinDesk</string>

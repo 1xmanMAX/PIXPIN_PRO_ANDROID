@@ -702,7 +702,7 @@
     <string name="guardados_abrir_con">別のアプリで開く</string>
     <string name="guardados_como_imagen">画像として共有</string>
     <string name="guardados_como_web">Web ページとして</string>
-    <string name="guardados_como_editable">編集可能 (.pixpin)</string>
+    <string name="guardados_como_editable">編集可能 (.pindesk)</string>
     <string name="guardados_como_pdf">PDF として共有</string>
     <string name="guardados_volver_al_salto">元の位置に戻る</string>
     <string name="guardados_foto_de">写真を %1$s に保存しました</string>
@@ -866,10 +866,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">Web ページ</string>
-    <string name="formato_pixpin">編集可能 (.pixpin)</string>
+    <string name="formato_pixpin">編集可能 (.pindesk)</string>
     <string name="proyecto_paquete_corto">編集可能</string>
-    <string name="proyecto_paquete">編集可能な形式で共有 (.pixpin)</string>
-    <string name="croquis_exportar_paquete">編集可能 (.pixpin)</string>
+    <string name="proyecto_paquete">編集可能な形式で共有 (.pindesk)</string>
+    <string name="croquis_exportar_paquete">編集可能 (.pindesk)</string>
     <string name="proyecto_desde_compartido">PinDesk で新しいプロジェクト</string>
     <string name="proyecto_desde_compartido_ok">プロジェクトを作成しました</string>
     <string name="formato_html_titulo">PinDesk の描画</string>

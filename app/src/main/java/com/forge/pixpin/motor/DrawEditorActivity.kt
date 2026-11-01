@@ -264,7 +264,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 Intent(context, DrawEditorActivity::class.java).apply {
                     // La seña de este documento: con `documentLaunchMode`, el mismo dibujo
                     // vuelve a su tarea y otro dibujo abre la suya. Ver el manifiesto.
-                    data = android.net.Uri.parse("pixpin://dibujo/" + android.net.Uri.encode(id))
+                    data = android.net.Uri.parse("pindesk://dibujo/" + android.net.Uri.encode(id))
                     putExtra(EXTRA_ID, id)
                     putExtra(EXTRA_RUTA, rutaDibujo)
                     putExtra(EXTRA_IMAGEN, imagenPath)
@@ -3482,7 +3482,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         ) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) {
                 // El icono del formato, como en los demás visores (un lienzo es un .pixpin).
-                com.forge.pixpin.ui.IconoDeFormato("lienzo.pixpin", Modifier.padding(end = 8.dp))
+                com.forge.pixpin.ui.IconoDeFormato("lienzo.pindesk", Modifier.padding(end = 8.dp))
                 Text(
                     nombre.ifBlank { "Sin nombre" },
                     style = MaterialTheme.typography.labelMedium,

@@ -2195,7 +2195,7 @@ class Croquis3DActivity : ComponentActivity() {
                         ?: mensajes.firstOrNull { it.clase == com.forge.pixpin.guardados.Clase.CROQUIS && it.referencia == id }?.proyecto
                             ?.let { pid -> proyectos.firstOrNull { it.id == pid } }
                 }) {
-                    paquete()?.let { com.forge.pixpin.ui.Compartible.Salida(it, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, ".pixpin: se sigue editando en otro PinDesk") }
+                    paquete()?.let { com.forge.pixpin.ui.Compartible.Salida(it, com.forge.pixpin.motor.PaquetePixpin.MIME_TYPE, ".pindesk: se sigue editando en otro PinDesk") }
                 },
                 com.forge.pixpin.ui.ExportarVisor.original(this, Croquis3DAlmacen.ruta(this, id), "$id.croquis.gz", "Su archivo .croquis.gz tal cual")
             ),
@@ -3176,7 +3176,7 @@ private val RECORRIDO_DE_LA_LUZ = 180f
         fun abrirConModelo(context: Context, archivo: java.io.File, nombre: String) {
             context.startActivity(
                 Intent(context, Croquis3DActivity::class.java)
-                    .setData(android.net.Uri.parse("pixpin://croquis/nuevo-${System.currentTimeMillis()}"))
+                    .setData(android.net.Uri.parse("pindesk://croquis/nuevo-${System.currentTimeMillis()}"))
                     .putExtra(EL_MODELO, archivo.absolutePath)
                     .putExtra(EL_NOMBRE_DEL_MODELO, nombre)
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -3195,7 +3195,7 @@ private val RECORRIDO_DE_LA_LUZ = 180f
             context.startActivity(
                 Intent(context, Croquis3DActivity::class.java)
                     // Cada croquis en su tarea; uno nuevo, en una nueva. Ver el manifiesto.
-                    .setData(android.net.Uri.parse("pixpin://croquis/" + android.net.Uri.encode(croquis ?: "nuevo-${System.currentTimeMillis()}")))
+                    .setData(android.net.Uri.parse("pindesk://croquis/" + android.net.Uri.encode(croquis ?: "nuevo-${System.currentTimeMillis()}")))
                     .putExtra(EL_PROYECTO, proyecto)
                     // De dónde se vino, para volver ahí al cerrar. Ver [EXTRA_DESDE_PROYECTO].
                     .also { if (desdeProyectos) it.putExtra(com.forge.pixpin.EXTRA_DESDE_PROYECTO, proyecto ?: "") }

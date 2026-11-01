@@ -78,7 +78,7 @@
         <!-- «Enviar a Anki»: sin esto, en Android 11+ AnkiDroid no se ve y siempre saldría el fichero. -->
         <package android:name="com.ichi2.anki" />
         <!-- «Lectura veloz» en los visores y en el menú del mensaje: la app de lectura rápida del
-             usuario y su enlace `lecturaveloz://pixpin/abrir`. Ver guardados/LecturaVeloz.kt. -->
+             usuario y su enlace `lecturaveloz://pindesk/abrir` (o `lecturaveloz://pixpin/abrir`, el de antes). Ver guardados/LecturaVeloz.kt. -->
         <package android:name="com.lecturaveloz.app" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
@@ -364,7 +364,7 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
         <!--
             Por donde entran los atajos. Exportada porque algunos buscadores lanzan el intento
-            tal cual; solo entiende pixpin://atajo/... Ver atajos/AtajoActivity.
+            tal cual; solo entiende pindesk://atajo/... (y pixpin://atajo/...) Ver atajos/AtajoActivity.
         -->
         <activity
             android:name=".atajos.AtajoActivity"
@@ -376,6 +376,8 @@
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
                 <category android:name="android.intent.category.DEFAULT" />
+                <!-- pindesk:// desde el 1-nov-2026; pixpin:// (atajos y señas de antes) se sigue entendiendo. -->
+                <data android:scheme="pindesk" android:host="atajo" />
                 <data android:scheme="pixpin" android:host="atajo" />
             </intent-filter>
         </activity>
@@ -421,7 +423,7 @@
             **Y cada documento en su propia tarea** (`documentLaunchMode="intoExisting"`,
             en los tres editores): dos dibujos, dos croquis o dos notas abiertos a la vez
             son dos entradas en Recientes que se pueden poner a pantalla partida, como dos
-            ventanas. El intent lleva de `data` la seña del documento (`pixpin://dibujo/id`):
+            ventanas. El intent lleva de `data` la seña del documento (`pindesk://dibujo/id`):
             es por lo que Android decide si vuelve a la tarea que ya estaba —el mismo
             dibujo— o abre otra. Lo pidió el usuario (5-sep-2026).
         -->
@@ -512,6 +514,8 @@
                 <data android:scheme="content" />
                 <data android:scheme="file" />
                 <data android:mimeType="*/*" />
+                <!-- .pindesk desde el 1-nov-2026 (como el PC); el .pixpin de antes se sigue abriendo. -->
+                <data android:pathPattern=".*\\.pindesk" />
                 <data android:pathPattern=".*\\.pixpin" />
             </intent-filter>
             <!--

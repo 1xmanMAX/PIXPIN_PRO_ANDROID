@@ -58,7 +58,9 @@ class ModoDePasoTest {
     fun `lo compartido conocido se abre de paso y lo demas va al menu corto`() {
         assertEquals(Recibido.DE_PASO, ModoDePaso.queHacerConLoCompartido(1, "a.pdf", "application/pdf"))
         assertEquals(Recibido.DE_PASO, ModoDePaso.queHacerConLoCompartido(1, null, "image/png"))
-        assertEquals(Recibido.IMPORTAR, ModoDePaso.queHacerConLoCompartido(1, "proyecto.pixpin", null))
+        assertEquals(Recibido.IMPORTAR, ModoDePaso.queHacerConLoCompartido(1, "proyecto.pindesk", null))
+        // El de antes de PinDesk (1-nov-2026) se sigue importando.
+        assertEquals(Recibido.IMPORTAR, ModoDePaso.queHacerConLoCompartido(1, "proyecto.PIXPIN", null))
         assertEquals(Recibido.MENU, ModoDePaso.queHacerConLoCompartido(1, "raro.xyz", "application/octet-stream"))
         assertEquals(Recibido.MENU, ModoDePaso.queHacerConLoCompartido(2, "a.pdf", "application/pdf"))
         // Solo texto o un enlace.

@@ -6,8 +6,8 @@
 -->
 <resources>
     <!-- La app se llama PinDesk (1-nov-2026), como el PC: «PixPin» es de otro producto. Solo cambia
-         el nombre visible; el paquete, el formato .pixpin y Sincronizar siguen igual
-         (docs/nombre-pindesk-android.md). -->
+         el nombre visible; el paquete sigue igual (docs/nombre-pindesk-android.md). Desde el mismo día el
+         formato es .pindesk y se sigue leyendo .pixpin (docs/formato-pindesk-android.md). -->
     <string name="app_name">PinDesk</string>
     <string name="onboarding_title">Welcome to PinDesk</string>
     <string name="onboarding_subtitle">Capture, annotate and pin floating notes over any app. I need these permissions to work:</string>
@@ -718,7 +718,7 @@
     <string name="guardados_abrir_con">Open with another app</string>
     <string name="guardados_como_imagen">Share as image</string>
     <string name="guardados_como_web">As web page</string>
-    <string name="guardados_como_editable">Editable (.pixpin)</string>
+    <string name="guardados_como_editable">Editable (.pindesk)</string>
     <string name="guardados_como_pdf">Share as PDF</string>
     <string name="guardados_volver_al_salto">Back to where you were</string>
     <string name="guardados_foto_de">Photo saved at %1$s</string>
@@ -882,10 +882,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">Web page</string>
-    <string name="formato_pixpin">Editable (.pixpin)</string>
+    <string name="formato_pixpin">Editable (.pindesk)</string>
     <string name="proyecto_paquete_corto">Editable</string>
-    <string name="proyecto_paquete">Share editable (.pixpin)</string>
-    <string name="croquis_exportar_paquete">Editable (.pixpin)</string>
+    <string name="proyecto_paquete">Share editable (.pindesk)</string>
+    <string name="croquis_exportar_paquete">Editable (.pindesk)</string>
     <string name="proyecto_desde_compartido">New project in PinDesk</string>
     <string name="proyecto_desde_compartido_ok">Project created</string>
     <string name="formato_html_titulo">PinDesk drawing</string>

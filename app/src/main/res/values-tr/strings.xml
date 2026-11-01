@@ -711,7 +711,7 @@
     <string name="guardados_abrir_con">Başka bir uygulamayla aç</string>
     <string name="guardados_como_imagen">Görüntü olarak paylaş</string>
     <string name="guardados_como_web">Web sayfası olarak</string>
-    <string name="guardados_como_editable">Düzenlenebilir (.pixpin)</string>
+    <string name="guardados_como_editable">Düzenlenebilir (.pindesk)</string>
     <string name="guardados_como_pdf">PDF olarak paylaş</string>
     <string name="guardados_volver_al_salto">Bulunduğunuz yere dön</string>
     <string name="guardados_foto_de">Fotoğraf %1$s konumuna kaydedildi</string>
@@ -875,10 +875,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">Web sayfası</string>
-    <string name="formato_pixpin">Düzenlenebilir (.pixpin)</string>
+    <string name="formato_pixpin">Düzenlenebilir (.pindesk)</string>
     <string name="proyecto_paquete_corto">Düzenlenebilir</string>
-    <string name="proyecto_paquete">Düzenlenebilir paylaş (.pixpin)</string>
-    <string name="croquis_exportar_paquete">Düzenlenebilir (.pixpin)</string>
+    <string name="proyecto_paquete">Düzenlenebilir paylaş (.pindesk)</string>
+    <string name="croquis_exportar_paquete">Düzenlenebilir (.pindesk)</string>
     <string name="proyecto_desde_compartido">PinDesk\'te yeni proje</string>
     <string name="proyecto_desde_compartido_ok">Proje oluşturuldu</string>
     <string name="formato_html_titulo">PinDesk çizimi</string>

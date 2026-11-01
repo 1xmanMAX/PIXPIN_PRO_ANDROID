@@ -31,7 +31,7 @@ class AbrirArchivoDeTextoTest {
         assertFalse(i.getBooleanExtra(MarkdownEditorActivity.EXTRA_LLANO, true))
         assertTrue(i.getBooleanExtra(MarkdownEditorActivity.EXTRA_SOLO_LEER, false))
         // Cada nota en su tarea: la misma nota, la misma.
-        assertEquals("pixpin://nota/md-abc", i.dataString)
+        assertEquals("pindesk://nota/md-abc", i.dataString)
     }
 
     @Test

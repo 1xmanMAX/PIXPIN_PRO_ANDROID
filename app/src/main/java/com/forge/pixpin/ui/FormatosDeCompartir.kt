@@ -39,7 +39,7 @@ object FormatosDeCompartir {
         CSV("Tabla (CSV)"),
         /** Lo propio de un contenido (el modelo 3D de un croquis, el DXF de un DWG): con su nombre. */
         OTRO(""),
-        PIXPIN("PinDesk (.pixpin)"),
+        PIXPIN("PinDesk (.pindesk)"),
         ORIGINAL("Original"),
         ANKI("Anki"),
         WIFI("Por Wi‑Fi a mis aparatos")
@@ -125,7 +125,7 @@ object FormatosDeCompartir {
             i == "md" || i == "markdown" -> Clase.MARKDOWN
             i == "texto" || i == "txt" -> Clase.TEXTO
             i == "csv" -> Clase.CSV
-            i == "editable" || i == "pixpin" -> Clase.PIXPIN
+            i == "editable" || i == "pindesk" || i == "pixpin" -> Clase.PIXPIN
             i == "original" -> Clase.ORIGINAL
             i == "anki" -> Clase.ANKI
             i == "wifi" -> Clase.WIFI

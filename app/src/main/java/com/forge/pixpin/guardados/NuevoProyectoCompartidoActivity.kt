@@ -94,7 +94,7 @@ class NuevoProyectoCompartidoActivity : ComponentActivity() {
         val (primero, nombre, tipo) = temporales.first()
 
         // Un paquete: se abre entero.
-        if (nombre.endsWith("." + PaquetePixpin.EXTENSION, ignoreCase = true) ||
+        if (PaquetePixpin.esPaquete(nombre) ||
             PaquetePixpin.abrir(primero) != null
         ) {
             val contenido = PaquetePixpin.abrir(primero) ?: return null

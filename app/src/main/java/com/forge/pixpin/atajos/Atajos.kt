@@ -19,22 +19,33 @@ import com.forge.pixpin.motor.Proyecto
  * **Y los últimos archivos del chat** —un PDF, una foto, una nota de voz, un lienzo—, que se
  * abren directamente con su visor, como al tocarlos en Mensajes guardados.
  *
- * Todos entran por [AtajoActivity], con una seña `pixpin://atajo/...`: el atajo guarda solo
+ * Todos entran por [AtajoActivity], con una seña `pindesk://atajo/...` (o la de antes, `pixpin://`): el atajo guarda solo
  * esa seña, y lo que abre se decide al tocarlo, con la aplicación ya al día.
  */
 object Atajos {
-    const val ESQUEMA = "pixpin"
+    /**
+     * `pindesk://` desde el 1-nov-2026, como el PC (`docs/formato-pindesk-android.md`): las señas
+     * nuevas se escriben con él y se siguen entendiendo las de antes, `pixpin://` (atajos fijados,
+     * Tasker, el buscador del sistema...), con las mismas reglas.
+     */
+    const val ESQUEMA = "pindesk"
+    /** El esquema de antes de PinDesk: se entiende siempre, ya no se escribe. */
+    const val ESQUEMA_DE_ANTES = "pixpin"
+
+    /** Si [esquema] es uno de los nuestros: `pindesk` o `pixpin`. */
+    fun esEsquema(esquema: String?): Boolean =
+        esquema != null && (esquema.equals(ESQUEMA, ignoreCase = true) || esquema.equals(ESQUEMA_DE_ANTES, ignoreCase = true))
     const val ANFITRION = "atajo"
     const val CAPTURAR = "capturar"
     const val MENSAJES = "mensajes"
     const val PROYECTOS = "proyectos"
     const val SINCRONIZAR = "sincronizar"
-    /** `pixpin://atajo/proyecto/<id>` */
+    /** `pindesk://atajo/proyecto/<id>` */
     const val PROYECTO = "proyecto"
 
     const val GRABAR = "grabar"
     const val TAREA = "tarea"
-    /** `pixpin://atajo/tareas`: todas las listas de tareas juntas, como `ventana cual: "tareas"` del PC. */
+    /** `pindesk://atajo/tareas`: todas las listas de tareas juntas, como `ventana cual: "tareas"` del PC. */
     const val TAREAS = "tareas"
     const val CAPTURAS = "capturas"
     const val SOLTAR = "soltar"
@@ -43,9 +54,9 @@ object Atajos {
     const val LISTA = "lista"
     const val LECCION = "leccion"
     const val LECCIONES = "lecciones"
-    /** `pixpin://atajo/buscar?texto=…`: la tarjeta de buscar en todo PixPin ([BuscarActivity]). */
+    /** `pindesk://atajo/buscar?texto=…`: la tarjeta de buscar en todo PixPin ([BuscarActivity]). */
     const val BUSCAR = "buscar"
-    /** `pixpin://atajo/archivo/<id del mensaje>`: un archivo del chat, abierto con su visor. */
+    /** `pindesk://atajo/archivo/<id del mensaje>`: un archivo del chat, abierto con su visor. */
     const val ARCHIVO = "archivo"
 
     private const val PREFIJO_PROYECTO = "proyecto-"

@@ -21,7 +21,7 @@ import java.io.File
  * abre el menú del mensaje. Existe para poder **pedir el permiso de AnkiDroid** ahí mismo (un
  * permiso peligroso necesita una actividad que lo pida) sin tocar el chat más que con una línea.
  *
- * - Con **AnkiDroid** (y su permiso): las tarjetas entran directas en el mazo `PixPin::<chat>`, con
+ * - Con **AnkiDroid** (y su permiso): las tarjetas entran directas en el mazo `PinDesk::<chat>`, con
  *   sus imágenes ([AnkiDroid]).
  * - **Sin él** (o si dice que no, o con su API apagada): un `.txt` para «Archivo → Importar» de
  *   Anki ([Tarjetas.fichero]) por la hoja de compartir, con las imágenes al lado. En el PC es el

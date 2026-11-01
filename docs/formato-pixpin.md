@@ -1,4 +1,9 @@
-# El formato `.pixpin`
+# El formato `.pindesk` (antes `.pixpin`)
+
+> **1-nov-2026**: la extensión es `.pindesk` y el manifiesto dice `"formato":"pindesk"`,
+> `"aplicacion":"pindesk-android"` y `"formato_de_antes":"pixpin"` (para los Android sin
+> actualizar). Por dentro no cambia nada, y `.pixpin` / `"formato":"pixpin"` se siguen leyendo.
+> Ver `docs/formato-pindesk-android.md`.
 
 Un `.pixpin` es **un ZIP normal** con un proyecto entero dentro: lienzos, croquis del espacio,
 notas, fotos y PDF. Se puede abrir con cualquier biblioteca de ZIP y no lleva nada cifrado ni
@@ -9,7 +14,7 @@ versión de escritorio— y se sigue editando allí.
 
 | Entrada                      | Qué es |
 |------------------------------|--------|
-| `manifest.json`              | `{"formato":"pixpin","version":1,"aplicacion":"pixpin-android","escrito":<ms>,"proyecto":"<nombre>"}` |
+| `manifest.json`              | `{"formato":"pindesk","version":1,"aplicacion":"pindesk-android","formato_de_antes":"pixpin","escrito":<ms>,"proyecto":"<nombre>"}` (antes `{"formato":"pixpin",…,"aplicacion":"pixpin-android",…}`, que se sigue leyendo) |
 | `proyecto.json`              | El proyecto (ver abajo). Sin rutas del aparato: `pdfOrigen` y `pdfLimpio` van a `null`. |
 | `lienzos/<id>.excalidraw`    | Un lienzo por hoja con dibujo, en JSON de Excalidraw (`type: "excalidraw"`). En `files[<id>].path` va `imagenes/<id>`, no una ruta. |
 | `imagenes/<id>`              | Cada foto de los lienzos tal cual (JPEG, PNG, WEBP…); el `mimeType` está en `files` del lienzo. |

@@ -8,9 +8,9 @@ import java.util.zip.ZipInputStream
 import java.util.zip.ZipOutputStream
 
 /**
- * **El formato único: un proyecto entero en un archivo, editable en cualquier PixPin.**
+ * **El formato único: un proyecto entero en un archivo, editable en cualquier PinDesk.**
  *
- * Un `.pixpin` es un **ZIP** —nada inventado: lo abre cualquier lenguaje y cualquier
+ * Un `.pindesk` (antes `.pixpin`, que se sigue leyendo: ver [EXTENSION]) es un **ZIP** —nada inventado: lo abre cualquier lenguaje y cualquier
  * ordenador— con dentro lo que un proyecto tiene repartido por el teléfono: sus lienzos, sus
  * croquis del espacio, sus notas, sus fotos y su PDF. Es lo que hace falta para pasar un
  * proyecto a otro aparato —o a la versión de escritorio— y seguir editándolo allí, que es lo
@@ -43,8 +43,37 @@ import java.util.zip.ZipOutputStream
  */
 object PaquetePixpin {
 
-    const val EXTENSION = "pixpin"
+    /**
+     * **`.pindesk` desde el 1-nov-2026**, como el PC (`docs/formato-pindesk-android.md`): se escribe
+     * con la extensión nueva y se sigue abriendo, importando y recibiendo el `.pixpin` de antes
+     * ([EXTENSION_DE_ANTES], [esPaquete]). Por dentro es el mismo ZIP.
+     */
+    const val EXTENSION = "pindesk"
+    /** La extensión de antes de PinDesk: se lee siempre, ya no se escribe. */
+    const val EXTENSION_DE_ANTES = "pixpin"
+    /** Las dos, la nueva delante. */
+    val EXTENSIONES = listOf(EXTENSION, EXTENSION_DE_ANTES)
+    /** El `formato` del `manifest.json` (antes `"pixpin"`, que se sigue aceptando). */
+    const val FORMATO = "pindesk"
+    const val FORMATO_DE_ANTES = "pixpin"
+    /** Quién lo escribió (informativo; antes `"pixpin-android"`). */
+    const val APLICACION = "pindesk-android"
     const val MIME_TYPE = "application/zip"
+
+    /** Si [ext] (sin punto, da igual mayúsculas) es la de un paquete: `pindesk` o `pixpin`. */
+    fun esExtension(ext: String): Boolean = ext.lowercase() in EXTENSIONES
+
+    /** Si el nombre de un archivo acaba en `.pindesk` o en `.pixpin` (el de antes). */
+    fun esPaquete(nombre: String): Boolean =
+        nombre.contains('.') && esExtension(nombre.substringAfterLast('.'))
+
+    /**
+     * Si el `manifest.json` es de un paquete nuestro: `formato` `"pindesk"` o `"pixpin"`. Tan
+     * poco estricto como antes (bastaba con que dijera `"pixpin"` en algún sitio).
+     */
+    fun esManifiesto(texto: String): Boolean =
+        texto.contains("\"$FORMATO\"") || texto.contains("\"$FORMATO_DE_ANTES\"")
+
     const val VERSION = 1
 
     /** Las entradas que escribe [escribir] por su cuenta: una de [escribir]`.otras` no las pisa. */
@@ -79,12 +108,7 @@ object PaquetePixpin {
                 zip.write(bytes)
                 zip.closeEntry()
             }
-            entrada(
-                "manifest.json",
-                ("{\"formato\":\"pixpin\",\"version\":$VERSION,\"aplicacion\":\"pixpin-android\"," +
-                    "\"escrito\":$escrito,\"proyecto\":\"${escaparJson(proyecto.nombre)}\"}")
-                    .toByteArray()
-            )
+            entrada("manifest.json", manifiesto(proyecto.nombre, escrito).toByteArray())
 
             // El proyecto, sin rutas del teléfono: el PDF va dentro con nombre fijo.
             val limpio = proyecto.copy(pdfOrigen = null, pdfLimpio = null)
@@ -133,6 +157,17 @@ object PaquetePixpin {
         destino
     }.getOrNull()
 
+    /**
+     * El `manifest.json` (1-nov-2026): `formato` `"pindesk"` y `aplicacion` `"pindesk-android"`,
+     * como el PC. Lleva además `"formato_de_antes":"pixpin"`: un Android sin actualizar solo abre
+     * el paquete si su manifiesto dice `"pixpin"` en algún sitio, y así lo sigue abriendo (quien
+     * no conoce el campo lo ignora; nadie más mira el manifiesto al abrir).
+     */
+    fun manifiesto(proyecto: String, escrito: Long): String =
+        "{\"formato\":\"$FORMATO\",\"version\":$VERSION,\"aplicacion\":\"$APLICACION\"," +
+            "\"formato_de_antes\":\"$FORMATO_DE_ANTES\"," +
+            "\"escrito\":$escrito,\"proyecto\":\"${escaparJson(proyecto)}\"}"
+
     /** Lo que se lee de un paquete, antes de darle sitio en el aparato. */
     class Contenido(
         val proyecto: Proyecto,
@@ -146,7 +181,7 @@ object PaquetePixpin {
         val adjuntosDelChat: Map<String, ByteArray> = emptyMap()
     )
 
-    /** Abre un paquete y devuelve lo que trae, o null si no es un `.pixpin`. */
+    /** Abre un paquete y devuelve lo que trae, o null si no es un `.pindesk` (o `.pixpin`). */
     fun abrir(archivo: File): Contenido? = runCatching {
         var proyecto: Proyecto? = null
         val lienzos = HashMap<String, String>()
@@ -164,7 +199,7 @@ object PaquetePixpin {
                 val nombre = e.name
                 val bytes = zip.readBytes()
                 when {
-                    nombre == "manifest.json" -> esPixpin = String(bytes).contains("\"pixpin\"")
+                    nombre == "manifest.json" -> esPixpin = esManifiesto(String(bytes))
                     nombre == "proyecto.json" ->
                         proyecto = Proyectos.json.decodeFromString(Proyecto.serializer(), String(bytes))
                     nombre == "documento.pdf" -> pdf = bytes

@@ -222,7 +222,7 @@ object ExportarGrabacion {
         val tiempos = capturas.map { it.first }.sorted()
         val quedan = valer?.invoke(tiempos.zip(Tarjetas.loDichoPorCaptura(trozos, tiempos)))
         val tarjetas = (if (quedan != null) Tarjetas.quedarseCon(todas, quedan) else todas)
-            .map { it.copy(etiquetas = listOf("pixpin")) }
+            .map { it.copy(etiquetas = listOf(AnkiDelMensaje.ETIQUETA)) }
         if (tarjetas.isEmpty()) return null
         val salida = ByteArrayOutputStream()
         ZipOutputStream(salida).use { zip ->

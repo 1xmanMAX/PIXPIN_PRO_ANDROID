@@ -25,7 +25,11 @@ import kotlinx.serialization.Serializable
  */
 object Envio {
 
-    const val TIPO = "_pixpinenvio._tcp."
+    /**
+     * El tipo mDNS de quien envía: `_pindeskenvio._tcp.` desde el 1-nov-2026, como el PC. [Red]
+     * anuncia y busca a la vez el de antes (`_pixpinenvio._tcp.`, [Red.tipoDeAntes]).
+     */
+    const val TIPO = "_pindeskenvio._tcp."
     const val CIFRAS = 6
     /** Intentos con un código equivocado antes de dar el código por quemado. */
     const val INTENTOS = 5
@@ -44,7 +48,13 @@ object Envio {
 
     fun etiqueta(codigo: String): String = Grupo.etiqueta(clave(codigo))
 
-    /** Lo que lleva el QR: el código y dónde está quien envía, para conectar sin buscar. */
+    /**
+     * Lo que lleva el QR: el código y dónde está quien envía, para conectar sin buscar.
+     *
+     * Sigue con el prefijo de antes de PinDesk (`pixpin-envio`, `pixpin-recibe`) porque lo lee
+     * otro aparato, y uno sin actualizar no sabría leer el nuevo; [leerQr] acepta ya los dos
+     * (fase B de `docs/formato-pindesk-android.md`, como el PC).
+     */
     fun textoDelQr(codigo: String, host: String?, puerto: Int): String =
         "pixpin-envio:1:$codigo:${host.orEmpty()}:$puerto"
 
@@ -58,7 +68,7 @@ object Envio {
      * papeles cambiados: quien recibe **espera** y quien envía **llama**, así que el canal lo
      * empieza el que llama. Ver [Emisor.atender] y [Receptor.conectar], parámetro `inicia`.
      */
-    const val TIPO_RECIBIR = "_pixpinrecibe._tcp."
+    const val TIPO_RECIBIR = "_pindeskrecibe._tcp."
 
     fun textoDelQrDeRecepcion(codigo: String, host: String?, puerto: Int): String =
         "pixpin-recibe:1:$codigo:${host.orEmpty()}:$puerto"
@@ -68,8 +78,9 @@ object Envio {
     fun leerQr(texto: String): DelQr? {
         val p = texto.trim().split(':')
         if (p.size < 5) return null
-        val recibir = p[0] == "pixpin-recibe"
-        if (p[0] != "pixpin-envio" && !recibir) return null
+        // Los prefijos de PinDesk (1-nov-2026) valen igual que los de antes.
+        val recibir = p[0] == "pindesk-recibe" || p[0] == "pixpin-recibe"
+        if (p[0] != "pindesk-envio" && p[0] != "pixpin-envio" && !recibir) return null
         val codigo = p[2].takeIf(::valido) ?: return null
         return DelQr(codigo, p[3].ifBlank { null }, p[4].toIntOrNull() ?: 0, esperaRecibir = recibir)
     }
@@ -77,7 +88,7 @@ object Envio {
     /** Una cosa que se manda. */
     @Serializable
     data class Elemento(
-        /** [ARCHIVO] o [PROYECTO] (un `.pixpin`). */
+        /** [ARCHIVO] o [PROYECTO] (un `.pindesk`). */
         val tipo: String,
         val nombre: String,
         val bytes: Long,
@@ -106,7 +117,7 @@ object Envio {
 
     const val ARCHIVO = "archivo"
     const val PROYECTO = "proyecto"
-    /** Un lienzo (una hoja) de un proyecto, solo: un `.pixpin` con esa hoja. */
+    /** Un lienzo (una hoja) de un proyecto, solo: un `.pindesk` con esa hoja. */
     const val LIENZO = "lienzo"
 
     @Serializable

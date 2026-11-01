@@ -134,10 +134,24 @@ object LecturaVelozEnElTelefono {
 
     // ---- Abrir ----
 
-    private fun enlaceDePrueba() = Intent(Intent.ACTION_VIEW, Uri.parse("${LecturaVeloz.ESQUEMA}://${LecturaVeloz.HOST}/abrir")).setPackage(LecturaVeloz.PAQUETE)
+    private fun enlaceDePrueba(host: String) = Intent(Intent.ACTION_VIEW, Uri.parse("${LecturaVeloz.ESQUEMA}://$host/abrir")).setPackage(LecturaVeloz.PAQUETE)
 
-    /** Si sabe abrir documentos de PixPin (el enlace `lecturaveloz://pixpin`). Necesita el `<queries>`. */
-    fun sabeAbrir(pm: PackageManager): Boolean = runCatching { enlaceDePrueba().resolveActivity(pm) != null }.getOrDefault(false)
+    private fun recibe(pm: PackageManager, host: String): Boolean =
+        runCatching { enlaceDePrueba(host).resolveActivity(pm) != null }.getOrDefault(false)
+
+    /**
+     * **El anfitrión que sabe abrir la Lectura Veloz instalada** (1-nov-2026): el nuevo
+     * (`lecturaveloz://pindesk`) si su filtro lo recibe; si no, el de antes (`lecturaveloz://pixpin`),
+     * el único que entiende una sin actualizar. Null si no recibe ninguno. Necesita el `<queries>`.
+     */
+    fun hostQueSabe(pm: PackageManager): String? = when {
+        recibe(pm, LecturaVeloz.HOST) -> LecturaVeloz.HOST
+        recibe(pm, LecturaVeloz.HOST_DE_ANTES) -> LecturaVeloz.HOST_DE_ANTES
+        else -> null
+    }
+
+    /** Si sabe abrir documentos de PinDesk (el enlace `lecturaveloz://pindesk` o el de antes). */
+    fun sabeAbrir(pm: PackageManager): Boolean = hostQueSabe(pm) != null
 
     fun estaInstalada(pm: PackageManager): Boolean =
         sabeAbrir(pm) || runCatching { pm.getLaunchIntentForPackage(LecturaVeloz.PAQUETE) != null }.getOrDefault(false)
@@ -165,7 +179,9 @@ object LecturaVelozEnElTelefono {
             m.voz?.let { Lectura.vozDeTexto(it) }, m.horaVoz, m.verde?.y, m.horaVerde, ultimo,
             mapaDe(c, d.base), d.esPdf, d.paginas
         )
-        val url = LecturaVeloz.enlace(d.doc, d.nombre, uri.toString(), d.tipo, pos, d.paginas)
+        // El anfitrión que entienda la que está instalada (sin preguntar, el de antes: lo entienden todas).
+        val host = hostQueSabe(c.packageManager) ?: LecturaVeloz.HOST_DE_ANTES
+        val url = LecturaVeloz.enlace(d.doc, d.nombre, uri.toString(), d.tipo, pos, d.paginas, host)
         runCatching { c.grantUriPermission(LecturaVeloz.PAQUETE, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
         return Intent(Intent.ACTION_VIEW, Uri.parse(url))
             .setPackage(LecturaVeloz.PAQUETE)

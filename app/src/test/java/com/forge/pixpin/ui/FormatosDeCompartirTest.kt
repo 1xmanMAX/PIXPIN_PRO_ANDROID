@@ -76,8 +76,11 @@ class FormatosDeCompartirTest {
     @Test
     fun losNombresSonLosMismosEnTodas() {
         // Lo que cada sitio llamaba a su manera sale igual.
-        assertEquals("PinDesk (.pixpin)", FormatosDeCompartir.rotulo("editable", "Editable"))
-        assertEquals("PinDesk (.pixpin)", FormatosDeCompartir.rotulo("editable", ".pixpin"))
+        assertEquals("PinDesk (.pindesk)", FormatosDeCompartir.rotulo("editable", "Editable"))
+        assertEquals("PinDesk (.pindesk)", FormatosDeCompartir.rotulo("editable", ".pindesk"))
+        // El id de antes (1-nov-2026: `.pindesk`) se sigue entendiendo, como el del PC.
+        assertEquals(Clase.PIXPIN, FormatosDeCompartir.claseDe("pindesk"))
+        assertEquals(Clase.PIXPIN, FormatosDeCompartir.claseDe("pixpin"))
         assertEquals("Texto", FormatosDeCompartir.rotulo("texto", "TXT"))
         assertEquals("Imagen PNG", FormatosDeCompartir.rotulo("png", "PNG"))
         assertEquals("Imagen JPG", FormatosDeCompartir.rotulo("jpg", "JPG"))

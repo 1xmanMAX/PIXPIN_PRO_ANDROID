@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- La app se llama PinDesk (1-nov-2026), como el PC: «PixPin» es de otro producto. Solo cambia
-         el nombre visible; el paquete, el formato .pixpin y Sincronizar siguen igual
-         (docs/nombre-pindesk-android.md). -->
+         el nombre visible; el paquete sigue igual (docs/nombre-pindesk-android.md). Desde el mismo día el
+         formato es .pindesk y se sigue leyendo .pixpin (docs/formato-pindesk-android.md). -->
     <string name="app_name">PinDesk</string>
 
     <!-- Onboarding -->
@@ -314,7 +314,7 @@
     <string name="pin_type_table">Tabla</string>
     <string name="pin_type_draw">Dibujo</string>
     <string name="cd_draw_edit">Seguir dibujando</string>
-    <string name="cd_draw_export">Compartir como .pixpin</string>
+    <string name="cd_draw_export">Compartir como .pindesk</string>
     <string name="cd_redo">Rehacer</string>
     <string name="cd_duplicate">Duplicar</string>
     <string name="cd_delete">Borrar</string>
@@ -747,7 +747,7 @@
     <string name="guardados_abrir_con">Abrir con otra app</string>
     <string name="guardados_como_imagen">Compartir como imagen</string>
     <string name="guardados_como_web">Como página web</string>
-    <string name="guardados_como_editable">Editable (.pixpin)</string>
+    <string name="guardados_como_editable">Editable (.pindesk)</string>
     <string name="guardados_como_pdf">Compartir como PDF</string>
     <string name="guardados_volver_al_salto">Volver a donde estabas</string>
     <string name="guardados_foto_de">Foto guardada a las %1$s</string>
@@ -926,10 +926,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">Página web</string>
-    <string name="formato_pixpin">Editable (.pixpin)</string>
+    <string name="formato_pixpin">Editable (.pindesk)</string>
     <string name="proyecto_paquete_corto">Editable</string>
-    <string name="proyecto_paquete">Compartir editable (.pixpin)</string>
-    <string name="croquis_exportar_paquete">Editable (.pixpin)</string>
+    <string name="proyecto_paquete">Compartir editable (.pindesk)</string>
+    <string name="croquis_exportar_paquete">Editable (.pindesk)</string>
     <string name="proyecto_desde_compartido">Nuevo proyecto en PinDesk</string>
     <string name="proyecto_desde_compartido_ok">Proyecto creado</string>
     <string name="formato_html_titulo">Dibujo de PinDesk</string>

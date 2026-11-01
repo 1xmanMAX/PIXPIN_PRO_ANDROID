@@ -332,7 +332,7 @@ object Acciones {
     /** Una acción de la app ya validada: el pedido listo y, si hay que preguntar, la pregunta. */
     data class AccionApp(
         val herramienta: String,
-        /** `{"pixpin":1,"accion":...}` completo (sin lo que falta resolver). */
+        /** `{"pindesk":1,"accion":...}` completo (sin lo que falta resolver). */
         val pedido: JsonObject,
         val confirmar: String?,
         /** Nombres de listas, tareas, chats o fechas: los cambia por ids [Tareas.resolver]. */
@@ -510,7 +510,7 @@ object Acciones {
     fun validar(a: Accion, args: JsonObject): AccionApp {
         val pedido = LinkedHashMap<String, JsonElement>()
         (runCatching { Json.parseToJsonElement(a.fijos) }.getOrNull() as? JsonObject)?.let { pedido.putAll(it) }
-        pedido["pixpin"] = JsonPrimitive(1)
+        pedido[Pedidos.VERSION] = JsonPrimitive(1)
         pedido["accion"] = JsonPrimitive(a.accion)
         val porResolver = LinkedHashMap<String, JsonElement>()
         for (p in a.params) {

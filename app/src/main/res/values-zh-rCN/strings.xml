@@ -702,7 +702,7 @@
     <string name="guardados_abrir_con">用其他应用打开</string>
     <string name="guardados_como_imagen">分享为图片</string>
     <string name="guardados_como_web">作为网页</string>
-    <string name="guardados_como_editable">可编辑（.pixpin）</string>
+    <string name="guardados_como_editable">可编辑（.pindesk）</string>
     <string name="guardados_como_pdf">分享为 PDF</string>
     <string name="guardados_volver_al_salto">回到之前的位置</string>
     <string name="guardados_foto_de">照片保存于 %1$s</string>
@@ -866,10 +866,10 @@
     <string name="formato_pdf">PDF</string>
     <string name="formato_svg">SVG</string>
     <string name="formato_html">网页</string>
-    <string name="formato_pixpin">可编辑（.pixpin）</string>
+    <string name="formato_pixpin">可编辑（.pindesk）</string>
     <string name="proyecto_paquete_corto">可编辑</string>
-    <string name="proyecto_paquete">分享可编辑文件（.pixpin）</string>
-    <string name="croquis_exportar_paquete">可编辑（.pixpin）</string>
+    <string name="proyecto_paquete">分享可编辑文件（.pindesk）</string>
+    <string name="croquis_exportar_paquete">可编辑（.pindesk）</string>
     <string name="proyecto_desde_compartido">在 PinDesk 中新建项目</string>
     <string name="proyecto_desde_compartido_ok">项目已创建</string>
     <string name="formato_html_titulo">PinDesk 绘画</string>

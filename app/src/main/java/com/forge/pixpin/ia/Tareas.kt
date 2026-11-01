@@ -255,7 +255,7 @@ object Tareas {
             val nueva = textoDe(r, "lista_nueva")
             if (nueva != null) {
                 val p = LinkedHashMap<String, JsonElement>()
-                p["pixpin"] = JsonPrimitive(1); p["accion"] = JsonPrimitive("lista_nueva"); p["titulo"] = JsonPrimitive(nueva)
+                p[Pedidos.VERSION] = JsonPrimitive(1); p["accion"] = JsonPrimitive("lista_nueva"); p["titulo"] = JsonPrimitive(nueva)
                 base["proyecto"]?.let { p["proyecto"] = it }
                 pedidos += JsonObject(p)
                 nombre = nueva

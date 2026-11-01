@@ -37,9 +37,12 @@ class Red(private val context: Context) {
     private val nsd = context.applicationContext.getSystemService(Context.NSD_SERVICE) as NsdManager
     private val principal = Handler(Looper.getMainLooper())
     private var servidor: ServerSocket? = null
-    private var anuncio: NsdManager.RegistrationListener? = null
+    /** Lo anunciado: con el tipo nuevo y, si se pudo, con el de antes. */
+    private val anuncios = mutableListOf<NsdManager.RegistrationListener>()
     private var anunciadoCon: String? = null
-    private var busqueda: NsdManager.DiscoveryListener? = null
+    private var busquedas: List<NsdManager.DiscoveryListener> = emptyList()
+    /** Sube con cada búsqueda: lo que llega de una anterior ya no cuenta. */
+    private var ronda = 0
     private var candado: WifiManager.MulticastLock? = null
     private val vecinos = ConcurrentHashMap<String, Vecino>()
 
@@ -91,54 +94,74 @@ class Red(private val context: Context) {
         }, "pixpin-red-escucha").start()
     }
 
-    /** Se anuncia en la red. Anunciar otra vez lo mismo no hace nada; algo distinto sustituye al anterior. */
+    /**
+     * Se anuncia en la red. Anunciar otra vez lo mismo no hace nada; algo distinto sustituye al anterior.
+     *
+     * **Con los dos nombres a la vez** (1-nov-2026, como el PC: `pindesk_shell::mdns::anunciar`):
+     * un tipo de PinDesk (`_pindesk…._tcp.`) se anuncia también con su tipo de antes
+     * ([tipoDeAntes]), para que lo vean los aparatos sin actualizar, que solo buscan `_pixpin…`.
+     * Si el de antes falla, se sigue con el nuevo solo.
+     */
     fun anunciar(tipo: String, nombre: String, datos: Map<String, String>) {
         val puerto = puerto.takeIf { it > 0 } ?: return
         val clave = "$tipo|$nombre|$puerto|$datos"
         principal.post {
-            if (servidor == null || (anuncio != null && anunciadoCon == clave)) return@post
+            if (servidor == null || (anuncios.isNotEmpty() && anunciadoCon == clave)) return@post
             dejarDeAnunciar()
-            val info = NsdServiceInfo().apply {
-                serviceName = nombre.take(60)
-                serviceType = tipo
-                port = puerto
-                for ((k, v) in datos) setAttribute(k, v)
-            }
-            val l = object : NsdManager.RegistrationListener {
-                override fun onServiceRegistered(i: NsdServiceInfo) {}
-                override fun onRegistrationFailed(i: NsdServiceInfo, e: Int) { principal.post { if (anuncio === this) { anuncio = null; anunciadoCon = null } } }
-                override fun onServiceUnregistered(i: NsdServiceInfo) {}
-                override fun onUnregistrationFailed(i: NsdServiceInfo, e: Int) {}
-            }
-            anuncio = l
             anunciadoCon = clave
-            runCatching { nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, l) }.onFailure { anuncio = null; anunciadoCon = null }
+            for (t in conElDeAntes(tipo)) {
+                val info = NsdServiceInfo().apply {
+                    serviceName = nombre.take(60)
+                    serviceType = t
+                    port = puerto
+                    for ((k, v) in datos) setAttribute(k, v)
+                }
+                val l = object : NsdManager.RegistrationListener {
+                    override fun onServiceRegistered(i: NsdServiceInfo) {}
+                    override fun onRegistrationFailed(i: NsdServiceInfo, e: Int) {
+                        principal.post { if (anuncios.remove(this) && anuncios.isEmpty()) anunciadoCon = null }
+                    }
+                    override fun onServiceUnregistered(i: NsdServiceInfo) {}
+                    override fun onUnregistrationFailed(i: NsdServiceInfo, e: Int) {}
+                }
+                anuncios += l
+                runCatching { nsd.registerService(info, NsdManager.PROTOCOL_DNS_SD, l) }.onFailure { anuncios.remove(l) }
+            }
+            if (anuncios.isEmpty()) anunciadoCon = null
         }
     }
 
     private fun dejarDeAnunciar() {
-        anuncio?.let { runCatching { nsd.unregisterService(it) } }
-        anuncio = null
+        for (l in anuncios) runCatching { nsd.unregisterService(l) }
+        anuncios.clear()
         anunciadoCon = null
     }
 
     /**
      * Busca servicios de [tipo] que cumplan [vale] y avisa con la lista cada vez que cambia.
      * Llamar desde el hilo principal.
+     *
+     * Un tipo de PinDesk se busca **también con su tipo de antes** (1-nov-2026), a la vez: un
+     * aparato sin actualizar solo sale con `_pixpin…`, y uno al día sale con los dos; ese queda una
+     * vez, con lo del nuevo ([juntar]).
      */
     fun buscar(tipo: String, vale: (Map<String, String>) -> Boolean, alCambiar: (List<Vecino>) -> Unit) {
         pararBusqueda()
         vecinos.clear()
         alCambiar(emptyList())
+        val estaRonda = ++ronda
         val wifi = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
         candado = runCatching { wifi?.createMulticastLock("pixpin-red")?.apply { setReferenceCounted(false); acquire() } }.getOrNull()
-        val porResolver = ArrayDeque<NsdServiceInfo>()
+        // Cada uno con el tipo por el que salió: 0 el nuevo, 1 el de antes.
+        val porResolver = ArrayDeque<Pair<NsdServiceInfo, Int>>()
         var resolviendo = false
-        lateinit var l: NsdManager.DiscoveryListener
-        fun lista() = vecinos.values.distinctBy { it.id.ifBlank { it.nombre } }.sortedBy { it.nombre }
+        fun lista() = juntar(
+            vecinos.filterKeys { it.startsWith("0|") }.values.toList(),
+            vecinos.filterKeys { it.startsWith("1|") }.values.toList()
+        )
         fun siguiente() {
-            if (resolviendo || busqueda !== l) return
-            val info = porResolver.removeFirstOrNull() ?: return
+            if (resolviendo || ronda != estaRonda) return
+            val (info, cual) = porResolver.removeFirstOrNull() ?: return
             resolviendo = true
             @Suppress("DEPRECATION")
             runCatching {
@@ -146,7 +169,7 @@ class Red(private val context: Context) {
                     override fun onResolveFailed(i: NsdServiceInfo, error: Int) {
                         principal.post {
                             resolviendo = false
-                            if (error == NsdManager.FAILURE_ALREADY_ACTIVE) principal.postDelayed({ porResolver.addLast(info); siguiente() }, 300)
+                            if (error == NsdManager.FAILURE_ALREADY_ACTIVE) principal.postDelayed({ porResolver.addLast(info to cual); siguiente() }, 300)
                             siguiente()
                         }
                     }
@@ -155,8 +178,8 @@ class Red(private val context: Context) {
                             resolviendo = false
                             val datos = i.attributes.mapValues { it.value?.decodeToString().orEmpty() }
                             @Suppress("DEPRECATION") val host = i.host
-                            if (busqueda === l && host != null && vale(datos)) {
-                                vecinos[i.serviceName] = Vecino(datos["n"] ?: i.serviceName, host, i.port, datos)
+                            if (ronda == estaRonda && host != null && vale(datos)) {
+                                vecinos["$cual|${i.serviceName}"] = Vecino(datos["n"] ?: i.serviceName, host, i.port, datos)
                                 alCambiar(lista())
                             }
                             siguiente()
@@ -165,25 +188,29 @@ class Red(private val context: Context) {
                 })
             }.onFailure { resolviendo = false }
         }
-        l = object : NsdManager.DiscoveryListener {
-            override fun onDiscoveryStarted(tipo: String) {}
-            override fun onDiscoveryStopped(tipo: String) {}
-            override fun onStartDiscoveryFailed(tipo: String, e: Int) {}
-            override fun onStopDiscoveryFailed(tipo: String, e: Int) {}
-            override fun onServiceFound(info: NsdServiceInfo) {
-                principal.post { porResolver.addLast(info); siguiente() }
+        val nuevas = conElDeAntes(tipo).mapIndexed { cual, t ->
+            val l = object : NsdManager.DiscoveryListener {
+                override fun onDiscoveryStarted(tipo: String) {}
+                override fun onDiscoveryStopped(tipo: String) {}
+                override fun onStartDiscoveryFailed(tipo: String, e: Int) {}
+                override fun onStopDiscoveryFailed(tipo: String, e: Int) {}
+                override fun onServiceFound(info: NsdServiceInfo) {
+                    principal.post { porResolver.addLast(info to cual); siguiente() }
+                }
+                override fun onServiceLost(info: NsdServiceInfo) {
+                    principal.post { if (ronda == estaRonda && vecinos.remove("$cual|${info.serviceName}") != null) alCambiar(lista()) }
+                }
             }
-            override fun onServiceLost(info: NsdServiceInfo) {
-                principal.post { if (vecinos.remove(info.serviceName) != null) alCambiar(lista()) }
-            }
+            t to l
         }
-        busqueda = l
-        runCatching { nsd.discoverServices(tipo, NsdManager.PROTOCOL_DNS_SD, l) }
+        busquedas = nuevas.map { it.second }
+        for ((t, l) in nuevas) runCatching { nsd.discoverServices(t, NsdManager.PROTOCOL_DNS_SD, l) }
     }
 
     fun pararBusqueda() {
-        busqueda?.let { runCatching { nsd.stopServiceDiscovery(it) } }
-        busqueda = null
+        ronda++
+        for (l in busquedas) runCatching { nsd.stopServiceDiscovery(l) }
+        busquedas = emptyList()
         runCatching { candado?.release() }
         candado = null
     }
@@ -196,7 +223,42 @@ class Red(private val context: Context) {
     }
 
     companion object {
-        const val TIPO = "_pixpin._tcp."
+        /**
+         * El tipo mDNS de la sincronización: `_pindesk._tcp.` desde el 1-nov-2026, como el PC
+         * (`pindesk_sincro::SERVICIO`). Hasta entonces era `_pixpin._tcp.`, que se sigue
+         * anunciando y buscando a la vez ([tipoDeAntes]): lo usan los aparatos sin actualizar.
+         */
+        const val TIPO = "_pindesk._tcp."
+
+        /** El prefijo del nombre de la instancia que se anuncia: «PinDesk <aparato>» (antes «PixPin …»). */
+        const val INSTANCIA = "PinDesk"
+
+        /** El nombre de la instancia de [aparato]: se enseña, no se compara (se compara el TXT `g`/`id`). */
+        fun instancia(aparato: String): String = "$INSTANCIA $aparato"
+
+        /**
+         * El tipo de antes de PinDesk de un tipo de ahora: `_pindesk._tcp.` → `_pixpin._tcp.`,
+         * `_pindeskenvio._tcp.` → `_pixpinenvio._tcp.`… null si no es uno de los nuestros (o ya es
+         * uno de antes). Como `tipo_de_antes` del PC; puro, para probarlo sin red.
+         */
+        fun tipoDeAntes(tipo: String): String? {
+            val t = tipo.trim()
+            if (!t.startsWith("_pindesk") || !t.contains("._tcp")) return null
+            return "_pixpin" + t.removePrefix("_pindesk")
+        }
+
+        /** [tipo] y, si lo tiene, su tipo de antes: el nuevo delante. */
+        fun conElDeAntes(tipo: String): List<String> = listOfNotNull(tipo, tipoDeAntes(tipo))
+
+        /**
+         * **Junta lo encontrado con el tipo de ahora y con el de antes**: un aparato que sale en los
+         * dos queda una vez, con lo del nuevo. Se le reconoce por su TXT (`id`; sin él, `g` y el
+         * nombre), no por el nombre de la instancia, que cambia de «PixPin» a «PinDesk».
+         */
+        fun juntar(ahora: List<Vecino>, antes: List<Vecino>): List<Vecino> =
+            (ahora + antes).distinctBy { clave(it) }.sortedBy { it.nombre }
+
+        private fun clave(v: Vecino): String = v.id.ifBlank { v.datos["g"].orEmpty() + "|" + v.nombre }
         /** Uno fijo, para poder teclearlo; si está ocupado, cualquiera. */
         const val PUERTO = 47474
 
