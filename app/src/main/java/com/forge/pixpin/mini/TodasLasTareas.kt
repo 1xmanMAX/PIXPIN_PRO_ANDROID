@@ -16,7 +16,8 @@ import java.time.LocalDate
  *
  * - **El Inbox**: lo que se apunta sin decir dónde va a la lista «Inbox» de «Mensajes guardados»
  *   (se crea si no está), como la caja de la ventana del PC y el pedido `anadir_tarea` sin
- *   `proyecto` ni `codigo`. De ahí se reparte con «Mover a…».
+ *   `proyecto` ni `codigo`. De ahí se reparte con «Mover a…». Hay uno solo: si llegan dos (cada
+ *   aparato creó el suyo antes de sincronizar), se juntan ([unirInboxes]).
  * - **Antes de tocar una tarea se comprueba que sigue siendo ella** (su texto crudo en ese
  *   número): si la lista cambió en el chat o llegó cambiada del PC, se devuelve `null` y no se
  *   toca nada, igual que `tareas::marcar` del PC.
@@ -149,21 +150,83 @@ object TodasLasTareas {
 
     /**
      * Todas las listas de todos los chats, ya ordenadas. [nombres] son los proyectos que hay
-     * (id → nombre): una lista de un proyecto que ya no está no sale, como en el PC, que solo
-     * mira los chats de su índice.
+     * (id → nombre).
+     *
+     * **Las de todos los chats, también los que no están en [nombres]** (1-nov-2026). El usuario:
+     * «no todos los grupos de tareas que creo aparecen en Tareas; uno que creo en otro chat no
+     * aparece». Antes una lista cuyo chat no estaba en los proyectos de este teléfono no salía
+     * («como en el PC, que solo mira los chats de su índice»), pero aquí hay chats que la lista de
+     * chats sí enseña sin ficha de proyecto: un chat llegado del PC o de un chat compartido antes
+     * de que lleguen sus proyectos, o la ficha aún sin releer. En el PC todo chat está en su índice,
+     * así que allí salen todas; aquí, igual que hace la lista de chats ([com.forge.pixpin.guardados.conversaciones]),
+     * se nombra con su id si no se sabe su nombre. Borrar un proyecto se lleva sus mensajes, así
+     * que esto no resucita nada borrado.
      */
     fun reunir(mensajes: List<Mensaje>, nombres: Map<String, String>): List<Lista> =
         mensajes.mapNotNull { m ->
-            val chat = if (m.proyecto == null) GUARDADOS else nombres[m.proyecto] ?: return@mapNotNull null
+            val chat = if (m.proyecto == null) GUARDADOS else nombres[m.proyecto] ?: m.proyecto
             listaDe(m, chat)
         }.sortedWith(ORDEN_DE_LISTAS)
 
     /**
-     * El Inbox de «Mensajes guardados», si ya está: la primera lista del chat general que se
-     * llama así y no espera en el buzón (`tareas::apuntar_con` del PC).
+     * Si un mensaje es **un Inbox**: una lista del chat general que se llama así (sin mirar
+     * mayúsculas ni blancos) y no espera en el buzón. La misma regla que `tareas::apuntar_con` del
+     * PC: el Inbox no tiene un código fijo, se reconoce por su chat y su nombre.
      */
-    fun inboxEn(mensajes: List<Mensaje>): Mensaje? = mensajes.firstOrNull {
-        it.proyecto == null && esLista(it) && !it.enBuzon && nombreDeLista(it).trim().equals(INBOX, ignoreCase = true)
+    fun esMensajeInbox(m: Mensaje): Boolean =
+        m.proyecto == null && esLista(m) && !m.enBuzon && nombreDeLista(m).trim().equals(INBOX, ignoreCase = true)
+
+    /**
+     * **El orden de los Inbox repetidos**: el más antiguo primero (por `cuando` y luego por `id`).
+     * Es el que se queda al juntarlos ([unirInboxes]), el mismo en todos los aparatos sin tener que
+     * ponerse de acuerdo; el PC coge el primero de su cuaderno, que se escribe en orden de llegada
+     * y casi siempre es también el más antiguo.
+     */
+    private val ORDEN_DE_INBOX: Comparator<Mensaje> = compareBy<Mensaje> { it.cuando }.thenBy { it.id }
+
+    /**
+     * El Inbox de «Mensajes guardados», si ya está (`tareas::apuntar_con` del PC). Si hay varios
+     * (ver [unirInboxes]), el que se queda: el más antiguo.
+     */
+    fun inboxEn(mensajes: List<Mensaje>): Mensaje? = mensajes.filter(::esMensajeInbox).minWithOrNull(ORDEN_DE_INBOX)
+
+    /**
+     * **«En Tareas veo dos Inbox»** (el usuario, 1-nov-2026: «debería ser uno solo, unificado en
+     * todos los aparatos sincronizados»).
+     *
+     * POR QUÉ salen dos: el Inbox no tiene un código fijo, se crea con uno al azar la primera vez que
+     * se apunta algo sin decir dónde, en el aparato donde se apunte (aquí [com.forge.pixpin.mini.TareaRapidaActivity.alInbox],
+     * en el PC `tareas::apuntar_con` con `pedidos::nueva_lista`). Si el teléfono y el PC apuntan
+     * antes de sincronizar —o dos aparatos sin conexión—, cada uno crea el suyo, y al sincronizar
+     * viajan los dos: dos mensajes distintos que se llaman «Inbox».
+     *
+     * El arreglo, sin cambiar nada del formato (el PC no lo necesita): **se juntan**. Se queda el
+     * más antiguo ([inboxEn]) y recibe, al final y tal cual (con su fecha, su hora y su estado), las
+     * tareas de los demás que no tenga ya (mismo texto crudo: así juntarlo dos veces, o en dos
+     * aparatos a la vez, no las repite); los demás se borran. Borrar deja su lápida y viaja, así
+     * que el PC también se queda con uno. Y no se pierde nada: si el PC añade algo a un Inbox
+     * borrado antes de enterarse, la sincronización lo rescata («lo modificado gana a lo borrado»,
+     * [com.forge.pixpin.sincro.Fusion]) y la próxima vez se vuelve a juntar.
+     *
+     * Devuelve los mensajes con un solo Inbox, o null si ya había uno o ninguno (no hay que tocar
+     * nada). Lo que espera en el buzón no cuenta (tampoco para el PC).
+     */
+    fun unirInboxes(mensajes: List<Mensaje>): List<Mensaje>? {
+        val inboxes = mensajes.filter(::esMensajeInbox).sortedWith(ORDEN_DE_INBOX)
+        if (inboxes.size < 2) return null
+        val queda = inboxes.first()
+        val sobran = inboxes.drop(1).map { it.id }.toSet()
+        val tareas = Tareas.leer(queda.texto).toMutableList()
+        val vistas = tareas.mapTo(HashSet()) { it.texto }
+        for (otro in inboxes.drop(1)) for (t in Tareas.leer(otro.texto)) if (vistas.add(t.texto)) tareas += t
+        val texto = Tareas.escribir(Cabecera.titulo(queda.texto).ifEmpty { INBOX }, tareas)
+        return mensajes.mapNotNull { m ->
+            when {
+                m.id == queda.id -> m.copy(texto = texto)
+                m.id in sobran && esMensajeInbox(m) -> null
+                else -> m
+            }
+        }
     }
 
     // ---- Buscar ----------------------------------------------------------
@@ -292,12 +355,20 @@ object TodasLasTareas {
         listas: List<Lista>,
         palabras: List<String>,
         hoy: LocalDate,
+        /**
+         * **También las listas vacías, sin buscar** (1-nov-2026). Un grupo recién creado en un chat
+         * nace vacío y no salía en las tarjetas hasta tener alguna tarea, y al usuario le parecía
+         * que no estaba («uno que creo en otro chat no aparece»). Con esto sale con su encabezado
+         * y «nada pendiente». Buscando no cambia nada: una lista sin nada que coincida no sale. El
+         * PC (`tarjetas::agrupar`) no las enseña; es solo la vista, no cambia nada de lo que viaja.
+         */
+        conVacias: Boolean = false,
         sigueArriba: (Lista, Fila) -> Boolean = { _, _ -> false }
     ): List<Grupo> = listas.mapIndexedNotNull { li, l ->
         val (arriba, hechas) = l.aLaVista { sigueArriba(l, it) }
         val a = arriba.filter { coincide(l, it, palabras, hoy) }.map { it.indice }
         val h = hechas.filter { coincide(l, it, palabras, hoy) }.map { it.indice }
-        if (a.isEmpty() && h.isEmpty()) null else Grupo(li, a, h)
+        if (a.isEmpty() && h.isEmpty() && !(conVacias && palabras.isEmpty() && l.filas.isEmpty())) null else Grupo(li, a, h)
     }
 
     /** «hoy», «hace 1 día», «hace N días» (`mini-tarea-edad`). Nunca la fecha: lo pidió el usuario. */

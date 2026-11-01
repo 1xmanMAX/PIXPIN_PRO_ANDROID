@@ -30,12 +30,18 @@ class ServicioDeTareas : RemoteViewsService() {
             val (nuevas, pendientes, hayListas) = runCatching {
                 val app = context as? PixPinApp
                 val nombres = app?.proyectos?.proyectos?.value?.associate { it.id to it.nombre } ?: emptyMap()
-                val listas = TodasLasTareas.reunir(MensajesStore(context).leer(), nombres)
+                val almacen = MensajesStore(context)
+                // Un solo Inbox (1-nov-2026): si llegaron dos, se juntan. Ver [TodasLasTareas.unirInboxes].
+                runCatching { com.forge.pixpin.mini.TareaRapidaActivity.unirInboxes(almacen) }
+                val listas = TodasLasTareas.reunir(almacen.leer(), nombres)
                 // Los chats compartidos, para el símbolo de sus filas (27-oct-2026): de la caché,
                 // que el widget se repinta a menudo; sin ninguno, ni se mira la identidad.
                 val compartidos = TareasCompartidas.EnCache.leer(context)
                 Triple(
-                    LogicaDeLosWidgets.filasDeTareas(listas, LocalDate.now(), compartidos = compartidos),
+                    LogicaDeLosWidgets.filasDeTareas(
+                        listas, LocalDate.now(), compartidos = compartidos,
+                        llaman = com.forge.pixpin.mini.LlamadasGuardadas.tareas(context)
+                    ),
                     LogicaDeLosWidgets.pendientes(listas), listas.isNotEmpty()
                 )
             }.onFailure { Log.w("PixPin", "widget de tareas: no se pudo leer el chat", it) }
