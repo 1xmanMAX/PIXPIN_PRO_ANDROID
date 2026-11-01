@@ -23,6 +23,21 @@ import java.io.File
  */
 object RepasarClase {
 
+    /**
+     * **Si Jev no contesta al repasar, se dice por qué** (1-nov-2026, `repaso-jev-fallo` y
+     * `repaso-jev-fallo-red` del PC, que lo copió de aquí): sin conexión, o el motivo entre paréntesis. En
+     * el idioma puesto ([com.forge.pixpin.ui.Textos]).
+     */
+    fun avisoDeFallo(e: Throwable): String {
+        val fallo = com.forge.pixpin.ui.Textos.t(com.forge.pixpin.R.string.repaso_jev_fallo, "Jev no contestó: los puntos se quedan como estaban.")
+        val motivo = when {
+            e is com.forge.pixpin.jev.ErrorJev.Red -> com.forge.pixpin.ui.Textos.t(com.forge.pixpin.R.string.repaso_jev_fallo_red, "Sin conexión.")
+            e.message.isNullOrBlank() -> null
+            else -> "(${e.message})"
+        }
+        return if (motivo == null) fallo else "$fallo $motivo"
+    }
+
     /** Un punto clave: lo que dice y el minuto de la clase donde se explicó. */
     data class PuntoClave(val texto: String, val ms: Long?)
 

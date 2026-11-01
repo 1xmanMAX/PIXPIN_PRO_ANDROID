@@ -584,6 +584,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         androidx.compose.runtime.LaunchedEffect(recargar) {
             mensajes = withContext(Dispatchers.IO) { cargar() }
             cargando = false
+            // **Las medidas de las fotos, ya** (1-nov-2026, como el PC): así la que entra por arriba al
+            // subir pinta su caja del alto final mientras se lee y no empuja lo que se lee. Primero las del
+            // final, que es donde se abre. Ver [HuecoDeLaFoto].
+            val fotos = mensajes.filter { it.clase == Clase.IMAGEN }.mapNotNull { it.ruta }
+            withContext(Dispatchers.IO) {
+                for (r in HuecoDeLaFoto.enOrdenDePrecarga(fotos)) HuecoDeLaFoto.medir(r, LADO_DE_LA_BURBUJA, PIXELES_DE_LA_BURBUJA)
+            }
         }
 
         // **Los proyectos, suscritos y una sola vez.** Se leían con `.value` allí donde
@@ -4167,6 +4174,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // un fotograma que dura dieciséis. Se notaba como un tropiezo por cada foto que
         // entraba a la vista, y otra vez al volver a subir.
         var original by remember(m.ruta) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        // Ya se intentó leer (sin foto después de leerla: el fichero se borró desde fuera).
+        var leida by remember(m.ruta) { mutableStateOf(false) }
         LaunchedEffect(m.ruta) {
             original = m.ruta?.let {
                 // Y se lee a más resolución: 600 puntos estirados al alto nuevo en una
@@ -4177,8 +4186,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 // cuatro— y en la burbuja no se leía nada. Ver [LADO_DE_LA_BURBUJA].
                 withContext(Dispatchers.IO) {
                     com.forge.pixpin.pin.ImageStore.cargarNitida(it, LADO_DE_LA_BURBUJA, PIXELES_DE_LA_BURBUJA)
-                }
+                }?.also { b -> HuecoDeLaFoto.apuntar(it, b.width, b.height) }
             }
+            leida = true
         }
         // **Si la foto se ha editado, en la lista se ve editada.**
         //
@@ -4240,9 +4250,13 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
         val mapa = editada ?: original
         if (mapa == null) {
+            // **Mientras se lee, su caja del alto final** (1-nov-2026, como el PC): si no, la
+            // burbuja crecía al llegar la foto y empujaba lo que se estaba leyendo al subir.
+            val medida = if (leida) null else HuecoDeLaFoto.sabida(m.ruta)
             // Sin bitmap no hay foto que enseñar —el fichero se borró desde fuera—, y
             // una caja gris no explica nada: se enseña como archivo, con su nombre.
-            FilaDeArchivo(m)
+            if (medida != null) HuecoEnEspera(medida, ALTO_DE_LA_FOTO, if (conHoraEncima) RADIO_DE_LA_FOTO else 4.dp)
+            else FilaDeArchivo(m)
             return
         }
         var hueco by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
@@ -4526,6 +4540,29 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         }
     }
 
+    /**
+     * **La caja de una foto o una hoja que aún se lee**, del tamaño exacto que tendrá ([HuecoDeLaFoto.caja],
+     * lo que hace `Image` al encajarla), en tono apagado: al llegar la imagen, la burbuja no cambia de alto.
+     */
+    @Composable
+    private fun HuecoEnEspera(medida: Pair<Int, Int>, altoMaximo: androidx.compose.ui.unit.Dp, radio: androidx.compose.ui.unit.Dp) {
+        androidx.compose.foundation.layout.BoxWithConstraints {
+            val densidad = androidx.compose.ui.platform.LocalDensity.current
+            val maxAlto = with(densidad) { altoMaximo.roundToPx() }
+            val (w, h) = HuecoDeLaFoto.caja(
+                medida.first, medida.second,
+                if (constraints.hasBoundedWidth) constraints.maxWidth else medida.first,
+                if (constraints.hasBoundedHeight) minOf(constraints.maxHeight, maxAlto) else maxAlto
+            )
+            Box(
+                Modifier
+                    .size(with(densidad) { w.toDp() }, with(densidad) { h.toDp() })
+                    .clip(RoundedCornerShape(radio))
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f))
+            )
+        }
+    }
+
     /** La hoja de un PDF con lo anotado encima, tal y como quedó. */
     @Composable
     private fun MiniaturaDePagina(
@@ -4551,6 +4588,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             rutaDelDibujo?.let { File(it).lastModified() } ?: 0L
         }
         var mapa by remember(pdf, pagina) { mutableStateOf<android.graphics.Bitmap?>(null) }
+        var compuesta by remember(pdf, pagina) { mutableStateOf(false) }
         LaunchedEffect(pdf, pagina, version) {
             mapa = withContext(Dispatchers.IO) {
                 runCatching {
@@ -4559,13 +4597,19 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         rutaDelDibujo, ANCHO_DE_LA_HOJA
                     )
                 }.getOrNull()
-            }
+            }?.also { HuecoDeLaFoto.apuntar(HuecoDeLaFoto.deHoja(pdf, pagina), it.width, it.height) }
+            compuesta = true
         }
         val hoja = mapa
         if (hoja == null) {
             // Mientras se compone se enseña la ficha del archivo, que ya dice de qué
-            // documento y de qué página se trata: un hueco gris no diría ni eso.
-            FilaDeArchivo(m)
+            // documento y de qué página se trata: un hueco gris no diría ni eso. **Salvo
+            // si ya se sabe lo que mide** (se compuso antes): entonces su hoja de espera
+            // del alto final, para que al subir no empuje lo que se lee (1-nov-2026, el
+            // `hueco_de_pagina` del PC).
+            val medida = if (compuesta) null else HuecoDeLaFoto.sabida(HuecoDeLaFoto.deHoja(pdf, pagina))
+            if (medida != null) HuecoEnEspera(medida, ALTO_DE_LA_HOJA, 4.dp)
+            else FilaDeArchivo(m)
             return
         }
         var hueco by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }

@@ -190,6 +190,24 @@ class TodasLasTareasTest {
     }
 
     @Test
+    fun `hoy y ayer en los catorce idiomas del PC`() {
+        // Con lo que dice la pista del buscador de cada uno (e0dd32c2 del PC).
+        for (hoy in listOf("今天", "今日", "Сегодня", "aujourd’hui", "aujourd'hui", "bugün", "오늘", "HEUTE", "oggi", "hoje", "आज", "اليوم")) {
+            assertEquals(hoy, TodasLasTareas.Dia.Hace(0), TodasLasTareas.diaDe(hoy))
+        }
+        for (ayer in listOf("昨天", "вчера", "Gestern", "dün", "أمس", "kemarin", "hier", "ontem", "ieri", "어제", "कल")) {
+            assertEquals(ayer, TodasLasTareas.Dia.Hace(1), TodasLasTareas.diaDe(ayer))
+        }
+        // «hari ini» son dos palabras que nombran un día: van juntas.
+        assertEquals(listOf("tarea", "hari ini"), TodasLasTareas.palabras("tarea hari ini"))
+        assertEquals(TodasLasTareas.Dia.Hace(0), TodasLasTareas.diaDe(TodasLasTareas.palabras("Hari Ini")[0]))
+        // Caso negativo: «ini» sola, o «hari» sin «ini», no se juntan ni son días.
+        assertEquals(listOf("ini", "hari"), TodasLasTareas.palabras("ini hari"))
+        assertNull(TodasLasTareas.diaDe("hari"))
+        assertNull(TodasLasTareas.diaDe("heuter"))
+    }
+
+    @Test
     fun `agrupar deja lo pendiente arriba y lo hecho aparte`() {
         val v = muestra()
         var g = TodasLasTareas.agrupar(v, emptyList(), dia(3))

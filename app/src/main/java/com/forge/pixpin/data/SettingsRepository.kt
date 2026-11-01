@@ -208,6 +208,15 @@ data class Settings(
     val modeloWhisper: String = "base",
 
     /**
+     * **Con qué se escucha en vivo una reunión que se graba** (1-nov-2026, `[voz] en_vivo` del PC, con
+     * los mismos valores): [EN_VIVO_SISTEMA] (el reconocedor del teléfono sin red si sabe el idioma; si
+     * no, Whisper ligero frase a frase) o [EN_VIVO_VOSK] (lo que se va oyendo mientras se habla y la frase
+     * a las décimas de callarse; su modelo se baja al elegirlo). Sin bajar, o si falla, el de siempre.
+     * Como en el PC, es de este aparato: no viaja.
+     */
+    val motorEnVivo: String = EN_VIVO_SISTEMA,
+
+    /**
      * **Quién contesta en el asistente** (`[asistente] motor` del PC): `claude` o `deepseek`, con
      * la clave del usuario, que se guarda cifrada aparte y nunca aquí (ver
      * [com.forge.pixpin.asistente.ClavesDeLaNube]). Vacío = Claude: desde el 25-oct-2026 no hay
@@ -505,6 +514,7 @@ class SettingsRepository(private val context: Context) {
         val IDIOMA_DE_VOZ = stringPreferencesKey("idioma_de_voz")
         val SEGUNDO_IDIOMA_DE_VOZ = stringPreferencesKey("segundo_idioma_de_voz")
         val MODELO_WHISPER = stringPreferencesKey("modelo_whisper")
+        val MOTOR_EN_VIVO = stringPreferencesKey("voz_en_vivo")
         val ASISTENTE_MOTOR = stringPreferencesKey("asistente_motor")
         val ASISTENTE_PENSAR = stringPreferencesKey("asistente_pensar")
         val ASISTENTE_DOCUMENTOS_NUBE = stringPreferencesKey("asistente_documentos_nube")
@@ -562,6 +572,7 @@ class SettingsRepository(private val context: Context) {
             idiomaDeVoz = prefs[Keys.IDIOMA_DE_VOZ] ?: "",
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
             modeloWhisper = prefs[Keys.MODELO_WHISPER] ?: "base",
+            motorEnVivo = prefs[Keys.MOTOR_EN_VIVO] ?: EN_VIVO_SISTEMA,
             asistenteMotor = prefs[Keys.ASISTENTE_MOTOR] ?: "",
             asistentePensar = prefs[Keys.ASISTENTE_PENSAR] ?: "",
             asistenteDocumentosNube = prefs[Keys.ASISTENTE_DOCUMENTOS_NUBE] ?: "",
@@ -760,6 +771,11 @@ class SettingsRepository(private val context: Context) {
     /** El segundo idioma para Whisper, o vacío. Ver [Settings.segundoIdiomaDeVoz]. */
     suspend fun setSegundoIdiomaDeVoz(valor: String) {
         context.dataStore.edit { it[Keys.SEGUNDO_IDIOMA_DE_VOZ] = valor }
+    }
+
+    /** [EN_VIVO_SISTEMA] o [EN_VIVO_VOSK]. Ver [Settings.motorEnVivo]. */
+    suspend fun setMotorEnVivo(valor: String) {
+        context.dataStore.edit { it[Keys.MOTOR_EN_VIVO] = valor }
     }
 
     /** «tiny», «base» o «small». Ver [Settings.modeloWhisper]. */
@@ -1000,6 +1016,10 @@ const val MOTOR_GOOGLE = "google"
 const val MOTOR_POR_DEFECTO = MOTOR_WHISPER
 /** Qwen3-ASR-0.6B, con Whisper de reserva. Ver [com.forge.pixpin.guardados.qwen3.MotorQwen3]. */
 const val MOTOR_QWEN3 = "qwen3"
+/** Escuchar en vivo con lo de siempre (`sistema` de `[voz] en_vivo` del PC). Ver [Settings.motorEnVivo]. */
+const val EN_VIVO_SISTEMA = "sistema"
+/** Escuchar en vivo con Vosk (`vosk` de `[voz] en_vivo` del PC). */
+const val EN_VIVO_VOSK = "vosk"
 /** Whisper con dos idiomas: cada trozo en el idioma en que se dijo. */
 const val MODO_CADA_IDIOMA = "cada_uno"
 /** Whisper: todo en el primer idioma, traducido lo que se dijo en el otro. */

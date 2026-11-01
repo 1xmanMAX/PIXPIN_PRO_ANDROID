@@ -168,8 +168,25 @@ object TodasLasTareas {
 
     // ---- Buscar ----------------------------------------------------------
 
-    /** Las palabras de lo buscado. Sin palabras no se filtra nada. */
-    fun palabras(consulta: String): List<String> = consulta.split(BLANCOS).filter { it.isNotEmpty() }
+    /**
+     * Las palabras de lo buscado. Sin palabras no se filtra nada.
+     *
+     * «hari ini» (hoy, en indonesio) son dos palabras que nombran un día: van juntas, o «hari» sola no
+     * encontraría nada (1-nov-2026, `tareas::tarjetas::palabras` del PC).
+     */
+    fun palabras(consulta: String): List<String> {
+        val v = ArrayList<String>()
+        for (p in consulta.split(BLANCOS)) {
+            if (p.isEmpty()) continue
+            val antes = v.lastOrNull()
+            if (plano(p) == "ini" && antes != null && plano(antes) == "hari") v[v.lastIndex] = "$antes $p"
+            else v += p
+        }
+        return v
+    }
+
+    /** Una palabra en su forma de comparar ([normalizar] letra a letra). */
+    private fun plano(s: String): String = s.map(::normalizar).joinToString("")
 
     /**
      * Un carácter en su forma de comparar: minúscula y sin tilde, **uno a uno** para que los
@@ -185,6 +202,8 @@ object TodasLasTareas {
         'ñ' -> 'n'
         'ç' -> 'c'
         'ý', 'ÿ' -> 'y'
+        // «aujourd’hui» con el apóstrofo curvo que pone el teclado vale lo mismo que con el recto.
+        '’' -> '\''
         else -> b
     }
 
@@ -240,13 +259,30 @@ object TodasLasTareas {
         }
     }
 
+    /** «Hoy», ya en su forma de comparar ([plano]). */
+    private val HOY = setOf(
+        "hoy", "today", "今天", "今日", "आज", "اليوم", "hoje", "aujourd'hui", "heute",
+        "сегодня", "오늘", "oggi", "hari ini", "bugun"
+    )
+    /** «Ayer», ya en su forma de comparar ([plano]). */
+    private val AYER = setOf(
+        "ayer", "yesterday", "昨天", "昨日", "कल", "أمس", "امس", "ontem", "hier",
+        "gestern", "вчера", "어제", "ieri", "kemarin", "dun"
+    )
+
     private val FECHA_ESCRITA = Regex("""^(\d{4})-(\d{2})-(\d{2})$""")
 
+    /**
+     * **«Hoy» y «ayer» en los catorce idiomas del PC** (1-nov-2026, `tareas::tarjetas::dia_de`), con las
+     * palabras que dice la pista del buscador de cada uno (今天, сегодня, aujourd’hui, bugün…): se aceptan
+     * todas a la vez, porque quien busca puede escribir en otro idioma que el de PixPin. «कल» es ayer y
+     * mañana en hindi: aquí, ayer.
+     */
     fun diaDe(palabra: String): Dia? {
-        val p = palabra.map(::normalizar).joinToString("")
+        val p = plano(palabra)
         return when (p) {
-            "hoy", "today" -> Dia.Hace(0)
-            "ayer", "yesterday" -> Dia.Hace(1)
+            in HOY -> Dia.Hace(0)
+            in AYER -> Dia.Hace(1)
             "anteayer" -> Dia.Hace(2)
             else -> FECHA_ESCRITA.find(p)?.let { m ->
                 // Mes 1-12 y día 1-31, como el PC: basta para no tomar un número por una fecha.

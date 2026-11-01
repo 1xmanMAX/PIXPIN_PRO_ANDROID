@@ -59,6 +59,17 @@ Además, mientras se graba:
      PC), en una **cola de tres que tira la más vieja**: si no hay reconocedor del sistema, si falla tres
      veces seguidas, o **si Android silencia la grabación por él** (`AudioRecordingCallback`,
      `isClientSilenced` de nuestra sesión: la grabación gana y el reconocedor se va).
+   - **Con Vosk** (1-nov-2026, `vosk_vivo.rs` y `[voz] en_vivo` del PC): con Ajustes › Voz › «Escuchar la
+     reunión en vivo con» Vosk (`Settings.motorEnVivo`, `voz_en_vivo` = `sistema` | `vosk`, de este
+     aparato) y el modelo pequeño del idioma bajado (se baja **al elegirlo**, con su avance en la fila;
+     volver a lo de siempre corta la descarga; «Borrar Vosk» lo libera), el oído no corta frases: le da el
+     PCM de corrido a `VoskEnVivo.Corriente`, que se lo pasa a Vosk de 100 en 100 ms, pide el parcial cada
+     200 ms (sale en cursiva en la barra y en la pantalla completa) y entrega la frase en cuanto Vosk la
+     cierra (medio segundo callado) o, pasados 4 s de frase, en la primera pausa de 200 ms, y a los 10 s
+     aunque no la haya (`LARGO_MS`, `PAUSA_MS`, `MAXIMO_MS`, los del PC). Un hueco de hasta 1 s se rellena
+     con silencio; uno más largo cierra la frase. Las palabras del parcial van apagadas (con ellas Vosk
+     tarda 1,5-2 s). Medido en el PC: 0,40 s de media desde que se deja de hablar frente a 3,24 s de
+     Whisper *base*, con el mismo WER. Si Vosk no carga, lo de siempre.
    - **La grabación va primero** (`OidoEnVivo.Freno`): con la batería por debajo del 20 % (sin cargar) o el
      teléfono caliente (`THERMAL_STATUS_MODERATE` o más) se saltan frases; si una frase de Whisper tardó
      más del 80 % de lo que dura, se salta la siguiente. Lo que no tiene voz no se mira.
@@ -140,13 +151,17 @@ al horario), encendidos de fábrica; sin clave no hacen nada.
 `TemasEnVivoTest`, `VivoYFechasTest`, `MesaDeLaReunionTest` (las de `temas.rs`, `vivo.rs`, `fechas.rs`, `compromisos.rs`, `citas.rs`, `pendientes.rs`, `tiempo_de_temas.rs`, `urgencia_viva.rs` y
 `en_la_reunion.rs`, con respuestas grabadas), `TemasYActaDeLaReunionTest` (`temas.rs` y `acta_viva.rs` de
 `pixpin-proyecto`, y la ida y vuelta de una nota escrita por el PC), `OidoEnVivoTest` (`en_vivo.rs`),
-`ClaseExportarReunionTest` (la página) y `ReunionConJevTest` (`texto_de`).
+`ClaseExportarReunionTest` (la página), `ReunionConJevTest` (`texto_de`) y `VoskEnVivoTest`
+(`vosk_vivo.rs`, con un reconocedor de mentira).
 
 ## Lo que necesita un teléfono o una clave
 
 - El reconocedor del sistema con `EXTRA_AUDIO_SOURCE` y `EXTRA_SEGMENTED_SESSION` en vivo (Android 13+),
   y si en Android 12 el reconocedor con su micrófono hace que Android silencie la grabación (entonces se
   pasa a Whisper): **no probado en un teléfono** el 29-oct-2026.
+- Vosk en vivo con `vosk-android` 0.3.75 en un teléfono (en el PC se midió con la 0.3.45, cuyos tiempos de
+  palabra siguen contando tras `finalResult`; la `Corriente` cuenta con ello): **no probado en un
+  teléfono** el 1-nov-2026.
 - Lo que tarda el ✓ de verdad (se apunta en el registro, etiqueta `PixPinReunion`, con los ms desde que
   se dejó de hablar) y el gasto de batería de una hora de escucha.
 - Las preguntas contra la API de verdad (como en el PC: sin clave el 29-oct-2026).

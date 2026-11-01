@@ -185,8 +185,7 @@ class RepasarActivity : ComponentActivity() {
                     r.onSuccess { s -> if (deEste.decidir(s).isNotEmpty()) version++ }
                     r.onFailure { e ->
                         runCatching { android.util.Log.i("PixPinJev", "el repaso no se preguntó: ${e.message}") }
-                        aviso = "Jev no contestó: los puntos se quedan como estaban." +
-                            (if (e is ErrorJev.Red) " Sin conexión." else e.message?.let { " ($it)" } ?: "")
+                        aviso = RepasarClase.avisoDeFallo(e)
                     }
                     if (pendiente) preguntar()
                 }

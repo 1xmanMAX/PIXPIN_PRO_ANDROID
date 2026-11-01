@@ -1085,6 +1085,7 @@ private fun MotorDeVozCard() {
                 }
             }
             Qwen3Asr(settings.motorDeVoz == com.forge.pixpin.data.MOTOR_QWEN3, version) { scope.launch { app.settings.setMotorDeVoz(com.forge.pixpin.data.MOTOR_QWEN3) } }
+            EscucharEnVivo(settings.motorEnVivo, idioma, version, ocupado = descargando != null) { version++ }
             // **El tamaño de Whisper**: tiny, base o small. Cada uno se baja aparte.
             Text(stringResource(R.string.motor_voz_tamano_whisper), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
             androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -1150,6 +1151,89 @@ private fun MotorDeVozCard() {
             TextButton(onClick = { com.forge.pixpin.guardados.MotorWhisper.enlaces(modeloWhisper).forEach { abrir(it) } }) { Text(stringResource(R.string.motor_voz_enlace_whisper, modeloWhisper)) }
             TextButton(onClick = { importar.launch(arrayOf("*/*")) }) { Text(stringResource(R.string.motor_voz_importar)) }
             TextButton(onClick = { abrir("https://alphacephei.com/vosk/models") }) { Text(stringResource(R.string.motor_voz_enlace)) }
+        }
+    }
+}
+
+/**
+ * **«Escuchar la reunión en vivo con»** (1-nov-2026, Ajustes › Voz del PC, `[voz] en_vivo`): lo de siempre
+ * (el reconocedor del teléfono sin red o Whisper ligero) o **Vosk**, que da lo que se va diciendo y cierra
+ * cada frase a las décimas de callarse ([com.forge.pixpin.guardados.VoskEnVivo]). Como en el PC, elegir
+ * Vosk es pedirlo: si falta su modelo, se baja ya, con el avance en la propia fila; volver a lo de siempre
+ * corta una descarga a medias. «Borrar Vosk» libera lo bajado. Sin modelo del idioma, se dice.
+ */
+@OptIn(androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@Composable
+private fun EscucharEnVivo(elegido: String, idioma: String, version: Int, ocupado: Boolean, cambio: () -> Unit) {
+    val context = LocalContext.current
+    val app = context.applicationContext as PixPinApp
+    val scope = rememberCoroutineScope()
+    val vosk = com.forge.pixpin.guardados.MotorVosk
+    var avance by remember { mutableStateOf<Float?>(null) }
+    var fallo by remember { mutableStateOf(false) }
+    val cancelar = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
+    val conVosk = elegido == com.forge.pixpin.data.EN_VIVO_VOSK
+    val tiene = vosk.tieneModelo(idioma)
+    val listo = remember(version, idioma, avance) { vosk.modeloListo(context, idioma) }
+    val algo = remember(version, avance) { vosk.algoBajado(context) }
+    fun bajar() {
+        if (avance != null || ocupado || !tiene || listo) return
+        cancelar.set(false); fallo = false; avance = 0f
+        Thread {
+            val ok = vosk.asegurarModelo(context, idioma, cancelar = { cancelar.get() }) { a -> avance = a } != null
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                fallo = !ok && !cancelar.get()
+                avance = null
+                cambio()
+            }
+        }.start()
+    }
+    Text(stringResource(R.string.motor_voz_en_vivo), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 8.dp))
+    androidx.compose.foundation.layout.FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        androidx.compose.material3.FilterChip(
+            selected = !conVosk,
+            onClick = {
+                if (avance != null) cancelar.set(true)
+                scope.launch { app.settings.setMotorEnVivo(com.forge.pixpin.data.EN_VIVO_SISTEMA) }
+            },
+            label = { Text(stringResource(R.string.motor_voz_en_vivo_sistema)) }
+        )
+        androidx.compose.material3.FilterChip(
+            selected = conVosk,
+            onClick = {
+                scope.launch { app.settings.setMotorEnVivo(com.forge.pixpin.data.EN_VIVO_VOSK) }
+                // Elegir Vosk es pedirlo: si falta, se baja ya (la línea de debajo dice antes cuánto pesa).
+                bajar()
+            },
+            label = { Text(stringResource(R.string.motor_voz_en_vivo_vosk)) }
+        )
+    }
+    val enCurso = avance
+    Text(
+        when {
+            enCurso != null -> stringResource(R.string.motor_voz_en_vivo_bajando, (enCurso * 100).toInt())
+            fallo -> stringResource(R.string.motor_voz_en_vivo_fallo)
+            !tiene -> stringResource(R.string.motor_voz_en_vivo_sin_idioma)
+            conVosk && listo -> stringResource(R.string.motor_voz_en_vivo_listo)
+            else -> stringResource(R.string.motor_voz_en_vivo_ayuda, if (listo) 0 else vosk.megasDe(idioma))
+        },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+    if (algo && enCurso == null) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                stringResource(R.string.motor_voz_vosk_borrar_ayuda),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = {
+                Thread {
+                    vosk.borrar(context)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { cambio() }
+                }.start()
+            }) { Text(stringResource(R.string.motor_voz_vosk_borrar)) }
         }
     }
 }
