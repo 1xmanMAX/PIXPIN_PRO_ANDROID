@@ -228,3 +228,17 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       la prueba cerrada y las declaraciones de la Play Console (ver `docs/google-play.md`).
 - [x] 72. Dos ramas principales: `main` (código general, sin restricciones de Play; el APK de GitHub)
       y `play-store` (`main` + lo que pide Google Play; el AAB). Ver `docs/ramas.md`.
+
+## Todo lo nuevo de Windows, en orden y con un solo agente (pedido del 2-nov, publicado en v0.157.0)
+
+- [x] 73. Tareas quietas: lo tachado se queda en su sitio y el orden no salta mientras se mira.
+- [x] 74. Exportar las listas de tareas (página, PDF, imagen, Word, Markdown, texto) en 14 idiomas.
+- [x] 75. Cada asignatura del horario con su lista de tareas (`lista:<id>`), renombrar y elegir destino.
+- [x] 76. Marcas de texto (resaltar, ondulada, subrayar, tachar, tapar) en notas, páginas web, Word,
+      libros, PDF, Office y hojas de cálculo; sincronizables con el PC.
+- [x] 77. Color avanzado del lienzo: código, contraste, opacidad, recientes, cuentagotas y el último
+      trazo a mano recordado.
+- [x] 78. Gestos del trackpad en lo exportado y «Pegar lo copiado» en la hoja del clip.
+- [x] 79. La nube de los chats compartidos (deltas: solo sube lo que cambia) con «En línea / Sin
+      conexión» en los visores. Ver `docs/compatibilidad-pc-2-nov.md`.
+
