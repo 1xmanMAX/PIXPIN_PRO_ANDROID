@@ -1,7 +1,6 @@
 package com.forge.pixpin.office
 
 import android.content.Context
-import android.content.res.Configuration
 
 /**
  * **El modo oscuro de los visores** (PC 74801b4/ce82d27, 12-oct-2026: «todos los visores con modo
@@ -18,7 +17,9 @@ import android.content.res.Configuration
  *
  * Sin nada de Android en las cuentas (se prueban en la JVM). La preferencia es **de este aparato**
  * (no viaja): la clave `invertido` de los ajustes `lectura`, la misma del interruptor «Invertir
- * colores» del lector; si nunca se tocó, manda el tema del teléfono (como el PC con el de Windows).
+ * colores» del lector; si nunca se tocó, manda el aspecto de la aplicación (como el PC con el de
+ * Windows). Hasta el 2-nov-2026 mandaba el del teléfono: con el teléfono de noche y PinDesk de día,
+ * el documento salía negro dentro de una aplicación blanca. Ver [com.forge.pixpin.ui.theme.deNocheEnLaApp].
  */
 object Oscuro {
     /** Lo blanco del documento, en oscuro: el gris de la barra de los pines del PC. */
@@ -67,16 +68,13 @@ object Oscuro {
     private const val AJUSTES = "lectura"
     private const val CLAVE = "invertido"
 
-    /** Si los visores van en oscuro: lo elegido con luna/sol o, si nunca se tocó, el tema del teléfono. */
+    /** Si los visores van en oscuro: lo elegido con luna/sol o, si nunca se tocó, el aspecto de la app. */
     fun activo(c: Context): Boolean {
         val p = c.getSharedPreferences(AJUSTES, Context.MODE_PRIVATE)
-        return if (p.contains(CLAVE)) p.getBoolean(CLAVE, false) else delTelefono(c)
+        return if (p.contains(CLAVE)) p.getBoolean(CLAVE, false) else com.forge.pixpin.ui.theme.deNocheEnLaApp(c)
     }
 
     fun poner(c: Context, si: Boolean) {
         c.getSharedPreferences(AJUSTES, Context.MODE_PRIVATE).edit().putBoolean(CLAVE, si).apply()
     }
-
-    fun delTelefono(c: Context): Boolean =
-        (c.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 }

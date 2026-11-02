@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import com.forge.pixpin.PixPinApp
 import com.forge.pixpin.data.ModoNoche
@@ -33,6 +34,9 @@ private val PinBlue = Color(0xFF29B8DB)
  * `onPrimary` tampoco vale el blanco por omisión: sobre este cian claro da un contraste
  * de 2,4 a 1, por debajo del mínimo de 3 a 1 que se le exige a un icono. Va un cian muy
  * oscuro, que además es el mismo que llevan los contenedores claros.
+ *
+ * (2-nov-2026) El primario de día ya no es este cian claro sino [CianHondo], que se lee
+ * como texto, con blanco encima; [CianMuyOscuro] sigue en los contenedores. Ver [LightColors].
  */
 private val CianMuyOscuro = Color(0xFF00323D)
 private val CianClaro = Color(0xFFB8ECF7)
@@ -76,7 +80,7 @@ private val NocheMasAlto = Color(0xFF2B3639)
 private val NocheTexto = Color(0xFFE2E9EB)
 private val NocheTextoSuave = Color(0xFFB7C3C7)
 
-private val DarkColors = darkColorScheme(
+internal val DarkColors = darkColorScheme(
     primary = Color(0xFF5CD3F0),
     onPrimary = Color(0xFF00363F),
     primaryContainer = Color(0xFF0C4E5C),
@@ -114,21 +118,73 @@ private val DarkColors = darkColorScheme(
     scrim = Color.Black
 )
 
-private val LightColors = lightColorScheme(
-    primary = PinBlue,
-    onPrimary = CianMuyOscuro,
+/**
+ * **El modo día, escrito entero** (2-nov-2026).
+ *
+ * Lo reportó el usuario: «el modo noche se ve bien; el de día se ve muy mal: los iconos
+ * cambian más o menos, pero el resto está oscuro, negro con letras negras». Dos cosas:
+ *
+ * - **Lo negro no era del tema, era de la ventana.** `values/themes.xml` pinta la ventana de
+ *   negro y, desde el aspecto Cosmos (17-sep-2026), muchas pantallas —la lista de chats, las
+ *   tareas— ya no se pintan su fondo: dejan ver el cielo, o el negro de la ventana de noche.
+ *   De día, encima de ese negro, el texto `onSurface` del esquema claro, que es casi negro.
+ *   Lo arregla [PixPinTheme] pintando la ventana con el `background` del esquema claro. Ver
+ *   `docs/modo-dia-y-noche.md`.
+ * - **El esquema claro solo tenía los acentos**: los fondos, contenedores y bordes eran los de
+ *   fábrica de Material, gris **lila** (`#FFFBFE`, `#E7E0EC`…), y el primario cian claro
+ *   (`#29B8DB`) daba **2,3 a 1** como texto sobre blanco: los «Conceder» y demás botones de
+ *   texto casi no se leían. Ahora es la misma escalera que la de noche, en el tono de la
+ *   marca, y los acentos van en su tono 40 (un cian hondo), con todo par texto/fondo por
+ *   encima de 4,5 a 1 (`EsquemasDeColorTest` lo comprueba uno a uno).
+ */
+private val DiaBase = Color(0xFFF5FAFB)
+private val DiaBajo = Color(0xFFEFF5F6)
+private val DiaMedio = Color(0xFFE9EFF1)
+private val DiaAlto = Color(0xFFE3EAEC)
+private val DiaMasAlto = Color(0xFFDDE4E6)
+private val DiaTexto = Color(0xFF161D1F)
+private val DiaTextoSuave = Color(0xFF40484C)
+
+/** El cian de la marca, oscurecido hasta leerse como texto sobre el papel claro (6,1 a 1). */
+private val CianHondo = Color(0xFF00687D)
+
+internal val LightColors = lightColorScheme(
+    primary = CianHondo,
+    onPrimary = Color.White,
     primaryContainer = CianClaro,
     onPrimaryContainer = CianMuyOscuro,
-    secondary = Color(0xFF0288D1),
-    onSecondary = Color(0xFFFFFFFF),
+    inversePrimary = Color(0xFF5CD3F0),
+    secondary = Color(0xFF00639B),
+    onSecondary = Color.White,
     secondaryContainer = Color(0xFFCDE8EF),
     onSecondaryContainer = Color(0xFF06282F),
-    tertiary = Color(0xFFF57C00),
-    onTertiary = Color(0xFFFFFFFF),
+    tertiary = Color(0xFF8B5000),
+    onTertiary = Color.White,
     tertiaryContainer = Color(0xFFFFDDB0),
     onTertiaryContainer = Color(0xFF2A1700),
+    error = Color(0xFFB3261E),
+    onError = Color.White,
+    errorContainer = Color(0xFFF9DEDC),
+    onErrorContainer = Color(0xFF410E0B),
+    background = DiaBase,
+    onBackground = DiaTexto,
+    surface = DiaBase,
+    onSurface = DiaTexto,
+    surfaceDim = Color(0xFFD5DBDD),
+    surfaceBright = DiaBase,
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = DiaBajo,
+    surfaceContainer = DiaMedio,
+    surfaceContainerHigh = DiaAlto,
+    surfaceContainerHighest = DiaMasAlto,
     surfaceVariant = Color(0xFFDCE7EB),
-    onSurfaceVariant = Color(0xFF40484C)
+    onSurfaceVariant = DiaTextoSuave,
+    surfaceTint = PinBlue,
+    inverseSurface = Color(0xFF2B3133),
+    inverseOnSurface = Color(0xFFECF2F3),
+    outline = Color(0xFF6F797C),
+    outlineVariant = Color(0xFFBFC8CB),
+    scrim = Color.Black
 )
 
 /**
@@ -145,7 +201,7 @@ private val LightColors = lightColorScheme(
  * puro contra negro puro, un panel no se ve y no habría forma de saber dónde
  * acaba. Los acentos son los del modo noche, por lo mismo que allí.
  */
-private val OledColors = DarkColors.copy(
+internal val OledColors = DarkColors.copy(
     background = Color.Black,
     onBackground = Color(0xFFE6E6E6),
     surface = Color.Black,
@@ -209,6 +265,8 @@ fun PixPinTheme(
         oscuro -> DarkColors
         else -> LightColors
     }
+    // **La ventana, del color del tema** (2-nov-2026). Ver [VentanaDelTema].
+    if (darkTheme == null) VentanaDelTema(contexto, claro = !cosmos && !oscuro, fondo = esquema.background)
     CompositionLocalProvider(LocalDeNoche provides oscuro, LocalCosmos provides cosmos) {
         MaterialTheme(colorScheme = esquema) {
             if (conCielo) {
@@ -223,11 +281,53 @@ fun PixPinTheme(
     }
 }
 
-/** Si [contexto] es una pantalla con la ventana opaca. Una ventana sobre otras apps no lo es. */
-private fun ventanaOpaca(contexto: android.content.Context): Boolean {
+/**
+ * **La ventana, del color del tema** (2-nov-2026).
+ *
+ * `values/themes.xml` pinta la ventana de negro, y está bien de noche: con el cielo de Cosmos
+ * delante, o con el fondo oscuro, no se ve. Pero muchas pantallas no se pintan su fondo —la lista
+ * de chats, las tareas: cuentan con el cielo detrás— y **de día dejaban ver ese negro con el texto
+ * casi negro del esquema claro encima**: «negro con letras negras», lo que reportó el usuario.
+ * De día la ventana se pinta con el `background` del esquema claro; de noche se deja como estaba
+ * (negro), para que la noche no cambie ni un píxel.
+ *
+ * Y las **barras del sistema**: iconos oscuros de día, claros de noche. `enableEdgeToEdge()` los
+ * elige por el modo del **teléfono**, no por el de la aplicación: con el teléfono de noche y
+ * PinDesk de día, la hora y la batería salían blancas sobre blanco.
+ *
+ * Solo en una pantalla con la ventana opaca y con el tema por el ajuste (sin `darkTheme`
+ * forzado): las que fuerzan claro u oscuro (la reunión, la cámara, la clase) llevan sus barras.
+ */
+@Composable
+private fun VentanaDelTema(contexto: android.content.Context, claro: Boolean, fondo: Color) {
+    val actividad = remember(contexto) { actividadDe(contexto)?.takeIf { ventanaOpaca(it) } }
+    androidx.compose.runtime.SideEffect {
+        actividad?.window?.let { ventana -> pintarLaVentana(ventana, claro, fondo) }
+    }
+}
+
+internal fun pintarLaVentana(ventana: android.view.Window, claro: Boolean, fondo: Color) {
+    val color = if (claro) fondo.toArgbSeguro() else android.graphics.Color.BLACK
+    val actual = (ventana.decorView.background as? android.graphics.drawable.ColorDrawable)?.color
+    if (actual != color) ventana.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(color))
+    val barras = androidx.core.view.WindowCompat.getInsetsController(ventana, ventana.decorView)
+    if (barras.isAppearanceLightStatusBars != claro) barras.isAppearanceLightStatusBars = claro
+    if (barras.isAppearanceLightNavigationBars != claro) barras.isAppearanceLightNavigationBars = claro
+}
+
+/** El color en ARGB, opaco: una ventana translúcida por error dejaría ver el escritorio. */
+private fun Color.toArgbSeguro(): Int = copy(alpha = 1f).toArgb()
+
+/** La actividad que hay detrás de [contexto], si la hay. */
+private fun actividadDe(contexto: android.content.Context): android.app.Activity? {
     var c: android.content.Context? = contexto
     while (c is android.content.ContextWrapper && c !is android.app.Activity) c = c.baseContext
-    val actividad = c as? android.app.Activity ?: return false
+    return c as? android.app.Activity
+}
+
+/** Si [contexto] es una pantalla con la ventana opaca. Una ventana sobre otras apps no lo es. */
+private fun ventanaOpaca(contexto: android.content.Context): Boolean {
+    val actividad = actividadDe(contexto) ?: return false
     val a = actividad.theme.obtainStyledAttributes(intArrayOf(android.R.attr.windowIsTranslucent))
     return try { !a.getBoolean(0, false) } finally { a.recycle() }
 }
@@ -244,4 +344,51 @@ private fun deNocheSegun(modo: ModoNoche): Boolean = when (modo) {
     ModoNoche.OSCURO -> true
     ModoNoche.AUTO -> rememberAOscuras()
     ModoNoche.COSMOS -> true
+}
+
+/**
+ * **Si la aplicación está de noche, fuera de Compose** (2-nov-2026): lo que decide el ajuste
+ * «Aspecto» y no el modo del teléfono. Para lo que no pasa por [PixPinTheme] —el papel de los
+ * visores, la página web que se exporta—, que antes miraba el teléfono: con el teléfono de noche
+ * y PinDesk en «Claro», el visor salía negro dentro de una aplicación blanca.
+ *
+ * Con «Automático» cuenta solo la hora: el sensor de luz lo escucha [rememberAOscuras], dentro de
+ * una pantalla.
+ */
+fun deNocheEnLaApp(contexto: android.content.Context): Boolean =
+    when ((contexto.applicationContext as? PixPinApp)?.ajustes?.modoNoche ?: ModoNoche.COSMOS) {
+        ModoNoche.SISTEMA -> telefonoDeNoche(contexto)
+        ModoNoche.CLARO -> false
+        ModoNoche.OSCURO, ModoNoche.COSMOS -> true
+        ModoNoche.AUTO -> esHoraDeNoche()
+    }
+
+/** Si el teléfono está en modo oscuro. Solo para el ajuste «Sistema»: ver [deNocheEnLaApp]. */
+fun telefonoDeNoche(contexto: android.content.Context): Boolean =
+    (contexto.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+        android.content.res.Configuration.UI_MODE_NIGHT_YES
+
+/**
+ * **Lo que es oscuro de día y de noche** (2-nov-2026): las hojas y barras que se pintan oscuras a
+ * propósito encima de un documento o de unas fotos (la hoja de la letra del lector, la barra de las
+ * capturas elegidas). Su texto va en blanco a mano, pero los botones de texto, los interruptores y
+ * los deslizadores de dentro toman el primario del tema, y el de día es un cian hondo hecho para
+ * leerse sobre papel claro: sobre ese fondo oscuro se perdía. Dentro, el esquema de noche.
+ *
+ * De noche (o con Cosmos) no cambia nada: se queda el esquema que ya hay.
+ */
+@Composable
+fun SiempreOscuro(contenido: @Composable () -> Unit) {
+    if (deNoche()) {
+        contenido()
+    } else {
+        CompositionLocalProvider(LocalDeNoche provides true) {
+            MaterialTheme(
+                colorScheme = DarkColors,
+                typography = MaterialTheme.typography,
+                shapes = MaterialTheme.shapes,
+                content = contenido
+            )
+        }
+    }
 }

@@ -144,8 +144,7 @@ object CompartirPaginas {
                     preparar()
                     val marcadas = app.ajustes.funcionesWeb ?: ExportarHtml.Opciones.NOMBRES.toSet()
                     val calidad = ExportarHtml.calidadDeAudio(marcadas)
-                    val deNoche = (contexto.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                        android.content.res.Configuration.UI_MODE_NIGHT_YES
+                    val deNoche = com.forge.pixpin.ui.theme.deNocheEnLaApp(contexto)
                     ExportarWebDe.archivo(contexto, agrupar(claves), ExportarHtml.Opciones.de(marcadas), deNoche, calidad)?.let {
                         Compartible.Salida(it, ExportarHtml.MIME_TYPE, ExportarWebDe.resumenDe(it, calidad).removePrefix("Página web: "))
                     }

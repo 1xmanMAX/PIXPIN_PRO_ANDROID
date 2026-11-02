@@ -210,8 +210,7 @@ object CompartirCarpeta {
             generar = { claves ->
                 val marcadas = app?.ajustes?.funcionesWeb ?: ExportarHtml.Opciones.NOMBRES.toSet()
                 val calidad = ExportarHtml.calidadDeAudio(marcadas)
-                val deNoche = (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-                    android.content.res.Configuration.UI_MODE_NIGHT_YES
+                val deNoche = com.forge.pixpin.ui.theme.deNocheEnLaApp(context)
                 val hojas = claves.mapNotNull { porId[it] }.flatMap { p ->
                     val comoHoja = proyectoDeLaPagina(p)?.let { runCatching { ExportarWebDe.hojas(context, it, emptySet(), deNoche, calidad) }.getOrNull() }
                     if (!comoHoja.isNullOrEmpty()) comoHoja
