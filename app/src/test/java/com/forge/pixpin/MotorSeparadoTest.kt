@@ -96,6 +96,7 @@ class MotorSeparadoTest {
         // forman es una lista de textos y vive en el mismo archivo porque
         // separarla dejaría un archivo de núcleo con seis constantes.
         "PaletaDeColores.kt",
+        "ColorAvanzado.kt",
         // Las dos ventanas flotantes: interfaz entera. Dónde caen las rayas
         // de la cuadrícula sí es núcleo y vive en `Cuadricula.kt`.
         "VentanaDeReferencia.kt", "VentanaDeAjustes.kt",
