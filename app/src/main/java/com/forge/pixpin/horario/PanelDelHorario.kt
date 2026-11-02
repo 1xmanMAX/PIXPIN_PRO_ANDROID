@@ -233,9 +233,12 @@ fun PanelDelHorario(
     fun guardarTexto(texto: String) {
         ponerTexto(texto)
         alcance.launch(Dispatchers.IO) {
-            val hecho = runCatching { AvisosDelHorario.guardar(contexto, texto) }.isSuccess
+            val guardado = runCatching { AvisosDelHorario.guardar(contexto, texto) }.getOrNull()
+            val hecho = guardado != null
             // Las llamadas de las clases son alarmas: sin permiso de exactas, se ofrece (versión de Play).
             if (hecho) com.forge.pixpin.pin.AlarmaExacta.ofrecerSiFalta(contexto)
+            // Con los enlaces de las listas recién apuntados (2-nov-2026): lo que se guarde después los lleva.
+            if (guardado != null && guardado != texto) withContext(Dispatchers.Main) { ponerTexto(guardado) }
             if (!hecho) withContext(Dispatchers.Main) { Toast.makeText(contexto, "No se pudo guardar el horario", Toast.LENGTH_SHORT).show() }
         }
     }
@@ -436,6 +439,19 @@ fun PanelDelHorario(
         else DeLaAsignatura(app, a, Color(0xFF000000.toInt() or semana.colorDe(a.nombre)),
             onColor = { guardar(copia(semana).also { it.cambiarColor(i) }) },
             onAula = { aula -> guardar(copia(semana).also { it.ponerAulaDeAsignatura(i, aula) }) },
+            // **Renombrar** (2-nov-2026, PC `71bf70f6`): la asignatura, sus clases y —al guardar, por su
+            // enlace `lista:<id>`— su lista de tareas, sin crear otra.
+            onNombre = { nuevo ->
+                val c = copia(semana)
+                when (val r = c.renombrarAsignatura(i, nuevo)) {
+                    is Semana.Renombrada.Hecho -> {
+                        guardar(c)
+                        if (elegida?.let { Horario.norm(it) == Horario.norm(r.antes) } == true) elegida = c.asignaturas[i].nombre
+                    }
+                    is Semana.Renombrada.Otra -> Toast.makeText(contexto, "Ya hay una asignatura «${c.asignaturas[r.i].nombre}»", Toast.LENGTH_SHORT).show()
+                    null -> {}
+                }
+            },
             onQuitar = {
                 guardar(copia(semana).also { it.borrarAsignatura(i) })
                 if (elegida?.let { Horario.norm(it) == Horario.norm(a.nombre) } == true) elegida = null
@@ -698,10 +714,11 @@ private fun EditarClase(b: Semana.Bloque, onGuardar: (Semana.Bloque) -> Unit, on
 @Composable
 private fun DeLaAsignatura(
     app: PixPinApp, a: Horario.Asignatura, color: Color,
-    onColor: () -> Unit, onAula: (String?) -> Unit, onQuitar: () -> Unit, onGrabar: () -> Unit,
+    onColor: () -> Unit, onAula: (String?) -> Unit, onNombre: (String) -> Unit, onQuitar: () -> Unit, onGrabar: () -> Unit,
     onAbrirEnTareas: () -> Unit, onCerrar: () -> Unit
 ) {
     var aula by remember(a) { mutableStateOf(a.aula.orEmpty()) }
+    var nombre by remember(a) { mutableStateOf(a.nombre) }
     var tareas by remember { mutableStateOf<List<String>?>(null) }
     var nuevaTarea by remember { mutableStateOf("") }
     val alcance = rememberCoroutineScope()
@@ -719,6 +736,7 @@ private fun DeLaAsignatura(
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Text("Toca el círculo para cambiar el color.", style = MaterialTheme.typography.labelMedium)
+                OutlinedTextField(nombre, { nombre = it }, label = { Text("Nombre") }, singleLine = true)
                 OutlinedTextField(aula, { aula = it }, label = { Text("Aula") }, singleLine = true)
                 Spacer(Modifier.height(10.dp))
                 Text("Tareas de ${a.nombre}", fontWeight = FontWeight.SemiBold)
@@ -748,6 +766,7 @@ private fun DeLaAsignatura(
             TextButton(onClick = {
                 val nueva = aula.trim().ifEmpty { null }
                 if (nueva != a.aula) onAula(nueva)
+                if (nombre.trim().isNotEmpty() && nombre.trim() != a.nombre) onNombre(nombre)
                 onCerrar()
             }) { Text("Listo") }
         }

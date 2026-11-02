@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La nube de los chats compartidos (PC sincronizar::nube, 1-nov-2026) -->
+<resources>
+    <string name="nb_chat_nuevo_nube">Bulutta paylaşılan sohbet</string>
+    <string name="nb_chat_nuevo_nube_detalle">Yüklediğini diğerleri nerede olurlarsa olsunlar indirir</string>
+    <string name="nb_nube_modo_titulo">Nasıl eşitlenir</string>
+    <string name="nb_nube_modo_local">Yerel ağ</string>
+    <string name="nb_nube_modo_nube">Bulut</string>
+    <string name="nb_nube_modo_local_detalle">Aynı Wi-Fi\'deyken eşitlenir; ücretsiz ve sunucusuz.</string>
+    <string name="nb_nube_modo_nube_detalle">Bulutun üzerinden gider: yüklediğini diğerleri nerede olurlarsa olsunlar indirir ve web\'de görünür. Yalnızca değişiklikler yüklenir.</string>
+    <string name="nb_nube_falta_configurar">Bulut ayarlanmadı: adresini ve anahtarını Eşitle → Bulut\'a gir.</string>
+    <string name="nb_nube_titulo">Bulut</string>
+    <string name="nb_nube_portada_como">«Bulut» olarak ayarlanan paylaşılan sohbetler sunucun üzerinden gider. Kendi sohbetlerin yerel ağda kalır.</string>
+    <string name="nb_nube_explica">Sunucun, bulut üzerinden giden paylaşılan sohbetleri saklar ve web\'de gösterir. Kişisel sohbetler sunucusuz, yerel ağda kalır.</string>
+    <string name="nb_nube_direccion">Web adresi</string>
+    <string name="nb_nube_llave">Cihaz anahtarı (pxn_…)</string>
+    <string name="nb_nube_llave_guardada">Kayıtlı anahtar:</string>
+    <string name="nb_nube_olvidar">Unut</string>
+    <string name="nb_nube_guardar">Kaydet</string>
+    <string name="nb_nube_probar">Dene</string>
+    <string name="nb_nube_guardado">Kaydedildi.</string>
+    <string name="nb_nube_direccion_mala">Adres https:// ile başlamalı.</string>
+    <string name="nb_nube_llave_mala">Anahtar pxn_ ile başlar (bu cihazı kaydederken web sitesi verir).</string>
+    <string name="nb_nube_probado">Bağlandı: alan %1$s.</string>
+    <string name="nb_nube_no_contesta">Bulut yanıt vermiyor:</string>
+    <string name="nb_nube_que_va">Yalnızca değişiklikler yüklenir: notlu bir planda tüm plan değil, yeni çizgi.</string>
+    <string name="nb_nube_en_linea">Çevrimiçi</string>
+    <string name="nb_nube_sin_conexion">Çevrimdışı</string>
+    <string name="nb_nube_cerrar_titulo">Çevrimdışı değişiklikler</string>
+    <string name="nb_nube_cerrar_pregunta">Bu belgeye çevrimdışıyken not ekledin.\nEvet: bu değişiklikleri at (diğerlerininkiler kalır).\nHayır: çevrimiçine dön ve yükle.\nİptal: bir dahaki sefere kadar çevrimdışı bırak.</string>
+    <string name="nb_descartar">Vazgeç</string>
+    <string name="nb_subir">Yükle</string>
+    <string name="nb_dejar">Çevrimdışı bırak</string>
+</resources>

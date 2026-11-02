@@ -1862,11 +1862,26 @@ function soltarPuntero(e){
 }
 caja.addEventListener('pointerup',soltarPuntero);
 caja.addEventListener('pointercancel',soltarPuntero);
+// Los gestos del trackpad, como el PC (`GestosVista`): con su tope por aviso, las líneas en
+// píxeles, Mayúsculas de lado y el pellizco de Safari.
+var enGesto=false, escalaGesto=1;
 caja.addEventListener('wheel',function(e){
   e.preventDefault();
-  if(e.ctrlKey||e.metaKey)zoomEn(e.clientX,e.clientY,Math.exp(-e.deltaY*0.0015));
-  else { V.x-=e.deltaX; V.y-=e.deltaY; aplicarVista(); }
+  var L=e.deltaMode===1?40:(e.deltaMode===2?(caja.clientHeight||800):1);
+  var dx=(+e.deltaX||0)*L, dy=(+e.deltaY||0)*L;
+  if(e.ctrlKey||e.metaKey){ if(!enGesto){ var t=Math.max(-25,Math.min(25,dy)); zoomEn(e.clientX,e.clientY,Math.exp(-t*0.01)); } return; }
+  if(e.shiftKey&&!dx){ dx=dy; dy=0; }
+  V.x-=dx; V.y-=dy; aplicarVista();
 },{passive:false});
+caja.addEventListener('gesturestart',function(e){ e.preventDefault(); enGesto=true; escalaGesto=e.scale||1; },{passive:false});
+caja.addEventListener('gesturechange',function(e){
+  e.preventDefault();
+  var s=e.scale||1, f=s/escalaGesto; escalaGesto=s;
+  if(punteros.size) return;
+  var r=caja.getBoundingClientRect();
+  zoomEn(e.clientX||r.left+r.width/2,e.clientY||r.top+r.height/2,f);
+},{passive:false});
+caja.addEventListener('gestureend',function(e){ e.preventDefault(); enGesto=false; escalaGesto=1; },{passive:false});
 tabla.addEventListener('dblclick',function(e){ var p=celdaDe(e.target); if(p&&modo==='mano'){ seleccionar(p[0],p[1],false); editar(); } });
 
 // ---- Teclado ----

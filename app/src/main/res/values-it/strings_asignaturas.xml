@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Las asignaturas con su lista (2-nov-2026): los textos del PC (main.ftl). -->
+<resources>
+    <string name="as_tareas_destino_pista">Lista o materia dell\'attività</string>
+    <string name="as_horario_nombre">Nome</string>
+</resources>

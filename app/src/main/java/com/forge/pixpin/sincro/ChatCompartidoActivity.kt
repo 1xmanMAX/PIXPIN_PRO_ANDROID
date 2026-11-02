@@ -389,6 +389,9 @@ class ChatCompartidoActivity : ComponentActivity() {
             Caja { Text("Ya no estás en este chat. Lo que tenías se queda aquí, pero no se sincroniza.", style = MaterialTheme.typography.bodyMedium) }
             Spacer(Modifier.height(16.dp))
         }
+        // **Por dónde va: Red local o Nube** (2-nov-2026, como el PC «Compartir con personas»).
+        if (estoyDentro) Caja { com.forge.pixpin.sincro.nube.PorDondeVa(c.chat) }
+        if (estoyDentro) Spacer(Modifier.height(12.dp))
         var quitando by remember { mutableStateOf<Persona?>(null) }
         // Una fila por aparato: cada uno firma sus mensajes con su código.
         for (p in c.personas.sortedWith(compareByDescending<Persona> { it.dentro }.thenBy { it.desde })) {

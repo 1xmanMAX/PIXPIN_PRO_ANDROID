@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Color avanzado del lienzo (PC selector_color, 2-nov-2026) -->
+<resources>
+    <string name="lc_recientes">Son kullanılanlar</string>
+    <string name="lc_personalizado">Özel</string>
+    <string name="lc_cuentagotas">Renk seçici</string>
+    <string name="lc_opacidad">Opaklık</string>
+    <string name="lc_contraste">Kontrast</string>
+    <string name="lc_toca_color">Kopyalamak istediğiniz renge dokunun</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">Salin</string>
+    <string name="mt_resaltar">Sorot</string>
+    <string name="mt_ondulada">Garis bergelombang</string>
+    <string name="mt_subrayar">Garis bawah</string>
+    <string name="mt_tachar">Coret</string>
+    <string name="mt_tapar">Tutupi</string>
+    <string name="mt_quitar">Hapus tanda</string>
+    <string name="mt_color">Warna</string>
+    <string name="mt_listo">Selesai</string>
+    <string name="mt_marcar_texto">Tandai teks</string>
+    <string name="mt_pista">Ketuk paragraf dan pilih teks untuk menandainya.</string>
+    <string name="mt_columna_fijada">Kolom dan huruf kini dikunci untuk menandai. Pilih teksnya lagi.</string>
+    <string name="mt_copiado">Disalin</string>
+    <string name="mt_pdf_android15">Memilih teks di PDF memerlukan Android 15. Anda dapat membukanya “sebagai teks”.</string>
+</resources>

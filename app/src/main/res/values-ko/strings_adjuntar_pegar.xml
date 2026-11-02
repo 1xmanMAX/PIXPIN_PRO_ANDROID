@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Pegar lo copiado» de la hoja del clip (PC f87468aa) -->
+<resources>
+    <string name="adjuntar_pegar">복사한 항목 붙여넣기</string>
+    <string name="adjuntar_nada_copiado">복사된 항목이 없습니다</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Pegar lo copiado» de la hoja del clip (PC f87468aa) -->
+<resources>
+    <string name="adjuntar_pegar">Coller ce qui a été copié</string>
+    <string name="adjuntar_nada_copiado">Rien n\'a été copié</string>
+</resources>

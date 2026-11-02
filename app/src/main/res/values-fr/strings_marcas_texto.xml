@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">Copier</string>
+    <string name="mt_resaltar">Surligner</string>
+    <string name="mt_ondulada">Ligne ondulée</string>
+    <string name="mt_subrayar">Souligner</string>
+    <string name="mt_tachar">Barrer</string>
+    <string name="mt_tapar">Masquer</string>
+    <string name="mt_quitar">Retirer la marque</string>
+    <string name="mt_color">Couleur</string>
+    <string name="mt_listo">Terminé</string>
+    <string name="mt_marcar_texto">Marquer le texte</string>
+    <string name="mt_pista">Touchez un paragraphe et sélectionnez le texte pour le marquer.</string>
+    <string name="mt_columna_fijada">La colonne et la police sont fixées pour marquer. Sélectionnez à nouveau le texte.</string>
+    <string name="mt_copiado">Copié</string>
+    <string name="mt_pdf_android15">Sélectionner le texte d\'un PDF nécessite Android 15. Vous pouvez l\'ouvrir « comme texte ».</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">कॉपी करें</string>
+    <string name="mt_resaltar">हाइलाइट करें</string>
+    <string name="mt_ondulada">लहरदार रेखा</string>
+    <string name="mt_subrayar">रेखांकित करें</string>
+    <string name="mt_tachar">स्ट्राइकथ्रू</string>
+    <string name="mt_tapar">ढकें</string>
+    <string name="mt_quitar">निशान हटाएँ</string>
+    <string name="mt_color">रंग</string>
+    <string name="mt_listo">हो गया</string>
+    <string name="mt_marcar_texto">टेक्स्ट चिह्नित करें</string>
+    <string name="mt_pista">किसी अनुच्छेद पर टैप करें और चिह्नित करने के लिए टेक्स्ट चुनें।</string>
+    <string name="mt_columna_fijada">चिह्नित करने के लिए कॉलम और फ़ॉन्ट तय कर दिए गए हैं। टेक्स्ट फिर से चुनें।</string>
+    <string name="mt_copiado">कॉपी किया गया</string>
+    <string name="mt_pdf_android15">PDF में टेक्स्ट चुनने के लिए Android 15 चाहिए। आप इसे “टेक्स्ट के रूप में” खोल सकते हैं।</string>
+</resources>

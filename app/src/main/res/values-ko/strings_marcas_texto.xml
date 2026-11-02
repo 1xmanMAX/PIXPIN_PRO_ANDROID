@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">복사</string>
+    <string name="mt_resaltar">강조 표시</string>
+    <string name="mt_ondulada">물결선</string>
+    <string name="mt_subrayar">밑줄</string>
+    <string name="mt_tachar">취소선</string>
+    <string name="mt_tapar">가리기</string>
+    <string name="mt_quitar">표시 제거</string>
+    <string name="mt_color">색상</string>
+    <string name="mt_listo">완료</string>
+    <string name="mt_marcar_texto">텍스트 표시</string>
+    <string name="mt_pista">문단을 탭하고 텍스트를 선택해 표시하세요.</string>
+    <string name="mt_columna_fijada">표시를 위해 단과 글꼴이 고정되었습니다. 텍스트를 다시 선택하세요.</string>
+    <string name="mt_copiado">복사됨</string>
+    <string name="mt_pdf_android15">PDF의 텍스트를 선택하려면 Android 15가 필요합니다. “텍스트로” 열 수 있습니다.</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">Kopyala</string>
+    <string name="mt_resaltar">Vurgula</string>
+    <string name="mt_ondulada">Dalgalı çizgi</string>
+    <string name="mt_subrayar">Altını çiz</string>
+    <string name="mt_tachar">Üstünü çiz</string>
+    <string name="mt_tapar">Ört</string>
+    <string name="mt_quitar">İşareti kaldır</string>
+    <string name="mt_color">Renk</string>
+    <string name="mt_listo">Bitti</string>
+    <string name="mt_marcar_texto">Metni işaretle</string>
+    <string name="mt_pista">Bir paragrafa dokunun ve işaretlemek için metni seçin.</string>
+    <string name="mt_columna_fijada">İşaretleme için sütun ve yazı tipi sabitlendi. Metni yeniden seçin.</string>
+    <string name="mt_copiado">Kopyalandı</string>
+    <string name="mt_pdf_android15">PDF\'de metin seçmek için Android 15 gerekir. “Metin olarak” açabilirsiniz.</string>
+</resources>

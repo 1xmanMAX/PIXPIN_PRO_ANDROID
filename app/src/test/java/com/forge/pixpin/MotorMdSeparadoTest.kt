@@ -31,7 +31,7 @@ class MotorMdSeparadoTest {
      */
     private val conAndroid = setOf(
         // Todo lo que pinta o escucha el dedo.
-        "MarkdownText.kt", "EditorVivo.kt", "FormulaUi.kt", "RejillaDeTabla.kt",
+        "MarkdownText.kt", "EditorVivo.kt", "MarcasDeLaNota.kt", "FormulaUi.kt", "RejillaDeTabla.kt",
         "BarraDeFormatoUi.kt",
         // El almacén y los adjuntos: archivos y contexto.
         "TextoStore.kt", "Adjuntos.kt",

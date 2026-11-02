@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Pegar lo copiado» de la hoja del clip (PC f87468aa) -->
+<resources>
+    <string name="adjuntar_pegar">コピーしたものを貼り付け</string>
+    <string name="adjuntar_nada_copiado">コピーされたものはありません</string>
+</resources>

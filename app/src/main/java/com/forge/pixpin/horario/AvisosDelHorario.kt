@@ -44,10 +44,27 @@ object AvisosDelHorario {
 
     fun leer(context: Context): Horario.Leido = Horario.leer(texto(context), Momento.deMsLocales(ahoraLocal()))
 
-    /** Guarda el horario y rehace sus alarmas. Trabajo de disco. */
-    fun guardar(context: Context, texto: String) {
-        ruta(context).writeText(texto)
+    /**
+     * Guarda el horario y rehace sus alarmas. Antes, **cada asignatura con su lista** (2-nov-2026,
+     * [Asignaturas.enlazar]): crea las que faltan y apunta su enlace `lista:<id>`. Devuelve el texto como
+     * quedó guardado (con los enlaces). Trabajo de disco.
+     */
+    fun guardar(context: Context, texto: String): String {
+        val app = context.applicationContext as? com.forge.pixpin.PixPinApp
+        val final = app?.let { a -> runCatching { Asignaturas.enlazar(a, texto) }.getOrNull() } ?: texto
+        ruta(context).writeText(final)
         reprogramar(context)
+        return final
+    }
+
+    /** **Al arrancar** (2-nov-2026): las asignaturas de un horario de antes, cada una con su lista y su enlace. */
+    fun enlazarAlArrancar(context: Context) {
+        val f = ruta(context)
+        if (!f.isFile) return
+        val app = context.applicationContext as? com.forge.pixpin.PixPinApp ?: return
+        val antes = f.readText()
+        val despues = Asignaturas.enlazar(app, antes)
+        if (despues != antes && f.readText() == antes) f.writeText(despues)
     }
 
     /** Los ms locales de ahora (como los cuenta el horario). */

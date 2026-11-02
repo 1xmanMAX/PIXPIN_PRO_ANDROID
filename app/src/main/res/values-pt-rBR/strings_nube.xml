@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La nube de los chats compartidos (PC sincronizar::nube, 1-nov-2026) -->
+<resources>
+    <string name="nb_chat_nuevo_nube">Chat compartilhado na nuvem</string>
+    <string name="nb_chat_nuevo_nube_detalle">O que você envia, os outros baixam de onde estiverem</string>
+    <string name="nb_nube_modo_titulo">Como sincroniza</string>
+    <string name="nb_nube_modo_local">Rede local</string>
+    <string name="nb_nube_modo_nube">Nuvem</string>
+    <string name="nb_nube_modo_local_detalle">Sincroniza quando vocês estão no mesmo Wi-Fi, grátis e sem servidores.</string>
+    <string name="nb_nube_modo_nube_detalle">Vai pela sua nuvem: o que você envia os outros baixam de onde estiverem, e aparece na web. Só envia o que muda.</string>
+    <string name="nb_nube_falta_configurar">Falta a nuvem: coloque o endereço e sua chave em Sincronizar → Nuvem.</string>
+    <string name="nb_nube_titulo">Nuvem</string>
+    <string name="nb_nube_portada_como">Os chats compartilhados marcados como «Nuvem» passam pelo seu servidor. Os seus continuam pela rede local.</string>
+    <string name="nb_nube_explica">Seu servidor guarda os chats compartilhados que vão pela nuvem e os mostra na web. Os chats pessoais continuam pela rede local, sem servidores.</string>
+    <string name="nb_nube_direccion">Endereço da web</string>
+    <string name="nb_nube_llave">Chave do aparelho (pxn_…)</string>
+    <string name="nb_nube_llave_guardada">Chave salva:</string>
+    <string name="nb_nube_olvidar">Esquecer</string>
+    <string name="nb_nube_guardar">Salvar</string>
+    <string name="nb_nube_probar">Testar</string>
+    <string name="nb_nube_guardado">Salvo.</string>
+    <string name="nb_nube_direccion_mala">O endereço tem que começar com https://.</string>
+    <string name="nb_nube_llave_mala">A chave começa com pxn_ (a web a fornece ao cadastrar este aparelho).</string>
+    <string name="nb_nube_probado">Conectado: espaço %1$s.</string>
+    <string name="nb_nube_no_contesta">A nuvem não responde:</string>
+    <string name="nb_nube_que_va">Só envia o que muda: de uma planta anotada, o traço novo e não a planta inteira.</string>
+    <string name="nb_nube_en_linea">On-line</string>
+    <string name="nb_nube_sin_conexion">Off-line</string>
+    <string name="nb_nube_cerrar_titulo">Alterações off-line</string>
+    <string name="nb_nube_cerrar_pregunta">Você anotou este documento off-line.\nSim: descartar essas alterações (as dos outros ficam).\nNão: voltar a ficar on-line e enviá-las.\nCancelar: deixá-lo off-line para a próxima vez.</string>
+    <string name="nb_descartar">Descartar</string>
+    <string name="nb_subir">Enviar</string>
+    <string name="nb_dejar">Manter offline</string>
+</resources>

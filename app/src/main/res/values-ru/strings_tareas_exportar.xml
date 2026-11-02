@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exportar una lista de tareas (2-nov-2026): los rótulos de tareas-exportar-* del PC (main.ftl). Los huecos {fecha}, {dia}… los llena ExportarTareas. -->
+<resources>
+    <string name="te_tareas_exportar_titulo">Задачи</string>
+    <string name="te_tareas_exportar_exportado">Экспортировано {fecha}</string>
+    <string name="te_tareas_exportar_pendientes">Осталось</string>
+    <string name="te_tareas_exportar_hechas">Сделано</string>
+    <string name="te_tareas_exportar_completado">Готово</string>
+    <string name="te_tareas_exportar_pendiente">Не сделана</string>
+    <string name="te_tareas_exportar_hecha">Сделана</string>
+    <string name="te_tareas_exportar_todo_hecho">Всё сделано</string>
+    <string name="te_tareas_exportar_vacia">Нет задач</string>
+    <string name="te_tareas_exportar_recordatorio">Напоминание</string>
+    <string name="te_tareas_exportar_pasada">Просрочена</string>
+    <string name="te_tareas_exportar_creada">Создана {fecha}</string>
+    <string name="te_tareas_exportar_de">{hechas} из {total}</string>
+    <string name="te_tareas_exportar_foto">Фото</string>
+    <string name="te_compartir_tipo_tareas">Список задач</string>
+    <string name="te_tareas_urgente">Срочно</string>
+    <string name="te_tareas_muy_urgente">Очень срочно</string>
+    <string name="te_tareas_selector_hoy">Сегодня</string>
+    <string name="te_tareas_selector_manana">Завтра</string>
+    <string name="te_chat_ayer">Вчера</string>
+    <string name="te_tareas_dia_0">Пн</string>
+    <string name="te_tareas_dia_1">Вт</string>
+    <string name="te_tareas_dia_2">Ср</string>
+    <string name="te_tareas_dia_3">Чт</string>
+    <string name="te_tareas_dia_4">Пт</string>
+    <string name="te_tareas_dia_5">Сб</string>
+    <string name="te_tareas_dia_6">Вс</string>
+    <string name="te_chat_mes_1">января</string>
+    <string name="te_chat_mes_2">февраля</string>
+    <string name="te_chat_mes_3">марта</string>
+    <string name="te_chat_mes_4">апреля</string>
+    <string name="te_chat_mes_5">мая</string>
+    <string name="te_chat_mes_6">июня</string>
+    <string name="te_chat_mes_7">июля</string>
+    <string name="te_chat_mes_8">августа</string>
+    <string name="te_chat_mes_9">сентября</string>
+    <string name="te_chat_mes_10">октября</string>
+    <string name="te_chat_mes_11">ноября</string>
+    <string name="te_chat_mes_12">декабря</string>
+    <string name="te_chat_fecha">{dia} {mes}</string>
+    <string name="te_chat_fecha_con_ano">{dia} {mes} {ano}</string>
+    <string name="te_grabacion_idioma">ru</string>
+</resources>

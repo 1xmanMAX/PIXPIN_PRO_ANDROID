@@ -332,7 +332,8 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                 BotonRedondo(Icons.Filled.Add, stringResource(R.string.lista_chat_nuevo), { eligiendoNuevo = true }, tamano = 56.dp, puesto = true)
                 com.forge.pixpin.guardados.MenuDeChatNuevo(
                     eligiendoNuevo, { eligiendoNuevo = false },
-                    alUnirse = { com.forge.pixpin.sincro.ChatCompartidoActivity.entrar(contexto) }
+                    alUnirse = { com.forge.pixpin.sincro.ChatCompartidoActivity.entrar(contexto) },
+                    alNube = { alcance.launch { chatNuevo(contexto, true, enLaNube = true) } }
                 ) { conPersonas ->
                     alcance.launch { chatNuevo(contexto, conPersonas) }
                 }
@@ -402,11 +403,17 @@ private fun accionesDeLaFila(
  * ella. [conPersonas]: además compartido, y encima sus personas para invitar. Si compartir
  * falla, queda como chat normal y se avisa (`cc-nuevo-error` del PC).
  */
-private suspend fun chatNuevo(contexto: android.content.Context, conPersonas: Boolean) {
+private suspend fun chatNuevo(contexto: android.content.Context, conPersonas: Boolean, enLaNube: Boolean = false) {
     val app = contexto.applicationContext as com.forge.pixpin.PixPinApp
     val p = app.proyectos.nuevo(contexto.getString(R.string.proyecto_nuevo_nombre), System.currentTimeMillis())
     val compartido = conPersonas && withContext(Dispatchers.IO) {
         runCatching { com.forge.pixpin.guardados.compartirChatNuevo(contexto, p.id, p.nombre) }.isSuccess
+    }
+    // **En la nube** (2-nov-2026, como el PC): el compartido va por la nube desde ya.
+    if (compartido && enLaNube) {
+        com.forge.pixpin.sincro.nube.NubeEnMarcha.ponerModo(contexto, p.id, com.forge.pixpin.sincro.nube.Modo.NUBE)
+        if (!com.forge.pixpin.sincro.nube.NubeEnMarcha.configurada(contexto))
+            android.widget.Toast.makeText(contexto, contexto.getString(R.string.nb_nube_falta_configurar), android.widget.Toast.LENGTH_LONG).show()
     }
     MensajesActivity.abrirChatDe(contexto, p.id, p.nombre)
     if (compartido) com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(contexto, p.id, p.nombre)
@@ -448,6 +455,10 @@ private fun Fila(
             // color del fondo. Un chat normal no la lleva, ni uno del que salí. Va encima de la foto.
             if (compartido != null) com.forge.pixpin.guardados.ChapaDeCompartido(
                 MaterialTheme.colorScheme.background, Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 3.dp)
+            )
+            // **La nubecita** (2-nov-2026, como el PC): arriba a la derecha, si el chat va por la nube.
+            if (compartido != null && c.proyecto != null) com.forge.pixpin.sincro.nube.NubecitaDelChat(
+                c.proyecto, Modifier.align(Alignment.TopEnd).offset(x = 3.dp, y = (-3).dp)
             )
             androidx.compose.material3.DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                 for (a in acciones) androidx.compose.material3.DropdownMenuItem(

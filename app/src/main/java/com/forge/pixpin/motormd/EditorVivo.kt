@@ -103,7 +103,12 @@ fun EditorVivo(
     comentados: Map<Int, Int> = emptyMap(),
     onComentarios: (Int) -> Unit = {},
     /** «Pasar a texto» de un audio de la nota (como el PC): la ruta del audio. Null, no sale. */
-    onPasarATexto: ((String) -> Unit)? = null
+    onPasarATexto: ((String) -> Unit)? = null,
+    /**
+     * **Solo elegir** (2-nov-2026, marcar el texto): tocar un bloque deja elegir su texto, pero sin
+     * teclado ni cambios. Es como se marca una nota que no se escribe (un adjunto del chat).
+     */
+    soloElegir: Boolean = false
 ) {
     // Los de editar: el documento vacío es un bloque vacío. Ver [Vivo.trozos].
     val trozos = remember(texto) { Vivo.trozos(texto) }
@@ -147,7 +152,7 @@ fun EditorVivo(
                     .background(Color(0x33FFC440), RoundedCornerShape(6.dp))
                 else Modifier.fillMaxWidth()
             ) {
-            if (activo && bloque is MarkdownBlock.Tabla) {
+            if (activo && bloque is MarkdownBlock.Tabla && !soloElegir) {
                 TablaEditable(
                     tabla = bloque,
                     baseSizeSp = baseSizeSp,
@@ -169,6 +174,7 @@ fun EditorVivo(
                     },
                     seleccion = sitio.seleccion,
                     baseSizeSp = baseSizeSp,
+                    soloElegir = soloElegir,
                     onCambio = { nuevo, sel ->
                         onTexto(Vivo.conContenido(texto, i, nuevo))
                         onSitio(Sitio(i, sel))
@@ -262,7 +268,7 @@ fun EditorVivo(
             Modifier
                 .fillMaxWidth()
                 .height((baseSizeSp * 6f).dp)
-                .clickable {
+                .clickable(enabled = !soloElegir) {
                     val (doc, donde) = Vivo.alFinal(texto)
                     if (doc != texto) onTexto(doc)
                     onSitio(donde)
@@ -690,7 +696,8 @@ private fun BloqueEditable(
     baseSizeSp: Float,
     onCambio: (InlineText, TextRange) -> Unit,
     onIntro: (InlineText, Int) -> Unit,
-    onRetroceso: () -> Boolean
+    onRetroceso: () -> Boolean,
+    soloElegir: Boolean = false
 ) {
     val foco = remember { FocusRequester() }
     // Atado a **qué bloque** es, no a la primera vez. Al pulsar intro se abre un
@@ -717,7 +724,12 @@ private fun BloqueEditable(
         ) {
         BasicTextField(
             value = TextFieldValue(contenido.text, seleccion),
+            readOnly = soloElegir,
             onValueChange = { v ->
+                if (soloElegir) {
+                    onCambio(contenido, v.selection)
+                    return@BasicTextField
+                }
                 // El intro no mete un salto de línea: **parte el bloque**. Es lo
                 // que distingue un editor por bloques de un cuadro de texto, y
                 // sin esto un título de dos renglones dejaba el segundo suelto.

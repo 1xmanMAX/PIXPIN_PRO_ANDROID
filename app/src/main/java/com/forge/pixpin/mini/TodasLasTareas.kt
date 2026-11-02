@@ -30,8 +30,6 @@ object TodasLasTareas {
     /** El nombre del chat general, el que no es de ningún proyecto. */
     const val GUARDADOS = "Mensajes guardados"
 
-    /** Lo que se queda arriba, tachada, una tarea recién marcada (`SE_QUEDA` del PC). */
-    const val SE_QUEDA_MS = 5_000L
 
     /** Lo que dura el «Deshacer» de una tarea quitada (`DURA_DESHACER` del PC). */
     const val DURA_DESHACER_MS = 6_000L
@@ -384,8 +382,26 @@ object TodasLasTareas {
         /** Lo hecho, plegable, en el orden del documento. */
         val hechas: List<Int>
     ) {
-        /** Cuántas de arriba siguen pendientes (lo recién tachado no cuenta). */
-        fun pendientes(l: Lista): Int = arriba.count { i -> l.filas.getOrNull(i)?.hecha == false }
+        /** Cuántas siguen pendientes: lo recién tachado no cuenta, y lo recién destachado que se quedó en «Hechas» sí. */
+        fun pendientes(l: Lista): Int = (arriba + hechas).count { i -> l.filas.getOrNull(i)?.hecha == false }
+    }
+
+    /**
+     * **Los grupos en el orden congelado** (2-nov-2026, [TareasQuietas]): las listas en el orden en que se
+     * vieron ([listasQuietas]; el tablero no, sus columnas siguen el orden de las listas) y, en cada una,
+     * lo de arriba y lo plegado; lo recién destachado baja a «Hechas».
+     */
+    fun congelar(quietas: TareasQuietas, listas: List<Lista>, grupos: List<Grupo>, listasQuietas: Boolean = true): List<Grupo> {
+        val claveDe = { g: Grupo -> listas[g.lista].clave }
+        val v = grupos.map { g ->
+            val l = listas[g.lista]
+            val a = g.arriba.toMutableList()
+            val h = g.hechas.toMutableList()
+            quietas.ordenarTareas(l.clave, a, h) { i -> l.filas.getOrNull(i)?.crudo.orEmpty() }
+            g.copy(arriba = a, hechas = h)
+        }.toMutableList()
+        if (listasQuietas) quietas.ordenarListas(v, claveDe)
+        return v
     }
 
     /**
@@ -409,7 +425,10 @@ object TodasLasTareas {
         val (arriba, hechas) = l.aLaVista { sigueArriba(l, it) }
         val a = arriba.filter { coincide(l, it, palabras, hoy) }.map { it.indice }
         val h = hechas.filter { coincide(l, it, palabras, hoy) }.map { it.indice }
-        if (a.isEmpty() && h.isEmpty() && !(conVacias && palabras.isEmpty() && l.filas.isEmpty())) null else Grupo(li, a, h)
+        // Una lista vacía sale sin buscar (con [conVacias]) y, buscando, si su nombre coincide (la de una
+        // asignatura recién creada se encuentra por su nombre, 2-nov-2026).
+        val vaciaQueSale = l.filas.isEmpty() && conVacias && (palabras.isEmpty() || palabras.all { hayCoincidencia(l.titulo, it) })
+        if (a.isEmpty() && h.isEmpty() && !vaciaQueSale) null else Grupo(li, a, h)
     }
 
     /** «hoy», «hace 1 día», «hace N días» (`mini-tarea-edad`). Nunca la fecha: lo pidió el usuario. */

@@ -75,6 +75,8 @@ class PixPinApp : Application() {
         // nada lea un texto. Ver [com.forge.pixpin.ajustes.IdiomaDeLaApp].
         com.forge.pixpin.ajustes.IdiomaDeLaApp.alArrancar(this)
         com.forge.pixpin.ui.Textos.app = this
+        // **La nube de los chats compartidos** (2-nov-2026): su bucle, si está configurada no hace nada sin chats.
+        runCatching { com.forge.pixpin.sincro.nube.NubeEnMarcha.instalar(this) }
         com.forge.pixpin.motor.DrawFonts.app = this
         // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].
         // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
@@ -149,7 +151,11 @@ class PixPinApp : Application() {
         // para no rehacerlas por cada tecla. Ver [com.forge.pixpin.pin.RecordatoriosDeTareas].
         // **Las llamadas del horario de clases**, también al arrancar (y tras reiniciar el teléfono).
         // Ver [com.forge.pixpin.horario.AvisosDelHorario].
-        scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.horario.AvisosDelHorario.reprogramar(this@PixPinApp) } }
+        scope.launch(Dispatchers.IO) {
+            // Cada asignatura con su lista y su enlace `lista:<id>` (2-nov-2026), luego las llamadas.
+            runCatching { com.forge.pixpin.horario.AvisosDelHorario.enlazarAlArrancar(this@PixPinApp) }
+            runCatching { com.forge.pixpin.horario.AvisosDelHorario.reprogramar(this@PixPinApp) }
+        }
         // **En la versión de Play, todos los recordatorios otra vez** (30-oct-2026): quitar el permiso de
         // alarmas exactas cancela las que había y reiniciar el teléfono las borra; se vuelven a poner
         // (inexactas si sigue sin permiso). El APK de GitHub no lo necesita y sigue igual.

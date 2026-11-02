@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Color avanzado del lienzo (PC selector_color, 2-nov-2026) -->
+<resources>
+    <string name="lc_recientes">الأخيرة</string>
+    <string name="lc_personalizado">مخصص</string>
+    <string name="lc_cuentagotas">منتقي الألوان</string>
+    <string name="lc_opacidad">العتامة</string>
+    <string name="lc_contraste">التباين</string>
+    <string name="lc_toca_color">المس اللون الذي تريد نسخه</string>
+</resources>

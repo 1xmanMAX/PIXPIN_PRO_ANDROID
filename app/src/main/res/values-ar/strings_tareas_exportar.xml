@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exportar una lista de tareas (2-nov-2026): los rótulos de tareas-exportar-* del PC (main.ftl). Los huecos {fecha}, {dia}… los llena ExportarTareas. -->
+<resources>
+    <string name="te_tareas_exportar_titulo">المهام</string>
+    <string name="te_tareas_exportar_exportado">صُدّرت في {fecha}</string>
+    <string name="te_tareas_exportar_pendientes">معلّقة</string>
+    <string name="te_tareas_exportar_hechas">منجزة</string>
+    <string name="te_tareas_exportar_completado">مكتمل</string>
+    <string name="te_tareas_exportar_pendiente">معلّقة</string>
+    <string name="te_tareas_exportar_hecha">منجزة</string>
+    <string name="te_tareas_exportar_todo_hecho">كل شيء منجز</string>
+    <string name="te_tareas_exportar_vacia">لا توجد مهام</string>
+    <string name="te_tareas_exportar_recordatorio">تذكير</string>
+    <string name="te_tareas_exportar_pasada">متأخرة</string>
+    <string name="te_tareas_exportar_creada">أُنشئت في {fecha}</string>
+    <string name="te_tareas_exportar_de">{hechas} من {total}</string>
+    <string name="te_tareas_exportar_foto">صورة</string>
+    <string name="te_compartir_tipo_tareas">قائمة مهام</string>
+    <string name="te_tareas_urgente">عاجل</string>
+    <string name="te_tareas_muy_urgente">عاجل جدًا</string>
+    <string name="te_tareas_selector_hoy">اليوم</string>
+    <string name="te_tareas_selector_manana">غدًا</string>
+    <string name="te_chat_ayer">أمس</string>
+    <string name="te_tareas_dia_0">الاثنين</string>
+    <string name="te_tareas_dia_1">الثلاثاء</string>
+    <string name="te_tareas_dia_2">الأربعاء</string>
+    <string name="te_tareas_dia_3">الخميس</string>
+    <string name="te_tareas_dia_4">الجمعة</string>
+    <string name="te_tareas_dia_5">السبت</string>
+    <string name="te_tareas_dia_6">الأحد</string>
+    <string name="te_chat_mes_1">يناير</string>
+    <string name="te_chat_mes_2">فبراير</string>
+    <string name="te_chat_mes_3">مارس</string>
+    <string name="te_chat_mes_4">أبريل</string>
+    <string name="te_chat_mes_5">مايو</string>
+    <string name="te_chat_mes_6">يونيو</string>
+    <string name="te_chat_mes_7">يوليو</string>
+    <string name="te_chat_mes_8">أغسطس</string>
+    <string name="te_chat_mes_9">سبتمبر</string>
+    <string name="te_chat_mes_10">أكتوبر</string>
+    <string name="te_chat_mes_11">نوفمبر</string>
+    <string name="te_chat_mes_12">ديسمبر</string>
+    <string name="te_chat_fecha">{dia} {mes}</string>
+    <string name="te_chat_fecha_con_ano">{dia} {mes} {ano}</string>
+    <string name="te_grabacion_idioma">ar</string>
+</resources>

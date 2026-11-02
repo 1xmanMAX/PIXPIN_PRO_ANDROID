@@ -89,6 +89,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.Compress
@@ -2596,6 +2597,17 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                     // Grabar una clase o una reunión con capturas en su minuto. Ver [GrabarClaseActivity].
                     OpcionesDeAdjuntar.Adjunto.CLASE -> GrabarClaseActivity.abrir(this@MensajesActivity, chatDe)
                     OpcionesDeAdjuntar.Adjunto.MINIAPPS -> eligiendoMini = true
+                    OpcionesDeAdjuntar.Adjunto.PEGAR -> {
+                        val clip = (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).primaryClip
+                        val item = clip?.takeIf { it.itemCount > 0 }?.getItemAt(0)
+                        val uri = item?.uri
+                        val textoCopiado = item?.coerceToText(this@MensajesActivity)?.toString().orEmpty()
+                        when {
+                            uri != null -> { guardarArchivo(uri); refrescar() }
+                            textoCopiado.isNotBlank() -> escrito = (escrito + textoCopiado).take(100_000)
+                            else -> Toast.makeText(this@MensajesActivity, getString(com.forge.pixpin.R.string.adjuntar_nada_copiado), Toast.LENGTH_SHORT).show()
+                        }
+                    }
                     // Una carpeta de páginas (25-oct-2026, del PC): un cuaderno que junta lienzos.
                     OpcionesDeAdjuntar.Adjunto.CARPETA -> {
                         val chat = chatDe
@@ -6284,6 +6296,17 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 )
                 CuadriculaDelClip(vista.mas, grande = false, alElegir)
             }
+            // **Pegar lo copiado**, abajo y aparte (como la «Adjuntar» del PC); sin nada copiado, apagado.
+            val hayCopiado = remember { (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).hasPrimaryClip() }
+            if (buscado.isBlank() || OpcionesDeAdjuntar.Adjunto.PEGAR.buscable.contains(buscado.trim().lowercase())) androidx.compose.material3.FilledTonalButton(
+                onClick = { alElegir(OpcionesDeAdjuntar.Adjunto.PEGAR) },
+                enabled = hayCopiado,
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
+            ) {
+                Icon(Icons.Filled.ContentPaste, null, Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_pegar))
+            }
             if (vista.deSiempre.isEmpty() && vista.mas.isEmpty()) Text(
                 androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_nada), color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center,
@@ -6339,6 +6362,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     }
 
     private fun iconoDe(a: OpcionesDeAdjuntar.Adjunto): androidx.compose.ui.graphics.vector.ImageVector = when (a) {
+        OpcionesDeAdjuntar.Adjunto.PEGAR -> Icons.Filled.ContentPaste
         OpcionesDeAdjuntar.Adjunto.FOTO -> Icons.Filled.Image
         OpcionesDeAdjuntar.Adjunto.ARCHIVO -> Icons.Filled.Description
         OpcionesDeAdjuntar.Adjunto.LIENZO -> Icons.Filled.Draw
@@ -7483,6 +7507,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 }
             )
         }
+        // **Una lista de tareas** sale cuidada (2-nov-2026, PC `bc4533bd`): su página propia, PDF, imagen,
+        // Word, Markdown y texto, sin las marcas crudas. Ver [com.forge.pixpin.mini.ExportarTareasEnLaApp].
+        if (com.forge.pixpin.mini.ExportarTareasEnLaApp.esLista(m)) return com.forge.pixpin.mini.ExportarTareasEnLaApp.compartible(this, m, nombre)
         // **Una grabación** (una nota de voz, o la carpeta de su clase) sale con lo suyo: página web,
         // PDF, Word, Markdown, texto y Anki (25-oct-2026, PC 2921a1d). Ver [ExportarGrabacion].
         if (m.clase == Clase.VOZ || CarpetaDePaginas.esGrabacion(m)) {

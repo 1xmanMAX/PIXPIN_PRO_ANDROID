@@ -532,7 +532,12 @@ internal fun ElTallerDelColor(
     onGuardar: ((String) -> Unit)? = null,
     /** Con el papel oscuro, los colores se enseñan como se van a ver. Ver [LaRuedaDelColor]. */
     noche: Boolean = false,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Lo avanzado (2-nov-2026, como el PC): los recientes, el código, el contraste, la opacidad y el cuentagotas. */
+    recientes: List<String> = emptyList(),
+    opacidad: Int = 100,
+    onOpacidad: ((Int) -> Unit)? = null,
+    onCuentagotas: (() -> Unit)? = null
 ) {
     val hsv = enHsv(parseColor(actual, 255))
     // Con una tinta gris, la rueda abre a colores vivos. Ver [claridadDeLaRueda].
@@ -610,6 +615,11 @@ internal fun ElTallerDelColor(
                 }
             }
             LaTiraDeLaLuz(hsv, onElegir)
+            ColorAvanzado(
+                actual = actual, opacidad = opacidad, recientes = recientes, papelOscuro = noche,
+                onElegir = onElegir, onOpacidad = onOpacidad, onCuentagotas = onCuentagotas,
+                modifier = Modifier.padding(top = 8.dp)
+            )
         }
     }
 }

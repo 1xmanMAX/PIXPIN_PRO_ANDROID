@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exportar una lista de tareas (2-nov-2026): los rótulos de tareas-exportar-* del PC (main.ftl). Los huecos {fecha}, {dia}… los llena ExportarTareas. -->
+<resources>
+    <string name="te_tareas_exportar_titulo">タスク</string>
+    <string name="te_tareas_exportar_exportado">{fecha} に書き出し</string>
+    <string name="te_tareas_exportar_pendientes">未完了</string>
+    <string name="te_tareas_exportar_hechas">完了</string>
+    <string name="te_tareas_exportar_completado">達成率</string>
+    <string name="te_tareas_exportar_pendiente">未完了</string>
+    <string name="te_tareas_exportar_hecha">完了</string>
+    <string name="te_tareas_exportar_todo_hecho">すべて完了</string>
+    <string name="te_tareas_exportar_vacia">タスクはありません</string>
+    <string name="te_tareas_exportar_recordatorio">リマインダー</string>
+    <string name="te_tareas_exportar_pasada">期限切れ</string>
+    <string name="te_tareas_exportar_creada">{fecha} 作成</string>
+    <string name="te_tareas_exportar_de">{hechas} / {total}</string>
+    <string name="te_tareas_exportar_foto">写真</string>
+    <string name="te_compartir_tipo_tareas">タスクリスト</string>
+    <string name="te_tareas_urgente">緊急</string>
+    <string name="te_tareas_muy_urgente">最優先</string>
+    <string name="te_tareas_selector_hoy">今日</string>
+    <string name="te_tareas_selector_manana">明日</string>
+    <string name="te_chat_ayer">昨日</string>
+    <string name="te_tareas_dia_0">月</string>
+    <string name="te_tareas_dia_1">火</string>
+    <string name="te_tareas_dia_2">水</string>
+    <string name="te_tareas_dia_3">木</string>
+    <string name="te_tareas_dia_4">金</string>
+    <string name="te_tareas_dia_5">土</string>
+    <string name="te_tareas_dia_6">日</string>
+    <string name="te_chat_mes_1">1月</string>
+    <string name="te_chat_mes_2">2月</string>
+    <string name="te_chat_mes_3">3月</string>
+    <string name="te_chat_mes_4">4月</string>
+    <string name="te_chat_mes_5">5月</string>
+    <string name="te_chat_mes_6">6月</string>
+    <string name="te_chat_mes_7">7月</string>
+    <string name="te_chat_mes_8">8月</string>
+    <string name="te_chat_mes_9">9月</string>
+    <string name="te_chat_mes_10">10月</string>
+    <string name="te_chat_mes_11">11月</string>
+    <string name="te_chat_mes_12">12月</string>
+    <string name="te_chat_fecha">{mes}{dia}日</string>
+    <string name="te_chat_fecha_con_ano">{ano}年{mes}{dia}日</string>
+    <string name="te_grabacion_idioma">ja</string>
+</resources>

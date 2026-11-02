@@ -878,6 +878,9 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
 
     fun archivo(rel: String): File = File(filesDir, rel)
 
+    /** Un texto portátil con las rutas de este aparato (lo de la copia «sin conexión» de la nube). */
+    fun aLocal(texto: String): String = rutas.aLocal(texto)
+
     /** La ruta [ruta] de este aparato, relativa a `files`; null si es de fuera. */
     fun relativa(ruta: String): String? = rutas.relativa(ruta)
 

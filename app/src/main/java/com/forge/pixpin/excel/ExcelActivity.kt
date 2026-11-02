@@ -214,6 +214,7 @@ class ExcelActivity : ComponentActivity() {
             ).also { it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) }
         }
         var tickDeTinta by remember { mutableIntStateOf(0) }
+        var colorDeMarca by remember { mutableIntStateOf(4) }
         val pintorDeTinta = remember(oscuro) {
             com.forge.pixpin.motor.Renderer(
                 imageProvider = { f -> tinta.scene.files[f]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } },
@@ -375,6 +376,9 @@ class ExcelActivity : ComponentActivity() {
             // De paso, con «Por Wi-Fi a mis aparatos». Ver [com.forge.pixpin.guardados.AbrirDePaso.conWifi].
             exportando?.let { c -> com.forge.pixpin.ui.HojaDeCompartir(remember(c) { com.forge.pixpin.guardados.AbrirDePaso.conWifi(this@ExcelActivity, c, estadoDePaso) }) { exportando = null } }
             // **El riel se va con la pastilla** (27-oct-2026): al mover la hoja, y vuelve al tocar. Ver [com.forge.pixpin.ui.RielALaVista].
+            // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
+            val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null, base) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deBase(this@ExcelActivity, base) }.getOrNull() } }
+            com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
             if (l != null && !marcosDoc.imprimiendo && !ocultarParaImprimir) com.forge.pixpin.ui.RielDelVisor(
                 visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarca),
                 alUsar = { toques++ },
@@ -431,6 +435,40 @@ class ExcelActivity : ComponentActivity() {
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 val hojas = remember(l) { l.libro.hojas.withIndex().filter { it.value.visible } }
+                // **Marcar celdas** (2-nov-2026, `visor_hoja/marcar.rs` del PC): con dos celdas o más
+                // elegidas, la barrita; se marca la celda entera, en la tinta de la hoja.
+                @Suppress("UNUSED_VARIABLE") val leerMarca = marca.intValue
+                val elegidas = vista?.seleccion
+                if (idDeLaTinta != null && elegidas != null && (elegidas.f0 != elegidas.f1 || elegidas.c0 != elegidas.c1)) {
+                    com.forge.pixpin.ui.BarraDeMarcasDeTexto(
+                        color = colorDeMarca,
+                        onColor = { colorDeMarca = it },
+                        onMarca = { que ->
+                            val g = vista?.hoja?.geo
+                            if (g != null) {
+                                val cajas = cajasDeCeldas(g, elegidas, que != "resaltar" && que != "tapar" && que != "quitar")
+                                if (que == "quitar") {
+                                    val grupos = com.forge.pixpin.motor.MarcasDeTextoEnTinta.gruposQueTocan(tinta.scene.elements, cajas)
+                                    val fuera = tinta.scene.elements.filter { e -> !e.isDeleted && e.groupIds.any { it in grupos } }
+                                    tinta.reemplazar(fuera.map { it.copy(isDeleted = true, version = it.version + 1, updated = System.currentTimeMillis()) })
+                                } else {
+                                    val ahora = System.currentTimeMillis()
+                                    tinta.insertar(
+                                        com.forge.pixpin.motor.MarcasDeTextoEnTinta.elementos(
+                                            que, com.forge.pixpin.motor.MarcasDeTextoEnTinta.color(colorDeMarca), cajas,
+                                            com.forge.pixpin.motor.MarcasDeTextoEnTinta.grupoNuevo(ahora), ahora
+                                        ),
+                                        marcar = false
+                                    )
+                                }
+                                cambiosDeTinta++; tickDeTinta++
+                                guardarTinta()
+                                vista?.invalidate()
+                            }
+                        },
+                        modifier = Modifier.padding(horizontal = 12.dp)
+                    )
+                }
                 LineaDeCelda(vista, marca, alCopiar = { vista?.let { copiar(it) }; toques++ }) { activa = it }
                 // Con una sola hoja no hay pestañas que elegir: no tapan nada (lo que falta por leer y el
                 // zoom, solos a la derecha).
@@ -440,6 +478,18 @@ class ExcelActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    /**
+     * Las cajas de las celdas [r] en unidades de la tinta de la hoja (px al 100 %): una sola para
+     * resaltar y tapar, una por fila para las rayas (como mucho 2000 filas, como el PC).
+     */
+    private fun cajasDeCeldas(g: Pxhj.Geometria, r: Pxhj.Rango, filaAFila: Boolean): List<com.forge.pixpin.motor.MarcasDeTextoEnTinta.Caja> {
+        val f1 = minOf(r.f1, r.f0 + 2000)
+        val x0 = g.x(r.c0).toDouble()
+        val x1 = g.x(r.c1 + 1).toDouble()
+        fun caja(a: Int, b: Int) = com.forge.pixpin.motor.MarcasDeTextoEnTinta.Caja(x0, g.y(a).toDouble(), x1, g.y(b + 1).toDouble())
+        return if (filaAFila) (r.f0..f1).filter { g.y(it + 1) > g.y(it) }.map { caja(it, it) } else listOf(caja(r.f0, f1))
     }
 
     /**

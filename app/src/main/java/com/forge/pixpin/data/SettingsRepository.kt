@@ -117,6 +117,16 @@ data class Settings(
      */
     val coloresMarcados: String = "",
     /**
+     * **Los colores elegidos a mano hace poco** en el lienzo (2-nov-2026, PC
+     * `lienzo_colores_recientes`), el último delante, `#rrggbb` separados por comas.
+     */
+    val coloresRecientes: String = "",
+    /**
+     * **El último «trazo a mano» elegido** en el panel del lienzo (PC `lienzo_rugosidad`): 0
+     * recto, 1 artista, 2 caricatura. -1, nunca se tocó (el de fábrica). Lo nuevo nace con él.
+     */
+    val rugosidadDelLienzo: Int = -1,
+    /**
      * Cómo se agrupan las herramientas en cada barra, escrito.
      *
      * Es cosa aparte de **cuáles** salen: se puede tener la misma lista repartida
@@ -487,6 +497,8 @@ class SettingsRepository(private val context: Context) {
         val IMAN_ACTIVO = booleanPreferencesKey("iman_activo")
         val MARCAS_DESLIZADORES = stringPreferencesKey("marcas_deslizadores")
         val COLORES_MARCADOS = stringPreferencesKey("colores_marcados")
+        val COLORES_RECIENTES = stringPreferencesKey("colores_recientes")
+        val RUGOSIDAD_DEL_LIENZO = intPreferencesKey("rugosidad_del_lienzo")
         val GUIA_EDITOR = booleanPreferencesKey("guia_editor")
         val GUIA_PIN = booleanPreferencesKey("guia_pin")
         val GUIA_CAPA = booleanPreferencesKey("guia_capa")
@@ -593,6 +605,8 @@ class SettingsRepository(private val context: Context) {
             imanActivo = prefs[Keys.IMAN_ACTIVO] ?: true,
             marcasDeDeslizadores = prefs[Keys.MARCAS_DESLIZADORES] ?: "",
             coloresMarcados = prefs[Keys.COLORES_MARCADOS] ?: "",
+            coloresRecientes = prefs[Keys.COLORES_RECIENTES] ?: "",
+            rugosidadDelLienzo = prefs[Keys.RUGOSIDAD_DEL_LIENZO] ?: -1,
             imanEsquinas = prefs[Keys.IMAN_ESQUINAS] ?: true,
             imanMedios = prefs[Keys.IMAN_MEDIOS] ?: true,
             imanCentros = prefs[Keys.IMAN_CENTROS] ?: true,
@@ -869,6 +883,16 @@ class SettingsRepository(private val context: Context) {
     /** Guarda las marcas de los deslizadores. Ver [Settings.marcasDeDeslizadores]. */
     suspend fun setMarcas(texto: String) {
         context.dataStore.edit { it[Keys.MARCAS_DESLIZADORES] = texto }
+    }
+
+    /** Los colores recientes del lienzo. Ver [Settings.coloresRecientes]. */
+    suspend fun setColoresRecientes(texto: String) {
+        context.dataStore.edit { it[Keys.COLORES_RECIENTES] = texto }
+    }
+
+    /** El último trazo a mano. Ver [Settings.rugosidadDelLienzo]. */
+    suspend fun setRugosidadDelLienzo(r: Int) {
+        context.dataStore.edit { it[Keys.RUGOSIDAD_DEL_LIENZO] = r }
     }
 
     /** Guarda los colores marcados en la rueda. Ver [Settings.coloresMarcados]. */

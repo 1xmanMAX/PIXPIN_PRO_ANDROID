@@ -77,6 +77,7 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.unit.dp
 import com.forge.pixpin.guardados.aPantallaCompleta
@@ -323,6 +324,10 @@ class LectorPdfActivity : ComponentActivity() {
         // Solo para llevar la herramienta y el estilo de la barra: cada hoja tiene su lienzo.
         val maestro = remember { com.forge.pixpin.motor.DrawController().also { it.selectTool(com.forge.pixpin.motor.Tool.FREEDRAW) } }
         var tickDeLaBarra by remember { mutableStateOf(0) }
+        // **Marcar el texto de una hoja** (2-nov-2026, como el PC): mantener el dedo y arrastrar elige;
+        // la barrita resalta, subraya, tacha o tapa, en la tinta de la hoja. Ver [ElegirTextoDeLaHoja].
+        var elegidoEnHoja by remember(rutaPedida) { mutableStateOf<Pair<Int, ElegirTextoDeLaHoja.Elegido>?>(null) }
+        var colorDeMarca by remember { androidx.compose.runtime.mutableIntStateOf(4) }
         // **Con lápiz, el dedo pasa las hojas** (11-oct-2026). Se enciende solo con el primer toque
         // de lápiz; el botón «Dedo» de la barra lo apaga (perder el lápiz no puede dejar sin anotar)
         // y entonces ya no se vuelve a encender solo hasta pedirlo.
@@ -841,7 +846,45 @@ class LectorPdfActivity : ComponentActivity() {
                                         end = with(densidad) { derechaPx.toDp() }
                                     )
                                 ) {
-                                    Hoja(ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty(), oscuroOffice = oscuroOffice, invertida = invertido && !esOffice) { aSolas = i }
+                                    Hoja(
+                                        ruta, i, zoomFirme, anchoPx, recortes[i].orEmpty(), oscuroOffice = oscuroOffice, invertida = invertido && !esOffice,
+                                        elegir = if (anotando) Modifier else Modifier.pointerInput(ruta, i) {
+                                            var a = Offset.Zero
+                                            var b = Offset.Zero
+                                            fun enPuntos(o: Offset): Pair<Float, Float> {
+                                                val m = medidaDeLaHoja(ruta, i)
+                                                val k = ((m?.first ?: 1.0) / size.width.coerceAtLeast(1)).toFloat()
+                                                return o.x * k to o.y * k
+                                            }
+                                            fun elegir() {
+                                                val pa = enPuntos(a)
+                                                val pb = enPuntos(b)
+                                                alcance.launch {
+                                                    val e = withContext(Dispatchers.IO) { ElegirTextoDeLaHoja.cajas(ruta, i, pa, pb) }
+                                                    when {
+                                                        e == null -> android.widget.Toast.makeText(this@LectorPdfActivity, getString(com.forge.pixpin.R.string.mt_pdf_android15), android.widget.Toast.LENGTH_LONG).show()
+                                                        e.cajas.isEmpty() -> elegidoEnHoja = null
+                                                        else -> elegidoEnHoja = i to e
+                                                    }
+                                                }
+                                            }
+                                            detectDragGesturesAfterLongPress(
+                                                onDragStart = { o -> a = o; b = o; elegir() },
+                                                onDrag = { cambio, _ -> cambio.consume(); b = cambio.position },
+                                                onDragEnd = { elegir() }
+                                            )
+                                        }
+                                    ) { aSolas = i }
+                                    // Lo elegido, en azul, encima de la hoja.
+                                    val elegidoAqui = elegidoEnHoja?.takeIf { it.first == i }?.second
+                                    if (elegidoAqui != null) androidx.compose.foundation.Canvas(Modifier.matchParentSize().padding(bottom = 6.dp)) {
+                                        val m = medidaDeLaHoja(ruta, i)?.first ?: return@Canvas
+                                        val k = (size.width / m).toFloat()
+                                        for (c in elegidoAqui.cajas) drawRect(
+                                            Color(0x553D8BFF), Offset(c[0] * k, c[1] * k),
+                                            androidx.compose.ui.geometry.Size((c[2] - c[0]) * k, (c[3] - c[1]) * k)
+                                        )
+                                    }
                                 }
                                 // La capa coge **la hoja y sus dos márgenes**.
                                 CapaDePagina(capas, i, anotando, espacios, maestro, Modifier.matchParentSize(), conLapiz, alLapiz, oscuro = invertido) { tickDeLaBarra++ }
@@ -864,6 +907,41 @@ class LectorPdfActivity : ComponentActivity() {
                     alImprimir = { imprimirLosMarcos() },
                     // Dos dedos: el pellizco de siempre, el de la caja de fuera.
                     modifier = Modifier.fillMaxSize()
+                )
+            }
+            // **La barrita de marcar** lo elegido en una hoja (2-nov-2026, como el PC).
+            val elegidoAhora = elegidoEnHoja
+            if (elegidoAhora != null && !anotando && aSolas == null) {
+                val (hojaElegida, elegido) = elegidoAhora
+                com.forge.pixpin.ui.BarraDeMarcasDeTexto(
+                    color = colorDeMarca,
+                    onColor = { colorDeMarca = it },
+                    onCopiar = if (elegido.texto.isBlank()) null else ({ copiar(elegido.texto, getString(com.forge.pixpin.R.string.mt_copiado)); elegidoEnHoja = null }),
+                    onMarca = { que ->
+                        val ancho = medidaDeLaHoja(ruta, hojaElegida)?.first
+                        if (ancho != null) {
+                            val cajas = ElegirTextoDeLaHoja.aTinta(elegido.cajas, ancho)
+                            val c = capas.controladorDe(hojaElegida)
+                            if (que == "quitar") {
+                                val grupos = com.forge.pixpin.motor.MarcasDeTextoEnTinta.gruposQueTocan(c.scene.elements, cajas)
+                                val fuera = c.scene.elements.filter { e -> !e.isDeleted && e.groupIds.any { it in grupos } }
+                                c.reemplazar(fuera.map { it.copy(isDeleted = true, version = it.version + 1, updated = System.currentTimeMillis()) })
+                            } else {
+                                val ahora = System.currentTimeMillis()
+                                c.insertar(
+                                    com.forge.pixpin.motor.MarcasDeTextoEnTinta.elementos(
+                                        que, com.forge.pixpin.motor.MarcasDeTextoEnTinta.color(colorDeMarca), cajas,
+                                        com.forge.pixpin.motor.MarcasDeTextoEnTinta.grupoNuevo(ahora), ahora
+                                    ),
+                                    marcar = false
+                                )
+                            }
+                            capas.ensuciar(hojaElegida)
+                            capas.guardarTodo()
+                        }
+                        elegidoEnHoja = null
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp)
                 )
             }
             // **Los mandos de los lados** (espacio a la izquierda, candado, espacio a la derecha) y
@@ -981,6 +1059,9 @@ class LectorPdfActivity : ComponentActivity() {
             // los marcadores. Anotando se queda, con el lápiz encendido: tocarlo deja de anotar.
             // **Y se va con la pastilla** (27-oct-2026): al mover la hoja, y vuelve al tocar. Ver [com.forge.pixpin.ui.RielALaVista].
             if (cuantas > 0 && aSolas == null && !marcosDoc.imprimiendo) {
+                // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
+                val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deAdjunto(this@LectorPdfActivity, rutaPedida) }.getOrNull() } }
+                com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
                 com.forge.pixpin.ui.RielDelVisor(
                     visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarca),
                     alUsar = { toques++ },
@@ -1247,6 +1328,8 @@ class LectorPdfActivity : ComponentActivity() {
         oscuroOffice: Boolean = false,
         /** Un PDF en el modo oscuro: la hoja con la matriz de invertir, al pintar su imagen. */
         invertida: Boolean = false,
+        /** Elegir el texto para marcarlo (mantener y arrastrar). Ver [ElegirTextoDeLaHoja]. */
+        elegir: Modifier = Modifier,
         alAbrirSublienzos: () -> Unit = {}
     ) {
         // A más aumento, más puntos: acercarse a una hoja ya dibujada la estiraría y se vería
@@ -1291,14 +1374,9 @@ class LectorPdfActivity : ComponentActivity() {
                 val k = pag.ancho / size.width.coerceAtLeast(1)
                 return pag to Offset(o.x * k, o.y * k)
             }
+            // Mantener el dedo ya no copia el renglón: **elige** (y la barrita lleva «Copiar»), como el PC.
             detectTapGestures(
-                onTap = { o -> puntoDe(o)?.let { (pag, pt) -> pag.textoEn(pt.x, pt.y)?.enlace?.let { abrirEnlace(it) } } },
-                onLongPress = { o ->
-                    puntoDe(o)?.let { (pag, pt) ->
-                        val renglon = pag.renglonEn(pt.x, pt.y).joinToString(" ") { it.texto.trim() }.trim()
-                        if (renglon.isNotEmpty()) copiar(renglon, "Renglón copiado")
-                    }
-                }
+                onTap = { o -> puntoDe(o)?.let { (pag, pt) -> pag.textoEn(pt.x, pt.y)?.enlace?.let { abrirEnlace(it) } } }
             )
         }
         // **El trozo nítido de cerca** (14-oct-2026, el usuario: «las imágenes del Word se ven en baja
@@ -1345,7 +1423,7 @@ class LectorPdfActivity : ComponentActivity() {
         }
         val densidadDelTrozo = LocalDensity.current
         Box(
-            Modifier.fillMaxWidth().padding(bottom = 6.dp).then(conTexto)
+            Modifier.fillMaxWidth().padding(bottom = 6.dp).then(conTexto).then(elegir)
                 .then(if (deOffice) Modifier.onGloballyPositioned { donde = it; if (zoom > 1.2f) movida++ } else Modifier)
         ) {
             if (actual != null) {

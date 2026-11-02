@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">Copy</string>
+    <string name="mt_resaltar">Highlight</string>
+    <string name="mt_ondulada">Wavy line</string>
+    <string name="mt_subrayar">Underline</string>
+    <string name="mt_tachar">Strikethrough</string>
+    <string name="mt_tapar">Cover</string>
+    <string name="mt_quitar">Remove mark</string>
+    <string name="mt_color">Color</string>
+    <string name="mt_listo">Done</string>
+    <string name="mt_marcar_texto">Mark text</string>
+    <string name="mt_pista">Tap a paragraph and select text to mark it.</string>
+    <string name="mt_columna_fijada">The column and font are now fixed for marking. Select the text again.</string>
+    <string name="mt_copiado">Copied</string>
+    <string name="mt_pdf_android15">Selecting text in a PDF needs Android 15. You can open it “as text”.</string>
+</resources>

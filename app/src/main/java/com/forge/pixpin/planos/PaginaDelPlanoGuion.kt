@@ -324,12 +324,30 @@ function zoom(f, mx, my){
   vista.cx = x - (mx - W / 2) * vista.px; vista.cy = y + (my - H / 2) * vista.px;
   redibujar();
 }
+// **Los gestos del trackpad, como el PC** (`GestosVista`, d321772f): dos dedos mueven el plano en
+// cualquier dirección, pellizcar (o Ctrl+rueda) acerca hacia el cursor, la rueda mueve.
+var enGesto = false, escalaGesto = 1;
 lienzo.addEventListener('wheel', function(e){
   e.preventDefault();
   var r = lienzo.getBoundingClientRect();
-  var d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
-  zoom(Math.pow(1.0015, d), e.clientX - r.left, e.clientY - r.top);
+  var L = e.deltaMode === 1 ? 40 : (e.deltaMode === 2 ? (lienzo.clientHeight || 800) : 1);
+  var dx = (+e.deltaX || 0) * L, dy = (+e.deltaY || 0) * L;
+  if (e.ctrlKey || e.metaKey) {
+    if (!enGesto) { var t = Math.max(-25, Math.min(25, dy)); zoom(1 / Math.exp(-t * 0.01), e.clientX - r.left, e.clientY - r.top); }
+    return;
+  }
+  if (e.shiftKey && !dx) { dx = dy; dy = 0; }
+  vista.cx += dx * vista.px; vista.cy -= dy * vista.px; redibujar();
 }, { passive: false });
+lienzo.addEventListener('gesturestart', function(e){ e.preventDefault(); enGesto = true; escalaGesto = e.scale || 1; }, { passive: false });
+lienzo.addEventListener('gesturechange', function(e){
+  e.preventDefault();
+  var s = e.scale || 1, f = s / escalaGesto; escalaGesto = s;
+  if (dedos.size) return;
+  var r = lienzo.getBoundingClientRect();
+  zoom(1 / f, (e.clientX || r.left + r.width / 2) - r.left, (e.clientY || r.top + r.height / 2) - r.top);
+}, { passive: false });
+lienzo.addEventListener('gestureend', function(e){ e.preventDefault(); enGesto = false; escalaGesto = 1; }, { passive: false });
 var dedos = new Map(), antes = null;
 lienzo.addEventListener('pointerdown', function(e){
   lienzo.setPointerCapture(e.pointerId); dedos.set(e.pointerId, [e.clientX, e.clientY]); antes = null;
@@ -388,7 +406,7 @@ function hacerPanel(){
 document.addEventListener('keydown', function(e){
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   var k = e.key.toLowerCase();
-  if (k === 'f' || k === 'home') verTodo();
+  if (k === 'f' || k === 'home' || k === '0') verTodo();
   else if (k === 'b') tema();
   else if (k === 'l' && bCapas) bCapas.click();
   else if (k === 'w' && bGrosor) bGrosor.click();

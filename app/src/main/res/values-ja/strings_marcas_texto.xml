@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">コピー</string>
+    <string name="mt_resaltar">ハイライト</string>
+    <string name="mt_ondulada">波線</string>
+    <string name="mt_subrayar">下線</string>
+    <string name="mt_tachar">取り消し線</string>
+    <string name="mt_tapar">覆う</string>
+    <string name="mt_quitar">印を削除</string>
+    <string name="mt_color">色</string>
+    <string name="mt_listo">完了</string>
+    <string name="mt_marcar_texto">テキストに印を付ける</string>
+    <string name="mt_pista">段落をタップしてテキストを選択すると印を付けられます。</string>
+    <string name="mt_columna_fijada">印を付けるために段組みと文字が固定されました。もう一度テキストを選択してください。</string>
+    <string name="mt_copiado">コピーしました</string>
+    <string name="mt_pdf_android15">PDF のテキストを選択するには Android 15 が必要です。「テキストとして」開くこともできます。</string>
+</resources>

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">Copia</string>
+    <string name="mt_resaltar">Evidenzia</string>
+    <string name="mt_ondulada">Ondulata</string>
+    <string name="mt_subrayar">Sottolinea</string>
+    <string name="mt_tachar">Barra</string>
+    <string name="mt_tapar">Copri</string>
+    <string name="mt_quitar">Rimuovi il segno</string>
+    <string name="mt_color">Colore</string>
+    <string name="mt_listo">Fatto</string>
+    <string name="mt_marcar_texto">Segna testo</string>
+    <string name="mt_pista">Tocca un paragrafo e seleziona il testo per segnarlo.</string>
+    <string name="mt_columna_fijada">Colonna e carattere sono ora fissati per segnare. Seleziona di nuovo il testo.</string>
+    <string name="mt_copiado">Copiato</string>
+    <string name="mt_pdf_android15">Per selezionare il testo di un PDF serve Android 15. Puoi aprirlo “come testo”.</string>
+</resources>

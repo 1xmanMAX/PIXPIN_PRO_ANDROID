@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La nube de los chats compartidos (PC sincronizar::nube, 1-nov-2026) -->
+<resources>
+    <string name="nb_chat_nuevo_nube">Discussion partagée dans le cloud</string>
+    <string name="nb_chat_nuevo_nube_detalle">Ce que vous envoyez, les autres le récupèrent où qu\'ils soient</string>
+    <string name="nb_nube_modo_titulo">Mode de synchronisation</string>
+    <string name="nb_nube_modo_local">Réseau local</string>
+    <string name="nb_nube_modo_nube">Cloud</string>
+    <string name="nb_nube_modo_local_detalle">Se synchronise quand vous êtes sur le même Wi-Fi, gratuitement et sans serveur.</string>
+    <string name="nb_nube_modo_nube_detalle">Passe par votre cloud : ce que vous envoyez, les autres le récupèrent où qu\'ils soient, et c\'est visible sur le web. Seules les modifications sont envoyées.</string>
+    <string name="nb_nube_falta_configurar">Pas encore de cloud : indiquez son adresse et votre clé dans Synchroniser → Cloud.</string>
+    <string name="nb_nube_titulo">Cloud</string>
+    <string name="nb_nube_portada_como">Les discussions partagées réglées sur « Cloud » passent par votre serveur. Les vôtres restent sur le réseau local.</string>
+    <string name="nb_nube_explica">Votre serveur conserve les discussions partagées qui passent par le cloud et les affiche sur le web. Les discussions personnelles restent sur le réseau local, sans serveur.</string>
+    <string name="nb_nube_direccion">Adresse web</string>
+    <string name="nb_nube_llave">Clé de l\'appareil (pxn_…)</string>
+    <string name="nb_nube_llave_guardada">Clé enregistrée :</string>
+    <string name="nb_nube_olvidar">Oublier</string>
+    <string name="nb_nube_guardar">Enregistrer</string>
+    <string name="nb_nube_probar">Tester</string>
+    <string name="nb_nube_guardado">Enregistré.</string>
+    <string name="nb_nube_direccion_mala">L\'adresse doit commencer par https://.</string>
+    <string name="nb_nube_llave_mala">La clé commence par pxn_ (le site vous la donne quand vous enregistrez cet appareil).</string>
+    <string name="nb_nube_probado">Connecté : espace %1$s.</string>
+    <string name="nb_nube_no_contesta">Le cloud ne répond pas :</string>
+    <string name="nb_nube_que_va">Seules les modifications sont envoyées : sur un plan annoté, le nouveau trait et non tout le plan.</string>
+    <string name="nb_nube_en_linea">En ligne</string>
+    <string name="nb_nube_sin_conexion">Hors ligne</string>
+    <string name="nb_nube_cerrar_titulo">Modifications hors ligne</string>
+    <string name="nb_nube_cerrar_pregunta">Vous avez annoté ce document hors ligne.\nOui : abandonner ces modifications (celles des autres restent).\nNon : repasser en ligne et les envoyer.\nAnnuler : le laisser hors ligne pour la prochaine fois.</string>
+    <string name="nb_descartar">Ignorer</string>
+    <string name="nb_subir">Envoyer</string>
+    <string name="nb_dejar">Laisser hors ligne</string>
+</resources>

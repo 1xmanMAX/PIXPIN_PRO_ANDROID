@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">复制</string>
+    <string name="mt_resaltar">高亮</string>
+    <string name="mt_ondulada">波浪线</string>
+    <string name="mt_subrayar">下划线</string>
+    <string name="mt_tachar">删除线</string>
+    <string name="mt_tapar">遮盖</string>
+    <string name="mt_quitar">移除标记</string>
+    <string name="mt_color">颜色</string>
+    <string name="mt_listo">完成</string>
+    <string name="mt_marcar_texto">标记文本</string>
+    <string name="mt_pista">轻触段落并选择文本以进行标记。</string>
+    <string name="mt_columna_fijada">栏宽和字体已固定以便标记。请重新选择文本。</string>
+    <string name="mt_copiado">已复制</string>
+    <string name="mt_pdf_android15">在 PDF 中选择文本需要 Android 15。你可以以“文本”方式打开它。</string>
+</resources>

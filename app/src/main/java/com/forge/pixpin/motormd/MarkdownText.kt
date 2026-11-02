@@ -22,6 +22,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.foundation.layout.Box
@@ -812,6 +813,18 @@ private fun Body(
             (it.tiene(SpanKind.SPOILER) && claveDeOculto(bloque, it) !in ocultosVisibles)
     }
     var origin by remember { mutableStateOf(Offset.Zero) }
+    // **Las marcas de texto** de la nota (2-nov-2026): resaltado debajo de la letra, rayas y tapado
+    // encima. Ver [MarcasDeLaNota].
+    val pintadas = LocalMarcasDeLaNota.current[content.text].orEmpty()
+    var capa by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+    val grosor = with(androidx.compose.ui.platform.LocalDensity.current) { 1.dp.toPx() }
+    val conMarcas = if (pintadas.isEmpty()) Modifier else Modifier.drawWithContent {
+        with(MarcasDeLaNota) {
+            pintarDebajo(capa, pintadas)
+            drawContent()
+            pintarEncima(capa, pintadas, grosor)
+        }
+    }
     Text(
         text = content.annotated(
             tramos = tramos,
@@ -826,10 +839,11 @@ private fun Body(
         fontFamily = LocalLetraDeLaNota.current,
         color = color,
         textDecoration = if (tachado) TextDecoration.LineThrough else null,
-        modifier = if (links.isEmpty()) Modifier else Modifier.onGloballyPositioned {
+        modifier = conMarcas.then(if (links.isEmpty()) Modifier else Modifier.onGloballyPositioned {
             origin = it.positionInRoot()
-        },
+        }),
         onTextLayout = { layout ->
+            if (pintadas.isNotEmpty()) capa = layout
             if (links.isEmpty()) return@Text
             // Un enlace puede partirse en varias líneas, así que se recogen las
             // cajas de cada carácter y se agrupan por línea: una sola caja

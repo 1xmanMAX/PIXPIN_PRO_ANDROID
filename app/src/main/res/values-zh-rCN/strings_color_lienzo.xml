@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Color avanzado del lienzo (PC selector_color, 2-nov-2026) -->
+<resources>
+    <string name="lc_recientes">最近使用</string>
+    <string name="lc_personalizado">自定义</string>
+    <string name="lc_cuentagotas">取色器</string>
+    <string name="lc_opacidad">不透明度</string>
+    <string name="lc_contraste">对比度</string>
+    <string name="lc_toca_color">轻触要复制的颜色</string>
+</resources>
