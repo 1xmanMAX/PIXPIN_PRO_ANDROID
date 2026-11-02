@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  La chapita de Jev en Tareas y su porqué (2-nov-2026, `e775e9f4` del PC: `tareas-prioridad-*` y
+  `tareas-jev-*` de main.ftl). Ver mini/ChapitasDeTarea.kt y docs/jev.md del PC.
+-->
+<resources>
+    <string name="tareas_prioridad_urgente">Urgente</string>
+    <string name="tareas_prioridad_alta">Alta</string>
+    <string name="tareas_prioridad_normal">Normal</string>
+    <string name="tareas_prioridad_baja">Baja</string>
+    <string name="tareas_jev_consecuencia_nada">sin consecuencias</string>
+    <string name="tareas_jev_consecuencia_leve">consecuencia leve</string>
+    <string name="tareas_jev_consecuencia_media">consecuencia media</string>
+    <string name="tareas_jev_consecuencia_grave">consecuencia grave</string>
+    <string name="tareas_jev_la_esperan">alguien la espera</string>
+    <string name="tareas_jev_nadie_espera">nadie la espera</string>
+    <string name="tareas_jev_plazo_ajeno">plazo de otro</string>
+    <string name="tareas_jev_la_piden">la piden en el chat</string>
+    <string name="tareas_jev_sin_fecha">sin fecha</string>
+    <string name="tareas_jev_ya_paso">ya pasó</string>
+    <string name="tareas_jev_hoy">hoy</string>
+    <string name="tareas_jev_manana">mañana</string>
+    <string name="tareas_jev_en_dias">en %1$d días</string>
+    <string name="tareas_jev_por_la_lista">%1$s (por el título de la lista)</string>
+</resources>

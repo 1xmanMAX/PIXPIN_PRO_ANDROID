@@ -231,6 +231,63 @@ class TablasDeJevTest {
         assertEquals(Urgencia.Prioridad.NORMAL, Urgencia.decidir(Urgencia.Marca.NINGUNA, u(LEVE, 0.5, 0.1, null), null))
     }
 
+    /**
+     * La tabla entera para una tarea sin marca, sin nadie esperando y sin plazo ajeno: cada consecuencia
+     * por cada distancia a su fecha (2-nov-2026, `4fe2730b` del PC).
+     */
+    @Test
+    fun `la tabla de verdad de la consecuencia y la fecha`() {
+        // Casi grave, pero no (2.4): como media.
+        val casi = listOf(0.0, 0.1, 0.4, 0.5)
+        val A = Urgencia.Prioridad.ALTA
+        val N = Urgencia.Prioridad.NORMAL
+        val B = Urgencia.Prioridad.BAJA
+        val filas = listOf(
+            // sin fecha, en 7 días, mañana, hoy
+            Triple("grave", GRAVE, listOf(A, A, A, A)),
+            Triple("casi grave", casi, listOf(N, N, A, A)),
+            Triple("media", MEDIA, listOf(N, N, A, A)),
+            Triple("leve", LEVE, listOf(B, N, N, N))
+        )
+        for ((nombre, niveles, esperadas) in filas) {
+            val x = u(niveles, 0.1, 0.1, null)
+            for ((dias, esperada) in listOf<Long?>(null, 7, 1, 0).zip(esperadas)) {
+                assertEquals("$nombre con días $dias", esperada, Urgencia.decidir(Urgencia.Marca.NINGUNA, x, dias))
+            }
+        }
+        // Grave y para hoy, con otro esperando: urgente (2.75 + 1 + 2).
+        assertEquals(Urgencia.Prioridad.URGENTE, Urgencia.decidir(Urgencia.Marca.NINGUNA, u(GRAVE, 0.9, 0.1, null), 0))
+    }
+
+    @Test
+    fun `la fecha del titulo de la lista`() {
+        val sabado = FechasDichas.Fecha.nueva(2026, 10, 31)!!
+        val domingo = sabado.mas(1)
+        fun d(t: String, creada: FechasDichas.Fecha, hoy: FechasDichas.Fecha) = Urgencia.diasDeLaLista(t, creada, hoy)
+        // Creada hoy sábado: es hoy (el «sábado» suelto sería el que viene; vale el más cercano).
+        assertEquals(0L, d("HOY SÁBADO TAREAS", sabado, sabado))
+        // La misma lista al día siguiente: ya pasó.
+        assertEquals(-1L, d("HOY SÁBADO TAREAS", sabado, domingo))
+        assertEquals(1L, d("Para mañana", sabado, sabado))
+        assertEquals(2L, d("Para el lunes", sabado, sabado))
+        assertEquals(15L, d("Entrega 15/11", sabado, sabado))
+        // Sin fecha: ni «Inbox» ni una lista de temas con su día escrito sin «el» («Clase 29-oct»).
+        assertNull(d("Inbox", sabado, sabado))
+        assertNull(d("Temas · Clase 29-oct", sabado, sabado))
+        // Un reloj atrasado no la hace del futuro.
+        assertEquals(0L, d("hoy", domingo, sabado))
+    }
+
+    @Test
+    fun `el porque de la prioridad`() {
+        assertEquals(
+            Urgencia.Motivo(consecuencia = 2, espera = true, plazoAjeno = false, pidenYa = false, dias = null, deLaLista = false),
+            Urgencia.Motivo.de(u(MEDIA, 0.9, 0.2, 0.1), null, true)
+        )
+        val m = Urgencia.Motivo.de(u(GRAVE, 0.0, 0.0, null), 0, true)
+        assertEquals(Triple(3, 0L as Long?, true), Triple(m.consecuencia, m.dias, m.deLaLista))
+    }
+
     @Test
     fun `el plazo lo cuenta el codigo`() {
         assertEquals(2.0, Urgencia.puntosDelPlazo(-3), 0.0)

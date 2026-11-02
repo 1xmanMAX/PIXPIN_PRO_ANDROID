@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- chino de values/strings_prioridad_de_jev.xml (2-nov-2026, main.ftl zh-CN del PC). -->
+<resources>
+    <string name="tareas_prioridad_urgente">紧急</string>
+    <string name="tareas_prioridad_alta">高</string>
+    <string name="tareas_prioridad_normal">普通</string>
+    <string name="tareas_prioridad_baja">低</string>
+    <string name="tareas_jev_consecuencia_nada">没有后果</string>
+    <string name="tareas_jev_consecuencia_leve">后果轻微</string>
+    <string name="tareas_jev_consecuencia_media">后果中等</string>
+    <string name="tareas_jev_consecuencia_grave">后果严重</string>
+    <string name="tareas_jev_la_esperan">有人在等</string>
+    <string name="tareas_jev_nadie_espera">没人在等</string>
+    <string name="tareas_jev_plazo_ajeno">他人设定的期限</string>
+    <string name="tareas_jev_la_piden">聊天中有人催</string>
+    <string name="tareas_jev_sin_fecha">无日期</string>
+    <string name="tareas_jev_ya_paso">已过期</string>
+    <string name="tareas_jev_hoy">今天</string>
+    <string name="tareas_jev_manana">明天</string>
+    <string name="tareas_jev_en_dias">%1$d 天后</string>
+    <string name="tareas_jev_por_la_lista">%1$s（来自列表标题）</string>
+</resources>

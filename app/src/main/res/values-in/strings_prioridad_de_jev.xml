@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- indonesio de values/strings_prioridad_de_jev.xml (2-nov-2026, main.ftl id-ID del PC). -->
+<resources>
+    <string name="tareas_prioridad_urgente">Mendesak</string>
+    <string name="tareas_prioridad_alta">Tinggi</string>
+    <string name="tareas_prioridad_normal">Normal</string>
+    <string name="tareas_prioridad_baja">Rendah</string>
+    <string name="tareas_jev_consecuencia_nada">tanpa akibat</string>
+    <string name="tareas_jev_consecuencia_leve">akibat ringan</string>
+    <string name="tareas_jev_consecuencia_media">akibat sedang</string>
+    <string name="tareas_jev_consecuencia_grave">akibat serius</string>
+    <string name="tareas_jev_la_esperan">ada yang menunggu</string>
+    <string name="tareas_jev_nadie_espera">tidak ada yang menunggu</string>
+    <string name="tareas_jev_plazo_ajeno">tenggat dari orang lain</string>
+    <string name="tareas_jev_la_piden">diminta di obrolan</string>
+    <string name="tareas_jev_sin_fecha">tanpa tanggal</string>
+    <string name="tareas_jev_ya_paso">sudah lewat</string>
+    <string name="tareas_jev_hoy">hari ini</string>
+    <string name="tareas_jev_manana">besok</string>
+    <string name="tareas_jev_en_dias">dalam %1$d hari</string>
+    <string name="tareas_jev_por_la_lista">%1$s (dari judul daftar)</string>
+</resources>

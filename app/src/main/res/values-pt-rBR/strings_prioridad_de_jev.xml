@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- portugués de Brasil de values/strings_prioridad_de_jev.xml (2-nov-2026, main.ftl pt-BR del PC). -->
+<resources>
+    <string name="tareas_prioridad_urgente">Urgente</string>
+    <string name="tareas_prioridad_alta">Alta</string>
+    <string name="tareas_prioridad_normal">Normal</string>
+    <string name="tareas_prioridad_baja">Baixa</string>
+    <string name="tareas_jev_consecuencia_nada">sem consequências</string>
+    <string name="tareas_jev_consecuencia_leve">consequência leve</string>
+    <string name="tareas_jev_consecuencia_media">consequência média</string>
+    <string name="tareas_jev_consecuencia_grave">consequência grave</string>
+    <string name="tareas_jev_la_esperan">alguém está esperando</string>
+    <string name="tareas_jev_nadie_espera">ninguém está esperando</string>
+    <string name="tareas_jev_plazo_ajeno">prazo de outra pessoa</string>
+    <string name="tareas_jev_la_piden">pedida no chat</string>
+    <string name="tareas_jev_sin_fecha">sem data</string>
+    <string name="tareas_jev_ya_paso">já passou</string>
+    <string name="tareas_jev_hoy">hoje</string>
+    <string name="tareas_jev_manana">amanhã</string>
+    <string name="tareas_jev_en_dias">em %1$d dias</string>
+    <string name="tareas_jev_por_la_lista">%1$s (pelo título da lista)</string>
+</resources>
