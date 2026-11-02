@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">Tutup</string>
+    <string name="ip_figuras">Bentuk</string>
+    <string name="ip_figuras_cuenta">%1$d bentuk dan templat</string>
+    <string name="ip_todas">Semua</string>
+    <string name="ip_buscar_figuras">Cari bentuk</string>
+    <string name="ip_adjuntar">Lampirkan</string>
+    <string name="ip_pegar">Tempel</string>
+    <string name="ip_figuras_dia">Bentuk siang</string>
+    <string name="ip_figuras_noche">Bentuk malam</string>
+</resources>

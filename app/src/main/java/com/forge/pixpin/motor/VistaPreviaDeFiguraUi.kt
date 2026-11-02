@@ -44,7 +44,7 @@ fun VistaPreviaDeFiguraUi(
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
     val renderer = remember { Renderer(typefaces = DrawFonts.provider(context)) }
-    val escena = remember(figura) { Scene(elements = figura.elementos) }
+    val escena = remember(figura) { Scene(elements = FigurasDeSerie.paraVer(figura.elementos)) }
     val caja = remember(figura) { getCommonBounds(figura.elementos.filter { !it.isDeleted }) }
     // El encuadre: null hasta conocer el tamaño de la pantalla (lo pone [onSizeChanged]).
     var vista by remember(figura) { mutableStateOf<Viewport?>(null) }

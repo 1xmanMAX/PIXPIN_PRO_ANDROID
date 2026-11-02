@@ -1,6 +1,13 @@
 package com.forge.pixpin.motor
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.material.icons.outlined.LightMode
+import androidx.compose.material.icons.outlined.DarkMode
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -119,81 +126,115 @@ fun PanelDeFiguras(
     // **Por categorías, como el menú de figuras del PC** (25-oct-2026): «Mías» y «Básicas» primero,
     // luego las 35 de serie. Con 627 figuras la lista de antes, todo seguido, no servía.
     val grupos = remember(deSerieDelModo) { FigurasDeSerie.porCategoria(deSerieDelModo) }
-    val pestanas = remember(grupos, propias.isEmpty()) {
-        listOfNotNull("Mías".takeIf { propias.isNotEmpty() }, "Básicas") + grupos.map { it.first }
+    // **Como en el iPhone** (2-nov-2026, el usuario): «Todas» primero, por secciones con su cuenta.
+    val todasRotulo = stringResource(R.string.ip_todas)
+    val secciones: List<Pair<String, List<FiguraGuardada>>> = remember(propias, fabrica, grupos) {
+        listOfNotNull(("Mías" to propias).takeIf { propias.isNotEmpty() }, ("Básicas" to fabrica).takeIf { fabrica.isNotEmpty() }) + grupos
     }
-    var pestana by remember { mutableStateOf(if (propias.isNotEmpty()) "Mías" else "Básicas") }
+    val pestanas = remember(secciones, todasRotulo) { listOf(todasRotulo) + secciones.map { it.first } }
+    var pestana by remember { mutableStateOf<String?>(null) }
     var buscando by remember { mutableStateOf("") }
-    val visibles: List<FiguraGuardada> = remember(pestana, buscando, propias, fabrica, grupos) {
+    val cuantas = remember(secciones) { secciones.sumOf { it.second.size } }
+    val vista: List<Pair<String, List<FiguraGuardada>>> = remember(pestana, buscando, secciones, propias, fabrica, deSerieDelModo) {
         // Buscando, entre las del modo puesto: de noche, «diario» da la de noche y no las dos.
-        if (buscando.isNotBlank()) FigurasDeSerie.buscar(propias + fabrica + deSerieDelModo, buscando)
-        else when (pestana) {
-            "Mías" -> propias
-            "Básicas" -> fabrica
-            else -> grupos.firstOrNull { it.first == pestana }?.second.orEmpty()
-        }
+        if (buscando.isNotBlank()) listOf("" to FigurasDeSerie.buscar(propias + fabrica + deSerieDelModo, buscando))
+        else if (pestana == null) secciones
+        else secciones.filter { it.first == pestana }
     }
 
-    Surface(shape = RoundedCornerShape(16.dp), shadowElevation = 8.dp, modifier = modifier) {
-        Column(Modifier.widthIn(max = 560.dp).padding(12.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    stringResource(R.string.figuras_titulo),
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.weight(1f)
-                )
-                InterruptorDiaNoche(noche, ponerNoche)
-                IconButton(onClick = onCerrar) {
-                    Icon(Icons.Filled.Close, contentDescription = stringResource(R.string.cd_close))
+    Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp, modifier = modifier) {
+        Column(Modifier.widthIn(max = 560.dp)) {
+            // La cabecera del iPhone: «Cerrar» a la izquierda, el título con su cuenta en medio y el
+            // botón redondo de día y noche a la derecha.
+            Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    onClick = onCerrar, shape = RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+                ) {
+                    Text(stringResource(R.string.ip_cerrar), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp))
                 }
+                Column(Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(stringResource(R.string.ip_figuras), style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                    Text(stringResource(R.string.ip_figuras_cuenta, cuantas), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                BotonDiaNoche(noche) { ponerNoche(!noche) }
             }
-            Text(
-                if (onAdjuntar != null) "Toca una para verla en grande; mantenla pulsada para adjuntarla ya."
-                else stringResource(R.string.figuras_ayuda),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            OutlinedTextField(
-                value = buscando, onValueChange = { buscando = it }, singleLine = true,
-                placeholder = { Text("Buscar figura (cama, resistencia, semanal…)") },
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-            )
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             if (buscando.isBlank()) androidx.compose.foundation.lazy.LazyRow(
-                Modifier.fillMaxWidth().padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(pestanas.size) { i ->
                     val c = pestanas[i]
-                    androidx.compose.material3.FilterChip(
-                        selected = c == pestana, onClick = { pestana = c },
-                        label = { Text(c, maxLines = 1) }
-                    )
-                }
-            }
-            // Perezosa: solo se pintan las miniaturas que se ven (una plantilla de página tiene
-            // cientos de piezas).
-            androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
-                columns = androidx.compose.foundation.lazy.grid.GridCells.Adaptive(LADO_DE_LA_CASILLA - 10.dp),
-                modifier = Modifier.fillMaxWidth().heightIn(max = 420.dp).padding(top = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                if (visibles.isEmpty()) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                    val puesta = (i == 0 && pestana == null) || c == pestana
                     Text(
-                        if (buscando.isNotBlank()) "Ninguna se llama así" else stringResource(R.string.figuras_sin_mias),
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(8.dp)
-                    )
-                }
-                items(visibles.size, key = { visibles[it].id }) { i ->
-                    val f = visibles[i]
-                    Casilla(
-                        f, onInsertar = { viendo = it }, onQuitar = if (f.propia) onQuitar else null,
-                        onLargo = usar
+                        c, maxLines = 1, style = MaterialTheme.typography.bodyMedium,
+                        color = if (puesta) Color.White else MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.background(if (puesta) AZUL_IPHONE else MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(50))
+                            .clickable { pestana = if (i == 0) null else c }
+                            .padding(horizontal = 14.dp, vertical = 7.dp)
                     )
                 }
             }
+            Box(Modifier.fillMaxWidth().heightIn(max = 560.dp)) {
+                // Perezosa: solo se pintan las miniaturas que se ven (una plantilla de página tiene
+                // cientos de piezas).
+                androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
+                    columns = androidx.compose.foundation.lazy.grid.GridCells.Fixed(2),
+                    modifier = Modifier.fillMaxWidth(),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(start = 14.dp, end = 14.dp, bottom = 76.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (vista.all { it.second.isEmpty() }) item(span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                        Text(
+                            if (buscando.isNotBlank()) "Ninguna se llama así" else stringResource(R.string.figuras_sin_mias),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(8.dp)
+                        )
+                    }
+                    for ((titulo, lista) in vista) {
+                        if (lista.isEmpty()) continue
+                        if (titulo.isNotEmpty()) item(key = "t:$titulo", span = { androidx.compose.foundation.lazy.grid.GridItemSpan(maxLineSpan) }) {
+                            Row(Modifier.padding(top = 10.dp, bottom = 6.dp), verticalAlignment = Alignment.Bottom) {
+                                Text(titulo, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+                                Text("  ${lista.size}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                        items(lista.size, key = { "$titulo:${lista[it].id}" }) { i ->
+                            val f = lista[i]
+                            Casilla(
+                                f, onInsertar = { viendo = it }, onQuitar = if (f.propia) onQuitar else null,
+                                onLargo = usar
+                            )
+                        }
+                    }
+                }
+                // **El buscador, flotando abajo** como en el iPhone.
+                Surface(
+                    shape = RoundedCornerShape(50), shadowElevation = 6.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+                    modifier = Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+                ) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Filled.Search, null, tint = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
+                        Box(Modifier.weight(1f).padding(start = 10.dp)) {
+                            if (buscando.isEmpty()) Text(stringResource(R.string.ip_buscar_figuras), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyLarge)
+                            androidx.compose.foundation.text.BasicTextField(
+                                buscando, { buscando = it }, singleLine = true,
+                                textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
+                                cursorBrush = androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.primary),
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                        if (buscando.isNotEmpty()) Icon(Icons.Filled.Close, stringResource(R.string.cd_close), modifier = Modifier.size(18.dp).clickable { buscando = "" })
+                    }
+                }
+            }
+            Column(Modifier.padding(horizontal = 12.dp)) {
             viendo?.let { f ->
                 VistaPreviaDeFiguraUi(
                     figura = f,
@@ -275,6 +316,7 @@ fun PanelDeFiguras(
                         modifier = Modifier.padding(start = 6.dp)
                     )
                 }
+            }
             }
         }
     }
@@ -561,7 +603,7 @@ private fun Apartado(
     }
 }
 
-/** Una figura de la lista: su dibujo, su nombre y —si es mía— cómo quitarla. */
+/** Una figura de la lista: su tarjeta (como en el iPhone), su nombre y —si es mía— cómo quitarla. */
 @Composable
 private fun Casilla(
     figura: FiguraGuardada,
@@ -572,52 +614,50 @@ private fun Casilla(
     /** Mantener pulsada: el camino corto, usarla sin verla. */
     onLargo: ((FiguraGuardada) -> Unit)? = null
 ) {
-    Column(
-        modifier.padding(vertical = 4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
+    val deNoche = FigurasDeSerie.esDeNoche(figura)
+    val elementos = remember(figura) { FigurasDeSerie.paraVer(figura.elementos) }
+    Column(modifier.padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(contentAlignment = Alignment.TopEnd) {
             Box(
                 Modifier
-                    .size(LADO_DE_LA_CASILLA)
-                    // **Blanco fijo, y la de noche sobre su gris** (27-oct-2026): la miniatura no
-                    // sigue el tema de la aplicación ni el papel del lienzo. La hoja de noche trae
-                    // su propio papel; el gris de detrás es para que no quede un marco blanco.
-                    .background(if (FigurasDeSerie.esDeNoche(figura)) FONDO_DE_LA_DE_NOCHE else Color.White, RoundedCornerShape(10.dp))
+                    .fillMaxWidth()
+                    .aspectRatio(1.32f)
+                    // **Blanco fijo, y la de noche sobre su gris**: la miniatura no sigue el tema de la
+                    // aplicación ni el papel del lienzo. La hoja de noche trae su propio papel.
+                    .background(if (deNoche) FONDO_DE_LA_DE_NOCHE else Color.White, RoundedCornerShape(12.dp))
                     .border(
                         if (marcada) 3.dp else 1.dp,
-                        if (marcada) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outlineVariant,
-                        RoundedCornerShape(10.dp)
+                        if (marcada) AZUL_IPHONE else Color(0x22000000),
+                        RoundedCornerShape(12.dp)
                     )
                     .combinedClickable(
                         onClick = { onInsertar(figura) },
                         onLongClick = onLargo?.let { l -> { l(figura) } }
                     )
-                    .padding(6.dp)
+                    .padding(8.dp),
+                contentAlignment = Alignment.Center
             ) {
-                // La figura de verdad, encuadrada por el propio renderizador.
-                DrawPreview(
-                    scene = Scene(elements = figura.elementos),
-                    modifier = Modifier.size(LADO_DE_LA_CASILLA - 12.dp)
-                )
+                // La figura de verdad, encuadrada por el propio renderizador, como queda al ponerla.
+                DrawPreview(scene = Scene(elements = elementos), modifier = Modifier.fillMaxSize())
             }
             if (onQuitar != null) {
                 IconButton(onClick = { onQuitar(figura) }, modifier = Modifier.size(28.dp)) {
                     Icon(
                         Icons.Filled.Close,
                         contentDescription = stringResource(R.string.figuras_quitar),
+                        tint = if (deNoche) Color.White else Color(0xFF555555),
                         modifier = Modifier.size(14.dp)
                     )
                 }
             }
         }
         Text(
-            FigurasDeSerie.nombreCorto(figura.nombre),
-            style = MaterialTheme.typography.labelSmall,
+            FigurasDeSerie.nombreCorto(figura.nombre).removeSuffix(" (noche)"),
+            style = MaterialTheme.typography.bodySmall,
             maxLines = 2,
             overflow = TextOverflow.Ellipsis,
             textAlign = ComposeTextAlign.Center,
-            modifier = Modifier.padding(top = 2.dp)
+            modifier = Modifier.padding(top = 4.dp)
         )
     }
 }
@@ -637,39 +677,28 @@ private val FONDO_DE_LA_DE_NOCHE = Color(0xFF2A2D35)
 private const val PREFS_DEL_PANEL = "panel_de_figuras"
 private const val CLAVE_NOCHE = "noche"
 
+/** El azul de lo elegido, el del iPhone. */
+private val AZUL_IPHONE = Color(0xFF0A9AE0)
+
 /**
- * **El interruptor de día y noche** del panel: un sol y una luna, el puesto marcado. Dos botones y
- * no un `Switch` porque se lee de un vistazo cuál de los dos está, sin saber hacia qué lado es
- * «encendido».
+ * **El botón redondo de día y noche**, como en el iPhone (2-nov-2026, el usuario): un solo círculo
+ * con el sol (de día) o la luna (de noche); tocarlo cambia y el icono gira.
  */
 @Composable
-private fun InterruptorDiaNoche(noche: Boolean, onCambio: (Boolean) -> Unit) {
-    Row(
-        Modifier
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
-            .padding(2.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun BotonDiaNoche(noche: Boolean, onCambio: () -> Unit) {
+    val giro by androidx.compose.animation.core.animateFloatAsState(if (noche) 180f else 0f, label = "giro")
+    val dice = stringResource(if (noche) R.string.ip_figuras_noche else R.string.ip_figuras_dia)
+    Surface(
+        onClick = onCambio, shape = androidx.compose.foundation.shape.CircleShape,
+        color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp,
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)),
+        modifier = Modifier.size(44.dp).semantics { contentDescription = dice }
     ) {
-        for ((esNoche, icono, dice) in listOf(Triple(false, "☀", "Figuras de día"), Triple(true, "☾", "Figuras de noche"))) {
-            val puesto = esNoche == noche
-            Box(
-                Modifier
-                    .size(32.dp)
-                    .background(
-                        if (puesto) MaterialTheme.colorScheme.secondaryContainer else Color.Transparent,
-                        RoundedCornerShape(50)
-                    )
-                    .clickable(onClickLabel = dice) { onCambio(esNoche) }
-                    .semantics { contentDescription = dice; selected = puesto },
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    icono,
-                    style = MaterialTheme.typography.titleMedium,
-                    color = if (puesto) MaterialTheme.colorScheme.onSecondaryContainer
-                    else MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
+        Box(contentAlignment = Alignment.Center) {
+            Icon(
+                if (noche) Icons.Outlined.DarkMode else Icons.Outlined.LightMode, null,
+                modifier = Modifier.size(22.dp).graphicsLayer { rotationZ = giro }
+            )
         }
     }
 }

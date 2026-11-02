@@ -2629,7 +2629,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         conProyecto = delProyecto != null,
                         asistente = chatDe != null && chatDe == chatDelAsistente
                     ),
-                    hacer
+                    hacer,
+                    alCerrar = { eligiendoQue = false }
                 )
             }
         }
@@ -6272,50 +6273,74 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
      * de todos los días y «Más». Ver [OpcionesDeAdjuntar].
      */
     @Composable
-    private fun HojaDelClip(hoja: OpcionesDeAdjuntar.Hoja, alElegir: (OpcionesDeAdjuntar.Adjunto) -> Unit) {
-        var buscado by remember { mutableStateOf("") }
-        val vista = remember(hoja, buscado) { OpcionesDeAdjuntar.filtrar(hoja, buscado) }
+    private fun HojaDelClip(hoja: OpcionesDeAdjuntar.Hoja, alElegir: (OpcionesDeAdjuntar.Adjunto) -> Unit, alCerrar: () -> Unit = {}) {
+        // **Como la «Adjuntar» del iPhone** (2-nov-2026, el usuario): «Cerrar» y el título arriba, la
+        // cuadrícula de lo de todos los días con sus colores, «Más» en dos columnas de pastillas y,
+        // abajo, «Pegar lo copiado».
+        val linea = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         Column(
             Modifier.fillMaxWidth().verticalScroll(androidx.compose.foundation.rememberScrollState())
-                .padding(horizontal = 16.dp).padding(bottom = 28.dp)
+                .padding(horizontal = 18.dp).padding(bottom = 28.dp)
         ) {
-            androidx.compose.material3.OutlinedTextField(
-                value = buscado, onValueChange = { buscado = it.take(60) }, singleLine = true,
-                placeholder = { Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_buscar)) },
-                leadingIcon = { Icon(Icons.Filled.Search, null) },
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(14.dp))
-            CuadriculaDelClip(vista.deSiempre, grande = true, alElegir)
-            if (vista.mas.isNotEmpty()) {
+            Box(Modifier.fillMaxWidth().padding(bottom = 14.dp), contentAlignment = Alignment.Center) {
+                androidx.compose.material3.Surface(
+                    onClick = alCerrar, shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                    color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, linea),
+                    modifier = Modifier.align(Alignment.CenterStart)
+                ) {
+                    Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.ip_cerrar), fontSize = 16.sp, modifier = Modifier.padding(horizontal = 18.dp, vertical = 10.dp))
+                }
+                Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.ip_adjuntar), fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+            }
+            CuadriculaDelClip(hoja.deSiempre, grande = true, alElegir)
+            if (hoja.mas.isNotEmpty()) {
+                androidx.compose.material3.HorizontalDivider(color = linea, modifier = Modifier.padding(vertical = 10.dp))
                 Text(
-                    androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_mas), fontSize = 12.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_mas), fontSize = 13.sp,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = if (vista.deSiempre.isEmpty()) 0.dp else 8.dp, bottom = 8.dp, start = 4.dp)
+                    modifier = Modifier.padding(bottom = 10.dp)
                 )
-                CuadriculaDelClip(vista.mas, grande = false, alElegir)
+                for (fila in hoja.mas.chunked(2)) {
+                    Row(Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                        for (a in fila) Box(Modifier.weight(1f)) {
+                            Row(
+                                Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant)
+                                    .clickable { alElegir(a) }
+                                    .padding(horizontal = 14.dp, vertical = 9.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(iconoDe(a), null, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(androidx.compose.ui.res.stringResource(a.texto), fontSize = 15.sp, maxLines = 1)
+                            }
+                        }
+                        if (fila.size == 1) Spacer(Modifier.weight(1f))
+                    }
+                }
             }
-            // **Pegar lo copiado**, abajo y aparte (como la «Adjuntar» del PC); sin nada copiado, apagado.
+            // **Pegar lo copiado**, abajo: el rótulo y la pastilla «Pegar» (apagada sin nada copiado).
+            androidx.compose.material3.HorizontalDivider(color = linea, modifier = Modifier.padding(vertical = 10.dp))
             val hayCopiado = remember { (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager).hasPrimaryClip() }
-            if (buscado.isBlank() || OpcionesDeAdjuntar.Adjunto.PEGAR.buscable.contains(buscado.trim().lowercase())) androidx.compose.material3.FilledTonalButton(
-                onClick = { alElegir(OpcionesDeAdjuntar.Adjunto.PEGAR) },
-                enabled = hayCopiado,
-                modifier = Modifier.fillMaxWidth().padding(top = 6.dp)
-            ) {
-                Icon(Icons.Filled.ContentPaste, null, Modifier.size(18.dp))
-                Spacer(Modifier.width(8.dp))
-                Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_pegar))
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_pegar), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
+                Row(
+                    Modifier.clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
+                        .background(if (hayCopiado) Color(0xFF0A9AE0) else Color(0x550A9AE0))
+                        .clickable(enabled = hayCopiado) { alElegir(OpcionesDeAdjuntar.Adjunto.PEGAR) }
+                        .padding(horizontal = 18.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(Icons.Filled.ContentPaste, null, tint = Color.White, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.ip_pegar), color = Color.White, fontSize = 16.sp)
+                }
             }
-            if (vista.deSiempre.isEmpty() && vista.mas.isEmpty()) Text(
-                androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.adjuntar_nada), color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                modifier = Modifier.fillMaxWidth().padding(vertical = 24.dp)
-            )
         }
     }
 
-    /** Cuatro por fila: el círculo de su color (los de todos los días) o del tono suave (los «Más»). */
+    /** Cuatro por fila: el cuadrado redondeado de su color, como en el iPhone. */
     @Composable
     private fun CuadriculaDelClip(cuales: List<OpcionesDeAdjuntar.Adjunto>, grande: Boolean, alElegir: (OpcionesDeAdjuntar.Adjunto) -> Unit) {
         for (fila in cuales.chunked(4)) {
@@ -6338,10 +6363,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         ) {
             Box(
                 Modifier
-                    .size(if (grande) 56.dp else 44.dp)
+                    .size(if (grande) 60.dp else 44.dp)
                     .background(
                         if (grande) Color(a.color) else MaterialTheme.colorScheme.secondaryContainer,
-                        androidx.compose.foundation.shape.CircleShape
+                        androidx.compose.foundation.shape.RoundedCornerShape(if (grande) 16.dp else 12.dp)
                     ),
                 contentAlignment = Alignment.Center
             ) {

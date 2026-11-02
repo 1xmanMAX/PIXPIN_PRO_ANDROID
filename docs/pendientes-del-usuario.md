@@ -242,3 +242,12 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 79. La nube de los chats compartidos (deltas: solo sube lo que cambia) con «En línea / Sin
       conexión» en los visores. Ver `docs/compatibilidad-pc-2-nov.md`.
 
+## Figuras y Adjuntar como en el iPhone (pedido del 2-nov, publicado en v0.158.0)
+
+- [x] 80. Las figuras de día se veían negras en el panel (la hoja blanca se «adaptaba» a negro): ahora se
+      ven como quedan al ponerlas.
+- [x] 81. El panel de Figuras como el del iPhone: «Cerrar», el título con su cuenta, el botón redondo de
+      día y noche (gira al cambiar), «Todas» con secciones y su cuenta, tarjetas y el buscador abajo.
+- [x] 82. La hoja «Adjuntar» como la del iPhone: «Cerrar» y el título, iconos cuadrados redondeados,
+      «Más» en dos columnas de pastillas y «Pegar lo copiado» con su botón «Pegar».
+

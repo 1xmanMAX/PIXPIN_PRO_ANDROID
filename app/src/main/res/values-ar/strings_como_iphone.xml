@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">إغلاق</string>
+    <string name="ip_figuras">الأشكال</string>
+    <string name="ip_figuras_cuenta">%1$d شكلًا وقالبًا</string>
+    <string name="ip_todas">الكل</string>
+    <string name="ip_buscar_figuras">ابحث في الأشكال</string>
+    <string name="ip_adjuntar">إرفاق</string>
+    <string name="ip_pegar">لصق</string>
+    <string name="ip_figuras_dia">أشكال النهار</string>
+    <string name="ip_figuras_noche">أشكال الليل</string>
+</resources>
