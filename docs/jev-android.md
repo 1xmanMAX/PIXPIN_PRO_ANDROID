@@ -44,6 +44,15 @@ interruptor por función (encendidas de fábrica; sin clave no hacen nada):
    antes que por fecha. Se pregunta en segundo plano (60 por tanda, cuatro a la vez) y Tareas relee al
    acabar. **Se calcula en cada aparato, solo en memoria: ni se guarda ni viaja.** Tras un fallo, esa
    tarea no se vuelve a preguntar en 10 minutos.
+
+   **Desde el 2-nov-2026** (`4fe2730b`, `e775e9f4` y `c2ee47ba` del PC): también sale **«✦ Normal»**
+   (gris, casi sin fondo: sin ella, una tarea juzgada parecía sin juzgar) y **un toque o una pulsación
+   larga en la chapita dice el porqué** («Jev: consecuencia media · nadie la espera · sin fecha»; «hoy
+   (por el título de la lista)»). Una tarea sin `⏰` cuenta con **la fecha del título de su lista**
+   («HOY SÁBADO», «Para mañana», «el lunes», «15/11»), resuelta contra el día en que se creó la lista
+   (una lista «hoy» de ayer ya pasó) y, si dice varias, la más cercana. **Una consecuencia grave**
+   (valor esperado ≥ 2.5) basta para «alta» aunque no tenga fecha. **Las listas de temas de una
+   reunión** (las que una nota de voz enlaza en `temasLista`) no se preguntan.
 4. **Elegir el modelo según el pedido**: en el chat «Asistente», lo que no es una orden del camino
    rápido va a **Claude Sonnet** (`claude-sonnet-5-5`) o **DeepSeek V4 Pro** (`deepseek-v4-pro`) si Jev
    lo juzga difícil, y si no al de siempre (Haiku, DeepSeek Flash), con la misma clave y el mismo

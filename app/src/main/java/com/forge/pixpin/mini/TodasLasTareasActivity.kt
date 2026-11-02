@@ -936,7 +936,10 @@ class TodasLasTareasActivity : ComponentActivity() {
                         textDecoration = if (f.hecha) TextDecoration.LineThrough else null
                     )
                 }
-                FilaDeChapitas(marcas.urgencia, marcas.etiquetas, Cristal.tinta, apagada = f.hecha, prioridad = f.prioridad.takeIf { !f.hecha })
+                FilaDeChapitas(
+                    marcas.urgencia, marcas.etiquetas, Cristal.tinta, apagada = f.hecha,
+                    prioridad = f.prioridad.takeIf { !f.hecha }, motivo = f.motivo.takeIf { !f.hecha }
+                )
                 marcas.nota?.let {
                     Text(
                         "${TareaInteligente.NOTA} $it", color = Cristal.tinta.copy(alpha = 0.6f),

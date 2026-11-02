@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- ruso de values/strings_prioridad_de_jev.xml (2-nov-2026, main.ftl ru-RU del PC). -->
+<resources>
+    <string name="tareas_prioridad_urgente">Срочный</string>
+    <string name="tareas_prioridad_alta">Высокий</string>
+    <string name="tareas_prioridad_normal">Обычный</string>
+    <string name="tareas_prioridad_baja">Низкий</string>
+    <string name="tareas_jev_consecuencia_nada">без последствий</string>
+    <string name="tareas_jev_consecuencia_leve">лёгкие последствия</string>
+    <string name="tareas_jev_consecuencia_media">средние последствия</string>
+    <string name="tareas_jev_consecuencia_grave">серьёзные последствия</string>
+    <string name="tareas_jev_la_esperan">кто-то ждёт</string>
+    <string name="tareas_jev_nadie_espera">никто не ждёт</string>
+    <string name="tareas_jev_plazo_ajeno">срок назначен другими</string>
+    <string name="tareas_jev_la_piden">просят в чате</string>
+    <string name="tareas_jev_sin_fecha">без даты</string>
+    <string name="tareas_jev_ya_paso">просрочено</string>
+    <string name="tareas_jev_hoy">сегодня</string>
+    <string name="tareas_jev_manana">завтра</string>
+    <string name="tareas_jev_en_dias">через %1$d дн.</string>
+    <string name="tareas_jev_por_la_lista">%1$s (по названию списка)</string>
+</resources>

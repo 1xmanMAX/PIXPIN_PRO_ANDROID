@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- coreano de values/strings_prioridad_de_jev.xml (2-nov-2026, main.ftl ko-KR del PC). -->
+<resources>
+    <string name="tareas_prioridad_urgente">긴급</string>
+    <string name="tareas_prioridad_alta">높음</string>
+    <string name="tareas_prioridad_normal">보통</string>
+    <string name="tareas_prioridad_baja">낮음</string>
+    <string name="tareas_jev_consecuencia_nada">영향 없음</string>
+    <string name="tareas_jev_consecuencia_leve">영향 적음</string>
+    <string name="tareas_jev_consecuencia_media">영향 보통</string>
+    <string name="tareas_jev_consecuencia_grave">영향 큼</string>
+    <string name="tareas_jev_la_esperan">기다리는 사람이 있음</string>
+    <string name="tareas_jev_nadie_espera">기다리는 사람 없음</string>
+    <string name="tareas_jev_plazo_ajeno">다른 사람이 정한 기한</string>
+    <string name="tareas_jev_la_piden">채팅에서 요청함</string>
+    <string name="tareas_jev_sin_fecha">날짜 없음</string>
+    <string name="tareas_jev_ya_paso">기한 지남</string>
+    <string name="tareas_jev_hoy">오늘</string>
+    <string name="tareas_jev_manana">내일</string>
+    <string name="tareas_jev_en_dias">%1$d일 후</string>
+    <string name="tareas_jev_por_la_lista">%1$s (목록 제목 기준)</string>
+</resources>

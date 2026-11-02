@@ -14,12 +14,16 @@ import java.util.concurrent.atomic.AtomicBoolean
  * **La prioridad de cada tarea según su contexto, en Tareas** (28-oct-2026, `apps/pixpin/src/jev/urgencia.rs`
  * del PC, `fa4ca12b`): por cada tarea pendiente, Jev juzga lo que pasa si se hace tarde, si otro la
  * espera, si el plazo lo puso otro y si en su chat la piden ya ([Urgencia]); cuánto falta para su hora
- * (`⏰`) lo cuenta el código, y la tabla de allí da urgente, alta, normal o baja. Lo que el usuario
- * marcó (⏫, 🔼) manda.
+ * (`⏰` o, si no tiene, la fecha del título de su lista: «HOY SÁBADO»; 2-nov-2026, `e775e9f4` del PC) lo
+ * cuenta el código, y la tabla de allí da urgente, alta, normal o baja. Lo que el usuario marcó (⏫, 🔼)
+ * manda.
+ *
+ * **Las listas de temas de una reunión** («Temas · Clase…», las que una nota de voz enlaza en
+ * `temasLista`) no se preguntan: son puntos de una agenda, no tareas con plazo.
  *
  * Va en segundo plano: al leer las listas ([aplicar]) se pone lo ya sabido y se pregunta por lo que
  * falta en un hilo (hasta [POR_TANDA] tareas, cuatro a la vez); al acabar sube [novedades] y Tareas
- * relee. **Lo sabido se queda en memoria mientras la app está abierta: nada va al disco ni viaja** (las
+ * relee (lo que no cupo va en la siguiente tanda, al releer). **Lo sabido se queda en memoria mientras la app está abierta: nada va al disco ni viaja** (las
  * prioridades se calculan en cada aparato). Tras un fallo, esa tarea no se vuelve a preguntar en 10 min.
  *
  * Sin clave o con la función apagada, `prioridad` se queda en null y Tareas ordena y enseña todo como
@@ -30,6 +34,9 @@ object UrgenciaEnLaApp {
     private sealed interface Sabido {
         class Dicho(val s: Urgencia.Senales) : Sabido
         class Fallo(val cuando: Long) : Sabido
+
+        /** Un tema de una reunión: sin prioridad. */
+        object Tema : Sabido
     }
 
     private val sabido = HashMap<String, Sabido>()
@@ -75,6 +82,26 @@ object UrgenciaEnLaApp {
     fun diasHasta(f: TareaInteligente.Frase, hoy: Long): Long? = f.hora?.let { it.dia - hoy }
 
     /**
+     * Los días que faltan para la fecha del título de la lista (dicha el día en que se creó, en la hora
+     * local), contados desde [hoy] (día local, como [Momento.dia]). 2-nov-2026, `dias_de_la_lista` del PC.
+     */
+    fun diasDeLaLista(l: TodasLasTareas.Lista, hoy: Long): Long? {
+        val creada = Math.floorDiv(l.cuando + java.util.TimeZone.getDefault().getOffset(l.cuando), 86_400_000L)
+        return Urgencia.diasDeLaLista(l.titulo, FechasDichas.Fecha.deDias(creada), FechasDichas.Fecha.deDias(hoy))
+    }
+
+    /**
+     * **La prioridad y su porqué** con lo que dijo Jev: los días, de su hora o, si no tiene, de la lista
+     * ([diasLista]). El porqué solo si no la marcó el usuario (entonces su chapita es la suya).
+     */
+    fun decidir(m: TareaInteligente.Frase, s: Urgencia.Senales, hoy: Long, diasLista: Long?): Pair<Urgencia.Prioridad, Urgencia.Motivo?> {
+        val marca = marcaDe(m.urgencia)
+        val dias = diasHasta(m, hoy) ?: diasLista
+        val motivo = if (marca == Urgencia.Marca.NINGUNA) Urgencia.Motivo.de(s, dias, m.hora == null) else null
+        return Urgencia.decidir(marca, s, dias) to motivo
+    }
+
+    /**
      * **Pone la prioridad de cada tarea pendiente** con lo ya sabido, y lanza en su hilo las preguntas
      * de lo que falta. Sin Jev, las listas tal cual. Lee el disco la primera vez: fuera del hilo principal.
      */
@@ -83,7 +110,10 @@ object UrgenciaEnLaApp {
         val hoy = Momento.ahora().dia
         val ahora = System.currentTimeMillis()
         val faltan = LinkedHashMap<String, Pair<String?, Urgencia.Contexto>>()
+        // La lista de cada una, (proyecto, mensaje): para no preguntar por los temas de una reunión.
+        val lista = HashMap<String, Pair<String?, String>>()
         val salida = listas.map { l ->
+            val diasLista = diasDeLaLista(l, hoy)
             l.copy(filas = l.filas.map { f ->
                 if (f.hecha) return@map f
                 val m = f.marcas
@@ -91,17 +121,29 @@ object UrgenciaEnLaApp {
                 if (texto.isEmpty()) return@map f
                 val clave = claveDe(l, texto)
                 when (val s = synchronized(sabido) { sabido[clave] }) {
-                    is Sabido.Dicho -> f.copy(prioridad = Urgencia.decidir(marcaDe(m.urgencia), s.s, diasHasta(m, hoy)))
+                    is Sabido.Dicho -> {
+                        val (p, motivo) = decidir(m, s.s, hoy, diasLista)
+                        f.copy(prioridad = p, motivo = motivo)
+                    }
+                    // Un tema de una reunión: lo de siempre.
+                    Sabido.Tema -> f
                     is Sabido.Fallo -> {
-                        if (ahora - s.cuando >= TRAS_UN_FALLO_MS) faltan[clave] = l.proyecto to Urgencia.Contexto(texto, l.titulo, l.chat)
+                        if (ahora - s.cuando >= TRAS_UN_FALLO_MS) {
+                            faltan[clave] = l.proyecto to Urgencia.Contexto(texto, l.titulo, l.chat)
+                            lista[clave] = l.proyecto to l.codigo
+                        }
                         f
                     }
-                    null -> { faltan[clave] = l.proyecto to Urgencia.Contexto(texto, l.titulo, l.chat); f }
+                    null -> {
+                        faltan[clave] = l.proyecto to Urgencia.Contexto(texto, l.titulo, l.chat)
+                        lista[clave] = l.proyecto to l.codigo
+                        f
+                    }
                 }
             })
         }
         if (faltan.isNotEmpty() && preguntando.compareAndSet(false, true)) {
-            val tanda = faltan.entries.take(POR_TANDA).map { it.key to it.value }
+            val tanda = faltan.entries.take(POR_TANDA).map { Falta(it.key, lista[it.key], it.value.first, it.value.second) }
             val app = context.applicationContext
             Thread({
                 try { preguntar(app, cliente, tanda) } finally {
@@ -113,20 +155,28 @@ object UrgenciaEnLaApp {
         return salida
     }
 
-    /** Lo de [aplicar], en el hilo: los mensajes recientes de cada chat y las preguntas. */
-    private fun preguntar(app: Context, cliente: Cliente, tanda: List<Pair<String, Pair<String?, Urgencia.Contexto>>>) {
+    /** Una tarea por preguntar: su clave, su lista (proyecto y mensaje), su chat y lo que se manda. */
+    private class Falta(val clave: String, val lista: Pair<String?, String>?, val proyecto: String?, val contexto: Urgencia.Contexto)
+
+    /**
+     * Lo de [aplicar], en el hilo: los mensajes recientes de cada chat y las preguntas. Las tareas de una
+     * lista de temas de una reunión no se preguntan: quedan sabidas como tema.
+     */
+    private fun preguntar(app: Context, cliente: Cliente, todas: List<Falta>) {
         val mensajes = runCatching { MensajesStore(app).leer() }.getOrDefault(emptyList())
+        val temas = listasDeTemas(mensajes)
+        val (deTemas, tanda) = todas.partition { it.lista != null && it.lista in temas }
+        if (deTemas.isNotEmpty()) synchronized(sabido) { deTemas.forEach { sabido[it.clave] = Sabido.Tema } }
         val porChat = HashMap<String?, List<String>>()
-        val contextos = tanda.map { (_, pc) ->
-            val (proyecto, c) = pc
-            c.copy(recientes = porChat.getOrPut(proyecto) { recientesDelChat(mensajes, proyecto) })
+        val contextos = tanda.map { f ->
+            f.contexto.copy(recientes = porChat.getOrPut(f.proyecto) { recientesDelChat(mensajes, f.proyecto) })
         }
         val empezo = System.currentTimeMillis()
         val respuestas = Urgencia.preguntarVarias(cliente, contextos, A_LA_VEZ)
         var fallos = 0
         synchronized(sabido) {
             for ((i, r) in respuestas.withIndex()) {
-                val clave = tanda[i].first
+                val clave = tanda[i].clave
                 r.fold({ sabido[clave] = Sabido.Dicho(it) }, { e ->
                     if (fallos++ == 0) runCatching { android.util.Log.w("PixPinJev", "sin prioridad para una tarea: ${e.message}") }
                     sabido[clave] = Sabido.Fallo(System.currentTimeMillis())
@@ -135,6 +185,17 @@ object UrgenciaEnLaApp {
         }
         runCatching { android.util.Log.i("PixPinJev", "prioridades: ${contextos.size} tareas, $fallos fallos, ${System.currentTimeMillis() - empezo} ms") }
     }
+
+    /**
+     * **Las listas de temas de las reuniones**, (proyecto de aquí, id del mensaje): las que enlaza en
+     * `temasLista` una nota de voz (2-nov-2026, `leer_chat` del PC).
+     */
+    fun listasDeTemas(mensajes: List<Mensaje>): Set<Pair<String?, String>> =
+        mensajes.mapNotNullTo(HashSet()) { m ->
+            com.forge.pixpin.guardados.TemasDeLaReunion.listaDe(m.temasLista)?.let { (p, id) ->
+                com.forge.pixpin.guardados.TemasDeLaReunion.proyectoDeAqui(p) to id
+            }
+        }
 
     /**
      * Los últimos mensajes escritos del chat (notas con texto, no las listas de tareas ni archivos), del

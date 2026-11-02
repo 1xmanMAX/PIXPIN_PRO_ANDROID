@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- árabe de values/strings_prioridad_de_jev.xml (2-nov-2026, main.ftl ar-SA del PC). -->
+<resources>
+    <string name="tareas_prioridad_urgente">عاجلة</string>
+    <string name="tareas_prioridad_alta">عالية</string>
+    <string name="tareas_prioridad_normal">عادية</string>
+    <string name="tareas_prioridad_baja">منخفضة</string>
+    <string name="tareas_jev_consecuencia_nada">بلا عواقب</string>
+    <string name="tareas_jev_consecuencia_leve">عاقبة بسيطة</string>
+    <string name="tareas_jev_consecuencia_media">عاقبة متوسطة</string>
+    <string name="tareas_jev_consecuencia_grave">عاقبة خطيرة</string>
+    <string name="tareas_jev_la_esperan">شخص ما ينتظرها</string>
+    <string name="tareas_jev_nadie_espera">لا أحد ينتظرها</string>
+    <string name="tareas_jev_plazo_ajeno">موعد حدده غيرك</string>
+    <string name="tareas_jev_la_piden">مطلوبة في الدردشة</string>
+    <string name="tareas_jev_sin_fecha">بلا تاريخ</string>
+    <string name="tareas_jev_ya_paso">فات موعدها</string>
+    <string name="tareas_jev_hoy">اليوم</string>
+    <string name="tareas_jev_manana">غدًا</string>
+    <string name="tareas_jev_en_dias">خلال %1$d أيام</string>
+    <string name="tareas_jev_por_la_lista">%1$s (من عنوان القائمة)</string>
+</resources>

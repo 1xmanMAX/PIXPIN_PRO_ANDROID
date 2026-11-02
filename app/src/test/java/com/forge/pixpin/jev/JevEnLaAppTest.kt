@@ -5,6 +5,7 @@ import com.forge.pixpin.anki.Tarjetas
 import com.forge.pixpin.guardados.Clase
 import com.forge.pixpin.guardados.Importantes
 import com.forge.pixpin.guardados.Mensaje
+import com.forge.pixpin.guardados.TemasDeLaReunion
 import com.forge.pixpin.ia.MensajeIa
 import com.forge.pixpin.ia.MotorGuionado
 import com.forge.pixpin.ia.Nube
@@ -146,10 +147,75 @@ class JevEnLaAppTest {
         assertEquals("✦ Alta" to ChapitasDeTarea.AMBAR, ChapitasDeTarea.deJev(TareaInteligente.Urgencia.NORMAL, Urgencia.Prioridad.ALTA))
         assertEquals("✦ Urgente" to ChapitasDeTarea.ROJO, ChapitasDeTarea.deJev(TareaInteligente.Urgencia.NORMAL, Urgencia.Prioridad.URGENTE))
         assertEquals("✦ Baja" to ChapitasDeTarea.GRIS, ChapitasDeTarea.deJev(TareaInteligente.Urgencia.NORMAL, Urgencia.Prioridad.BAJA))
-        // Marcada a mano: solo su marca. Normal, o sin Jev: como siempre.
+        // Normal también se enseña (juzgada no es lo mismo que sin juzgar; 2-nov-2026, `e775e9f4` del PC),
+        // en gris y con la mitad de fondo; y la baja es baja.
+        assertEquals("✦ Normal" to ChapitasDeTarea.GRIS, ChapitasDeTarea.deJev(TareaInteligente.Urgencia.NORMAL, Urgencia.Prioridad.NORMAL))
+        assertEquals(ChapitasDeTarea.fondoDeJev(Urgencia.Prioridad.BAJA) / 2, ChapitasDeTarea.fondoDeJev(Urgencia.Prioridad.NORMAL), 1e-6f)
+        // Marcada a mano: solo su marca. Sin Jev: como siempre.
         assertNull(ChapitasDeTarea.deJev(TareaInteligente.Urgencia.URGENTE, Urgencia.Prioridad.URGENTE))
-        assertNull(ChapitasDeTarea.deJev(TareaInteligente.Urgencia.NORMAL, Urgencia.Prioridad.NORMAL))
+        assertNull(ChapitasDeTarea.deJev(TareaInteligente.Urgencia.URGENTE, Urgencia.Prioridad.NORMAL))
         assertNull(ChapitasDeTarea.deJev(TareaInteligente.Urgencia.NORMAL, null))
+    }
+
+    /** Los textos de `strings_prioridad_de_jev.xml` de una carpeta, como los daría Android. */
+    private fun textos(carpeta: String): (ChapitasDeTarea.Texto, Any?) -> String {
+        val doc = javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
+            .parse(java.io.File("src/main/res/$carpeta/strings_prioridad_de_jev.xml"))
+        val nodos = doc.getElementsByTagName("string")
+        val m = (0 until nodos.length).associate { i ->
+            val e = nodos.item(i) as org.w3c.dom.Element
+            e.getAttribute("name") to e.textContent.replace("\\'", "'")
+        }
+        return { t, a -> m.getValue(t.clave).let { if (a == null) it else String.format(it, a) } }
+    }
+
+    @Test
+    fun `la chapita de jev dice su rotulo y su porque`() {
+        val es = textos("values")
+        // Las cuatro de Jev, cada una la suya.
+        assertEquals("Normal", es(ChapitasDeTarea.textoDe(Urgencia.Prioridad.NORMAL), null))
+        assertEquals("Baja", es(ChapitasDeTarea.textoDe(Urgencia.Prioridad.BAJA), null))
+        assertEquals("Alta", es(ChapitasDeTarea.textoDe(Urgencia.Prioridad.ALTA), null))
+        val m = Urgencia.Motivo(consecuencia = 2, espera = false, plazoAjeno = false, pidenYa = false, dias = null, deLaLista = false)
+        assertEquals("Jev: consecuencia media · nadie la espera · sin fecha", ChapitasDeTarea.pistaDeJev(m, es))
+        val m2 = m.copy(consecuencia = 3, espera = true, plazoAjeno = true, dias = 0, deLaLista = true)
+        assertEquals(
+            "Jev: consecuencia grave · alguien la espera · plazo de otro · hoy (por el título de la lista)",
+            ChapitasDeTarea.pistaDeJev(m2, es)
+        )
+        assertEquals(
+            "Jev: sin consecuencias · nadie la espera · la piden en el chat · en 5 días",
+            ChapitasDeTarea.pistaDeJev(m.copy(consecuencia = 0, pidenYa = true, dias = 5), es)
+        )
+        assertEquals("Jev: consecuencia leve · nadie la espera · ya pasó", ChapitasDeTarea.pistaDeJev(m.copy(consecuencia = 1, dias = -2), es))
+        assertEquals("Jev: moderate consequence · nobody is waiting · tomorrow (from the list title)", ChapitasDeTarea.pistaDeJev(m.copy(dias = 1, deLaLista = true), textos("values-en")))
+        // Cada texto tiene su nombre en el XML.
+        ChapitasDeTarea.Texto.entries.forEach { es(it, 1) }
+    }
+
+    @Test
+    fun `la prioridad y su porque con la fecha de la tarea o la de la lista`() {
+        val s = Urgencia.Senales(Escala.de(listOf(0.0, 0.05, 0.15, 0.8)), 0.1, 0.1, null)
+        val hoy = FechasDichas.Fecha.nueva(2026, 10, 31)!!.dias()
+        // Sin hora: la de la lista.
+        val sin = TareaInteligente.marcas("revisar el aula virtual")
+        val (p, motivo) = UrgenciaEnLaApp.decidir(sin, s, hoy, 0)
+        assertEquals(Urgencia.Prioridad.ALTA, p)
+        assertEquals(Urgencia.Motivo(3, false, false, false, 0, true), motivo)
+        // Marcada a mano: su marca y sin porqué (su chapita es la suya).
+        val (p2, m2) = UrgenciaEnLaApp.decidir(TareaInteligente.marcas("pagar ⏫"), s, hoy, 0)
+        assertEquals(Urgencia.Prioridad.URGENTE, p2)
+        assertNull(m2)
+    }
+
+    @Test
+    fun `las listas de temas de una reunion no se preguntan`() {
+        val ms = listOf(
+            Mensaje(id = "v1", cuando = 1, clase = Clase.VOZ, proyecto = "p", temasLista = TemasDeLaReunion.listaEnJson("p", "l1")),
+            Mensaje(id = "v2", cuando = 2, clase = Clase.VOZ, temasLista = TemasDeLaReunion.listaEnJson("general", "l2")),
+            Mensaje(id = "v3", cuando = 3, clase = Clase.VOZ, proyecto = "p")
+        )
+        assertEquals(setOf<Pair<String?, String>>("p" to "l1", null to "l2"), UrgenciaEnLaApp.listasDeTemas(ms))
     }
 
     // --- El modelo del asistente --------------------------------------------------------------

@@ -1,7 +1,6 @@
 package com.forge.pixpin.ui
 
 import android.content.Context
-import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -159,7 +158,7 @@ object ExportarDocumentoAnotado {
         val columna = fijada?.columna
         var tamano = p.getInt("tamano", 100); var grosor = p.getInt("grosor", 1); var tipo = p.getInt("tipo", 0)
         if (fijada != null) { tamano = fijada.tamano; grosor = fijada.grosor; tipo = fijada.tipo }
-        val deNoche = (c.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
+        val deNoche = com.forge.pixpin.ui.theme.deNocheEnLaApp(c)
 
         // La página: la que el visor tiene delante, o convertida aquí igual que la convierte el chat.
         val titulo = nombre.substringBeforeLast('.').ifBlank { "documento" }

@@ -62,7 +62,12 @@ object TodasLasTareas {
          * null: sin Jev, o aún no se sabe; entonces todo va como siempre. Se calcula en cada aparato y
          * no se guarda ni viaja.
          */
-        val prioridad: com.forge.pixpin.jev.Urgencia.Prioridad? = null
+        val prioridad: com.forge.pixpin.jev.Urgencia.Prioridad? = null,
+        /**
+         * Y su porqué, para la pista de la chapita (2-nov-2026, `Fila::motivo` del PC; null si la marcó
+         * el usuario o no se sabe). Tampoco se guarda ni viaja.
+         */
+        val motivo: com.forge.pixpin.jev.Urgencia.Motivo? = null
     )
 
     /** Una lista de tareas de un chat. */
