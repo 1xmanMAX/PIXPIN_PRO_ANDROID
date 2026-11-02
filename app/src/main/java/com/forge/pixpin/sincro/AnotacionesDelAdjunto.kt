@@ -92,6 +92,12 @@ object AnotacionesDelAdjunto {
     fun asistente(filesDir: File, uid: String) = File(filesDir, "$CARPETA/$PREFIJO$uid.asistente.json")
 
     /**
+     * **Las marcas de texto de una nota o una página web** (2-nov-2026, PC `MARCAS_TEXTO`):
+     * `anot-<uid>.marcas-texto.json`, ancladas por su cita. Ver [com.forge.pixpin.motormd.MarcasDeTexto].
+     */
+    fun marcasDeTexto(filesDir: File, uid: String) = File(filesDir, "$CARPETA/$PREFIJO$uid.marcas-texto.json")
+
+    /**
      * Lo anotado de las hojas que estaban en [antes] y ya no están en ningún proyecto de
      * [despues]: sin su hoja ya no viaja ni se abre. Una hoja que se mueve a otro proyecto lleva
      * su código, así que la suya no se toca.
@@ -326,9 +332,10 @@ object AnotacionesDelAdjunto {
     // con ella, como los comentarios; el teléfono aún no lo escribe ni lo enseña.
     // `.marcos.json` y `.vistas.json` (PC c31f974, 19-oct): los marcos numerados de un documento y
     // lo que guarda cada marcador además de su sitio. Ver [com.forge.pixpin.motor.MarcosDelDocumento].
+    // `.marcas-texto.json` (PC 2-nov): las marcas de texto de una nota o página web ([marcasDeTexto]).
     private val TERMINACIONES = listOf(
         ".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json", ".asistente.json",
-        ".marcos.json", ".vistas.json"
+        ".marcos.json", ".vistas.json", ".marcas-texto.json"
     )
 
     /**

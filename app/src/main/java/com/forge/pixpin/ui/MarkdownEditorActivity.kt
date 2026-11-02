@@ -1,6 +1,8 @@
 package com.forge.pixpin.ui
 
 import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.ui.res.stringResource
+import androidx.compose.material.icons.filled.BorderColor
 
 import androidx.compose.ui.graphics.nativeCanvas
 
@@ -549,6 +551,64 @@ private fun Pantalla(
             c.guardar(nuevo, texto)?.let { guardado -> kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { fichero = guardado } }
         }
     }
+    // **Las marcas de texto** (2-nov-2026, como el lector de notas del PC): resaltar, ondulada,
+    // subrayar, tachar y tapar lo elegido, ancladas en el Markdown (`sobre: "markdown"`), en
+    // `anot-<uid>.marcas-texto.json`. Se eligen escribiendo o con «Marcar texto» (sin teclado).
+    var marcandoTexto by remember { mutableStateOf(false) }
+    var marcasDeTexto by remember { mutableStateOf(emptyList<kotlinx.serialization.json.JsonObject>()) }
+    var paginaDeMarcas by remember { mutableStateOf<com.forge.pixpin.motormd.MarcasDeTexto.DeLaPagina?>(null) }
+    var colorDeMarca by remember { mutableIntStateOf(4) }
+    val alcanceDeMarcasDeTexto = rememberCoroutineScope()
+    val archivoDeMarcasDeTexto = comentarios?.archivoDeMarcasDeTexto
+    LaunchedEffect(archivoDeMarcasDeTexto) {
+        val f = archivoDeMarcasDeTexto ?: return@LaunchedEffect
+        val p = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            com.forge.pixpin.motormd.MarcasDeTexto.DeLaPagina(f, com.forge.pixpin.motormd.MarcasDeTexto.SOBRE_MARKDOWN)
+        }
+        paginaDeMarcas = p
+        marcasDeTexto = p.marcas
+        // Lo que llega por la sincronización con la nota abierta.
+        while (true) {
+            kotlinx.coroutines.delay(2000)
+            if (kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { p.mirar() } != null) marcasDeTexto = p.marcas
+        }
+    }
+    fun guardarMarcasDeTexto(nuevas: List<kotlinx.serialization.json.JsonObject>) {
+        marcasDeTexto = nuevas
+        val p = paginaDeMarcas ?: return
+        alcanceDeMarcasDeTexto.launch(kotlinx.coroutines.Dispatchers.IO) {
+            if (p.deLaPagina(com.forge.pixpin.motormd.MarcasDeTexto.lista(nuevas)) != null) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { marcasDeTexto = p.marcas }
+            }
+        }
+    }
+    val pintadasDeLaNota = remember(valor.text, marcasDeTexto) { com.forge.pixpin.motormd.MarcasDeLaNota.porBloque(valor.text, marcasDeTexto) }
+    // Escribiendo dentro de una marca o a su lado, el ancla se pone al día al rato.
+    LaunchedEffect(valor.text) {
+        if (marcasDeTexto.isEmpty()) return@LaunchedEffect
+        kotlinx.coroutines.delay(700)
+        com.forge.pixpin.motormd.AnclaDeTexto.alDia(valor.text, marcasDeTexto)?.let { guardarMarcasDeTexto(it) }
+    }
+    /** Marcar (o quitar) lo elegido en el bloque del [sitio]. */
+    fun marcarLoElegido(que: String) {
+        val s2 = sitio ?: return
+        if (s2.seleccion.collapsed) return
+        val texto = valor.text
+        val limpio = Vivo.contenido(texto, s2.bloque)?.text.orEmpty()
+        val mi = s2.seleccion.min
+        // El principio es la letra elegida, no lo de antes de ella (un `**` se queda fuera).
+        val a = if (mi < limpio.length) Vivo.aCrudo(texto, s2.bloque, mi + 1) - 1 else Vivo.aCrudo(texto, s2.bloque, mi)
+        val b = Vivo.aCrudo(texto, s2.bloque, s2.seleccion.max)
+        if (que == "quitar") {
+            val sitios = com.forge.pixpin.motormd.MarcasDeLaNota.sitios(texto, marcasDeTexto)
+            val fuera = com.forge.pixpin.motormd.AnclaDeTexto.tocadas(marcasDeTexto, sitios, a, b).toSet()
+            if (fuera.isNotEmpty()) guardarMarcasDeTexto(marcasDeTexto.filter { it !in fuera })
+        } else {
+            com.forge.pixpin.motormd.AnclaDeTexto.nueva(texto, a, b, que, colorDeMarca, System.currentTimeMillis(), marcasDeTexto)
+                ?.let { guardarMarcasDeTexto(marcasDeTexto + it) }
+        }
+        sitio = s2.copy(seleccion = TextRange(s2.seleccion.max))
+    }
     // **Ver la nota como va a quedar**, sin salir: el editor por bloques enseña
     // cada bloque ya compuesto, pero solo de uno en uno; esto es la página
     // entera, seguida, como la verá quien la reciba.
@@ -872,7 +932,8 @@ private fun Pantalla(
                         // mismo de la pantalla de la letra y el de la barra de abajo: así
                         // los minutos de cada párrafo pueden saltar dentro de él, que es lo
                         // que el usuario pidió (7-sep-2026). Ver [AudioDeLaNota].
-                        com.forge.pixpin.motormd.LocalAudioDeLaNota provides elReproductorDeLaNota()
+                        com.forge.pixpin.motormd.LocalAudioDeLaNota provides elReproductorDeLaNota(),
+                        com.forge.pixpin.motormd.LocalMarcasDeLaNota provides pintadasDeLaNota
                     ) {
                         MarkdownText(blocks = bloques, baseSizeSp = vista.tamano)
                     }
@@ -880,12 +941,14 @@ private fun Pantalla(
                     androidx.compose.runtime.CompositionLocalProvider(
                         com.forge.pixpin.motormd.LocalContextoDeLaNota provides contextoDeLaNota,
                         com.forge.pixpin.motormd.LocalVersionDeMedios provides repintadas,
-                        com.forge.pixpin.motormd.LocalLetraDeLaNota provides letraDeLaNota
+                        com.forge.pixpin.motormd.LocalLetraDeLaNota provides letraDeLaNota,
+                        com.forge.pixpin.motormd.LocalMarcasDeLaNota provides pintadasDeLaNota
                     ) {
                     EditorVivo(
                         texto = valor.text,
                         sitio = sitio,
-                        onTexto = { cambia(valor.copy(text = it)) },
+                        soloElegir = marcandoTexto,
+                        onTexto = { if (!marcandoTexto) cambia(valor.copy(text = it)) },
                         onSitio = { sitio = it },
                         comentados = remember(fichero, valor.text) {
                             if (comentarios == null) emptyMap() else ComentariosDeNota.porBloque(fichero, valor.text)
@@ -1007,7 +1070,13 @@ private fun Pantalla(
                 visible = barras && !anotandoLaNota && !marcosDeLaNota.activo && !marcosDeLaNota.imprimiendo,
                 nombre = titulo,
                 archivo = archivo ?: "nota.md",
-                botones = if (viendo) listOfNotNull(
+                botones = if (marcandoTexto) listOf(
+                    BotonDeLector(Icons.Filled.Check, stringResource(com.forge.pixpin.R.string.mt_listo)) { marcandoTexto = false; sitio = null; viendo = true }
+                ) else if (viendo) listOfNotNull(
+                    // **Marcar el texto** (2-nov-2026): se elige sin teclado y se marca con la barrita.
+                    if (paginaDeMarcas == null || llano) null else BotonDeLector(Icons.Filled.BorderColor, stringResource(com.forge.pixpin.R.string.mt_marcar_texto)) {
+                        dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = false; sitio = null; marcandoTexto = true; viendo = false
+                    },
                     // **Escribir el texto** (el `EDIT_NOTE` del PC): el lápiz del riel es para anotar.
                     // Un adjunto del chat se mira y se anota, pero no se escribe ([soloLeer]).
                     if (soloLeer) null else BotonDeLector(Icons.Filled.EditNote, "Escribir") {
@@ -1056,7 +1125,23 @@ private fun Pantalla(
             }
 
             // Texto llano: ni bloques, ni comandos, ni estilos; el teclado y ya.
-            if (!viendo && !llano) run {
+            // La barrita de marcar, con algo elegido (escribiendo o marcando).
+            if (!viendo && !llano && paginaDeMarcas != null && sitio?.seleccion?.collapsed == false) {
+                BarraDeMarcasDeTexto(
+                    color = colorDeMarca,
+                    onColor = { colorDeMarca = it },
+                    onMarca = { marcarLoElegido(it) },
+                    modifier = Modifier.barraDeMarcasAbajo().then(if (marcandoTexto) Modifier.navigationBarsPadding() else Modifier)
+                )
+            } else if (marcandoTexto) {
+                Text(
+                    stringResource(com.forge.pixpin.R.string.mt_pista),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(12.dp)
+                )
+            }
+            if (!viendo && !llano && !marcandoTexto) run {
                 // La lista de comandos va **encima** de la barra y por delante
                 // del teclado: es lo que estás mirando mientras tecleas.
                 val sugerencias = remember(consulta) {

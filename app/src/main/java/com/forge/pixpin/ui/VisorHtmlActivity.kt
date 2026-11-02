@@ -41,6 +41,7 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.horizontalScroll
@@ -94,6 +95,8 @@ import com.forge.pixpin.ui.theme.PixPinTheme
 import java.io.ByteArrayInputStream
 import java.io.File
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import com.forge.pixpin.sincro.AnotacionesDelAdjunto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -197,6 +200,22 @@ class VisorHtmlActivity : ComponentActivity() {
          * `download` que apunte a un `blob:` o un `data:` se lee y se entrega por el puente.
          * En ES5, que el `WebView` de un teléfono viejo no sabe más.
          */
+        /**
+         * **Lo elegido en un documento** (2-nov-2026, marcas de texto en tinta): cuando la selección
+         * se queda quieta, sus cajas de renglón en píxeles CSS del documento van al puente; sin nada
+         * elegido, una lista vacía.
+         */
+        private const val GUION_ELEGIR_DOCUMENTO = """(function(){
+  if(window.__pixpinElegir) return; window.__pixpinElegir=1; var t=0, habia=false;
+  document.addEventListener('selectionchange',function(){ clearTimeout(t); t=setTimeout(function(){
+    var s=getSelection(), l=[];
+    if(s&&s.rangeCount&&!s.isCollapsed){ var rs=s.getRangeAt(0).getClientRects(), x=window.pageXOffset||0, y=window.pageYOffset||0;
+      for(var i=0;i<rs.length;i++){ var r=rs[i]; if(r.width>0.5&&r.height>0.5) l.push([r.left+x,r.top+y,r.right+x,r.bottom+y]); } }
+    if(l.length||habia){ habia=l.length>0; try{ PixPinVisor.elegido(JSON.stringify(l)); }catch(e){} }
+  },400); });
+  window.__pixpinSoltar=function(){ try{ getSelection().removeAllRanges(); }catch(e){} };
+})();"""
+
         private const val GUION_DEL_VISOR = """(function(){
   if(window.__pixpinVisor) return; window.__pixpinVisor=1;
   window.print=function(){ PixPinVisor.imprimir(); };
@@ -307,6 +326,52 @@ class VisorHtmlActivity : ComponentActivity() {
      * es un documento del chat: entonces sigue todo por la ruta. Ver [ExportarDocumentoAnotado.baseDe].
      */
     private var baseDelMensaje: String? = null
+
+    /**
+     * **Las marcas de texto de la página** (2-nov-2026, como el PC): resaltar, ondulada, subrayar,
+     * tachar y tapar lo elegido, en `anot-<uid>.marcas-texto.json` si es del chat. Solo en una
+     * página web: un documento (Word, libro) se marca con su tinta. Ver [MarcasDeTextoEnLaWeb].
+     */
+    private var marcasDeTexto: com.forge.pixpin.motormd.MarcasDeTexto.DeLaPagina? = null
+
+    /**
+     * **Marcar el texto de un Word o un libro** (2-nov-2026, §3.9 del PC): lo elegido (cajas de
+     * renglón en píxeles CSS del documento) y el color. La marca es tinta de la capa del documento,
+     * con el grupo `marca-texto-<ms>`, así que viaja y la ve el PC. Ver [com.forge.pixpin.motor.MarcasDeTextoEnTinta].
+     */
+    private var cajasElegidas by mutableStateOf(emptyList<com.forge.pixpin.motor.MarcasDeTextoEnTinta.Caja>())
+    private var colorDeMarca by mutableIntStateOf(4)
+
+    private fun marcarLoElegido(que: String) {
+        val cajas = cajasElegidas
+        if (cajas.isEmpty()) return
+        // La primera marca **fija la columna y la letra**, como la primera vez que se anota: si no,
+        // el texto se volvería a partir y la marca se quedaría en el aire.
+        if (!anotable) {
+            fijarLaColumna()
+            android.widget.Toast.makeText(this, getString(R.string.mt_columna_fijada), android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        val escena = laCapa.scene
+        if (que == "quitar") {
+            val grupos = com.forge.pixpin.motor.MarcasDeTextoEnTinta.gruposQueTocan(escena.elements, cajas)
+            if (grupos.isNotEmpty()) {
+                val fuera = escena.elements.filter { e -> !e.isDeleted && e.groupIds.any { it in grupos } }
+                laCapa.reemplazar(fuera.map { it.copy(isDeleted = true, version = it.version + 1, updated = System.currentTimeMillis()) })
+            }
+        } else {
+            val ahora = System.currentTimeMillis()
+            val nuevos = com.forge.pixpin.motor.MarcasDeTextoEnTinta.elementos(
+                que, com.forge.pixpin.motor.MarcasDeTextoEnTinta.color(colorDeMarca), cajas,
+                com.forge.pixpin.motor.MarcasDeTextoEnTinta.grupoNuevo(ahora), ahora
+            )
+            laCapa.insertar(nuevos, marcar = false)
+        }
+        guardarLaCapa()
+        ponerLaTintaEnLaPagina()
+        cajasElegidas = emptyList()
+        web?.evaluateJavascript("window.__pixpinSoltar&&window.__pixpinSoltar()", null)
+    }
     private val elDocumento: File? get() = comparte ?: elOriginal
 
     /**
@@ -944,6 +1009,28 @@ class VisorHtmlActivity : ComponentActivity() {
      * está y se abren dos tercios de margen a cada lado— y desde entonces **la letra queda
      * fijada**: si cambiara, el texto se recolocaría y lo anotado se quedaría en el aire.
      */
+    /** La columna y la letra fijadas sin ponerse a anotar (lo de [empezarAAnotar], la primera vez). */
+    @Suppress("DEPRECATION")
+    private fun fijarLaColumna() {
+        val vista = web ?: return
+        if (!esDocumento || columnaDeAnotar != null) return
+        val columna = (vista.width / vista.scale.coerceAtLeast(0.1f)).toInt().coerceAtLeast(200)
+        columnaDeAnotar = columna
+        espacioIzq = com.forge.pixpin.motor.Lectura.margenDe(columna)
+        espacioDer = com.forge.pixpin.motor.Lectura.margenDe(columna)
+        guardarLaMaqueta()
+        val pagina = laPaginaQueSeVe ?: return
+        fraccionPendiente = fraccionDeAhora()
+        cajasElegidas = emptyList()
+        lifecycleScope.launch {
+            withContext(Dispatchers.IO) {
+                runCatching { pagina.writeText(com.forge.pixpin.motor.Lectura.conEstilo(pagina.readText(), grosorDeLetra, tipoDeLetra, columna, esDeNoche(), espacioIzq, espacioDer)) }
+            }
+            vista.settings.loadWithOverviewMode = false
+            vista.reload()
+        }
+    }
+
     @Suppress("DEPRECATION")
     private fun empezarAAnotar() {
         val vista = web ?: return
@@ -1144,6 +1231,10 @@ class VisorHtmlActivity : ComponentActivity() {
             baseDelMensaje = ExportarDocumentoAnotado.baseDe(this, d)
             marcadores = com.forge.pixpin.motor.Lectura.deTexto(ExportarDocumentoAnotado.marcadores(this, d, baseDelMensaje))
             marcosDoc = MarcosDelVisor(baseDelMensaje?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(filesDir, it) })
+            if (!sinGuion) marcasDeTexto = com.forge.pixpin.motormd.MarcasDeTexto.DeLaPagina(
+                AnotacionesDelAdjunto.uidDe(filesDir, d.absolutePath)?.let { AnotacionesDelAdjunto.marcasDeTexto(filesDir, it) },
+                com.forge.pixpin.motormd.MarcasDeTexto.SOBRE_HTML
+            ).also { mirarLasMarcasDeTexto() }
         }
         if (esDocumento) {
             tamanoDeLetra = com.forge.pixpin.motor.Lectura.tamanoValido(prefsDeLectura.getInt("tamano", 100))
@@ -1448,6 +1539,14 @@ class VisorHtmlActivity : ComponentActivity() {
                     poniendoMarcador = false
                     marcadores = com.forge.pixpin.motor.Lectura.conMarcador(marcadores, fraccionDeAhora(), emoji, System.currentTimeMillis())
                     guardarMarcadores()
+                }
+                if (esDocumento && !presentando && !anotando && cajasElegidas.isNotEmpty()) {
+                    BarraDeMarcasDeTexto(
+                        color = colorDeMarca,
+                        onColor = { colorDeMarca = it },
+                        onMarca = { marcarLoElegido(it) },
+                        modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().barraDeMarcasAbajo()
+                    )
                 }
                 if (esDocumento && !presentando && !anotando) {
                     RielDeLectura(Modifier.align(Alignment.CenterStart))
@@ -2113,7 +2212,50 @@ class VisorHtmlActivity : ComponentActivity() {
      * por su cuenta**: sale la hoja de compartir y el usuario decide a dónde va, que una página
      * llegada de otro no tiene por qué poder dejar archivos en el teléfono.
      */
+    private val guionDeMarcas: String by lazy { MarcasDeTextoEnLaWeb.guion(this) }
+
+    /** Lo que manda el guion de marcar (`window.chrome.webview.postMessage` del PC). */
+    private inner class PuenteDeMarcas {
+        @android.webkit.JavascriptInterface
+        fun mensaje(m: String) {
+            val p = marcasDeTexto ?: return
+            if (m.length > TOPE_DE_LO_BAJADO) return
+            lifecycleScope.launch {
+                val respuesta = withContext(Dispatchers.IO) { MarcasDeTextoEnLaWeb.atender(this@VisorHtmlActivity, p, m) }
+                if (respuesta != null) web?.evaluateJavascript(respuesta, null)
+            }
+        }
+    }
+
+    /** Lo que llega por la sincronización con la página abierta se le pasa (cada 2 s, mientras se ve). */
+    private fun mirarLasMarcasDeTexto() {
+        lifecycleScope.launch {
+            repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
+                while (true) {
+                    kotlinx.coroutines.delay(2000)
+                    val p = marcasDeTexto ?: break
+                    val nueva = withContext(Dispatchers.IO) { p.mirar() }
+                    if (nueva != null) web?.evaluateJavascript(MarcasDeTextoEnLaWeb.recibir(nueva), null)
+                }
+            }
+        }
+    }
+
     private inner class Puente {
+        /** Lo elegido en un documento: sus cajas de renglón (ver [GUION_ELEGIR_DOCUMENTO]). */
+        @android.webkit.JavascriptInterface
+        fun elegido(json: String) {
+            if (json.length > 200_000) return
+            val cajas = runCatching {
+                val a = org.json.JSONArray(json)
+                (0 until a.length()).map { i ->
+                    val c = a.getJSONArray(i)
+                    com.forge.pixpin.motor.MarcasDeTextoEnTinta.Caja(c.getDouble(0), c.getDouble(1), c.getDouble(2), c.getDouble(3))
+                }
+            }.getOrDefault(emptyList())
+            runOnUiThread { cajasElegidas = cajas }
+        }
+
         @android.webkit.JavascriptInterface
         fun imprimir() = runOnUiThread { this@VisorHtmlActivity.imprimir(intent?.getStringExtra(EXTRA_NOMBRE).orEmpty()) }
 
@@ -2211,6 +2353,7 @@ class VisorHtmlActivity : ComponentActivity() {
             false
         }
         if (!sinGuion) addJavascriptInterface(Puente(), "PixPinVisor")
+        if (marcasDeTexto != null) addJavascriptInterface(PuenteDeMarcas(), MarcasDeTextoEnLaWeb.PUENTE)
         loadUrl(Uri.fromFile(pagina).toString())
         web = this
     }
@@ -2253,6 +2396,8 @@ class VisorHtmlActivity : ComponentActivity() {
             @Suppress("DEPRECATION")
             escalaWeb = view.scale
             if (!sinGuion) view.evaluateJavascript(GUION_DEL_VISOR, null)
+            if (marcasDeTexto != null) view.evaluateJavascript(guionDeMarcas, null)
+            if (esDocumento && !sinGuion) { cajasElegidas = emptyList(); view.evaluateJavascript(GUION_ELEGIR_DOCUMENTO, null) }
             // La página recién cargada no tiene la tinta: se le pone. Ver [ponerLaTintaEnLaPagina].
             tintaEnLaPagina = false
             if (anotable) ponerLaTintaEnLaPagina()

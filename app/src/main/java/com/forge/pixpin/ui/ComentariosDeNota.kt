@@ -41,7 +41,9 @@ class ComentariosDeNota private constructor(
     private val archivo: File,
     private val quien: Comentarios.Quien,
     /** Los marcadores de la nota (`anot-<uid>.marcas`, `id:fracción:emoji`, como el PC): viajan con ella. */
-    val archivoDeMarcas: File? = null
+    val archivoDeMarcas: File? = null,
+    /** Las marcas de texto de la nota (`anot-<uid>.marcas-texto.json`, 2-nov-2026). Ver [com.forge.pixpin.motormd.MarcasDeTexto]. */
+    val archivoDeMarcasDeTexto: File? = null
 ) {
 
     /** Lo que había en disco al abrir o tras el último guardado: la base para juntar. */
@@ -108,7 +110,8 @@ class ComentariosDeNota private constructor(
             )
             return ComentariosDeNota(
                 AnotacionesDelAdjunto.comentarios(app.filesDir, uid), quien,
-                AnotacionesDelAdjunto.marcas(app.filesDir, AnotacionesDelAdjunto.delPdf(uid))
+                AnotacionesDelAdjunto.marcas(app.filesDir, AnotacionesDelAdjunto.delPdf(uid)),
+                AnotacionesDelAdjunto.marcasDeTexto(app.filesDir, uid)
             )
         }
 

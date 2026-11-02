@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">Копировать</string>
+    <string name="mt_resaltar">Выделить цветом</string>
+    <string name="mt_ondulada">Волнистая линия</string>
+    <string name="mt_subrayar">Подчеркнуть</string>
+    <string name="mt_tachar">Зачеркнуть</string>
+    <string name="mt_tapar">Закрыть</string>
+    <string name="mt_quitar">Убрать пометку</string>
+    <string name="mt_color">Цвет</string>
+    <string name="mt_listo">Готово</string>
+    <string name="mt_marcar_texto">Отметить текст</string>
+    <string name="mt_pista">Коснитесь абзаца и выделите текст, чтобы отметить его.</string>
+    <string name="mt_columna_fijada">Колонка и шрифт закреплены для пометок. Выделите текст ещё раз.</string>
+</resources>

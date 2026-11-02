@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Marcas de texto (PC marcas_web.rs, 2-nov-2026) -->
+<resources>
+    <string name="mt_copiar">نسخ</string>
+    <string name="mt_resaltar">تمييز</string>
+    <string name="mt_ondulada">خط متموج</string>
+    <string name="mt_subrayar">تسطير</string>
+    <string name="mt_tachar">شطب</string>
+    <string name="mt_tapar">تغطية</string>
+    <string name="mt_quitar">إزالة العلامة</string>
+    <string name="mt_color">اللون</string>
+    <string name="mt_listo">تم</string>
+    <string name="mt_marcar_texto">تمييز النص</string>
+    <string name="mt_pista">المس فقرة واختر النص لتمييزه.</string>
+    <string name="mt_columna_fijada">تم تثبيت العمود والخط للتمييز. اختر النص مرة أخرى.</string>
+</resources>
