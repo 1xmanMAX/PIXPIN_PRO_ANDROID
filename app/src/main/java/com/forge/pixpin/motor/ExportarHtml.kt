@@ -1441,10 +1441,30 @@ function soltar(e){
 }
 caja.addEventListener('pointerup',soltar);
 caja.addEventListener('pointercancel',soltar);
+// **Los gestos del trackpad, como el PC** (`GestosVista`, 2-nov-2026): dos dedos mueven en
+// cualquier dirección, pellizcar (rueda con Ctrl, o el gesto de Safari) acerca hacia el cursor,
+// la rueda del ratón mueve en vertical y con Mayúsculas de lado.
+var enGesto=false, escalaGesto=1;
 caja.addEventListener('wheel',function(e){
   e.preventDefault();
-  zoom(e.deltaY>0?1.12:1/1.12,e.clientX,e.clientY);
+  var L=e.deltaMode===1?40:(e.deltaMode===2?(caja.clientHeight||800):1);
+  var dx=(+e.deltaX||0)*L, dy=(+e.deltaY||0)*L;
+  if(e.ctrlKey||e.metaKey){
+    if(!enGesto){ var t=Math.max(-25,Math.min(25,dy)); zoom(1/Math.exp(-t*0.01),e.clientX,e.clientY); }
+    return;
+  }
+  if(e.shiftKey&&!dx){ dx=dy; dy=0; }
+  var k=aEscena(0,0).k; v.x+=dx*k; v.y+=dy*k; aplicar();
 },{passive:false});
+caja.addEventListener('gesturestart',function(e){ e.preventDefault(); enGesto=true; escalaGesto=e.scale||1; },{passive:false});
+caja.addEventListener('gesturechange',function(e){
+  e.preventDefault();
+  var s=e.scale||1, f=s/escalaGesto; escalaGesto=s;
+  if(dedos.size) return;
+  var r=caja.getBoundingClientRect();
+  zoom(1/f,e.clientX||r.left+r.width/2,e.clientY||r.top+r.height/2);
+},{passive:false});
+caja.addEventListener('gestureend',function(e){ e.preventDefault(); enGesto=false; escalaGesto=1; },{passive:false});
 // El doble toque encaja solo con la mano: con el lápiz, dos toques seguidos son dos puntos.
 caja.addEventListener('dblclick',function(e){e.preventDefault();if(modo==='mano')encajar();});
 function encajar(){v={x:casa.x,y:casa.y,w:casa.w,h:casa.h};aplicar();}

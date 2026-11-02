@@ -50,6 +50,12 @@ object OpcionesDeAdjuntar {
          * demasiado escondida. Ahora es el botón de la cámara junto al «+» de la lista de chats, que
          * solo sale mientras un PC del grupo graba. Ver `ui/ListaDeChats`.
          */
+        /**
+         * **Pegar lo copiado** (2-nov-2026, la «Adjuntar» del PC, `f87468aa`): lo mismo que pegar —una
+         * foto o un archivo copiado entra como adjunto; un texto va a la caja de escribir—. Va
+         * abajo, aparte, y no sale si no hay nada copiado.
+         */
+        PEGAR("Pegar lo copiado", com.forge.pixpin.R.string.adjuntar_pegar, "pegar portapapeles copiado paste clipboard copied", 0xFF5B6B7F),
         MINIAPPS("Mini apps", com.forge.pixpin.R.string.adjuntar_miniapps, "mini-app cronometro temporizador contador ruleta gastos alarma stopwatch timer counter wheel expenses alarm", 0xFF5B6B7F);
 
         /** Donde busca el buscador: el nombre y sus sinónimos, sin tildes. */

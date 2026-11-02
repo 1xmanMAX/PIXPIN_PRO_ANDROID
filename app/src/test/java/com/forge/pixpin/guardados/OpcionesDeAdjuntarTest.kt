@@ -18,8 +18,10 @@ class OpcionesDeAdjuntarTest {
         )
         assertEquals(Adjunto.FIGURA, h.mas.first())
         // Todas las de antes siguen a mano, cada una una vez.
-        assertEquals(Adjunto.entries.toSet(), (h.deSiempre + h.mas).toSet())
-        assertEquals(Adjunto.entries.size, (h.deSiempre + h.mas).size)
+        assertEquals(Adjunto.entries.toSet() - Adjunto.PEGAR, (h.deSiempre + h.mas).toSet())
+        assertEquals(Adjunto.entries.size - 1, (h.deSiempre + h.mas).size)
+        // «Pegar lo copiado» va aparte, abajo: no está en la cuadrícula (como el PC).
+        assertFalse(Adjunto.PEGAR in h.deSiempre + h.mas)
     }
 
     @Test
@@ -37,7 +39,7 @@ class OpcionesDeAdjuntarTest {
         val h = OpcionesDeAdjuntar.hoja(conProyecto = true, asistente = true)
         assertEquals(listOf(Adjunto.FIGURA, Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.ESCANEAR, Adjunto.LIENZO, Adjunto.NOTA), h.deSiempre)
         assertFalse(Adjunto.FIGURA in h.mas)
-        assertEquals(Adjunto.entries.toSet(), (h.deSiempre + h.mas).toSet())
+        assertEquals(Adjunto.entries.toSet() - Adjunto.PEGAR, (h.deSiempre + h.mas).toSet())
     }
 
     @Test

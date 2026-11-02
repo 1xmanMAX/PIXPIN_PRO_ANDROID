@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- «Pegar lo copiado» de la hoja del clip (PC f87468aa) -->
+<resources>
+    <string name="adjuntar_pegar">粘贴已复制的内容</string>
+    <string name="adjuntar_nada_copiado">没有复制任何内容</string>
+</resources>
