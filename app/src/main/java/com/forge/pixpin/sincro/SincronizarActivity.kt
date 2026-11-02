@@ -46,6 +46,7 @@ import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Cloud
 import androidx.compose.material.icons.outlined.GroupAdd
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -670,6 +671,8 @@ class SincronizarActivity : ComponentActivity() {
     @Composable
     private fun Portada(identidad: Identidad) {
         var anadiendo by remember { mutableStateOf(false) }
+        var ajustandoLaNube by remember { mutableStateOf(false) }
+        if (ajustandoLaNube) com.forge.pixpin.sincro.nube.AjustesDeLaNube { ajustandoLaNube = false }
         Column(Modifier.fillMaxSize().safeDrawingPadding()) {
             Column(
                 Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp)
@@ -697,6 +700,9 @@ class SincronizarActivity : ComponentActivity() {
                 Fila(Icons.Outlined.GroupAdd, "Unirse a un chat compartido") {
                     ChatCompartidoActivity.entrar(this@SincronizarActivity)
                 }
+                Spacer(Modifier.height(10.dp))
+                // **La nube de los chats compartidos** (2-nov-2026, como el PC): su dirección y la llave.
+                Fila(Icons.Outlined.Cloud, androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.nb_nube_titulo)) { ajustandoLaNube = true }
                 Spacer(Modifier.height(10.dp))
                 Fila(Icons.Outlined.Delete, "Papelera") { CopiasActivity.abrir(this@SincronizarActivity, null) }
 

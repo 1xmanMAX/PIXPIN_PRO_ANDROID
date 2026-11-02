@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La nube de los chats compartidos (PC sincronizar::nube, 1-nov-2026) -->
+<resources>
+    <string name="nb_chat_nuevo_nube">クラウドの共有チャット</string>
+    <string name="nb_chat_nuevo_nube_detalle">あなたがアップロードしたものを、ほかの人はどこからでもダウンロードできます</string>
+    <string name="nb_nube_modo_titulo">同期の方法</string>
+    <string name="nb_nube_modo_local">ローカルネットワーク</string>
+    <string name="nb_nube_modo_nube">クラウド</string>
+    <string name="nb_nube_modo_local_detalle">同じ Wi-Fi にいるときに同期します。無料でサーバー不要です。</string>
+    <string name="nb_nube_modo_nube_detalle">あなたのクラウドを通ります。アップロードしたものはほかの人がどこからでもダウンロードでき、ウェブでも見られます。変更点だけをアップロードします。</string>
+    <string name="nb_nube_falta_configurar">クラウドが未設定です。同期 → クラウド でアドレスとキーを入力してください。</string>
+    <string name="nb_nube_titulo">クラウド</string>
+    <string name="nb_nube_portada_como">「クラウド」にした共有チャットはあなたのサーバーを通ります。自分のチャットはローカルネットワークのままです。</string>
+    <string name="nb_nube_explica">あなたのサーバーはクラウドを通る共有チャットを保存し、ウェブに表示します。個人のチャットはサーバーなしでローカルネットワークのままです。</string>
+    <string name="nb_nube_direccion">ウェブのアドレス</string>
+    <string name="nb_nube_llave">デバイスキー（pxn_…）</string>
+    <string name="nb_nube_llave_guardada">保存済みのキー：</string>
+    <string name="nb_nube_olvidar">削除</string>
+    <string name="nb_nube_guardar">保存</string>
+    <string name="nb_nube_probar">テスト</string>
+    <string name="nb_nube_guardado">保存しました。</string>
+    <string name="nb_nube_direccion_mala">アドレスは https:// で始めてください。</string>
+    <string name="nb_nube_llave_mala">キーは pxn_ で始まります（このデバイスを登録するとウェブで発行されます）。</string>
+    <string name="nb_nube_probado">接続しました：スペース %1$s。</string>
+    <string name="nb_nube_no_contesta">クラウドが応答しません：</string>
+    <string name="nb_nube_que_va">変更点だけをアップロードします。注釈付きの図面なら、図面全体ではなく新しい線だけです。</string>
+    <string name="nb_nube_en_linea">オンライン</string>
+    <string name="nb_nube_sin_conexion">オフライン</string>
+    <string name="nb_nube_cerrar_titulo">オフラインでの変更</string>
+    <string name="nb_nube_cerrar_pregunta">この文書にオフラインで注釈を付けました。\nはい：その変更を破棄します（ほかの人の変更は残ります）。\nいいえ：オンラインに戻してアップロードします。\nキャンセル：次回までオフラインのままにします。</string>
+    <string name="nb_descartar">破棄</string>
+    <string name="nb_subir">アップロード</string>
+    <string name="nb_dejar">オフラインのまま</string>
+</resources>

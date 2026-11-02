@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La nube de los chats compartidos (PC sincronizar::nube, 1-nov-2026) -->
+<resources>
+    <string name="nb_chat_nuevo_nube">Chat compartido en la nube</string>
+    <string name="nb_chat_nuevo_nube_detalle">Lo que subes lo bajan los demás desde donde estén</string>
+    <string name="nb_nube_modo_titulo">Por dónde va</string>
+    <string name="nb_nube_modo_local">Red local</string>
+    <string name="nb_nube_modo_nube">Nube</string>
+    <string name="nb_nube_modo_local_detalle">Se sincroniza cuando estáis en la misma Wi-Fi, gratis y sin servidores.</string>
+    <string name="nb_nube_modo_nube_detalle">Va por tu nube: lo que subes lo bajan los demás desde donde estén, y se ve en la web. Solo sube lo que cambia.</string>
+    <string name="nb_nube_falta_configurar">Falta la nube: pon su dirección y tu llave en Sincronizar → Nube.</string>
+    <string name="nb_nube_titulo">Nube</string>
+    <string name="nb_nube_portada_como">Los chats compartidos que eliges «Nube» van por tu servidor. Los tuyos siguen por la red local.</string>
+    <string name="nb_nube_explica">Tu servidor guarda los chats compartidos que van por la nube y los enseña en la web. Los chats personales siguen por la red local, sin servidores.</string>
+    <string name="nb_nube_direccion">Dirección de la web</string>
+    <string name="nb_nube_llave">Llave del aparato (pxn_…)</string>
+    <string name="nb_nube_llave_guardada">Llave guardada:</string>
+    <string name="nb_nube_olvidar">Olvidar</string>
+    <string name="nb_nube_guardar">Guardar</string>
+    <string name="nb_nube_probar">Probar</string>
+    <string name="nb_nube_guardado">Guardado.</string>
+    <string name="nb_nube_direccion_mala">La dirección tiene que empezar por https://.</string>
+    <string name="nb_nube_llave_mala">La llave empieza por pxn_ (te la da la web al dar de alta este aparato).</string>
+    <string name="nb_nube_probado">Conectado: espacio %1$s.</string>
+    <string name="nb_nube_no_contesta">La nube no contesta:</string>
+    <string name="nb_nube_que_va">Solo sube lo que cambia: de un plano anotado, la raya nueva y no el plano entero.</string>
+    <string name="nb_nube_en_linea">En línea</string>
+    <string name="nb_nube_sin_conexion">Sin conexión</string>
+    <string name="nb_nube_cerrar_titulo">Cambios sin conexión</string>
+    <string name="nb_nube_cerrar_pregunta">Anotaste este documento sin conexión.\nSí: descartar esos cambios (se queda lo de los demás).\nNo: volver a en línea y subirlos.\nCancelar: dejarlo sin conexión para la próxima vez.</string>
+    <string name="nb_descartar">Descartar</string>
+    <string name="nb_subir">Subir</string>
+    <string name="nb_dejar">Dejar así</string>
+</resources>

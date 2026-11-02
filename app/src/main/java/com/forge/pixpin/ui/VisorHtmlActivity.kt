@@ -1513,6 +1513,9 @@ class VisorHtmlActivity : ComponentActivity() {
                 // **Y se va con la pastilla** (27-oct-2026): al mover la página, y vuelve al tocar. Ver [RielALaVista].
                 if (!presentando && !marcosDoc.imprimiendo && pagina != null) {
                     val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
+                    // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
+                    val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deAdjunto(this@VisorHtmlActivity, elDocumento?.absolutePath) }.getOrNull() } }
+                    com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
                     RielDelVisor(
                         visible = RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarcador),
                         alUsar = { aLaVista = true; toquesEnLaPagina++ },

@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
@@ -87,11 +88,15 @@ internal fun ChapaDeCompartido(aro: Color, modifier: Modifier = Modifier, lado: 
  */
 @Composable
 internal fun MenuDeChatNuevo(
-    abierto: Boolean, alCerrar: () -> Unit, alUnirse: () -> Unit, alElegir: (compartido: Boolean) -> Unit
+    abierto: Boolean, alCerrar: () -> Unit, alUnirse: () -> Unit,
+    /** **Chat compartido en la nube** (2-nov-2026, como el PC): null, no sale. */
+    alNube: (() -> Unit)? = null,
+    alElegir: (compartido: Boolean) -> Unit
 ) {
     DropdownMenu(expanded = abierto, onDismissRequest = alCerrar) {
         FilaDeChatNuevo(Icons.Filled.ChatBubbleOutline, androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_normal), androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_normal_detalle)) { alCerrar(); alElegir(false) }
         FilaDeChatNuevo(Icons.Filled.Groups, androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_compartido), androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.chat_nuevo_compartido_detalle)) { alCerrar(); alElegir(true) }
+        if (alNube != null) FilaDeChatNuevo(Icons.Filled.Cloud, androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.nb_chat_nuevo_nube), androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.nb_chat_nuevo_nube_detalle)) { alCerrar(); alNube() }
         // **Unirse al de otro** (27-oct-2026): se podía crear un chat compartido pero no entrar en
         // uno; la puerta estaba en el ⋮ de «Mensajes guardados» y nadie la encontraba. Aquí, junto a
         // crearlo, como el menú del «+» del PC (`cc-menu-entrar`).

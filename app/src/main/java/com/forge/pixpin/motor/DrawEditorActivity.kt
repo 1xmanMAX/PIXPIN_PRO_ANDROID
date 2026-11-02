@@ -1828,6 +1828,9 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 // **El riel de la derecha, el de todos los visores** (24-oct-2026, PC `ba59dd6`):
                 // marcador, lápiz —mirar o editar— y marco, y debajo los marcadores.
                 @Suppress("UNUSED_EXPRESSION") tick
+                // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
+                val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deLienzo(this@DrawEditorActivity, dibujoId) }.getOrNull() } }
+                com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
                 if (!soloElDibujo) com.forge.pixpin.ui.RielDelVisor(
                     visible = !modoVista || com.forge.pixpin.ui.RielALaVista.visible(mirandoALaVista, anotando = false, marcando = false, poniendoMarca = poniendoMarca),
                     alUsar = { mirandoALaVista = true },

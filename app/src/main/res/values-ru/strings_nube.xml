@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La nube de los chats compartidos (PC sincronizar::nube, 1-nov-2026) -->
+<resources>
+    <string name="nb_chat_nuevo_nube">Общий чат в облаке</string>
+    <string name="nb_chat_nuevo_nube_detalle">То, что вы загружаете, другие получают где угодно</string>
+    <string name="nb_nube_modo_titulo">Как синхронизируется</string>
+    <string name="nb_nube_modo_local">Локальная сеть</string>
+    <string name="nb_nube_modo_nube">Облако</string>
+    <string name="nb_nube_modo_local_detalle">Синхронизируется, когда вы в одной сети Wi-Fi, бесплатно и без серверов.</string>
+    <string name="nb_nube_modo_nube_detalle">Идёт через ваше облако: то, что вы загружаете, другие получают где угодно, и это видно в вебе. Загружаются только изменения.</string>
+    <string name="nb_nube_falta_configurar">Облако не настроено: укажите адрес и ключ в Синхронизация → Облако.</string>
+    <string name="nb_nube_titulo">Облако</string>
+    <string name="nb_nube_portada_como">Общие чаты с режимом «Облако» идут через ваш сервер. Ваши личные остаются в локальной сети.</string>
+    <string name="nb_nube_explica">Ваш сервер хранит общие чаты, которые идут через облако, и показывает их в вебе. Личные чаты остаются в локальной сети, без серверов.</string>
+    <string name="nb_nube_direccion">Веб-адрес</string>
+    <string name="nb_nube_llave">Ключ устройства (pxn_…)</string>
+    <string name="nb_nube_llave_guardada">Ключ сохранён:</string>
+    <string name="nb_nube_olvidar">Забыть</string>
+    <string name="nb_nube_guardar">Сохранить</string>
+    <string name="nb_nube_probar">Проверить</string>
+    <string name="nb_nube_guardado">Сохранено.</string>
+    <string name="nb_nube_direccion_mala">Адрес должен начинаться с https://.</string>
+    <string name="nb_nube_llave_mala">Ключ начинается с pxn_ (его выдаёт сайт при регистрации устройства).</string>
+    <string name="nb_nube_probado">Подключено: пространство %1$s.</string>
+    <string name="nb_nube_no_contesta">Облако не отвечает:</string>
+    <string name="nb_nube_que_va">Загружаются только изменения: на размеченном плане — новый штрих, а не весь план.</string>
+    <string name="nb_nube_en_linea">В сети</string>
+    <string name="nb_nube_sin_conexion">Не в сети</string>
+    <string name="nb_nube_cerrar_titulo">Изменения без сети</string>
+    <string name="nb_nube_cerrar_pregunta">Вы размечали этот документ без сети.\nДа: отменить эти изменения (изменения других останутся).\nНет: вернуться в сеть и загрузить их.\nОтмена: оставить без сети до следующего раза.</string>
+    <string name="nb_descartar">Отменить</string>
+    <string name="nb_subir">Загрузить</string>
+    <string name="nb_dejar">Оставить офлайн</string>
+</resources>

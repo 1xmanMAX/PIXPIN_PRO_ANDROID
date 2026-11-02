@@ -1,5 +1,6 @@
 package com.forge.pixpin.ui
 
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.filled.BorderColor
@@ -1029,6 +1030,9 @@ private fun Pantalla(
             }
             // **El riel de la derecha**: marcador, lápiz (anotar encima) y marcos, como en los visores.
             // **Y se va con la pastilla** (27-oct-2026): al mover la nota, y vuelve al tocar. Ver [RielALaVista].
+            // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
+            val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deBase(contextoDelEditor, archivoDeMarcasDeTexto?.name) }.getOrNull() } }
+            com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { (contextoDelEditor as? android.app.Activity)?.finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
             if (viendo && !marcosDeLaNota.imprimiendo) RielDelVisor(
                 visible = RielALaVista.visible(barras, anotandoLaNota, marcosDeLaNota.activo, poniendoMarca),
                 alUsar = { toques++ },

@@ -1059,6 +1059,9 @@ class LectorPdfActivity : ComponentActivity() {
             // los marcadores. Anotando se queda, con el lápiz encendido: tocarlo deja de anotar.
             // **Y se va con la pastilla** (27-oct-2026): al mover la hoja, y vuelve al tocar. Ver [com.forge.pixpin.ui.RielALaVista].
             if (cuantas > 0 && aSolas == null && !marcosDoc.imprimiendo) {
+                // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
+                val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deAdjunto(this@LectorPdfActivity, rutaPedida) }.getOrNull() } }
+                com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
                 com.forge.pixpin.ui.RielDelVisor(
                     visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarca),
                     alUsar = { toques++ },

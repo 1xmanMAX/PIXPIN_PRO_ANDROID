@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- La nube de los chats compartidos (PC sincronizar::nube, 1-nov-2026) -->
+<resources>
+    <string name="nb_chat_nuevo_nube">Shared chat in the cloud</string>
+    <string name="nb_chat_nuevo_nube_detalle">What you upload, the others download wherever they are</string>
+    <string name="nb_nube_modo_titulo">How it syncs</string>
+    <string name="nb_nube_modo_local">Local network</string>
+    <string name="nb_nube_modo_nube">Cloud</string>
+    <string name="nb_nube_modo_local_detalle">Syncs when you are on the same Wi-Fi, free and without servers.</string>
+    <string name="nb_nube_modo_nube_detalle">Goes through your cloud: what you upload the others download wherever they are, and it shows on the web. Only changes are uploaded.</string>
+    <string name="nb_nube_falta_configurar">No cloud yet: set its address and your key in Sync → Cloud.</string>
+    <string name="nb_nube_titulo">Cloud</string>
+    <string name="nb_nube_portada_como">Shared chats set to «Cloud» go through your server. Your own chats stay on the local network.</string>
+    <string name="nb_nube_explica">Your server keeps the shared chats that go through the cloud and shows them on the web. Personal chats stay on the local network, without servers.</string>
+    <string name="nb_nube_direccion">Web address</string>
+    <string name="nb_nube_llave">Device key (pxn_…)</string>
+    <string name="nb_nube_llave_guardada">Key saved:</string>
+    <string name="nb_nube_olvidar">Forget</string>
+    <string name="nb_nube_guardar">Save</string>
+    <string name="nb_nube_probar">Test</string>
+    <string name="nb_nube_guardado">Saved.</string>
+    <string name="nb_nube_direccion_mala">The address must start with https://.</string>
+    <string name="nb_nube_llave_mala">The key starts with pxn_ (the web gives it to you when you register this device).</string>
+    <string name="nb_nube_probado">Connected: space %1$s.</string>
+    <string name="nb_nube_no_contesta">The cloud does not answer:</string>
+    <string name="nb_nube_que_va">Only changes are uploaded: on an annotated plan, the new stroke and not the whole plan.</string>
+    <string name="nb_nube_en_linea">Online</string>
+    <string name="nb_nube_sin_conexion">Offline</string>
+    <string name="nb_nube_cerrar_titulo">Offline changes</string>
+    <string name="nb_nube_cerrar_pregunta">You annotated this document offline.\nYes: discard those changes (the others\' stay).\nNo: go back online and upload them.\nCancel: keep it offline for next time.</string>
+    <string name="nb_descartar">Discard</string>
+    <string name="nb_subir">Upload</string>
+    <string name="nb_dejar">Keep offline</string>
+</resources>

@@ -75,6 +75,8 @@ class PixPinApp : Application() {
         // nada lea un texto. Ver [com.forge.pixpin.ajustes.IdiomaDeLaApp].
         com.forge.pixpin.ajustes.IdiomaDeLaApp.alArrancar(this)
         com.forge.pixpin.ui.Textos.app = this
+        // **La nube de los chats compartidos** (2-nov-2026): su bucle, si está configurada no hace nada sin chats.
+        runCatching { com.forge.pixpin.sincro.nube.NubeEnMarcha.instalar(this) }
         com.forge.pixpin.motor.DrawFonts.app = this
         // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].
         // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
