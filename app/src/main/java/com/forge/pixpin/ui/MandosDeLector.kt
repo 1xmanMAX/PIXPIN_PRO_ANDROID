@@ -147,6 +147,8 @@ fun PastillaDeLector(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HojaDeLector(onCerrar: () -> Unit, contenido: @Composable ColumnScope.() -> Unit) {
+    // Oscura también de día, con sus botones y deslizadores en los colores de noche. Ver [SiempreOscuro].
+    com.forge.pixpin.ui.theme.SiempreOscuro {
     ModalBottomSheet(
         onDismissRequest = onCerrar,
         containerColor = Color(0xF214182B),
@@ -159,6 +161,7 @@ fun HojaDeLector(onCerrar: () -> Unit, contenido: @Composable ColumnScope.() -> 
                 .padding(horizontal = 18.dp).padding(bottom = 14.dp),
             content = contenido
         )
+    }
     }
 }
 

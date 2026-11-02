@@ -760,10 +760,12 @@ class VisorHtmlActivity : ComponentActivity() {
         if (!abierta) Toast.makeText(this, "No se pudieron abrir los ajustes de voz", Toast.LENGTH_SHORT).show()
     }
 
-    /** Si el aparato está en modo oscuro: decide el papel del documento y, con él, la tinta de lo anotado. */
-    private fun esDeNoche(): Boolean =
-        (resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
-            android.content.res.Configuration.UI_MODE_NIGHT_YES
+    /**
+     * Si la aplicación está de noche: decide el papel del documento y, con él, la tinta de lo
+     * anotado. El aspecto de PinDesk, no el del teléfono (2-nov-2026): ver
+     * [com.forge.pixpin.ui.theme.deNocheEnLaApp].
+     */
+    private fun esDeNoche(): Boolean = com.forge.pixpin.ui.theme.deNocheEnLaApp(this)
 
     // ---- Anotar encima del documento, con el motor del lienzo. Ver [CapaDeAnotar]. ----
 

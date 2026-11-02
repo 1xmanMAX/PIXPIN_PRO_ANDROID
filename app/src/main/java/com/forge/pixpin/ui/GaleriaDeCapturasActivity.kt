@@ -372,6 +372,8 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
         n: Int, onTodas: () -> Unit, onConservar: () -> Unit, onPinear: () -> Unit, onCopiar: () -> Unit,
         onBorrar: () -> Unit, onSalir: () -> Unit
     ) {
+        // Oscura también de día: sus botones de texto, en los colores de noche. Ver [SiempreOscuro].
+        com.forge.pixpin.ui.theme.SiempreOscuro {
         Surface(color = Color(0xFF2C2C2E), shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp)) {
             Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -387,6 +389,7 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
                     TextButton(onClick = onBorrar, enabled = activo) { Text("Borrar", color = if (activo) ROJO_TEXTO else Color.Gray, maxLines = 1) }
                 }
             }
+        }
         }
     }
 
