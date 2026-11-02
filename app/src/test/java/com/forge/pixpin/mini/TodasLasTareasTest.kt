@@ -147,8 +147,10 @@ class TodasLasTareasTest {
         val g = TodasLasTareas.agrupar(listas, emptyList(), dia(3), conVacias = true)
         assertEquals(3, g.size)
         assertTrue(g.any { listas[it.lista].codigo == "nueva" && it.arriba.isEmpty() })
-        // Caso negativo: buscando, un grupo vacío no sale (no tiene nada que coincida).
-        assertTrue(TodasLasTareas.agrupar(listas, listOf("nuevo"), dia(3), conVacias = true).none { listas[it.lista].codigo == "nueva" })
+        // Buscando, un grupo vacío sale si su nombre coincide (la lista de una asignatura recién creada,
+        // 2-nov-2026, PC `71bf70f6`); caso negativo: si no coincide, no.
+        assertTrue(TodasLasTareas.agrupar(listas, listOf("nuevo"), dia(3), conVacias = true).any { listas[it.lista].codigo == "nueva" })
+        assertTrue(TodasLasTareas.agrupar(listas, listOf("pan"), dia(3), conVacias = true).none { listas[it.lista].codigo == "nueva" })
     }
 
     /**

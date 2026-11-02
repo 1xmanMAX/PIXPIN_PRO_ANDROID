@@ -79,7 +79,13 @@ object Horario {
         val nombre: String,
         val aula: String?,
         /** Su color, `0xRRGGBB`; null es el de su nombre. */
-        val color: Int? = null
+        val color: Int? = null,
+        /**
+         * **El enlace con su lista de tareas** (2-nov-2026, PC `71bf70f6`): `lista:<id>` al final de su
+         * línea, el `id` del mensaje de su lista en el chat «Asignaturas». Con él, renombrar la asignatura
+         * renombra la lista en vez de dejarla huérfana. Ver [Asignaturas.enlazar].
+         */
+        val lista: String? = null
     )
 
     /** Una evaluación (examen, entrega…) con su fecha. */
@@ -307,14 +313,25 @@ object Horario {
         return minOf(n, 24 * 60)
     }
 
-    /** **Una línea de la lista de asignaturas**: `Asignatura Geometría @A-12 #4F8EF7`. */
-    private fun asignaturaDeLinea(palabras: List<String>): Asignatura? {
+    /** Lo que marca el enlace de una asignatura con su lista (`lista:<id>`, el `ENLACE` del PC). */
+    const val ENLACE = "lista:"
+
+    /** **Una línea de la lista de asignaturas**: `Asignatura Geometría @A-12 #4F8EF7 lista:<id>`. */
+    internal fun asignaturaDeLinea(palabras: List<String>): Asignatura? {
         val primera = norm((palabras.firstOrNull() ?: return null).trimEnd(':'))
         if (primera != "asignatura" && primera != "materia") return null
         var color: Int? = null
-        val resto = palabras.drop(1).filter { p -> val c = colorDe(p); if (c != null) { color = c; false } else true }
+        var lista: String? = null
+        val resto = palabras.drop(1).filter { p ->
+            val c = colorDe(p)
+            when {
+                c != null -> { color = c; false }
+                p.startsWith(ENLACE) && p.length > ENLACE.length -> { lista = p.substring(ENLACE.length); false }
+                else -> true
+            }
+        }
         val (nombre, aula) = nombreYAula(resto)
-        return if (nombre.isNotEmpty()) Asignatura(nombre, aula, color) else null
+        return if (nombre.isNotEmpty()) Asignatura(nombre, aula, color, lista) else null
     }
 
     /** Un color `#RRGGBB`. */
@@ -634,4 +651,19 @@ Evaluación Geometría 23/10
 
 avisar 10 min antes
 """
+
+    /**
+     * **El horario con los enlaces apuntados** (2-nov-2026, `con_enlaces` del PC): a cada línea
+     * `Asignatura …` sin `lista:` a la que [enlace] da un id, se le pone `lista:<id>` al final. Lo demás,
+     * letra a letra.
+     */
+    fun conEnlaces(original: String, enlace: (Asignatura) -> String?): String {
+        val fin = original.endsWith("\n")
+        val v = original.split('\n').map { l ->
+            val a = asignaturaDeLinea(palabras(l.trim()))
+            if (a == null || a.lista != null) l
+            else enlace(a)?.takeIf { it.isNotBlank() }?.let { "${l.trimEnd()} $ENLACE$it" } ?: l
+        }
+        return v.joinToString("\n").let { if (fin && !it.endsWith("\n")) it + "\n" else it }
+    }
 }

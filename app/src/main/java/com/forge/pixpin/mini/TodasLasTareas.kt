@@ -425,7 +425,10 @@ object TodasLasTareas {
         val (arriba, hechas) = l.aLaVista { sigueArriba(l, it) }
         val a = arriba.filter { coincide(l, it, palabras, hoy) }.map { it.indice }
         val h = hechas.filter { coincide(l, it, palabras, hoy) }.map { it.indice }
-        if (a.isEmpty() && h.isEmpty() && !(conVacias && palabras.isEmpty() && l.filas.isEmpty())) null else Grupo(li, a, h)
+        // Una lista vacía sale sin buscar (con [conVacias]) y, buscando, si su nombre coincide (la de una
+        // asignatura recién creada se encuentra por su nombre, 2-nov-2026).
+        val vaciaQueSale = l.filas.isEmpty() && conVacias && (palabras.isEmpty() || palabras.all { hayCoincidencia(l.titulo, it) })
+        if (a.isEmpty() && h.isEmpty() && !vaciaQueSale) null else Grupo(li, a, h)
     }
 
     /** «hoy», «hace 1 día», «hace N días» (`mini-tarea-edad`). Nunca la fecha: lo pidió el usuario. */

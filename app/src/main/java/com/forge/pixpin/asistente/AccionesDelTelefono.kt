@@ -304,7 +304,15 @@ class AccionesDelTelefono(
             "anadir_tarea" -> {
                 val t = texto(p, "texto") ?: error("la tarea esta vacia")
                 if (Casillas.saneado(t).isEmpty()) error("la tarea esta vacia")
+                // **A una asignatura** (2-nov-2026, PC `dbbd4ec3`): a su lista (la de su enlace, creándola si
+                // aún no está); entonces no se miran `proyecto` ni `codigo`.
+                val asignatura = texto(p, "asignatura")?.trim()?.takeIf { it.isNotEmpty() }
                 when {
+                    asignatura != null -> {
+                        val app = contexto.applicationContext as com.forge.pixpin.PixPinApp
+                        val id = com.forge.pixpin.horario.Asignaturas.listaDeLaAsignatura(app, asignatura)
+                        cambiarLista(id) { TodasLasTareas.conTarea(it, t) }
+                    }
                     codigo != null -> cambiarLista(codigo) { TodasLasTareas.conTarea(it, t) }
                     proyectoDe(p) != null -> {
                         val ultima = almacen.leer().lastOrNull { it.proyecto == proyectoDe(p) && TodasLasTareas.esLista(it) && !it.enBuzon }
@@ -347,6 +355,17 @@ class AccionesDelTelefono(
                 if (!hecho) error("la lista cambio mientras tanto; vuelve a intentarlo")
             }
             "borrar_lista" -> almacen.cambiar { todos -> todos.filterNot { it.id == codigo } }
+            // **Tareas abierta en una lista** (2-nov-2026, PC `dbbd4ec3`): la de la `asignatura` (por su nombre;
+            // se crea vacía si aún no tiene) o la `codigo`; sin ninguna, Tareas como siempre.
+            "abrir_lista" -> {
+                val app = contexto.applicationContext as com.forge.pixpin.PixPinApp
+                val asignatura = texto(p, "asignatura")?.trim()?.takeIf { it.isNotEmpty() }
+                val id = asignatura?.let { com.forge.pixpin.horario.Asignaturas.listaDeLaAsignatura(app, it) } ?: codigo
+                val nombre = id?.let { i -> almacen.leer().firstOrNull { it.id == i }?.let(TodasLasTareas::nombreDeLista) }
+                android.os.Handler(android.os.Looper.getMainLooper()).post {
+                    com.forge.pixpin.mini.TodasLasTareasActivity.abrir(contexto, buscar = nombre)
+                }
+            }
             else -> error("pedido de tareas desconocido: $accion")
         }
     }

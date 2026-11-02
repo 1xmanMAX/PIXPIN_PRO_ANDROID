@@ -102,6 +102,28 @@ data class Semana(
         data class Repetida(val i: Int) : Resultado()
     }
 
+    /**
+     * **Renombra la asignatura [i]** y sus clases, que la nombran (2-nov-2026, `renombrar_asignatura` del
+     * PC). Su enlace con la lista se queda (quien guarda renombra también la lista). [Renombrada.Otra] con
+     * la otra si ya hay una que se llama así; null si no cambia nada (vacío o el mismo nombre); con el
+     * nombre de antes si se cambió.
+     */
+    fun renombrarAsignatura(i: Int, nuevo0: String): Renombrada? {
+        val nuevo = nuevo0.trim().split(Regex("\\s+")).filter { it.isNotEmpty() }.joinToString(" ")
+        val antes = asignaturas.getOrNull(i)?.nombre ?: return null
+        if (nuevo.isEmpty() || nuevo == antes) return null
+        asignatura(nuevo)?.takeIf { it != i }?.let { return Renombrada.Otra(it) }
+        for (k in bloques.indices) if (mismo(bloques[k].nombre, antes)) bloques[k] = bloques[k].copy(nombre = nuevo)
+        asignaturas[i] = asignaturas[i].copy(nombre = nuevo)
+        return Renombrada.Hecho(antes)
+    }
+
+    /** Lo que da [renombrarAsignatura]. */
+    sealed class Renombrada {
+        data class Hecho(val antes: String) : Renombrada()
+        data class Otra(val i: Int) : Renombrada()
+    }
+
     /** Quita la asignatura [i] de la lista, con todas sus clases. */
     fun borrarAsignatura(i: Int): Asignatura? {
         if (i !in asignaturas.indices) return null
@@ -224,6 +246,7 @@ data class Semana(
             var s = "Asignatura ${a.nombre.trim()}"
             a.aula?.takeIf { it.isNotBlank() }?.let { s += " " + aulaEscrita(it) }
             a.color?.let { s += " #%06X".format(it) }
+            a.lista?.takeIf { it.isNotBlank() }?.let { s += " ${Horario.ENLACE}$it" }
             return s
         }
 

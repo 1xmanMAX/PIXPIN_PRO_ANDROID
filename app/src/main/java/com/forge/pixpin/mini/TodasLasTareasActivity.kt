@@ -29,6 +29,9 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -147,7 +150,7 @@ class TodasLasTareasActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        if (savedInstanceState == null) vistaPedida = vistaDe(intent)
+        if (savedInstanceState == null) { vistaPedida = vistaDe(intent); busquedaPedida = intent.getStringExtra(EXTRA_BUSCAR) }
         setContent { PixPinTheme { Pantalla() } }
     }
 
@@ -157,7 +160,11 @@ class TodasLasTareasActivity : ComponentActivity() {
         // Volver a pedir Tareas es volver a mirarla: lo tachado se va a «Hechas» (2-nov-2026, [TareasQuietas]).
         soltarQuietas()
         vistaDe(intent)?.let { vistaPedida = it }
+        intent.getStringExtra(EXTRA_BUSCAR)?.let { busquedaPedida = it }
     }
+
+    /** Lo que hay que buscar al abrir (una lista pedida por su nombre, [abrir]). */
+    private var busquedaPedida by mutableStateOf<String?>(null)
 
     override fun onStop() {
         super.onStop()
@@ -246,6 +253,12 @@ class TodasLasTareasActivity : ComponentActivity() {
                 withContext(Dispatchers.Main) { llamanTareas = t; clasesApagadas = a; if (h != null) horario = h }
             }
         }
+        LaunchedEffect(busquedaPedida) {
+            val b = busquedaPedida ?: return@LaunchedEffect
+            cambiarModo(VistaDeTareas.Vista.TARJETAS)
+            consulta = b
+            busquedaPedida = null
+        }
         LaunchedEffect(vistaPedida) {
             val pedida = vistaPedida ?: return@LaunchedEffect
             cambiarModo(pedida)
@@ -256,6 +269,11 @@ class TodasLasTareasActivity : ComponentActivity() {
         var resaltada by remember { mutableStateOf<String?>(null) }
         val rejilla = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
         var apuntar by remember { mutableStateOf("") }
+        // **Adónde va lo apuntado** (2-nov-2026, `tareas::destino` del PC): null es el Inbox; si no, la
+        // clave de la lista (una asignatura o cualquier otra). Lo eligen el «＋» de cada lista y el libro de la caja.
+        var destino by remember { mutableStateOf<String?>(null) }
+        var eligiendoDestino by remember { mutableStateOf(false) }
+        val campoDeApuntar = remember { androidx.compose.ui.focus.FocusRequester() }
         val abiertas = remember { mutableStateMapOf<String, Boolean>() }
         var moviendo by remember { mutableStateOf<Pair<Lista, Fila>?>(null) }
         val avisos = remember { SnackbarHostState() }
@@ -414,10 +432,12 @@ class TodasLasTareasActivity : ComponentActivity() {
             val t = TareaInteligente.paraApuntar(apuntar)
             if (t.isEmpty()) return
             apuntar = ""
+            val l = destino?.let { d -> listas?.firstOrNull { it.clave == d } }
             app.scope.launch(Dispatchers.IO) {
-                TareaRapidaActivity.alInbox(applicationContext, t)
+                if (l == null) TareaRapidaActivity.alInbox(applicationContext, t)
+                else almacen.actualizar(l.codigo) { it.copy(texto = TodasLasTareas.conTarea(it.texto, t)) }
                 val dice = TareaInteligente.tituloDe(t).ifBlank { Tareas.saneado(t) }
-                withContext(Dispatchers.Main) { avisar(getString(R.string.tareas_anadida_a, dice, TodasLasTareas.INBOX)) }
+                withContext(Dispatchers.Main) { avisar(getString(R.string.tareas_anadida_a, dice, l?.titulo ?: TodasLasTareas.INBOX)) }
             }
         }
 
@@ -478,13 +498,34 @@ class TodasLasTareasActivity : ComponentActivity() {
                     }
                     Spacer(Modifier.height(8.dp))
 
-                    // Apuntar: va al Inbox de «Mensajes guardados».
+                    // Apuntar: al Inbox de «Mensajes guardados» o a la lista elegida (el libro de delante).
                     Row(
-                        Modifier.fillMaxWidth().padding(horizontal = 12.dp).cristal().padding(start = 14.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = 12.dp).cristal().padding(start = 4.dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Icon(Icons.Filled.Add, null, tint = Cristal.tinta.copy(alpha = 0.7f))
-                        Spacer(Modifier.width(8.dp))
+                        Box {
+                            val elegida = destino?.let { d -> listas?.firstOrNull { it.clave == d } }
+                            TextButton(onClick = { eligiendoDestino = true }) {
+                                Icon(Icons.AutoMirrored.Filled.MenuBook, stringResource(R.string.as_tareas_destino_pista), tint = Cristal.tinta.copy(alpha = 0.8f))
+                                Spacer(Modifier.width(4.dp))
+                                Text(
+                                    elegida?.let { (if (esAsignatura(it)) "📘 " else "") + it.titulo } ?: TodasLasTareas.INBOX,
+                                    color = Cristal.tinta, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 110.dp)
+                                )
+                            }
+                            androidx.compose.material3.DropdownMenu(expanded = eligiendoDestino, onDismissRequest = { eligiendoDestino = false }) {
+                                Text(stringResource(R.string.as_tareas_destino_pista), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
+                                androidx.compose.material3.DropdownMenuItem(text = { Text(TodasLasTareas.INBOX) }, onClick = { destino = null; eligiendoDestino = false })
+                                // Primero las asignaturas (📘), luego las demás listas de todos los chats.
+                                val todas = listas.orEmpty().filterNot { TodasLasTareas.esInbox(it) }
+                                for (l in todas.sortedBy { if (esAsignatura(it)) 0 else 1 }) {
+                                    androidx.compose.material3.DropdownMenuItem(
+                                        text = { Text((if (esAsignatura(l)) "📘 " else "") + l.titulo.ifBlank { stringResource(R.string.tareas_titulo) } + "  ·  " + l.chat, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                                        onClick = { destino = l.clave; eligiendoDestino = false }
+                                    )
+                                }
+                            }
+                        }
                         Box(Modifier.weight(1f).padding(vertical = 12.dp)) {
                             if (apuntar.isEmpty()) Text(
                                 stringResource(R.string.tareas_apunta), color = Cristal.tinta.copy(alpha = 0.5f),
@@ -493,7 +534,7 @@ class TodasLasTareasActivity : ComponentActivity() {
                             BasicTextField(
                                 value = apuntar, onValueChange = { apuntar = it }, singleLine = true,
                                 textStyle = MaterialTheme.typography.bodyLarge.copy(color = Cristal.tinta),
-                                cursorBrush = SolidColor(Cristal.tinta), modifier = Modifier.fillMaxWidth(),
+                                cursorBrush = SolidColor(Cristal.tinta), modifier = Modifier.fillMaxWidth().focusRequester(campoDeApuntar),
                                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                                 keyboardActions = KeyboardActions(onDone = { apuntarAhora() })
                             )
@@ -532,8 +573,8 @@ class TodasLasTareasActivity : ComponentActivity() {
                                 if (resaltada == clave(l, f)) Modifier.border(2.dp, color, RoundedCornerShape(16.dp)) else Modifier
                             v.grupos.forEach { g ->
                                 val l = v.listas[g.lista]
-                                val color = Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[g.lista]])
-                                item(key = "e:" + l.clave, span = ancha) { Encabezado(l, g.pendientes(l), color) }
+                                val color = colorDeLista(l, colores[g.lista])
+                                item(key = "e:" + l.clave, span = ancha) { Encabezado(l, g.pendientes(l), color) { destino = l.clave; runCatching { campoDeApuntar.requestFocus() } } }
                                 items(g.arriba, key = { "a:" + l.clave + ":" + l.filas[it].crudo + ":" + it }) { i ->
                                     Tarjeta(l, l.filas[i], color, palabras, v.hoy, palabras.isNotEmpty(), ::marcar, { moviendo = l to l.filas[i] }, ::quitar, ::recordar, ::llamarA, resalte(l, l.filas[i], color)) { a, b -> ponerHora(a, b, null) }
                                 }
@@ -667,7 +708,7 @@ class TodasLasTareasActivity : ComponentActivity() {
     ) {
         val actual by rememberUpdatedState(v)
         val colores = remember(v.listas) { TodasLasTareas.coloresDeListas(v.listas.map { it.clave to it.filas.isNotEmpty() }) }
-        fun colorDe(li: Int) = Color(0xFF000000.toInt() or TodasLasTareas.COLORES_DE_GRUPO[colores[li]])
+        fun colorDe(li: Int) = colorDeLista(v.listas[li], colores[li])
         val lado = rememberScrollState()
         val cajas = remember { mutableStateMapOf<Int, Rect>() }
         var origen by remember { mutableStateOf(Offset.Zero) }
@@ -851,12 +892,31 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
     }
 
+    /** La asignatura del horario de la lista [l], si es una lista del chat «Asignaturas» con ese nombre. */
+    private fun asignaturaDe(l: Lista): com.forge.pixpin.horario.Horario.Asignatura? {
+        if (l.chat != com.forge.pixpin.horario.Asignaturas.NOMBRE_CHAT) return null
+        val n = com.forge.pixpin.horario.Horario.norm(l.titulo.trim())
+        return horario.todasLasAsignaturas().firstOrNull { a -> a.lista == l.codigo || com.forge.pixpin.horario.Horario.norm(a.nombre.trim()) == n }
+    }
+
+    private fun esAsignatura(l: Lista): Boolean = asignaturaDe(l) != null
+
+    /**
+     * **El color de una lista** (2-nov-2026, PC `71bf70f6`): la de una asignatura, el de la asignatura en
+     * el horario; las demás, el suyo de siempre ([TodasLasTareas.coloresDeListas], [indice] su sitio).
+     */
+    private fun colorDeLista(l: Lista, indice: Int): Color {
+        val a = asignaturaDe(l)
+        val rgb = if (a != null) a.color ?: com.forge.pixpin.horario.Semana.colorPorNombre(a.nombre) else TodasLasTareas.COLORES_DE_GRUPO[indice]
+        return Color(0xFF000000.toInt() or rgb)
+    }
+
     @Composable
-    private fun Encabezado(l: Lista, pendientes: Int, color: Color) {
+    private fun Encabezado(l: Lista, pendientes: Int, color: Color, onAnadir: (() -> Unit)? = null) {
         // Si es una asignatura del horario, cuándo llama (y tocar la apaga o la enciende).
         val llamada = remember(l.titulo, l.chat, horario, clasesApagadas) { LlamadasDeTareas.deGrupo(l.titulo, l.chat, horario, clasesApagadas) }
         Column(Modifier.fillMaxWidth()) {
-            EncabezadoFila(l, pendientes, color)
+            EncabezadoFila(l, pendientes, color, onAnadir)
             if (llamada != null) Box(Modifier.padding(start = 20.dp, bottom = 4.dp)) {
                 ChapaDeLlamada(LlamadasDeTareas.textoDeGrupo(llamada), !llamada.apagada) { cambiarLlamadaDeGrupo(l.titulo, llamada.apagada) }
             }
@@ -864,7 +924,7 @@ class TodasLasTareasActivity : ComponentActivity() {
     }
 
     @Composable
-    private fun EncabezadoFila(l: Lista, pendientes: Int, color: Color) {
+    private fun EncabezadoFila(l: Lista, pendientes: Int, color: Color, onAnadir: (() -> Unit)? = null) {
         Row(
             Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp))
                 .clickable { MiniActivity.abrir(this, l.codigo) }.padding(horizontal = 6.dp, vertical = 6.dp),
@@ -885,6 +945,10 @@ class TodasLasTareasActivity : ComponentActivity() {
             )
             Spacer(Modifier.width(8.dp))
             Text(TodasLasTareas.pendientesDeGrupo(pendientes), color = Cristal.puesto, style = MaterialTheme.typography.labelMedium, maxLines = 1)
+            // **«＋»: lo que se escriba en la caja va a esta lista** (2-nov-2026, PC `71bf70f6`; vale para todas).
+            if (onAnadir != null) IconButton(onClick = onAnadir, modifier = Modifier.size(32.dp)) {
+                Icon(Icons.Filled.Add, stringResource(R.string.as_tareas_destino_pista), tint = Cristal.tinta.copy(alpha = 0.8f), modifier = Modifier.size(20.dp))
+            }
         }
     }
 
@@ -1107,13 +1171,20 @@ class TodasLasTareasActivity : ComponentActivity() {
          * Abre Tareas; con [vista], en esa (el mosaico Horario la abre en el Horario). Si ya está
          * abierta, la trae al frente y le pasa la vista ([onNewIntent]).
          */
-        fun abrir(context: Context, vista: VistaDeTareas.Vista? = null) = context.startActivity(
+        fun abrir(context: Context, vista: VistaDeTareas.Vista? = null, buscar: String? = null) = context.startActivity(
             Intent(context, TodasLasTareasActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK).apply {
                 if (vista != null) {
                     putExtra(EXTRA_VISTA, vista.texto)
                     addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
                 }
+                // **En una lista** (2-nov-2026, `abrir_lista`): las tarjetas, buscando su nombre.
+                if (buscar != null) {
+                    putExtra(EXTRA_BUSCAR, buscar)
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                }
             }
         )
+
+        private const val EXTRA_BUSCAR = "buscar"
     }
 }

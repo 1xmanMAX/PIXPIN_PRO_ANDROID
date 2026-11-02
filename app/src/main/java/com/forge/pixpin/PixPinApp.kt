@@ -149,7 +149,11 @@ class PixPinApp : Application() {
         // para no rehacerlas por cada tecla. Ver [com.forge.pixpin.pin.RecordatoriosDeTareas].
         // **Las llamadas del horario de clases**, también al arrancar (y tras reiniciar el teléfono).
         // Ver [com.forge.pixpin.horario.AvisosDelHorario].
-        scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.horario.AvisosDelHorario.reprogramar(this@PixPinApp) } }
+        scope.launch(Dispatchers.IO) {
+            // Cada asignatura con su lista y su enlace `lista:<id>` (2-nov-2026), luego las llamadas.
+            runCatching { com.forge.pixpin.horario.AvisosDelHorario.enlazarAlArrancar(this@PixPinApp) }
+            runCatching { com.forge.pixpin.horario.AvisosDelHorario.reprogramar(this@PixPinApp) }
+        }
         @OptIn(kotlinx.coroutines.FlowPreview::class)
         scope.launch(Dispatchers.IO) {
             com.forge.pixpin.guardados.MensajesStore.cambios.debounce(1_500).collect {
