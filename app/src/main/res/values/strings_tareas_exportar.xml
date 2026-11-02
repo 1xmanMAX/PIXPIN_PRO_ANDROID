@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exportar una lista de tareas (2-nov-2026): los rótulos de tareas-exportar-* del PC (main.ftl). Los huecos {fecha}, {dia}… los llena ExportarTareas. -->
+<resources>
+    <string name="te_tareas_exportar_titulo">Tareas</string>
+    <string name="te_tareas_exportar_exportado">Exportado el {fecha}</string>
+    <string name="te_tareas_exportar_pendientes">Pendientes</string>
+    <string name="te_tareas_exportar_hechas">Hechas</string>
+    <string name="te_tareas_exportar_completado">Completado</string>
+    <string name="te_tareas_exportar_pendiente">Pendiente</string>
+    <string name="te_tareas_exportar_hecha">Hecha</string>
+    <string name="te_tareas_exportar_todo_hecho">Todo hecho</string>
+    <string name="te_tareas_exportar_vacia">Sin tareas</string>
+    <string name="te_tareas_exportar_recordatorio">Recordatorio</string>
+    <string name="te_tareas_exportar_pasada">Pasada</string>
+    <string name="te_tareas_exportar_creada">Creada el {fecha}</string>
+    <string name="te_tareas_exportar_de">{hechas} de {total}</string>
+    <string name="te_tareas_exportar_foto">Foto</string>
+    <string name="te_compartir_tipo_tareas">Lista de tareas</string>
+    <string name="te_tareas_urgente">Urgente</string>
+    <string name="te_tareas_muy_urgente">Muy urgente</string>
+    <string name="te_tareas_selector_hoy">Hoy</string>
+    <string name="te_tareas_selector_manana">Mañana</string>
+    <string name="te_chat_ayer">Ayer</string>
+    <string name="te_tareas_dia_0">lun</string>
+    <string name="te_tareas_dia_1">mar</string>
+    <string name="te_tareas_dia_2">mié</string>
+    <string name="te_tareas_dia_3">jue</string>
+    <string name="te_tareas_dia_4">vie</string>
+    <string name="te_tareas_dia_5">sáb</string>
+    <string name="te_tareas_dia_6">dom</string>
+    <string name="te_chat_mes_1">enero</string>
+    <string name="te_chat_mes_2">febrero</string>
+    <string name="te_chat_mes_3">marzo</string>
+    <string name="te_chat_mes_4">abril</string>
+    <string name="te_chat_mes_5">mayo</string>
+    <string name="te_chat_mes_6">junio</string>
+    <string name="te_chat_mes_7">julio</string>
+    <string name="te_chat_mes_8">agosto</string>
+    <string name="te_chat_mes_9">septiembre</string>
+    <string name="te_chat_mes_10">octubre</string>
+    <string name="te_chat_mes_11">noviembre</string>
+    <string name="te_chat_mes_12">diciembre</string>
+    <string name="te_chat_fecha">{dia} de {mes}</string>
+    <string name="te_chat_fecha_con_ano">{dia} de {mes} de {ano}</string>
+    <string name="te_grabacion_idioma">es</string>
+</resources>

@@ -7483,6 +7483,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 }
             )
         }
+        // **Una lista de tareas** sale cuidada (2-nov-2026, PC `bc4533bd`): su página propia, PDF, imagen,
+        // Word, Markdown y texto, sin las marcas crudas. Ver [com.forge.pixpin.mini.ExportarTareasEnLaApp].
+        if (com.forge.pixpin.mini.ExportarTareasEnLaApp.esLista(m)) return com.forge.pixpin.mini.ExportarTareasEnLaApp.compartible(this, m, nombre)
         // **Una grabación** (una nota de voz, o la carpeta de su clase) sale con lo suyo: página web,
         // PDF, Word, Markdown, texto y Anki (25-oct-2026, PC 2921a1d). Ver [ExportarGrabacion].
         if (m.clase == Clase.VOZ || CarpetaDePaginas.esGrabacion(m)) {

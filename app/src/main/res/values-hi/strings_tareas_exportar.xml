@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exportar una lista de tareas (2-nov-2026): los rótulos de tareas-exportar-* del PC (main.ftl). Los huecos {fecha}, {dia}… los llena ExportarTareas. -->
+<resources>
+    <string name="te_tareas_exportar_titulo">कार्य</string>
+    <string name="te_tareas_exportar_exportado">{fecha} को निर्यात किया गया</string>
+    <string name="te_tareas_exportar_pendientes">बाकी</string>
+    <string name="te_tareas_exportar_hechas">पूरे</string>
+    <string name="te_tareas_exportar_completado">पूर्ण</string>
+    <string name="te_tareas_exportar_pendiente">बाकी</string>
+    <string name="te_tareas_exportar_hecha">पूरा</string>
+    <string name="te_tareas_exportar_todo_hecho">सब पूरा</string>
+    <string name="te_tareas_exportar_vacia">कोई कार्य नहीं</string>
+    <string name="te_tareas_exportar_recordatorio">रिमाइंडर</string>
+    <string name="te_tareas_exportar_pasada">समय निकल गया</string>
+    <string name="te_tareas_exportar_creada">{fecha} को बनाया</string>
+    <string name="te_tareas_exportar_de">{total} में से {hechas}</string>
+    <string name="te_tareas_exportar_foto">फ़ोटो</string>
+    <string name="te_compartir_tipo_tareas">कार्य सूची</string>
+    <string name="te_tareas_urgente">तत्काल</string>
+    <string name="te_tareas_muy_urgente">बहुत तत्काल</string>
+    <string name="te_tareas_selector_hoy">आज</string>
+    <string name="te_tareas_selector_manana">कल</string>
+    <string name="te_chat_ayer">कल</string>
+    <string name="te_tareas_dia_0">सोम</string>
+    <string name="te_tareas_dia_1">मंगल</string>
+    <string name="te_tareas_dia_2">बुध</string>
+    <string name="te_tareas_dia_3">गुरु</string>
+    <string name="te_tareas_dia_4">शुक्र</string>
+    <string name="te_tareas_dia_5">शनि</string>
+    <string name="te_tareas_dia_6">रवि</string>
+    <string name="te_chat_mes_1">जनवरी</string>
+    <string name="te_chat_mes_2">फ़रवरी</string>
+    <string name="te_chat_mes_3">मार्च</string>
+    <string name="te_chat_mes_4">अप्रैल</string>
+    <string name="te_chat_mes_5">मई</string>
+    <string name="te_chat_mes_6">जून</string>
+    <string name="te_chat_mes_7">जुलाई</string>
+    <string name="te_chat_mes_8">अगस्त</string>
+    <string name="te_chat_mes_9">सितंबर</string>
+    <string name="te_chat_mes_10">अक्टूबर</string>
+    <string name="te_chat_mes_11">नवंबर</string>
+    <string name="te_chat_mes_12">दिसंबर</string>
+    <string name="te_chat_fecha">{dia} {mes}</string>
+    <string name="te_chat_fecha_con_ano">{dia} {mes} {ano}</string>
+    <string name="te_grabacion_idioma">hi</string>
+</resources>

@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Exportar una lista de tareas (2-nov-2026): los rótulos de tareas-exportar-* del PC (main.ftl). Los huecos {fecha}, {dia}… los llena ExportarTareas. -->
+<resources>
+    <string name="te_tareas_exportar_titulo">Görevler</string>
+    <string name="te_tareas_exportar_exportado">{fecha} tarihinde dışa aktarıldı</string>
+    <string name="te_tareas_exportar_pendientes">Bekleyen</string>
+    <string name="te_tareas_exportar_hechas">Yapılan</string>
+    <string name="te_tareas_exportar_completado">Tamamlandı</string>
+    <string name="te_tareas_exportar_pendiente">Bekliyor</string>
+    <string name="te_tareas_exportar_hecha">Yapıldı</string>
+    <string name="te_tareas_exportar_todo_hecho">Hepsi yapıldı</string>
+    <string name="te_tareas_exportar_vacia">Görev yok</string>
+    <string name="te_tareas_exportar_recordatorio">Hatırlatıcı</string>
+    <string name="te_tareas_exportar_pasada">Gecikti</string>
+    <string name="te_tareas_exportar_creada">{fecha} tarihinde oluşturuldu</string>
+    <string name="te_tareas_exportar_de">{total} görevden {hechas}</string>
+    <string name="te_tareas_exportar_foto">Fotoğraf</string>
+    <string name="te_compartir_tipo_tareas">Görev listesi</string>
+    <string name="te_tareas_urgente">Acil</string>
+    <string name="te_tareas_muy_urgente">Çok acil</string>
+    <string name="te_tareas_selector_hoy">Bugün</string>
+    <string name="te_tareas_selector_manana">Yarın</string>
+    <string name="te_chat_ayer">Dün</string>
+    <string name="te_tareas_dia_0">Pzt</string>
+    <string name="te_tareas_dia_1">Sal</string>
+    <string name="te_tareas_dia_2">Çar</string>
+    <string name="te_tareas_dia_3">Per</string>
+    <string name="te_tareas_dia_4">Cum</string>
+    <string name="te_tareas_dia_5">Cmt</string>
+    <string name="te_tareas_dia_6">Paz</string>
+    <string name="te_chat_mes_1">Ocak</string>
+    <string name="te_chat_mes_2">Şubat</string>
+    <string name="te_chat_mes_3">Mart</string>
+    <string name="te_chat_mes_4">Nisan</string>
+    <string name="te_chat_mes_5">Mayıs</string>
+    <string name="te_chat_mes_6">Haziran</string>
+    <string name="te_chat_mes_7">Temmuz</string>
+    <string name="te_chat_mes_8">Ağustos</string>
+    <string name="te_chat_mes_9">Eylül</string>
+    <string name="te_chat_mes_10">Ekim</string>
+    <string name="te_chat_mes_11">Kasım</string>
+    <string name="te_chat_mes_12">Aralık</string>
+    <string name="te_chat_fecha">{dia} {mes}</string>
+    <string name="te_chat_fecha_con_ano">{dia} {mes} {ano}</string>
+    <string name="te_grabacion_idioma">tr</string>
+</resources>
