@@ -154,12 +154,29 @@ class TodasLasTareasActivity : ComponentActivity() {
     /** Ya abierta, el mosaico Horario la trae al frente en su vista. */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        // Volver a pedir Tareas es volver a mirarla: lo tachado se va a «Hechas» (2-nov-2026, [TareasQuietas]).
+        soltarQuietas()
         vistaDe(intent)?.let { vistaPedida = it }
     }
 
     override fun onStop() {
         super.onStop()
         notaDeVoz.alParar()
+        // Dejar de verla (otra app, el inicio, la pantalla apagada) es salir de Tareas, como minimizar
+        // la ventana del PC. Un diálogo o un menú encima no la paran: no cuentan.
+        soltarQuietas()
+    }
+
+    /**
+     * **Lo que no se mueve bajo el dedo** (2-nov-2026, `tareas_quietas` del PC): lo recién tachado se
+     * queda en su sitio y el orden no se mueve hasta salir de Tareas. [versionDeQuietas] sube con cada
+     * cambio, para volver a calcular la vista.
+     */
+    private val quietas = TareasQuietas()
+    private var versionDeQuietas by mutableIntStateOf(0)
+
+    private fun soltarQuietas() {
+        if (quietas.tocadas() == 0) quietas.soltar() else { quietas.soltar(); versionDeQuietas++ }
     }
 
     private fun vistaDe(i: Intent?): VistaDeTareas.Vista? = i?.getStringExtra(EXTRA_VISTA)?.let { VistaDeTareas.Vista.deTexto(it) }
@@ -213,6 +230,8 @@ class TodasLasTareasActivity : ComponentActivity() {
         // palabras; aquí, las preferencias). La «lista» que se guardaba antes abre en las tarjetas.
         var modo by remember { mutableStateOf(VistaDeTareas.Vista.deTexto(runCatching { preferencias().getString(VISTA, null) }.getOrNull())) }
         fun cambiarModo(m: VistaDeTareas.Vista) {
+            // Otra vista es mirar de otra manera: se suelta lo quieto.
+            if (m != modo) soltarQuietas()
             modo = m
             runCatching { preferencias().edit().putString(VISTA, m.texto).apply() }
         }
@@ -237,41 +256,36 @@ class TodasLasTareasActivity : ComponentActivity() {
         var resaltada by remember { mutableStateOf<String?>(null) }
         val rejilla = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
         var apuntar by remember { mutableStateOf("") }
-        // Las recién tachadas (clave de la lista + texto crudo) y cuándo.
-        val recien = remember { mutableStateMapOf<String, Long>() }
         val abiertas = remember { mutableStateMapOf<String, Boolean>() }
         var moviendo by remember { mutableStateOf<Pair<Lista, Fila>?>(null) }
         val avisos = remember { SnackbarHostState() }
         val alcance = rememberCoroutineScope()
 
-        // Lo recién tachado se va a «Hechas» pasado su rato, cada una a su hora.
-        LaunchedEffect(recien.size) {
-            while (recien.isNotEmpty()) {
-                val primera = recien.values.minOrNull() ?: break
-                delay((primera + TodasLasTareas.SE_QUEDA_MS - System.currentTimeMillis()).coerceAtLeast(0))
-                val ahora = System.currentTimeMillis()
-                recien.keys.filter { ahora - (recien[it] ?: 0) >= TodasLasTareas.SE_QUEDA_MS }.forEach { recien.remove(it) }
-            }
-        }
-
         val palabras = remember(consulta) { TodasLasTareas.palabras(consulta) }
         var vista by remember { mutableStateOf<Vista?>(null) }
-        val recienes = recien.keys.toSet()
-        LaunchedEffect(listas, palabras, recienes) {
+        LaunchedEffect(listas, palabras, versionDeQuietas) {
             val ls = listas ?: return@LaunchedEffect
             if (palabras.isNotEmpty()) delay(80)
-            vista = withContext(Dispatchers.Default) {
-                val hoy = LocalDate.now()
-                val sigue = { l: Lista, f: Fila -> clave(l, f) in recienes }
+            // Buscar otra cosa es mirar de otra manera: se suelta lo quieto.
+            quietas.buscar(consulta)
+            val hoy = LocalDate.now()
+            val sigue = { l: Lista, f: Fila -> quietas.sigueArriba(l.clave, f.crudo) }
+            val calculada = withContext(Dispatchers.Default) {
                 // Sin buscar, también los grupos aún vacíos: uno recién creado en un chat se ve ya (1-nov-2026).
                 Vista(ls, TodasLasTareas.agrupar(ls, palabras, hoy, conVacias = true, sigueArriba = sigue), hoy, Kanban.columnas(ls, palabras, hoy, sigue))
             }
+            // **El orden congelado** (en el hilo principal: [TareasQuietas] no es para varios hilos).
+            vista = calculada.copy(
+                grupos = TodasLasTareas.congelar(quietas, ls, calculada.grupos),
+                columnas = TodasLasTareas.congelar(quietas, ls, calculada.columnas, listasQuietas = false)
+            )
         }
 
         fun avisar(t: String) { alcance.launch { avisos.currentSnackbarData?.dismiss(); avisos.showSnackbar(t) } }
 
         fun marcar(l: Lista, f: Fila, hecha: Boolean) {
-            if (hecha) recien[clave(l, f)] = System.currentTimeMillis() else recien.remove(clave(l, f))
+            quietas.marcar(l.clave, f.crudo, hecha)
+            versionDeQuietas++
             app.scope.launch(Dispatchers.IO) {
                 var cambio = false
                 almacen.cambiar { todos ->
@@ -285,6 +299,7 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
 
         fun quitar(l: Lista, f: Fila) {
+            quietas.quitar(l.clave, f.crudo)
             app.scope.launch(Dispatchers.IO) {
                 var hecha: Quitada? = null
                 almacen.cambiar { todos ->
@@ -349,6 +364,7 @@ class TodasLasTareasActivity : ComponentActivity() {
         }
 
         fun mover(desde: Lista, f: Fila, hasta: Lista) {
+            quietas.quitar(desde.clave, f.crudo)
             if (desde.clave == hasta.clave) return
             app.scope.launch(Dispatchers.IO) {
                 // Las imágenes, copiadas al chat de destino antes de tocar nada (`tareas::mover`).

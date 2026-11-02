@@ -287,6 +287,10 @@ class MiniActivity : ComponentActivity() {
         val titulo = Cabecera.titulo(documento)
         val tareas = remember(documento) { Tareas.leer(documento) }
         var ocultarHechas by remember { mutableStateOf(false) }
+        // **Con las hechas escondidas, lo recién tachado sigue a la vista** (2-nov-2026, `mini_panel` del
+        // PC `582b2e1e`): tachado y en su sitio hasta volver a pulsar el botón o salir. Si se escondiera
+        // en el mismo toque, la de debajo subiría bajo el dedo y el siguiente toque tacharía otra.
+        val tachadas = remember { androidx.compose.runtime.mutableStateListOf<String>() }
         var elegida by remember { mutableStateOf<Int?>(null) }
         var corrigiendo by remember { mutableStateOf<Int?>(null) }
         val hoy = remember { java.time.LocalDate.now() }
@@ -428,7 +432,7 @@ class MiniActivity : ComponentActivity() {
                         modifier = Modifier.weight(1f).padding(vertical = 4.dp).clip(androidx.compose.foundation.shape.RoundedCornerShape(50))
                     )
                     if (resumen.hechas > 0) {
-                        androidx.compose.material3.TextButton(onClick = { ocultarHechas = !ocultarHechas }) {
+                        androidx.compose.material3.TextButton(onClick = { ocultarHechas = !ocultarHechas; tachadas.clear() }) {
                             Text(if (ocultarHechas) "Ver las hechas" else "Ocultar las hechas")
                         }
                     }
@@ -440,7 +444,7 @@ class MiniActivity : ComponentActivity() {
                         item { Nada() }
                     }
                     itemsIndexed(tareas, key = { i, _ -> i }) { i, t ->
-                        if (ocultarHechas && t.hecha) return@itemsIndexed
+                        if (ocultarHechas && t.hecha && t.texto !in tachadas) return@itemsIndexed
                         val (texto, fecha) = remember(t.texto) { Tareas.partir(t.texto) }
                         // Lo que se lee y las imágenes, aparte: la fila enseña el texto limpio y,
                         // detrás, una miniatura por imagen.
@@ -461,7 +465,10 @@ class MiniActivity : ComponentActivity() {
                         ) {
                             Checkbox(
                                 checked = t.hecha,
-                                onCheckedChange = { conLasTareas(Tareas.alternar(tareas, i)) }
+                                onCheckedChange = {
+                                    if (ocultarHechas && !t.hecha) tachadas.add(t.texto)
+                                    conLasTareas(Tareas.alternar(tareas, i))
+                                }
                             )
                             if (corrigiendo == i) {
                                 Column(Modifier.weight(1f)) {
