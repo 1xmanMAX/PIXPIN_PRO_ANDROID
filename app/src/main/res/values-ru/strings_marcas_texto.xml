@@ -13,4 +13,6 @@
     <string name="mt_marcar_texto">Отметить текст</string>
     <string name="mt_pista">Коснитесь абзаца и выделите текст, чтобы отметить его.</string>
     <string name="mt_columna_fijada">Колонка и шрифт закреплены для пометок. Выделите текст ещё раз.</string>
+    <string name="mt_copiado">Скопировано</string>
+    <string name="mt_pdf_android15">Для выделения текста в PDF нужен Android 15. Можно открыть его «как текст».</string>
 </resources>

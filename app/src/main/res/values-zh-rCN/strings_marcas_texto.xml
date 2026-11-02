@@ -13,4 +13,6 @@
     <string name="mt_marcar_texto">标记文本</string>
     <string name="mt_pista">轻触段落并选择文本以进行标记。</string>
     <string name="mt_columna_fijada">栏宽和字体已固定以便标记。请重新选择文本。</string>
+    <string name="mt_copiado">已复制</string>
+    <string name="mt_pdf_android15">在 PDF 中选择文本需要 Android 15。你可以以“文本”方式打开它。</string>
 </resources>

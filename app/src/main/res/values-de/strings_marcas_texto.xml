@@ -13,4 +13,6 @@
     <string name="mt_marcar_texto">Text markieren</string>
     <string name="mt_pista">Tippe auf einen Absatz und wähle Text aus, um ihn zu markieren.</string>
     <string name="mt_columna_fijada">Spalte und Schrift sind jetzt zum Markieren fixiert. Wähle den Text erneut aus.</string>
+    <string name="mt_copiado">Kopiert</string>
+    <string name="mt_pdf_android15">Zum Auswählen von Text in einem PDF ist Android 15 nötig. Du kannst es „als Text“ öffnen.</string>
 </resources>

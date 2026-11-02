@@ -13,4 +13,6 @@
     <string name="mt_marcar_texto">Marquer le texte</string>
     <string name="mt_pista">Touchez un paragraphe et sélectionnez le texte pour le marquer.</string>
     <string name="mt_columna_fijada">La colonne et la police sont fixées pour marquer. Sélectionnez à nouveau le texte.</string>
+    <string name="mt_copiado">Copié</string>
+    <string name="mt_pdf_android15">Sélectionner le texte d\'un PDF nécessite Android 15. Vous pouvez l\'ouvrir « comme texte ».</string>
 </resources>

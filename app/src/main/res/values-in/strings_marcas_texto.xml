@@ -13,4 +13,6 @@
     <string name="mt_marcar_texto">Tandai teks</string>
     <string name="mt_pista">Ketuk paragraf dan pilih teks untuk menandainya.</string>
     <string name="mt_columna_fijada">Kolom dan huruf kini dikunci untuk menandai. Pilih teksnya lagi.</string>
+    <string name="mt_copiado">Disalin</string>
+    <string name="mt_pdf_android15">Memilih teks di PDF memerlukan Android 15. Anda dapat membukanya “sebagai teks”.</string>
 </resources>

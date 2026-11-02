@@ -33,6 +33,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.material.icons.filled.ContentCopy
 import com.forge.pixpin.R
 import com.forge.pixpin.motormd.AnclaDeTexto
 
@@ -46,7 +47,9 @@ fun BarraDeMarcasDeTexto(
     color: Int,
     onColor: (Int) -> Unit,
     onMarca: (String) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** «Copiar» lo elegido, delante de los colores (como el PC); null, no sale. */
+    onCopiar: (() -> Unit)? = null
 ) {
     val colores = AnclaDeTexto.COLORES.map { Color(0xFF000000 or it.substring(1).toLong(16)) }
     val elegido = colores.getOrElse(color) { colores[4] }
@@ -67,6 +70,16 @@ fun BarraDeMarcasDeTexto(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(2.dp)
         ) {
+            if (onCopiar != null) {
+                val rotuloCopiar = stringResource(R.string.mt_copiar)
+                Box(
+                    Modifier.size(38.dp).clip(RoundedCornerShape(8.dp)).clickable { onCopiar() }.semantics { contentDescription = rotuloCopiar },
+                    contentAlignment = Alignment.Center
+                ) {
+                    androidx.compose.material3.Icon(androidx.compose.material.icons.Icons.Filled.ContentCopy, rotuloCopiar, Modifier.size(18.dp))
+                }
+                Spacer(Modifier.width(4.dp).height(22.dp).padding(horizontal = 1.5.dp).background(MaterialTheme.colorScheme.outlineVariant))
+            }
             colores.forEachIndexed { i, c ->
                 Box(
                     Modifier.size(34.dp).clip(CircleShape).clickable { onColor(i) }.semantics { contentDescription = rotuloColor },

@@ -13,4 +13,6 @@
     <string name="mt_marcar_texto">Marcar texto</string>
     <string name="mt_pista">Toque em um parágrafo e selecione o texto para marcá-lo.</string>
     <string name="mt_columna_fijada">A coluna e a fonte foram fixadas para marcar. Selecione o texto novamente.</string>
+    <string name="mt_copiado">Copiado</string>
+    <string name="mt_pdf_android15">Selecionar texto em um PDF requer Android 15. Você pode abri-lo “como texto”.</string>
 </resources>

@@ -13,4 +13,6 @@
     <string name="mt_marcar_texto">テキストに印を付ける</string>
     <string name="mt_pista">段落をタップしてテキストを選択すると印を付けられます。</string>
     <string name="mt_columna_fijada">印を付けるために段組みと文字が固定されました。もう一度テキストを選択してください。</string>
+    <string name="mt_copiado">コピーしました</string>
+    <string name="mt_pdf_android15">PDF のテキストを選択するには Android 15 が必要です。「テキストとして」開くこともできます。</string>
 </resources>

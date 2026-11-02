@@ -13,4 +13,6 @@
     <string name="mt_marcar_texto">टेक्स्ट चिह्नित करें</string>
     <string name="mt_pista">किसी अनुच्छेद पर टैप करें और चिह्नित करने के लिए टेक्स्ट चुनें।</string>
     <string name="mt_columna_fijada">चिह्नित करने के लिए कॉलम और फ़ॉन्ट तय कर दिए गए हैं। टेक्स्ट फिर से चुनें।</string>
+    <string name="mt_copiado">कॉपी किया गया</string>
+    <string name="mt_pdf_android15">PDF में टेक्स्ट चुनने के लिए Android 15 चाहिए। आप इसे “टेक्स्ट के रूप में” खोल सकते हैं।</string>
 </resources>
