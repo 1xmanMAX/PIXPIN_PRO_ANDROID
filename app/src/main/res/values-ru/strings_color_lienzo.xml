@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Color avanzado del lienzo (PC selector_color, 2-nov-2026) -->
+<resources>
+    <string name="lc_recientes">Недавние</string>
+    <string name="lc_personalizado">Свой цвет</string>
+    <string name="lc_cuentagotas">Пипетка</string>
+    <string name="lc_opacidad">Непрозрачность</string>
+    <string name="lc_contraste">Контраст</string>
+    <string name="lc_toca_color">Коснитесь цвета, который нужно скопировать</string>
+</resources>

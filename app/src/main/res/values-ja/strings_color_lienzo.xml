@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Color avanzado del lienzo (PC selector_color, 2-nov-2026) -->
+<resources>
+    <string name="lc_recientes">最近使った色</string>
+    <string name="lc_personalizado">カスタム</string>
+    <string name="lc_cuentagotas">カラーピッカー</string>
+    <string name="lc_opacidad">不透明度</string>
+    <string name="lc_contraste">コントラスト</string>
+    <string name="lc_toca_color">コピーしたい色をタップ</string>
+</resources>

@@ -138,6 +138,7 @@ import androidx.compose.foundation.layout.requiredSize
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.CornerRadius
@@ -339,7 +340,11 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         dibujoId = intent.getStringExtra(EXTRA_ID) ?: System.currentTimeMillis().toString()
         cargarLasMarcas()
 
-        val cargada = ExcalidrawStore.cargar(intent.getStringExtra(EXTRA_RUTA)) ?: Scene()
+        val leida = ExcalidrawStore.cargar(intent.getStringExtra(EXTRA_RUTA))
+        // **Un dibujo nuevo nace con el último trazo a mano elegido** (2-nov-2026, PC
+        // `lienzo_rugosidad`); uno guardado trae el suyo.
+        val rugosidad = runBlockingRugosidad()
+        val cargada = leida ?: Scene().let { e -> if (rugosidad in 0..2) e.copy(style = e.style.copy(roughness = rugosidad)) else e }
         controller.load(cargada)
 
         val imagenPath = intent.getStringExtra(EXTRA_IMAGEN)
@@ -1331,6 +1336,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         // Se pinta aquí y no dentro del panel porque ahí se podría **ver** pero no **tocar**:
         // lo que se sale de un contenedor no recibe el dedo. Ver [PanelLateralDeEstilo].
         var tallerDeColor by remember { mutableStateOf(false) }
+        var cuentagotas by remember { mutableStateOf(false) }
+        var colorDelTaller by remember { mutableStateOf<String?>(null) }
         /**
          * **Solo el dibujo**: fuera todos los mandos, con la herramienta que hubiera puesta.
          *
@@ -1532,6 +1539,15 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             if (comoCielo) com.forge.pixpin.ui.theme.FondoCosmico(Modifier.matchParentSize())
             // Los colores marcados en la rueda. Van en los ajustes y no en el dibujo: son de
             // quien dibuja. Ver [Settings.coloresMarcados].
+            // **Los recientes** (2-nov-2026, PC `lienzo_colores_recientes`): los cinco últimos elegidos a mano.
+            val recientesDeColor = remember(ajustes.coloresRecientes) { SelectorDeColor.Recientes.deTexto(ajustes.coloresRecientes).codigos() }
+            fun apuntarReciente(hex: String) {
+                val r = SelectorDeColor.Recientes.deTexto(ajustes.coloresRecientes)
+                val c = SelectorDeColor.deHex(hex) ?: return
+                if (r.apuntar(c)) lifecycleScope.launch {
+                    (application as? com.forge.pixpin.PixPinApp)?.settings?.setColoresRecientes(r.codigos().joinToString(","))
+                }
+            }
             val marcasDeColor = remember(ajustes.coloresMarcados) {
                 ajustes.coloresMarcados.split(',')
                     .map { it.trim() }
@@ -2219,7 +2235,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                     if (aplican.isEmpty() || editandoTexto != null) {
                         tallerDeColor = false
                     } else {
-                        Velo(alTocar = { tallerDeColor = false }) { }
+                        Velo(alTocar = { colorDelTaller?.let(::apuntarReciente); colorDelTaller = null; tallerDeColor = false }) { }
                         val estilo = controller.estiloActivo()
                         ElTallerDelColor(
                             actual = estilo.strokeColor,
@@ -2230,7 +2246,12 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                                 .filterNot { c -> marcasDeColor.any { it.equals(c, true) } },
                             marcas = marcasDeColor,
                             noche = noche,
+                            recientes = recientesDeColor,
+                            opacidad = estilo.opacity,
+                            onOpacidad = { o -> aplicarEstilo(controller.estiloActivo().copy(opacity = o)); cambiado() },
+                            onCuentagotas = { colorDelTaller = estilo.strokeColor; tallerDeColor = false; cuentagotas = true },
                             onElegir = { hex ->
+                                colorDelTaller = hex
                                 aplicarEstilo(estilo.copy(strokeColor = hex))
                                 cambiado()
                             },
@@ -2249,6 +2270,30 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                                 .padding(horizontal = ANCHO_DEL_LATERAL)
                         )
                     }
+                }
+
+                // **El cuentagotas** (2-nov-2026, como el PC): un toque copia el color de la pantalla.
+                if (cuentagotas) Box(
+                    Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.04f)).pointerInput(Unit) {
+                        detectTapGestures { p ->
+                            cuentagotas = false
+                            colorEnLaPantalla(p.x.toInt(), p.y.toInt()) { argb ->
+                                if (argb != null) {
+                                    val hex = "#%06x".format(argb and 0xFFFFFF)
+                                    apuntarReciente(hex)
+                                    aplicarEstilo(controller.estiloActivo().copy(strokeColor = hex))
+                                    cambiado()
+                                }
+                            }
+                        }
+                    },
+                    contentAlignment = Alignment.TopCenter
+                ) {
+                    Text(
+                        stringResource(com.forge.pixpin.R.string.lc_toca_color),
+                        color = Color.White,
+                        modifier = Modifier.padding(top = 72.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.6f)).padding(horizontal = 14.dp, vertical = 8.dp)
+                    )
                 }
 
                 // **A qué zoom se está mirando, y el candado.**
@@ -2559,6 +2604,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                 val laTinta = if (tinta in tintas) tinta else Tinta.LAPIZ
                 val estilo = controller.estiloActivo()
                 val elegir: (String) -> Unit = { hex ->
+                    if (!isTransparent(hex)) apuntarReciente(hex)
                     aplicarEstilo(
                         if (laTinta == Tinta.RELLENO) estilo.copy(backgroundColor = hex)
                         else estilo.copy(strokeColor = hex)
@@ -4742,7 +4788,35 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         finish()
     }
 
+    /** El último trazo a mano guardado (-1 si nunca se tocó). Una lectura corta de los ajustes al abrir. */
+    private fun runBlockingRugosidad(): Int = runCatching {
+        val app = application as? com.forge.pixpin.PixPinApp ?: return -1
+        kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeoutOrNull(300) { app.settings.settings.first().rugosidadDelLienzo } } ?: -1
+    }.getOrDefault(-1)
+
+    /** El color del píxel ([x], [y]) de la ventana (el cuentagotas), con `PixelCopy`. */
+    private fun colorEnLaPantalla(x: Int, y: Int, alAcabar: (Int?) -> Unit) {
+        val vista = window.decorView
+        if (x !in 0 until vista.width || y !in 0 until vista.height) { alAcabar(null); return }
+        val b = android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)
+        runCatching {
+            android.view.PixelCopy.request(window, android.graphics.Rect(x, y, x + 1, y + 1), b, { r ->
+                alAcabar(if (r == android.view.PixelCopy.SUCCESS) b.getPixel(0, 0) else null)
+            }, android.os.Handler(mainLooper))
+        }.onFailure { alAcabar(null) }
+    }
+
+    /**
+     * **El último trazo a mano se recuerda** (2-nov-2026, PC `lienzo_rugosidad`): al cambiarlo se
+     * guarda, y un dibujo nuevo nace con él.
+     */
+    private fun recordarRugosidad(antes: Int, despues: Int) {
+        if (antes == despues) return
+        lifecycleScope.launch { (application as? com.forge.pixpin.PixPinApp)?.settings?.setRugosidadDelLienzo(despues) }
+    }
+
     private fun aplicarEstilo(nuevo: ItemStyle) {
+        recordarRugosidad(controller.estiloActivo().roughness, nuevo.roughness)
         // Qué campos se tocan y a quién le aplican lo decide el motor, en un
         // solo sitio; aquí solo queda lo que necesita Android: volver a medir la
         // caja de un texto al que se le ha cambiado la letra. Sin eso el
