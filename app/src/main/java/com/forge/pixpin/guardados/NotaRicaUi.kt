@@ -3,6 +3,7 @@ package com.forge.pixpin.guardados
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -67,7 +68,8 @@ private class FotoCargada(val mapa: ImageBitmap?, val proporcion: Float)
 
 @Composable
 private fun AlbumDeLaNota(fotos: List<NotaRica.Imagen>) {
-    val filesDir = LocalContext.current.filesDir
+    val contexto = LocalContext.current
+    val filesDir = contexto.filesDir
     val cargadas by produceState<List<FotoCargada>?>(null, fotos) {
         value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             fotos.map { f -> cargar(NotaRica.archivo(filesDir, f.enlace), if (fotos.size == 1) 1080 else 640) }
@@ -82,10 +84,14 @@ private fun AlbumDeLaNota(fotos: List<NotaRica.Imagen>) {
         Box(Modifier.fillMaxWidth().height(alto.dp)) {
             cajas.forEachIndexed { i, c ->
                 val mapa = cargadas?.getOrNull(i)?.mapa
+                // **Tocar una foto la abre** (3-nov-2026, el usuario: «si un mensaje tiene enlace e
+                // imágenes, al tocar la imagen se abre el enlace»): la foto se queda el toque, que ya
+                // no llega a la burbuja. Se ve en el visor de siempre, con su lápiz.
                 val forma = Modifier
                     .offset(c.x.dp, c.y.dp)
                     .size(c.ancho.dp, c.alto.dp)
                     .clip(RoundedCornerShape(8.dp))
+                    .clickable { abrirFotoDeLaNota(contexto, NotaRica.archivo(filesDir, fotos[i].enlace)) }
                 if (mapa != null) {
                     Image(mapa, contentDescription = fotos[i].alt.ifBlank { null }, modifier = forma, contentScale = ContentScale.Crop)
                 } else {
@@ -96,6 +102,14 @@ private fun AlbumDeLaNota(fotos: List<NotaRica.Imagen>) {
             }
         }
     }
+}
+
+/** Abre una foto de una nota en el visor de imágenes (el lienzo con la foto, mirando). */
+private fun abrirFotoDeLaNota(c: android.content.Context, f: File?) {
+    if (f == null || !f.isFile) return
+    val id = "nota-foto-" + com.forge.pixpin.sincro.sha256(f.absolutePath.toByteArray()).take(16)
+    val ruta = com.forge.pixpin.motor.ExcalidrawStore.rutaDe(c, id)
+    com.forge.pixpin.motor.DrawEditorActivity.abrir(c, id, ruta, if (File(ruta).isFile) null else f.absolutePath)
 }
 
 /** Reducida al decodificar: una foto de 12 megapíxeles en una burbuja es memoria tirada. */
