@@ -739,7 +739,11 @@ class LectorPdfActivity : ComponentActivity() {
                                 if (zoom in 0.999f..1.001f && kotlin.math.abs(desplazado.x) < size.width * 0.12f) desplazado = Offset.Zero
                                 break
                             }
-                            if (dedos >= 2) { cogido = true; pellizcando = true }
+                            // **Mirando, moverse esconde las barras y el riel** (3-nov-2026, el usuario:
+                            // «la barra lateral tiene que desaparecer mientras estoy en movimiento, en
+                            // todos los formatos, igual que la de arriba»): también al pellizcar y al
+                            // llevar la hoja de lado, no solo al pasar hojas.
+                            if (dedos >= 2) { cogido = true; pellizcando = true; if (!anotando && !marcosDoc.activo) aLaVista = false }
                             // **Un dedo, también de lado** (23-sep-2026: «con un solo dedo moverme a
                             // todas partes»). De alto lo lleva la lista, como siempre; de lado, si el
                             // documento es más ancho que la pantalla —acercado o con espacios—, este
@@ -750,6 +754,7 @@ class LectorPdfActivity : ComponentActivity() {
                                 if (c != null && !anotando && !marcosDoc.activo) {
                                     val d = c.position - c.previousPosition
                                     recorrido += d.getDistance()
+                                    if (recorrido > viewConfiguration.touchSlop) aLaVista = false
                                     val tope = topeX(zoom)
                                     if (!sinLado && tope > 0f && d.x != 0f) desplazado = Offset((desplazado.x + d.x).coerceIn(-tope, tope), desplazado.y)
                                 }

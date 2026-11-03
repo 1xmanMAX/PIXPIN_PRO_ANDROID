@@ -270,6 +270,8 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 90. La vista previa de una figura, dentro de esa misma tarjeta (no en otra ventana) y, al
       acercarla, recortada a su recuadro.
 - [x] 91. La galería de capturas, también en una tarjeta que sube desde abajo y se cierra bajándola.
+- [x] 94. Mirando, moverse esconde el riel y la barra de arriba en todos los visores: ahora también al
+      pellizcar o llevar de lado un PDF/Office y al pellizcar una página web.
 - [ ] 92. Comentario avanzado (pegatinas con minichat, `docs/comentarios.md` del PC): pendiente.
 - [ ] 93. Parámetros de las plantillas de figuras (desde/hasta, por hoja, semanas, mes, año): pendiente;
       necesita el generador de plantillas del PC.

@@ -2347,6 +2347,8 @@ class VisorHtmlActivity : ComponentActivity() {
         setOnTouchListener { _, e ->
             when (e.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> { x0 = e.x; y0 = e.y; seMovio = false }
+                // Un segundo dedo es pellizcar: también es moverse (3-nov-2026), se esconden.
+                android.view.MotionEvent.ACTION_POINTER_DOWN -> if (!seMovio) { seMovio = true; movidasDeLaPagina++ }
                 android.view.MotionEvent.ACTION_MOVE ->
                     if (!seMovio && (kotlin.math.abs(e.x - x0) > margen || kotlin.math.abs(e.y - y0) > margen)) { seMovio = true; movidasDeLaPagina++ }
                 // Leyendo, **donde se deja el documento, ahí se queda** (23-sep-2026): el imán que
