@@ -229,7 +229,21 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
         val grupos = remember(vista, fichas) { GaleriaLogica.agrupar(vista.map { GaleriaLogica.diaLocal(fichas[it].cuando, zona) }) }
         val hoy = GaleriaLogica.diaLocal(ahora, zona)
 
+        // **Una tarjeta que sube desde abajo** (3-nov-2026, el usuario: «las capturas, de la misma
+        // forma, en una tarjeta elegante que sale de abajo y bajándola se cierre»). La ventana es
+        // transparente (`Theme.PixPin.Hoja`); al bajarla del todo se cierra la pantalla.
+        val hoja = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        val cerrarHoja: () -> Unit = { scope.launch { hoja.hide() }.invokeOnCompletion { finish() } }
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { finish() },
+            sheetState = hoja,
+            shape = androidx.compose.foundation.shape.RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            contentWindowInsets = { WindowInsets(0, 0, 0, 0) },
+            // Con el aspecto Cosmos, la tarjeta oscura que pide su tinta clara.
+            containerColor = if (com.forge.pixpin.ui.theme.LocalCosmos.current) Color(0xF2161A33) else MaterialTheme.colorScheme.surface
+        ) {
         Scaffold(
+            modifier = Modifier.fillMaxWidth().fillMaxHeight(0.94f),
             snackbarHost = { SnackbarHost(avisos) },
             containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -247,9 +261,9 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
                 }
             }
         ) { relleno ->
-            Column(Modifier.fillMaxSize().padding(relleno).statusBarsPadding()) {
-                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 12.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BotonRedondo(Icons.AutoMirrored.Filled.ArrowBack, "Volver", { finish() }, tamano = 44.dp)
+            Column(Modifier.fillMaxSize().padding(relleno).navigationBarsPadding()) {
+                Row(Modifier.fillMaxWidth().padding(start = 12.dp, end = 12.dp, top = 0.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    BotonRedondo(Icons.Filled.Close, "Cerrar", cerrarHoja, tamano = 40.dp)
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         Text("Capturas", style = MaterialTheme.typography.titleLarge, color = Cristal.tinta, maxLines = 1)
@@ -327,6 +341,8 @@ class GaleriaDeCapturasActivity : ComponentActivity() {
                     }
                 }
             }
+        }
+
         }
 
         detalle?.let { c ->

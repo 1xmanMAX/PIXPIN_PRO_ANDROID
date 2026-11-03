@@ -1,6 +1,9 @@
 package com.forge.pixpin.motor
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.navigationBarsPadding
+import kotlinx.coroutines.launch
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.DarkMode
@@ -65,6 +68,7 @@ import com.forge.pixpin.R
  * herramientas porque las tres cosas son lo mismo —traer algo hecho al dibujo—
  * y separarlas obligaría a acordarse de en qué menú estaba cada una.
  */
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun PanelDeFiguras(
     figuras: List<FiguraGuardada>,
@@ -142,13 +146,27 @@ fun PanelDeFiguras(
         else secciones.filter { it.first == pestana }
     }
 
-    Surface(shape = RoundedCornerShape(22.dp), shadowElevation = 8.dp, modifier = modifier) {
-        Column(Modifier.widthIn(max = 560.dp)) {
+    // **Una tarjeta que sube desde abajo** (3-nov-2026, el usuario: «que salga como una tarjeta de
+    // abajo y para cerrarlo la barrita de arriba, la bajo y se cierra»). La barrita la pone la hoja;
+    // «Cerrar» la baja con su animación en vez de quitarla de golpe.
+    val hoja = androidx.compose.material3.rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val alcance = androidx.compose.runtime.rememberCoroutineScope()
+    val cerrar: () -> Unit = {
+        alcance.launch { hoja.hide() }.invokeOnCompletion { onCerrar() }
+    }
+    androidx.compose.material3.ModalBottomSheet(
+        onDismissRequest = onCerrar,
+        sheetState = hoja,
+        shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+        containerColor = MaterialTheme.colorScheme.surface,
+        contentWindowInsets = { androidx.compose.foundation.layout.WindowInsets(0, 0, 0, 0) }
+    ) {
+        Column(modifier.fillMaxWidth().fillMaxHeight(0.92f).navigationBarsPadding()) {
             // La cabecera del iPhone: «Cerrar» a la izquierda, el título con su cuenta en medio y el
             // botón redondo de día y noche a la derecha.
             Row(Modifier.fillMaxWidth().padding(start = 14.dp, end = 14.dp, top = 14.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    onClick = onCerrar, shape = RoundedCornerShape(50),
+                    onClick = cerrar, shape = RoundedCornerShape(50),
                     color = MaterialTheme.colorScheme.surface, shadowElevation = 2.dp,
                     border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
                 ) {
@@ -161,7 +179,22 @@ fun PanelDeFiguras(
                 BotonDiaNoche(noche) { ponerNoche(!noche) }
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
-            if (buscando.isBlank()) androidx.compose.foundation.lazy.LazyRow(
+            // **La vista previa, dentro de la misma tarjeta** (3-nov-2026): no como otra ventana
+            // encima. Ocupa el sitio de la lista y «‹ Figuras» vuelve a ella.
+            val f0 = viendo
+            if (f0 != null) {
+                VistaPreviaDeFiguraUi(
+                    figura = f0,
+                    rotuloDeUsar = if (onAdjuntar != null) "Adjuntar" else "Usar",
+                    onUsar = {
+                        viendo = null
+                        usar(f0)
+                    },
+                    onCerrar = { viendo = null },
+                    modifier = Modifier.weight(1f).fillMaxWidth()
+                )
+            }
+            if (f0 == null && buscando.isBlank()) androidx.compose.foundation.lazy.LazyRow(
                 Modifier.fillMaxWidth().padding(vertical = 8.dp),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -178,7 +211,7 @@ fun PanelDeFiguras(
                     )
                 }
             }
-            Box(Modifier.fillMaxWidth().heightIn(max = 560.dp)) {
+            if (f0 == null) Box(Modifier.fillMaxWidth().weight(1f)) {
                 // Perezosa: solo se pintan las miniaturas que se ven (una plantilla de página tiene
                 // cientos de piezas).
                 androidx.compose.foundation.lazy.grid.LazyVerticalGrid(
@@ -235,20 +268,9 @@ fun PanelDeFiguras(
                 }
             }
             Column(Modifier.padding(horizontal = 12.dp)) {
-            viendo?.let { f ->
-                VistaPreviaDeFiguraUi(
-                    figura = f,
-                    rotuloDeUsar = if (onAdjuntar != null) "Adjuntar" else "Usar",
-                    onUsar = {
-                        viendo = null
-                        usar(f)
-                    },
-                    onCerrar = { viendo = null }
-                )
-            }
             // Guardar, pegar y la gráfica son del lienzo: adjuntando no salen. Con un `if` y no
             // con un `return@Column`, que sale de una función en línea y a R8 no le gusta.
-            if (onAdjuntar == null) {
+            if (onAdjuntar == null && f0 == null) {
                 if (nombre != null) {
                     // Al aceptar se cierra el campo: guardar dos veces seguidas la
                     // misma selección deja dos figuras iguales y nadie lo quiere.
@@ -678,7 +700,7 @@ private const val PREFS_DEL_PANEL = "panel_de_figuras"
 private const val CLAVE_NOCHE = "noche"
 
 /** El azul de lo elegido, el del iPhone. */
-private val AZUL_IPHONE = Color(0xFF0A9AE0)
+internal val AZUL_IPHONE = Color(0xFF0A9AE0)
 
 /**
  * **El botón redondo de día y noche**, como en el iPhone (2-nov-2026, el usuario): un solo círculo

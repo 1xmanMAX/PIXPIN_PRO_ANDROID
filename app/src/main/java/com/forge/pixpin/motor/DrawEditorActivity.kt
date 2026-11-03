@@ -2540,7 +2540,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                         medirTexto(texto, estiloDeLasFiguras.fontFamily, tamano)
                     }
                 }
-                Velo {
+                run {
                     val deSerie = remember { FigurasDeSerie.todas(this@DrawEditorActivity) }
                     PanelDeFiguras(
                         figuras = deFabrica + FigurasDeSerie.sinLasDeSerie(misFiguras),

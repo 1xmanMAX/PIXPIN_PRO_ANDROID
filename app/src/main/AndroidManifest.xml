@@ -335,7 +335,7 @@
         <activity
             android:name=".ui.GaleriaDeCapturasActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPin" />
+            android:theme="@style/Theme.PixPin.Hoja" />
         <activity
             android:name=".guardados.SoltarActivity"
             android:exported="false"
