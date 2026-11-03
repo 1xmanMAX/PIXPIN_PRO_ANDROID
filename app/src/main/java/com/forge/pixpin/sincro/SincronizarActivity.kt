@@ -701,6 +701,26 @@ class SincronizarActivity : ComponentActivity() {
                     ChatCompartidoActivity.entrar(this@SincronizarActivity)
                 }
                 Spacer(Modifier.height(10.dp))
+                // **Sincronizar en segundo plano** (3-nov-2026): seguir al salir de la app.
+                run {
+                    val app = application as com.forge.pixpin.PixPinApp
+                    val ajustesApp by app.settings.settings.collectAsState(initial = app.ajustes)
+                    Caja(relleno = PaddingValues(0.dp)) {
+                        Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.sf_ajuste), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                                Text(androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.sf_ajuste_detalle), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                            androidx.compose.material3.Switch(checked = ajustesApp.sincronizarDeFondo, onCheckedChange = { si ->
+                                lifecycleScope.launch {
+                                    app.settings.setSincronizarDeFondo(si)
+                                    if (si) Presencia.reiniciar() else SincronizarDeFondoService.parar(this@SincronizarActivity)
+                                }
+                            })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
                 // **La nube de los chats compartidos** (2-nov-2026, como el PC): su dirección y la llave.
                 Fila(Icons.Outlined.Cloud, androidx.compose.ui.res.stringResource(com.forge.pixpin.R.string.nb_nube_titulo)) { ajustandoLaNube = true }
                 Spacer(Modifier.height(10.dp))

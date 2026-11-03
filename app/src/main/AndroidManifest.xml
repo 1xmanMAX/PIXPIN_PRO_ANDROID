@@ -747,6 +747,12 @@
             android:exported="false"
             android:foregroundServiceType="dataSync|mediaProcessing" />
 
+        <!-- Sincronizar en segundo plano con los demás aparatos. Ver sincro/SincronizarDeFondoService. -->
+        <service
+            android:name=".sincro.SincronizarDeFondoService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
         <!-- Sube al PC las fotos y los clips de su grabación. Ver sincro/SubidaDeLaCamaraService. -->
         <service
             android:name=".sincro.SubidaDeLaCamaraService"

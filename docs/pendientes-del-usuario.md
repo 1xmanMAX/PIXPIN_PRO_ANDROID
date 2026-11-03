@@ -251,3 +251,13 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 82. La hoja «Adjuntar» como la del iPhone: «Cerrar» y el título, iconos cuadrados redondeados,
       «Más» en dos columnas de pastillas y «Pegar lo copiado» con su botón «Pegar».
 
+## Pedidos del 3-nov (publicados en v0.159.0)
+
+- [x] 83. Una nota con enlace y fotos: tocar una foto la abre (antes se abría el enlace).
+- [x] 84. Abrir una foto sin esperar: se decodifica en segundo plano y se pinta al tenerla.
+- [x] 85. Compartir una nota o un Markdown con la hoja de compartir de la app, no directo con Android.
+- [x] 86. Aspecto de fábrica: día y noche según el teléfono (el cosmos, solo si se elige); las notas
+      Markdown nunca con el fondo galáctico.
+- [x] 87. Sincronizar en segundo plano con los demás aparatos y los chats compartidos (servicio con su
+      aviso; se apaga en Sincronizar).
+

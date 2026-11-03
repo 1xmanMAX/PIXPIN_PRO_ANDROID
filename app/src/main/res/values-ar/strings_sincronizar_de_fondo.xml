@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sincronizar en segundo plano (3-nov-2026) -->
+<resources>
+    <string name="sf_canal">المزامنة في الخلفية</string>
+    <string name="sf_canal_detalle">يواصل المزامنة مع أجهزتك ودردشاتك المشتركة</string>
+    <string name="sf_aviso">PinDesk يزامن في الخلفية</string>
+    <string name="sf_ajuste">المزامنة في الخلفية</string>
+    <string name="sf_ajuste_detalle">يواصل إرسال الجديد إلى أجهزتك الأخرى ودردشاتك المشتركة بعد مغادرة التطبيق.</string>
+</resources>
