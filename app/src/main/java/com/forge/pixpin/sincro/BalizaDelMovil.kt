@@ -71,6 +71,30 @@ object BalizaDelMovil {
     @Volatile private var redesActuales: List<Interfaz> = emptyList()
     private val claves = ConcurrentHashMap<String, ByteArray>()
 
+    /**
+     * **Buscar para unirse con un código** (3-nov-2026, `emparejar::pregunta` del PC): con la clave
+     * que sale del código tecleado se pregunta cada segundo por la baliza (y a los 4 s, una vez, a
+     * cada dirección de la red); el primero del grupo que contesta da su dirección. Va a la vez que
+     * mDNS ([SincronizarActivity]): sirve donde mDNS no llega.
+     */
+    private class Union(val clave: ByteArray, val yo: String, val alEncontrar: (host: String, puerto: Int, id: String) -> Unit) {
+        @Volatile var vueltas = 0
+        @Volatile var ultima = 0L
+        @Volatile var secuencia = 0L
+    }
+    @Volatile private var union: Union? = null
+    private const val UNIRSE = "unirse"
+
+    /** Empieza a buscar con [clave]; devuelve con qué pararlo. [alEncontrar] se llama desde otro hilo. */
+    fun buscarParaUnirse(clave: ByteArray, yo: String, alEncontrar: (String, Int, String) -> Unit): () -> Unit {
+        val u = Union(clave, yo, alEncontrar)
+        union = u
+        preguntar.set(true)
+        motivo(UNIRSE, true)
+        despertar.release()
+        return { if (union === u) union = null; motivo(UNIRSE, false) }
+    }
+
     fun instalar(aplicacion: Application) {
         app = aplicacion
         // **Al volver la red** (o cambiar de dirección): se vuelven a leer las redes y se pregunta.
@@ -206,6 +230,19 @@ object BalizaDelMovil {
                 grababa = graba
                 val g = grupo
                 val e = emisor
+                // Preguntando por el grupo de un código tecleado: firmada con su clave, cada segundo.
+                val u = union
+                if (u != null && e != null && ahora - u.ultima >= 1_000) {
+                    u.ultima = ahora
+                    u.vueltas++
+                    u.secuencia = (u.secuencia + 1) and 0xffff_ffffL
+                    val p = Baliza(
+                        etiqueta = Baliza.etiquetaDe(u.clave), id = u.yo, puerto = runCatching { Presencia.red.puerto }.getOrDefault(0),
+                        reloj = System.currentTimeMillis(), secuencia = u.secuencia, banderas = Baliza.PREGUNTA
+                    ).escribir(u.clave)
+                    e.difundir(p)
+                    if (u.vueltas == 4) for (red in e.redes) e.a(p, Baliza.barrido(red, emptyList()))
+                }
                 if (g == null || e == null) {
                     // Sin grupo no hay clave con que firmar ni a quién llamar.
                     aContestar.clear()
@@ -317,6 +354,13 @@ object BalizaDelMovil {
                     Log.i(TAG, "el oyente falló: se vuelve a abrir", t)
                     o.cerrar(); oyente = null; fallo = SystemClock.elapsedRealtime()
                     continue
+                }
+                union?.let { u ->
+                    val r = (Baliza.leer(buf, u.clave, n) as? Baliza.Valida)?.baliza
+                    if (r != null && r.id.isNotEmpty() && r.id != u.yo) {
+                        union = null
+                        runCatching { u.alEncontrar(Ipv4.texto(de), if (r.puerto == 0) Red.PUERTO else r.puerto, r.id) }
+                    }
                 }
                 val g = grupo ?: continue
                 val b = (Baliza.leer(buf, g.clave, n) as? Baliza.Valida)?.baliza ?: continue

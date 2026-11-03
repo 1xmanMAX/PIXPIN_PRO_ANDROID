@@ -159,15 +159,26 @@ class Red(private val context: Context) {
             vecinos.filterKeys { it.startsWith("0|") }.values.toList(),
             vecinos.filterKeys { it.startsWith("1|") }.values.toList()
         )
+        // **Sin resolver dos veces lo mismo, y con tope** (3-nov-2026, `docs/emparejar.md` del PC): un
+        // aparato al día sale con los dos tipos; el de antes solo se resuelve si su nombre no salió
+        // ya con el nuevo. Y una resolución que Android no contesta no para la cola: a los 5 s, la siguiente.
+        val vistosNuevos = HashSet<String>()
+        var turno = 0
         fun siguiente() {
             if (resolviendo || ronda != estaRonda) return
-            val (info, cual) = porResolver.removeFirstOrNull() ?: return
+            var par = porResolver.removeFirstOrNull() ?: return
+            while (par.second == 1 && par.first.serviceName in vistosNuevos) par = porResolver.removeFirstOrNull() ?: return
+            val (info, cual) = par
+            if (cual == 0) vistosNuevos += info.serviceName
             resolviendo = true
+            val esteTurno = ++turno
+            principal.postDelayed({ if (turno == esteTurno && resolviendo) { resolviendo = false; siguiente() } }, 5_000)
             @Suppress("DEPRECATION")
             runCatching {
                 nsd.resolveService(info, object : NsdManager.ResolveListener {
                     override fun onResolveFailed(i: NsdServiceInfo, error: Int) {
                         principal.post {
+                            if (turno != esteTurno) return@post
                             resolviendo = false
                             if (error == NsdManager.FAILURE_ALREADY_ACTIVE) principal.postDelayed({ porResolver.addLast(info to cual); siguiente() }, 300)
                             siguiente()
@@ -175,14 +186,15 @@ class Red(private val context: Context) {
                     }
                     override fun onServiceResolved(i: NsdServiceInfo) {
                         principal.post {
-                            resolviendo = false
+                            val tarde = turno != esteTurno
+                            if (!tarde) resolviendo = false
                             val datos = i.attributes.mapValues { it.value?.decodeToString().orEmpty() }
                             @Suppress("DEPRECATION") val host = i.host
                             if (ronda == estaRonda && host != null && vale(datos)) {
                                 vecinos["$cual|${i.serviceName}"] = Vecino(datos["n"] ?: i.serviceName, host, i.port, datos)
                                 alCambiar(lista())
                             }
-                            siguiente()
+                            if (!tarde) siguiente()
                         }
                     }
                 })

@@ -501,6 +501,8 @@ class ChatCompartidoActivity : ComponentActivity() {
         if (escaneando && camaraPermitida) {
             Box(Modifier.widthIn(max = 320.dp).fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(18.dp))) {
                 Qr.Escaner(Modifier.fillMaxSize()) { texto ->
+                        // El QR de emparejar de otro aparato (3-nov-2026): a Sincronizar, que pregunta y se une.
+                        if (Emparejar.Enlace.leer(texto) != null) { SincronizarActivity.emparejar(this@ChatCompartidoActivity, texto); return@Escaner }
                     val leido = Invitacion.leerQr(texto) ?: return@Escaner
                     if (!trabajando) { escaneando = false; entrarCon(leido.codigo, leido.host, leido.puerto) }
                 }

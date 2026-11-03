@@ -878,9 +878,19 @@
         <!-- Sincronizar con los otros aparatos del grupo. Ver sincro/SincronizarActivity. -->
         <activity
             android:name=".sincro.SincronizarActivity"
-            android:exported="false"
+            android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.PixPin" />
+            android:theme="@style/Theme.PixPin">
+            <!-- El QR de emparejar (3-nov-2026, docs/emparejar.md del PC): cualquier cámara lo abre aquí. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pindesk" android:host="emparejar" />
+                <data android:scheme="pixpin" android:host="emparejar" />
+            </intent-filter>
+        </activity>
 
         <!-- La hoja de compartir de un archivo desde un pin o una captura, que no tienen pantalla. Ver CompartirArchivoActivity. -->
         <activity

@@ -580,6 +580,8 @@ class EnviarActivity : ComponentActivity() {
         ) {
             if (camaraPermitida) {
                 Qr.Escaner(Modifier.fillMaxSize()) { texto ->
+                        // El QR de emparejar de otro aparato (3-nov-2026): a Sincronizar, que pregunta y se une.
+                        if (Emparejar.Enlace.leer(texto) != null) { SincronizarActivity.emparejar(this@EnviarActivity, texto); return@Escaner }
                     val leido = Envio.leerQr(texto) ?: return@Escaner
                     // Solo los que **esperan recibir**: el QR del otro sentido es para escanearlo
                     // desde «Recibir», no desde aquí.

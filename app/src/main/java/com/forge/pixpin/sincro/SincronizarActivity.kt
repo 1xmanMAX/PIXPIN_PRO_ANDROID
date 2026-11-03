@@ -2,6 +2,7 @@ package com.forge.pixpin.sincro
 
 import android.content.Context
 import android.content.Intent
+import androidx.compose.ui.graphics.asImageBitmap
 import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
@@ -168,7 +169,47 @@ class SincronizarActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         disco = Red.disco(this)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setContent { PixPinTheme { Pantalla() } }
+        if (savedInstanceState == null) leerEnlace(intent)
+        setContent { PixPinTheme { Pantalla(); enlacePedido?.let { PreguntarEnlace(it) } } }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        leerEnlace(intent)
+    }
+
+    /** **El enlace `pindesk://emparejar`** del QR (3-nov-2026): se pregunta antes de unirse. */
+    private var enlacePedido by mutableStateOf<Emparejar.Enlace?>(null)
+
+    private fun leerEnlace(i: Intent?) {
+        val t = i?.dataString ?: i?.getStringExtra(EXTRA_ENLACE) ?: return
+        val e = Emparejar.Enlace.leer(t) ?: return
+        if (!e.vigente(System.currentTimeMillis())) {
+            android.widget.Toast.makeText(this, "Este QR ya no vale: vuelve a enseñarlo en el otro aparato.", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+        enlacePedido = e
+    }
+
+    @Composable
+    private fun PreguntarEnlace(e: Emparejar.Enlace) {
+        val enGrupo = remember { disco.identidad.leer().enGrupo }
+        AlertDialog(
+            onDismissRequest = { enlacePedido = null },
+            title = { Text("¿Unirte al grupo" + (if (e.nombre.isNotBlank()) " de ${e.nombre}" else "") + "?") },
+            text = { Text(if (enGrupo) "Este aparato saldrá del grupo en el que está ahora." else "Se sincronizará con los aparatos de ese grupo.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    enlacePedido = null
+                    // Llamar sin buscar: cada dirección del QR; si ninguna contesta, buscar.
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        val h = e.hosts.firstOrNull { Red.sondear(it, e.puerto) }
+                        withContext(Dispatchers.Main) { unirseCon(e.codigo, h?.let { "$it:${e.puerto}" }) }
+                    }
+                }) { Text("Unirme") }
+            },
+            dismissButton = { TextButton(onClick = { enlacePedido = null }) { Text("Cancelar") } }
+        )
     }
 
     override fun onStart() {
@@ -602,12 +643,19 @@ class SincronizarActivity : ComponentActivity() {
                     val (h, p) = partirDireccion(direccion) ?: throw IllegalStateException("La dirección tiene que ser como 192.168.1.20:47474")
                     Triple(h, p, h)
                 } else {
-                    val etiqueta = Grupo.etiqueta(Grupo.clave(codigo))
-                    val encontrado = CompletableDeferred<Red.Vecino>()
-                    withContext(Dispatchers.Main) { red.buscar(Red.TIPO, { it["g"] == etiqueta }) { l -> l.firstOrNull()?.let { encontrado.complete(it) } } }
-                    val v = kotlinx.coroutines.withTimeoutOrNull(25_000) { encontrado.await() }
+                    val clave = Grupo.clave(codigo)
+                    val etiqueta = Grupo.etiqueta(clave)
+                    // **Por mDNS y por la baliza a la vez** (3-nov-2026, como el PC): gana el primero.
+                    val encontrado = CompletableDeferred<Triple<String, Int, String>>()
+                    withContext(Dispatchers.Main) {
+                        red.buscar(Red.TIPO, { it["g"] == etiqueta }) { l -> l.firstOrNull()?.let { encontrado.complete(Triple(it.host.hostAddress ?: "", it.puerto, it.nombre)) } }
+                    }
+                    val parar = BalizaDelMovil.buscarParaUnirse(clave, disco.identidad.leer().yo.id) { h, p, _ -> encontrado.complete(Triple(h, p, h)) }
+                    val v = try {
+                        kotlinx.coroutines.withTimeoutOrNull(25_000) { encontrado.await() }
+                    } finally { parar() }
                         ?: throw IllegalStateException("No apareció ningún aparato con ese código. Comprueba el código, que los dos estáis en la misma Wi-Fi y que el otro tiene PinDesk abierto. También puedes escribir su dirección.")
-                    Triple(v.host.hostAddress ?: "", v.puerto, v.nombre)
+                    v
                 }
                 fase = Fase.Conectando("Uniéndome al grupo con $nombre…")
                 Red.conectar(InetAddress.getByName(host), puerto).use { s ->
@@ -1074,6 +1122,23 @@ class SincronizarActivity : ComponentActivity() {
                                 fontSize = if (verCodigo) 24.sp else 15.sp, fontWeight = FontWeight.Bold
                             )
                         }
+                        // **El QR de emparejar** (3-nov-2026, como el PC): `pindesk://emparejar`, que se lee con
+                        // cualquier cámara y abre PinDesk ya uniéndose. Diez minutos y se esconde.
+                        if (verCodigo) {
+                            val qr by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(null, identidad.codigo) {
+                                value = withContext(Dispatchers.IO) {
+                                    val ips = Emparejar.direccionesParaElEnlace(listOfNotNull(Red.miDireccion(this@SincronizarActivity)))
+                                    val enlace = Emparejar.Enlace(identidad.codigo!!, ips, red.puerto.takeIf { it > 0 } ?: Red.PUERTO, identidad.yo.nombre, System.currentTimeMillis() + Emparejar.VIGENCIA_QR_MS)
+                                    runCatching { Qr.imagen(enlace.texto(), 512) }.getOrNull()
+                                }
+                            }
+                            LaunchedEffect(Unit) { kotlinx.coroutines.delay(Emparejar.VIGENCIA_QR_MS); verCodigo = false }
+                            qr?.let {
+                                Spacer(Modifier.height(10.dp))
+                                androidx.compose.foundation.Image(it.asImageBitmap(), "QR", Modifier.size(200.dp).align(Alignment.CenterHorizontally).background(androidx.compose.ui.graphics.Color.White).padding(8.dp))
+                                Text("Léelo con la cámara del otro aparato.", style = MaterialTheme.typography.bodySmall, modifier = Modifier.align(Alignment.CenterHorizontally))
+                            }
+                        }
                         Spacer(Modifier.height(6.dp))
                         TextButton(onClick = { aMano = true }) { Text("Conectar con una dirección") }
                         TextButton(onClick = { saliendo = true }) { Text("Salir del grupo", color = MaterialTheme.colorScheme.error) }
@@ -1268,8 +1333,15 @@ class SincronizarActivity : ComponentActivity() {
     }
 
     companion object {
+        /** Un enlace `pindesk://emparejar` leído dentro de la app (el lector de QR). */
+        const val EXTRA_ENLACE = "enlace_de_emparejar"
+
         fun abrir(context: Context) {
             context.startActivity(Intent(context, SincronizarActivity::class.java))
+        }
+
+        fun emparejar(context: Context, enlace: String) {
+            context.startActivity(Intent(context, SincronizarActivity::class.java).putExtra(EXTRA_ENLACE, enlace))
         }
     }
 }
