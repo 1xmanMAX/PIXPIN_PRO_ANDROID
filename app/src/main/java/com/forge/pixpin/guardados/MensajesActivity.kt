@@ -1703,7 +1703,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                         else it
                                     } }) { refrescar() }
                                 },
-                                compartir = { compartir(m) },
+                                // **Una nota o un Markdown, con la hoja de compartir de la app** (3-nov-2026,
+                                // el usuario): no directo al panel de Android.
+                                compartir = { if (esDeTexto(m)) compartiendo = m else compartir(m) },
                                 pinear = { pinear(m) },
                                 rescatar = if (!m.enBuzon) null else {
                                     {
@@ -7711,6 +7713,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             else avisarDeQueNoHay()
         }
     }
+
+    /** Una nota, o un archivo Markdown o de texto: se comparte con la hoja de la app. */
+    private fun esDeTexto(m: Mensaje): Boolean =
+        m.clase == Clase.NOTA || m.ruta?.substringAfterLast('.', "")?.lowercase() in setOf("md", "markdown", "txt")
 
     private fun compartir(m: Mensaje) {
         runCatching {

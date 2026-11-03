@@ -245,13 +245,17 @@ fun PixPinTheme(
      * en cada fotograma.
      */
     cielo: Boolean = true,
+    /** Sin el cosmos aunque esté elegido (las notas Markdown): día o noche según el teléfono. */
+    sinCosmos: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val contexto = LocalContext.current
     val app = contexto.applicationContext as? PixPinApp
     val ajustes by (app?.settings?.settings ?: kotlinx.coroutines.flow.flowOf(null))
         .collectAsState(initial = app?.ajustes)
-    val modo = ajustes?.modoNoche ?: ModoNoche.COSMOS
+    // **De fábrica, día y noche según el teléfono** (3-nov-2026, el usuario); el cosmos, solo si se elige.
+    // Y [sinCosmos] (las notas y los visores de texto): con el cosmos elegido, día o noche del teléfono.
+    val modo = (ajustes?.modoNoche ?: ModoNoche.SISTEMA).let { if (sinCosmos && it == ModoNoche.COSMOS) ModoNoche.SISTEMA else it }
     // **El cosmos**: el aspecto del sistema solar para toda la aplicación. Ver [esquemaCosmos].
     val cosmos = darkTheme == null && modo == ModoNoche.COSMOS
     val oscuro = darkTheme ?: deNocheSegun(modo)
@@ -356,7 +360,7 @@ private fun deNocheSegun(modo: ModoNoche): Boolean = when (modo) {
  * una pantalla.
  */
 fun deNocheEnLaApp(contexto: android.content.Context): Boolean =
-    when ((contexto.applicationContext as? PixPinApp)?.ajustes?.modoNoche ?: ModoNoche.COSMOS) {
+    when ((contexto.applicationContext as? PixPinApp)?.ajustes?.modoNoche ?: ModoNoche.SISTEMA) {
         ModoNoche.SISTEMA -> telefonoDeNoche(contexto)
         ModoNoche.CLARO -> false
         ModoNoche.OSCURO, ModoNoche.COSMOS -> true

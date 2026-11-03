@@ -181,7 +181,7 @@ data class Settings(
      * cuando es de noche de verdad —por la hora o porque el sensor de luz dice que la
      * habitación está a oscuras—. Ver [com.forge.pixpin.ui.theme.rememberAOscuras].
      */
-    val modoNoche: ModoNoche = ModoNoche.COSMOS,
+    val modoNoche: ModoNoche = ModoNoche.SISTEMA,
 
 
     /**
@@ -579,7 +579,7 @@ class SettingsRepository(private val context: Context) {
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
             modoNoche = runCatching { ModoNoche.valueOf(prefs[Keys.MODO_NOCHE] ?: "") }
-                .getOrDefault(ModoNoche.COSMOS),
+                .getOrDefault(ModoNoche.SISTEMA),
             motorDeVoz = prefs[Keys.MOTOR_DE_VOZ] ?: MOTOR_POR_DEFECTO,
             idiomaDeVoz = prefs[Keys.IDIOMA_DE_VOZ] ?: "",
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",

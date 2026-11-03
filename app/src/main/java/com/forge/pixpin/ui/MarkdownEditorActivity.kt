@@ -193,7 +193,7 @@ class MarkdownEditorActivity : ComponentActivity() {
         val soloLeer = intent.getBooleanExtra(EXTRA_SOLO_LEER, false)
         val archivo = intent.getStringExtra(EXTRA_NOMBRE)?.takeIf { it.isNotBlank() } ?: paso?.nombre
         setContent {
-            PixPinTheme {
+            PixPinTheme(sinCosmos = true) {
               Box(Modifier.fillMaxSize()) {
                 Pantalla(
                     inicial = inicial,
@@ -1087,7 +1087,12 @@ private fun Pantalla(
                         dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = false; viendo = false
                     },
                     botonDeComentarios,
-                    BotonDeLector(IconoDeCompartir, "Compartir") { CompartirNativo.texto(contextoDelEditor, valor.text, titulo); toques++ },
+                    BotonDeLector(IconoDeCompartir, "Compartir") {
+                        // **La hoja de compartir de la app** (3-nov-2026), la de todo PinDesk; sin ella, el panel del teléfono.
+                        val global = masAcciones.firstOrNull { it.first == "Compartir…" }?.second
+                        if (global != null) global(valor.text) else CompartirNativo.texto(contextoDelEditor, valor.text, titulo)
+                        toques++
+                    },
                     guardarYCerrar.takeIf { hayCambios }
                 ) else listOfNotNull(
                     BotonDeLector(Icons.Filled.Visibility, "Ver la nota") { viendo = true },

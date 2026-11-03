@@ -353,8 +353,18 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         // encima pero sin la foto —el pin la pinta él, por debajo—, y con la
         // condición de antes se editaba a ciegas: los trazos flotando sobre un
         // lienzo en blanco, sin ver sobre qué estaban puestos.
-        if (imagenPath != null && cargada.elements.none { it.type == ElementType.IMAGE }) {
-            colocarImagenInicial(imagenPath)
+        // **La foto se prepara fuera de la pantalla** (3-nov-2026, el usuario: «al abrir una foto tarda
+        // más de 2 segundos»): decodificarla y copiarla se hacía aquí, en el hilo que pinta, y la
+        // pantalla no salía hasta acabar. Ahora sale al momento y la foto entra en cuanto está.
+        val colocandoLaFoto = imagenPath != null && cargada.elements.none { it.type == ElementType.IMAGE }
+        if (colocandoLaFoto) lifecycleScope.launch {
+            val lista = withContext(Dispatchers.IO) {
+                val bmp = ImageStore.load(imagenPath!!) ?: return@withContext null
+                val file = ExcalidrawStore.guardarImagen(this@DrawEditorActivity, File(imagenPath), "image/png") ?: return@withContext null
+                Triple(bmp, file, paraPintar(file.path, bmp))
+            } ?: return@launch
+            colocarImagenInicial(lista.first, lista.second, lista.third)
+            fijarLaFoto(true)
         }
         // **La foto que se está anotando no se toca, venga como venga.** Un pin
         // de imagen sigue pintando su foto por su cuenta, por debajo del dibujo;
@@ -365,12 +375,15 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         //
         // Se hace aquí y no solo al colocarla porque los pines de antes ya
         // llevan su imagen guardada suelta: al abrirlos hay que clavarla igual.
-        fijarLaFoto(imagenPath != null)
+        if (!colocandoLaFoto) fijarLaFoto(imagenPath != null)
         // La foto del pin ya estaba puesta de una vez anterior: se carga igual
         // para que el mosaico tenga de dónde sacar sus píxeles. Solo en este
         // caso, que es el único en el que se sabe que la imagen ocupa la escena
         // desde el origen y a tamaño natural.
-        if (imagenPath != null && fondo == null) fondo = ImageStore.load(imagenPath)
+        if (imagenPath != null && !colocandoLaFoto) lifecycleScope.launch {
+            val b = withContext(Dispatchers.IO) { ImageStore.load(imagenPath) }
+            if (fondo == null) fondo = b
+        }
 
         // **La página del PDF, de telón.**
         //
@@ -515,10 +528,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
      * foto, así que dejarla en (0, 0) a tamaño natural es lo que hace que lo
      * anotado en el pin caiga exactamente donde estaba al abrirlo aquí.
      */
-    private fun colocarImagenInicial(path: String) {
-        val bmp = ImageStore.load(path) ?: return
-        val file = ExcalidrawStore.guardarImagen(this, File(path), "image/png") ?: return
-        bitmaps[file.id] = paraPintar(file.path, bmp)
+    private fun colocarImagenInicial(bmp: Bitmap, file: SceneFile, paraVer: Bitmap) {
+        bitmaps[file.id] = paraVer
         fondo = bmp
         controller.placeImage(
             file,
@@ -1198,6 +1209,27 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
      * en el lienzo no cambian —son las del elemento—; solo hay más píxeles dentro. Con muchas
      * fotos en el lienzo se reparte la memoria entre ellas ([ImageStore.pixelesParaVarias]).
      */
+    /**
+     * **La foto para la pantalla, sin esperarla** (3-nov-2026, el usuario: «al abrir una foto tarda
+     * más de 2 segundos»): la primera vez se lee en segundo plano —una foto de 12 megapíxeles nítida
+     * tarda— y se pinta en cuanto está; mientras, el resto del lienzo ya se ve y responde. Exportar e
+     * imprimir siguen usando [bitmapDe], que espera.
+     */
+    private fun bitmapParaPantalla(fileId: String): Bitmap? {
+        if (bitmaps.containsKey(fileId)) return bitmaps[fileId]
+        val ruta = controller.scene.files[fileId]?.path ?: return null
+        if (cargandoFotos.add(fileId)) lifecycleScope.launch {
+            val n = controller.scene.files.size
+            val b = withContext(Dispatchers.IO) { runCatching { ImageStore.cargarNitida(ruta, maxPixeles = ImageStore.pixelesParaVarias(n)) }.getOrNull() }
+            bitmaps[fileId] = b
+            cargandoFotos.remove(fileId)
+            tickDelMosaico++
+        }
+        return null
+    }
+
+    private val cargandoFotos = HashSet<String>()
+
     private fun bitmapDe(fileId: String): Bitmap? = bitmaps.getOrPut(fileId) {
         controller.scene.files[fileId]?.path?.let {
             ImageStore.cargarNitida(it, maxPixeles = ImageStore.pixelesParaVarias(controller.scene.files.size))
@@ -1610,7 +1642,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                         DrawCanvas(
                             controller = controladorDe(cual),
                             modifier = Modifier.fillMaxSize(),
-                            imageProvider = ::bitmapDe,
+                            imageProvider = ::bitmapParaPantalla,
                             dark = DrawTheme.esDeNoche(suPapel),
                             zurdo = zurdo,
                             cuadricula = cuadricula,
@@ -1718,7 +1750,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                             cambiado()
                         }
                     ),
-                imageProvider = ::bitmapDe,
+                imageProvider = ::bitmapParaPantalla,
                 dark = noche,
                 // Lo que se toca en la barra —deshacer, esconder las guías,
                 // borrar— también tiene que repintar el lienzo. Ver [DrawCanvas].
@@ -2989,7 +3021,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
                                 DrawCanvas(
                                     controller = controladorDe(cual),
                                     modifier = Modifier.fillMaxSize(),
-                                    imageProvider = ::bitmapDe,
+                                    imageProvider = ::bitmapParaPantalla,
                                     dark = DrawTheme.esDeNoche(papelSuyo),
                                     cuadricula = cuadricula,
                                     backdrop = telonDe(cual),
@@ -4791,11 +4823,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
         finish()
     }
 
-    /** El último trazo a mano guardado (-1 si nunca se tocó). Una lectura corta de los ajustes al abrir. */
-    private fun runBlockingRugosidad(): Int = runCatching {
-        val app = application as? com.forge.pixpin.PixPinApp ?: return -1
-        kotlinx.coroutines.runBlocking { kotlinx.coroutines.withTimeoutOrNull(300) { app.settings.settings.first().rugosidadDelLienzo } } ?: -1
-    }.getOrDefault(-1)
+    /** El último trazo a mano guardado (-1 si nunca se tocó), de los ajustes ya leídos: sin esperar a nada. */
+    private fun runBlockingRugosidad(): Int = (application as? com.forge.pixpin.PixPinApp)?.ajustes?.rugosidadDelLienzo ?: -1
 
     /** El color del píxel ([x], [y]) de la ventana (el cuentagotas), con `PixelCopy`. */
     private fun colorEnLaPantalla(x: Int, y: Int, alAcabar: (Int?) -> Unit) {
