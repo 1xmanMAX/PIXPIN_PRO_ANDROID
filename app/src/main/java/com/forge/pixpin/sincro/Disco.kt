@@ -927,6 +927,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 if (rel.endsWith(".gz")) GZIPOutputStream(tmp.outputStream()).use { it.write(local.toByteArray()) }
                 else tmp.writeText(local)
             }
+            // **Las pegatinas de comentario se juntan, no se pisan** (4-nov-2026, `juntar_comentarios` del
+            // PC): si aquí también cambió, lo que llega con las pegatinas de los dos. Ver
+            // [com.forge.pixpin.comentarios.Fusion.alLlegar].
+            if (rel.endsWith(".comentarios.json") && destino.isFile) runCatching {
+                com.forge.pixpin.comentarios.Fusion.alLlegar(destino.readText(), tmp.readText())?.let { tmp.writeText(it) }
+            }
             ponerEnSuSitio(tmp, destino)
         } catch (e: Throwable) {
             tmp.delete()

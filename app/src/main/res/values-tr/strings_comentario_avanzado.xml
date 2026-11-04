@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Acil</string>
+    <string name="cm_tipo_alta">Yüksek öncelik</string>
+    <string name="cm_tipo_media">Orta öncelik</string>
+    <string name="cm_tipo_nota">Not</string>
+    <string name="cm_abrir">Sohbeti aç</string>
+    <string name="cm_resolver">Çöz</string>
+    <string name="cm_reabrir">Yeniden aç</string>
+    <string name="cm_crear_tarea">Görev oluştur</string>
+    <string name="cm_tarea_creada">Gelen Kutusu\'nda görev oluşturuldu</string>
+    <string name="cm_quitar">Kaldır</string>
+    <string name="cm_lista_titulo">Yorumlar</string>
+    <string name="cm_sin_entradas">İlk mesajı yazın, bir resim yapıştırın veya dosya ekleyin.</string>
+    <string name="cm_resuelto">Çözüldü</string>
+    <string name="cm_sin_sitio">Bu belge kaydedilmedi: hiçbir şey eklenemez.</string>
+    <string name="cm_abre_el_chat">O mesaja gitmek için sohbeti açın.</string>
+    <string name="cm_elegir_atajo">Kısayol…</string>
+    <string name="cm_sin_atajos">Kısayol oluşturmak için tuvalde bir şey seçin veya bir sohbetteki belgeyi açın.</string>
+    <string name="cm_elemento">Öğe</string>
+    <string name="cm_mensaje">Sohbet mesajı</string>
+    <string name="cm_lienzo_propio">Tuval</string>
+    <string name="cm_anotar">Açıklama ekle</string>
+    <string name="cm_anotada">Açıklamalı</string>
+    <string name="cm_plantando_toque">Yorumu yapıştırmak istediğin yere dokun</string>
+    <string name="cm_lista_vacia_toque">Henüz yorum yok. Bir tür seç ve yapıştırmak istediğin yere dokun.</string>
+    <string name="cm_escribir_toque">Yaz…</string>
+    <string name="cm_adjuntar">Dosya ekle</string>
+    <string name="cm_comentar">Yorum</string>
+    <string name="cm_enviar">Gönder</string>
+</resources>

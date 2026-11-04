@@ -272,7 +272,8 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 91. La galería de capturas, también en una tarjeta que sube desde abajo y se cierra bajándola.
 - [x] 94. Mirando, moverse esconde el riel y la barra de arriba en todos los visores: ahora también al
       pellizcar o llevar de lado un PDF/Office y al pellizcar una página web.
-- [ ] 92. Comentario avanzado (pegatinas con minichat, `docs/comentarios.md` del PC): pendiente.
+- [~] 92. Comentario avanzado (pegatinas con minichat, `docs/comentarios.md` del PC): **hecho en los planos**
+      (v0.161.0, ver 96); faltan el lienzo, el PDF/Office, el lector de Word y las hojas.
 - [ ] 93. Parámetros de las plantillas de figuras (desde/hasta, por hoja, semanas, mes, año): pendiente;
       necesita el generador de plantillas del PC.
 
@@ -281,3 +282,7 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 95. Jev no repite la revisión de urgencia: lo dicho de cada tarea se guarda en
       `anot-<uid>.urgencia.json` de su lista y viaja; lo nacido en el teléfono se revisa al momento.
       El PC tiene que leer y escribir el mismo fichero (`docs/urgencia-que-viaja.md`).
+- [x] 96. Comentarios en los planos con el emoji: botón abajo a la derecha (con las abiertas en rojo), los
+      cuatro tipos (🔴 urgente, 🟠 alta, 🟡 media, 💬 nota), un toque pega la pegatina, mantener y arrastrar
+      la mueve, y su minichat (escribir, adjuntar archivos, resolver, cambiar tipo, crear tarea en el Inbox,
+      quitar) y la lista «Comentarios (n)». Mismo fichero y misma fusión que el PC: viajan y se juntan.

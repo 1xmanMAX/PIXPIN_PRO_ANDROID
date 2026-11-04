@@ -123,6 +123,8 @@ class PlanoActivity : ComponentActivity() {
     /** La capa de anotar; null hasta que se lee el plano. */
     private var capa: com.forge.pixpin.motor.DrawController? = null
     private var idCapa = ""
+    /** Las pegatinas de comentario del plano (las de `anot-<uid>.comentarios.json`); null hasta saber su sitio. */
+    private var pegatinas by mutableStateOf<com.forge.pixpin.comentarios.EstadoDePegatinas?>(null)
     /** Cómo cae la capa en el plano (de su `.hoja`, o nuevo). */
     private var encaje = CapaDelPlano.Encaje(1.0, 0.0, 0.0)
     /** El de las unidades del fichero (su `.hoja`), y cómo pasar la capa de la memoria a él. */
@@ -487,6 +489,9 @@ class PlanoActivity : ComponentActivity() {
                 val leida = withContext(Dispatchers.IO) {
                     runCatching {
                         idCapa = com.forge.pixpin.ui.ExportarDocumentoAnotado.idDeLaCapa(original, com.forge.pixpin.ui.ExportarDocumentoAnotado.baseDe(this@PlanoActivity, original))
+                        pegatinas = com.forge.pixpin.comentarios.EstadoDePegatinas(
+                            filesDir, File(filesDir, "${com.forge.pixpin.sincro.AnotacionesDelAdjunto.CARPETA}/$idCapa.comentarios.json"), idCapa, nombre
+                        )
                         leerCapaDelDisco(m)
                     }.getOrNull()
                 }
@@ -948,6 +953,28 @@ class PlanoActivity : ComponentActivity() {
                     guardarMarcadores(marcadores.plano + MarcadoresDelPlano.deLaVista(c, mo.origenX, mo.origenY, ancho, alto, emoji, id))
                 }
             }
+            // **Las pegatinas de comentario** (4-nov-2026, «Comentario avanzado en el plano CAD» del PC): ancla
+            // `pagina` 0 en unidades del dibujo respecto a su origen, con la y hacia arriba (las de la cámara).
+            // Se ven y se tocan también sin anotar; anotando, el lienzo manda. Ver [com.forge.pixpin.comentarios].
+            val pegs = pegatinas
+            if (listo && pegs != null && !anotando && !marcando) com.forge.pixpin.comentarios.CapaDePegatinas(
+                pegs,
+                aPantalla = { a ->
+                    val c = camara
+                    if (c == null || a.sitio != com.forge.pixpin.comentarios.Ancla.PAGINA || ancho <= 0) null
+                    else androidx.compose.ui.geometry.Offset(c.pantallaX(a.x ?: 0.0, ancho).toFloat(), c.pantallaY(a.y ?: 0.0, alto).toFloat())
+                },
+                dePantalla = { p ->
+                    camara?.let { c -> com.forge.pixpin.comentarios.Ancla.pagina(0, c.planoX(p.x.toDouble(), ancho), c.planoY(p.y.toDouble(), alto)) }
+                },
+                irA = { a ->
+                    val c = camara
+                    if (c != null && a.x != null && a.y != null) { camara = c.copy(centroX = a.x, centroY = a.y); pintar() }
+                },
+                tick = marcos,
+                botonVisible = aLaVista,
+                margenAbajo = 84
+            )
             if (viendoLetras) {
                 val faltan = remember(modelo) {
                     modelo?.sinDibujar.orEmpty().filter { it.first.startsWith(LectorDePlanos.FUENTE_QUE_FALTA) }.map { it.first.removePrefix(LectorDePlanos.FUENTE_QUE_FALTA) }

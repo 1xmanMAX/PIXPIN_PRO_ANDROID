@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Urgent</string>
+    <string name="cm_tipo_alta">Priorité haute</string>
+    <string name="cm_tipo_media">Priorité moyenne</string>
+    <string name="cm_tipo_nota">Note</string>
+    <string name="cm_abrir">Ouvrir la discussion</string>
+    <string name="cm_resolver">Résoudre</string>
+    <string name="cm_reabrir">Rouvrir</string>
+    <string name="cm_crear_tarea">Créer une tâche</string>
+    <string name="cm_tarea_creada">Tâche créée dans la boîte de réception</string>
+    <string name="cm_quitar">Retirer</string>
+    <string name="cm_lista_titulo">Commentaires</string>
+    <string name="cm_sin_entradas">Écrivez le premier message, collez une image ou joignez un fichier.</string>
+    <string name="cm_resuelto">Résolu</string>
+    <string name="cm_sin_sitio">Ce document n’est pas enregistré : impossible de joindre quoi que ce soit.</string>
+    <string name="cm_abre_el_chat">Ouvrez la discussion pour aller à ce message.</string>
+    <string name="cm_elegir_atajo">Raccourci vers…</string>
+    <string name="cm_sin_atajos">Sélectionnez quelque chose sur la toile, ou ouvrez un document d’une discussion, pour créer un raccourci.</string>
+    <string name="cm_elemento">Élément</string>
+    <string name="cm_mensaje">Message de la discussion</string>
+    <string name="cm_lienzo_propio">Toile</string>
+    <string name="cm_anotar">Annoter</string>
+    <string name="cm_anotada">Annotée</string>
+    <string name="cm_plantando_toque">Touchez l\'endroit où coller le commentaire</string>
+    <string name="cm_lista_vacia_toque">Aucun commentaire pour l\'instant. Choisissez un type et touchez l\'endroit où le coller.</string>
+    <string name="cm_escribir_toque">Écrivez…</string>
+    <string name="cm_adjuntar">Joindre un fichier</string>
+    <string name="cm_comentar">Commenter</string>
+    <string name="cm_enviar">Envoyer</string>
+</resources>

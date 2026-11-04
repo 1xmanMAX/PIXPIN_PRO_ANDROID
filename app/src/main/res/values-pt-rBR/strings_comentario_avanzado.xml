@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Urgente</string>
+    <string name="cm_tipo_alta">Prioridade alta</string>
+    <string name="cm_tipo_media">Prioridade média</string>
+    <string name="cm_tipo_nota">Nota</string>
+    <string name="cm_abrir">Abrir o chat</string>
+    <string name="cm_resolver">Resolver</string>
+    <string name="cm_reabrir">Reabrir</string>
+    <string name="cm_crear_tarea">Criar tarefa</string>
+    <string name="cm_tarea_creada">Tarefa criada na Caixa de entrada</string>
+    <string name="cm_quitar">Remover</string>
+    <string name="cm_lista_titulo">Comentários</string>
+    <string name="cm_sin_entradas">Escreva a primeira mensagem, cole uma imagem ou anexe um arquivo.</string>
+    <string name="cm_resuelto">Resolvido</string>
+    <string name="cm_sin_sitio">Este documento não está salvo: não é possível anexar.</string>
+    <string name="cm_abre_el_chat">Abra o chat para ir até essa mensagem.</string>
+    <string name="cm_elegir_atajo">Atalho para…</string>
+    <string name="cm_sin_atajos">Selecione algo na tela, ou abra um documento de um chat, para criar um atalho.</string>
+    <string name="cm_elemento">Elemento</string>
+    <string name="cm_mensaje">Mensagem do chat</string>
+    <string name="cm_lienzo_propio">Tela</string>
+    <string name="cm_anotar">Anotar</string>
+    <string name="cm_anotada">Anotada</string>
+    <string name="cm_plantando_toque">Toque onde quer colar o comentário</string>
+    <string name="cm_lista_vacia_toque">Ainda não há comentários. Escolha um tipo e toque onde quer colá-lo.</string>
+    <string name="cm_escribir_toque">Escreva…</string>
+    <string name="cm_adjuntar">Anexar arquivo</string>
+    <string name="cm_comentar">Comentar</string>
+    <string name="cm_enviar">Enviar</string>
+</resources>

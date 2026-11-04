@@ -339,10 +339,11 @@ object AnotacionesDelAdjunto {
     // `.marcos.json` y `.vistas.json` (PC c31f974, 19-oct): los marcos numerados de un documento y
     // lo que guarda cada marcador además de su sitio. Ver [com.forge.pixpin.motor.MarcosDelDocumento].
     // `.marcas-texto.json` (PC 2-nov): las marcas de texto de una nota o página web ([marcasDeTexto]).
+    // `.adjunto` (PC 3-nov): los ficheros de las entradas de las pegatinas, `anot-<uid>.a<huella>.adjunto`.
     // `.urgencia.json` (4-nov): la revisión de urgencia de las tareas de una lista ([urgencias]).
     private val TERMINACIONES = listOf(
         ".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json", ".asistente.json",
-        ".marcos.json", ".vistas.json", ".marcas-texto.json", ".urgencia.json"
+        ".marcos.json", ".vistas.json", ".marcas-texto.json", ".urgencia.json", ".adjunto"
     )
 
     /**

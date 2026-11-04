@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">緊急</string>
+    <string name="cm_tipo_alta">優先度：高</string>
+    <string name="cm_tipo_media">優先度：中</string>
+    <string name="cm_tipo_nota">メモ</string>
+    <string name="cm_abrir">チャットを開く</string>
+    <string name="cm_resolver">解決</string>
+    <string name="cm_reabrir">再オープン</string>
+    <string name="cm_crear_tarea">タスクを作成</string>
+    <string name="cm_tarea_creada">受信トレイにタスクを作成しました</string>
+    <string name="cm_quitar">削除</string>
+    <string name="cm_lista_titulo">コメント</string>
+    <string name="cm_sin_entradas">最初のメッセージを書くか、画像を貼り付けるか、ファイルを添付します。</string>
+    <string name="cm_resuelto">解決済み</string>
+    <string name="cm_sin_sitio">このドキュメントは保存されていないため、添付できません。</string>
+    <string name="cm_abre_el_chat">そのメッセージに移動するにはチャットを開いてください。</string>
+    <string name="cm_elegir_atajo">ショートカット先…</string>
+    <string name="cm_sin_atajos">キャンバスで何かを選択するか、チャットのドキュメントを開くとショートカットを作れます。</string>
+    <string name="cm_elemento">要素</string>
+    <string name="cm_mensaje">チャットのメッセージ</string>
+    <string name="cm_lienzo_propio">キャンバス</string>
+    <string name="cm_anotar">注釈を付ける</string>
+    <string name="cm_anotada">注釈あり</string>
+    <string name="cm_plantando_toque">コメントを貼りたい場所をタップ</string>
+    <string name="cm_lista_vacia_toque">まだコメントはありません。種類を選び、貼りたい場所をタップしてください。</string>
+    <string name="cm_escribir_toque">入力…</string>
+    <string name="cm_adjuntar">ファイルを添付</string>
+    <string name="cm_comentar">コメント</string>
+    <string name="cm_enviar">送信</string>
+</resources>
