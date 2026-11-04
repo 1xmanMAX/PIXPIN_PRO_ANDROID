@@ -87,7 +87,12 @@ object TodasLasTareas {
          * compartido dice si la apuntó otra persona ([TareasCompartidas.autor]). null en las de
          * antes de los códigos de aparato, que son mías.
          */
-        val aparato: String? = null
+        val aparato: String? = null,
+        /**
+         * **El código único del mensaje** ([com.forge.pixpin.sincro.Codigos.unico], 4-nov-2026): el de su
+         * `anot-<uid>.urgencia.json`, la revisión de urgencia que viaja ([com.forge.pixpin.jev.UrgenciasGuardadas]).
+         */
+        val uid: String? = null
     ) {
         val guardados: Boolean get() = proyecto == null
 
@@ -135,7 +140,7 @@ object TodasLasTareas {
     /** La lista de un mensaje, si es una lista de tareas. También vacía: es adonde mover. */
     fun listaDe(m: Mensaje, chat: String): Lista? =
         if (!esLista(m)) null
-        else Lista(m.proyecto, chat, m.id, nombreDeLista(m), m.cuando, filasDe(m.texto), m.aparato)
+        else Lista(m.proyecto, chat, m.id, nombreDeLista(m), m.cuando, filasDe(m.texto), m.aparato, com.forge.pixpin.sincro.Codigos.unico(m))
 
     /** Si una lista es el Inbox: la de «Mensajes guardados» que se llama así. */
     fun esInbox(l: Lista): Boolean = l.guardados && l.titulo.trim().equals(INBOX, ignoreCase = true)

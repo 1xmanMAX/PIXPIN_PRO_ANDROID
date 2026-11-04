@@ -128,6 +128,18 @@ class PixPinApp : Application() {
         // Y lo que el capturador no ve —crashes nativos, ANR—, que Android sí
         // apunta: se recoge al arrancar y acaba en el mismo informe.
         scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }
+        // **La urgencia de lo apuntado aquí, al momento** (4-nov-2026): al cambiar los mensajes, pasado un
+        // respiro, Jev revisa las tareas nuevas de las listas de este aparato y lo guarda para que viaje.
+        // Lo ya revisado (aquí o en el PC) sale del disco: no gasta. Ver [com.forge.pixpin.jev.UrgenciaEnLaApp].
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        scope.launch(Dispatchers.IO) {
+            com.forge.pixpin.guardados.MensajesStore.cambios.debounce(5_000).collect {
+                runCatching {
+                    val nombres = proyectos.proyectos.value.associate { it.id to it.nombre }
+                    com.forge.pixpin.jev.UrgenciaEnLaApp.alCambiarLasTareas(this@PixPinApp, nombres)
+                }
+            }
+        }
         // Los modelos del asistente que se bajaban al teléfono ya no se usan: fuera, que ocupan gigas.
         scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.asistente.Asistente.limpiarModelosLocales(this@PixPinApp) } }
         // La biblioteca de figuras viaja por el chat «Asistente» (mensaje `auto-figuras`).

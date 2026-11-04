@@ -275,3 +275,9 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [ ] 92. Comentario avanzado (pegatinas con minichat, `docs/comentarios.md` del PC): pendiente.
 - [ ] 93. Parámetros de las plantillas de figuras (desde/hasta, por hoja, semanas, mes, año): pendiente;
       necesita el generador de plantillas del PC.
+
+## Pedidos del 4-nov
+
+- [x] 95. Jev no repite la revisión de urgencia: lo dicho de cada tarea se guarda en
+      `anot-<uid>.urgencia.json` de su lista y viaja; lo nacido en el teléfono se revisa al momento.
+      El PC tiene que leer y escribir el mismo fichero (`docs/urgencia-que-viaja.md`).

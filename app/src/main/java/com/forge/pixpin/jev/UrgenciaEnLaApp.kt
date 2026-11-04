@@ -23,8 +23,18 @@ import java.util.concurrent.atomic.AtomicBoolean
  *
  * Va en segundo plano: al leer las listas ([aplicar]) se pone lo ya sabido y se pregunta por lo que
  * falta en un hilo (hasta [POR_TANDA] tareas, cuatro a la vez); al acabar sube [novedades] y Tareas
- * relee (lo que no cupo va en la siguiente tanda, al releer). **Lo sabido se queda en memoria mientras la app está abierta: nada va al disco ni viaja** (las
- * prioridades se calculan en cada aparato). Tras un fallo, esa tarea no se vuelve a preguntar en 10 min.
+ * relee (lo que no cupo va en la siguiente tanda, al releer). Tras un fallo, esa tarea no se vuelve a
+ * preguntar en 10 min.
+ *
+ * **Lo que dijo Jev se guarda y viaja** (4-nov-2026, el usuario: «si ya se hizo la revisión, que no se
+ * vuelva a hacer; lo revisado en el PC llega al celular y lo del celular al PC; sin gastar tokens»): en el
+ * `anot-<uid>.urgencia.json` de su lista ([UrgenciasGuardadas]). Antes de preguntar se mira ahí; lo que ya
+ * está, sea de este aparato o de otro, no se pregunta. Las prioridades se recalculan con esas señales en
+ * cada aparato cada día (el plazo cambia; las señales, no).
+ *
+ * **Las tareas nacidas aquí se revisan al momento** ([alCambiarLasTareas]): al apuntarlas, sin esperar a
+ * abrir Tareas. Las que llegaron de otro aparato solo se preguntan al abrir Tareas y si su revisión aún no
+ * ha llegado: quien la creó ya la hizo.
  *
  * Sin clave o con la función apagada, `prioridad` se queda en null y Tareas ordena y enseña todo como
  * siempre.
@@ -105,10 +115,25 @@ object UrgenciaEnLaApp {
      * **Pone la prioridad de cada tarea pendiente** con lo ya sabido, y lanza en su hilo las preguntas
      * de lo que falta. Sin Jev, las listas tal cual. Lee el disco la primera vez: fuera del hilo principal.
      */
-    fun aplicar(context: Context, listas: List<TodasLasTareas.Lista>): List<TodasLasTareas.Lista> {
+    fun aplicar(
+        context: Context,
+        listas: List<TodasLasTareas.Lista>,
+        /** Preguntar solo por las listas nacidas en este aparato (lo de fondo, [alCambiarLasTareas]). */
+        soloDeAqui: Boolean = false
+    ): List<TodasLasTareas.Lista> {
         val cliente = Jev.para(context, Jev.Funcion.URGENCIA) ?: return listas
         val hoy = Momento.ahora().dia
         val ahora = System.currentTimeMillis()
+        val filesDir = context.filesDir
+        val yo = if (soloDeAqui) com.forge.pixpin.sincro.Codigos.deEsteAparato(filesDir) else null
+        // Lo guardado de cada lista, leído una vez por tanda.
+        val delDisco = HashMap<String, Map<String, UrgenciasGuardadas.Guardada>>()
+        fun guardada(l: TodasLasTareas.Lista, texto: String): UrgenciasGuardadas.Guardada? {
+            val uid = l.uid ?: return null
+            return delDisco.getOrPut(uid) { UrgenciasGuardadas.leer(com.forge.pixpin.sincro.AnotacionesDelAdjunto.urgencias(filesDir, uid)) }[texto]
+        }
+        fun mia(l: TodasLasTareas.Lista) = !soloDeAqui || l.aparato == null || l.aparato == yo
+        val uidDe = HashMap<String, String>()
         val faltan = LinkedHashMap<String, Pair<String?, Urgencia.Contexto>>()
         // La lista de cada una, (proyecto, mensaje): para no preguntar por los temas de una reunión.
         val lista = HashMap<String, Pair<String?, String>>()
@@ -120,7 +145,12 @@ object UrgenciaEnLaApp {
                 val texto = textoParaJev(m)
                 if (texto.isEmpty()) return@map f
                 val clave = claveDe(l, texto)
-                when (val s = synchronized(sabido) { sabido[clave] }) {
+                // Lo que ya revisó este u otro aparato, del disco: no se pregunta otra vez.
+                val enMemoria = synchronized(sabido) { sabido[clave] }
+                val s0 = if (enMemoria is Sabido.Dicho || enMemoria is Sabido.Tema) enMemoria
+                else guardada(l, texto)?.let { g -> Sabido.Dicho(g.senales).also { d -> synchronized(sabido) { sabido[clave] = d } } } ?: enMemoria
+                l.uid?.let { uidDe[clave] = it }
+                when (val s = s0) {
                     is Sabido.Dicho -> {
                         val (p, motivo) = decidir(m, s.s, hoy, diasLista)
                         f.copy(prioridad = p, motivo = motivo)
@@ -128,22 +158,24 @@ object UrgenciaEnLaApp {
                     // Un tema de una reunión: lo de siempre.
                     Sabido.Tema -> f
                     is Sabido.Fallo -> {
-                        if (ahora - s.cuando >= TRAS_UN_FALLO_MS) {
+                        if (ahora - s.cuando >= TRAS_UN_FALLO_MS && mia(l)) {
                             faltan[clave] = l.proyecto to Urgencia.Contexto(texto, l.titulo, l.chat)
                             lista[clave] = l.proyecto to l.codigo
                         }
                         f
                     }
                     null -> {
-                        faltan[clave] = l.proyecto to Urgencia.Contexto(texto, l.titulo, l.chat)
-                        lista[clave] = l.proyecto to l.codigo
+                        if (mia(l)) {
+                            faltan[clave] = l.proyecto to Urgencia.Contexto(texto, l.titulo, l.chat)
+                            lista[clave] = l.proyecto to l.codigo
+                        }
                         f
                     }
                 }
             })
         }
         if (faltan.isNotEmpty() && preguntando.compareAndSet(false, true)) {
-            val tanda = faltan.entries.take(POR_TANDA).map { Falta(it.key, lista[it.key], it.value.first, it.value.second) }
+            val tanda = faltan.entries.take(POR_TANDA).map { Falta(it.key, lista[it.key], it.value.first, it.value.second, uidDe[it.key]) }
             val app = context.applicationContext
             Thread({
                 try { preguntar(app, cliente, tanda) } finally {
@@ -156,7 +188,7 @@ object UrgenciaEnLaApp {
     }
 
     /** Una tarea por preguntar: su clave, su lista (proyecto y mensaje), su chat y lo que se manda. */
-    private class Falta(val clave: String, val lista: Pair<String?, String>?, val proyecto: String?, val contexto: Urgencia.Contexto)
+    private class Falta(val clave: String, val lista: Pair<String?, String>?, val proyecto: String?, val contexto: Urgencia.Contexto, val uid: String?)
 
     /**
      * Lo de [aplicar], en el hilo: los mensajes recientes de cada chat y las preguntas. Las tareas de una
@@ -174,16 +206,37 @@ object UrgenciaEnLaApp {
         val empezo = System.currentTimeMillis()
         val respuestas = Urgencia.preguntarVarias(cliente, contextos, A_LA_VEZ)
         var fallos = 0
+        // Lo dicho, por lista: a su fichero, para que ningún aparato lo vuelva a preguntar.
+        val ahora = System.currentTimeMillis()
+        val yo = com.forge.pixpin.sincro.Codigos.deEsteAparato(app.filesDir).orEmpty()
+        val aGuardar = HashMap<String, MutableMap<String, UrgenciasGuardadas.Guardada>>()
         synchronized(sabido) {
             for ((i, r) in respuestas.withIndex()) {
                 val clave = tanda[i].clave
-                r.fold({ sabido[clave] = Sabido.Dicho(it) }, { e ->
+                r.fold({
+                    sabido[clave] = Sabido.Dicho(it)
+                    tanda[i].uid?.let { uid -> aGuardar.getOrPut(uid) { HashMap() }[tanda[i].contexto.tarea] = UrgenciasGuardadas.Guardada(it, ahora, yo) }
+                }, { e ->
                     if (fallos++ == 0) runCatching { android.util.Log.w("PixPinJev", "sin prioridad para una tarea: ${e.message}") }
                     sabido[clave] = Sabido.Fallo(System.currentTimeMillis())
                 })
             }
         }
+        for ((uid, nuevas) in aGuardar) runCatching {
+            UrgenciasGuardadas.anadir(com.forge.pixpin.sincro.AnotacionesDelAdjunto.urgencias(app.filesDir, uid), nuevas)
+        }
         runCatching { android.util.Log.i("PixPinJev", "prioridades: ${contextos.size} tareas, $fallos fallos, ${System.currentTimeMillis() - empezo} ms") }
+    }
+
+    /**
+     * **Revisar al momento lo apuntado aquí** (4-nov-2026): cada vez que cambian los mensajes, pasado un
+     * respiro, se pregunta por las tareas nuevas de las listas nacidas en este aparato (las demás ya las
+     * revisó quien las creó). Lo ya revisado no cuesta nada: sale del disco. Lo llama [com.forge.pixpin.PixPinApp].
+     */
+    fun alCambiarLasTareas(context: Context, nombres: Map<String, String>) {
+        if (Jev.para(context, Jev.Funcion.URGENCIA) == null) return
+        val mensajes = runCatching { MensajesStore(context).leer() }.getOrNull() ?: return
+        aplicar(context, TodasLasTareas.reunir(mensajes, nombres), soloDeAqui = true)
     }
 
     /**

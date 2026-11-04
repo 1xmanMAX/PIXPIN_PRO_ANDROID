@@ -98,6 +98,12 @@ object AnotacionesDelAdjunto {
     fun marcasDeTexto(filesDir: File, uid: String) = File(filesDir, "$CARPETA/$PREFIJO$uid.marcas-texto.json")
 
     /**
+     * **La revisión de urgencia de las tareas de una lista** (4-nov-2026): lo que dijo Jev de cada una,
+     * para no volver a preguntarlo en ningún aparato. Ver [com.forge.pixpin.jev.UrgenciasGuardadas].
+     */
+    fun urgencias(filesDir: File, uid: String) = File(filesDir, "$CARPETA/$PREFIJO$uid.urgencia.json")
+
+    /**
      * Lo anotado de las hojas que estaban en [antes] y ya no están en ningún proyecto de
      * [despues]: sin su hoja ya no viaja ni se abre. Una hoja que se mueve a otro proyecto lleva
      * su código, así que la suya no se toca.
@@ -333,9 +339,10 @@ object AnotacionesDelAdjunto {
     // `.marcos.json` y `.vistas.json` (PC c31f974, 19-oct): los marcos numerados de un documento y
     // lo que guarda cada marcador además de su sitio. Ver [com.forge.pixpin.motor.MarcosDelDocumento].
     // `.marcas-texto.json` (PC 2-nov): las marcas de texto de una nota o página web ([marcasDeTexto]).
+    // `.urgencia.json` (4-nov): la revisión de urgencia de las tareas de una lista ([urgencias]).
     private val TERMINACIONES = listOf(
         ".excalidraw.gz", ".marcas", ".espacios", ".maqueta", ".voz", ".sitio", ".hoja", ".comentarios.json", ".asistente.json",
-        ".marcos.json", ".vistas.json", ".marcas-texto.json"
+        ".marcos.json", ".vistas.json", ".marcas-texto.json", ".urgencia.json"
     )
 
     /**
