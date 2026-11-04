@@ -1524,7 +1524,7 @@ class Sesion private constructor(
         Protocolo.enviar(canal, Protocolo.Peticion("dame", chat = chatDeLaVuelta, ruta = rel))
         val cabecera = Protocolo.leerRespuesta(canal)
         val entero = disco.escribirArchivo(rel, cabecera.bytes) { salida -> Protocolo.recibirTrozos(canal, cabecera.bytes, salida, avance) != null }
-        return if (entero) disco.resumenDeArchivo(rel) else null
+        return if (entero) disco.resumenAcordadoDe(rel) else null
     }
 
     /** Su versión, reconstruida con lo acordado y los cambios que manda. Null si no tiene esa base. */

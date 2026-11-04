@@ -1481,4 +1481,44 @@ class SincronizarDeVerdadTest {
         sincronizar()
         assertEquals("no es json", File(telefono.filesDir, rel).readText())
     }
+
+    @Test
+    fun `las pegatinas de un plano, sus adjuntos y la urgencia de una lista viajan y se juntan`() {
+        emparejar()
+        val dwg = File(telefono.filesDir, "guardados/9_planta.dwg").apply { parentFile!!.mkdirs(); writeBytes(byteArrayOf(9, 8, 7)) }
+        val plano = mensaje(telefono, "pl", clase = Clase.ARCHIVO, ruta = dwg.absolutePath)
+        val lista = mensaje(telefono, "ls", "# Obra\n- [ ] Mandar la cotización\n", clase = Clase.MINIAPP)
+        val uidP = Codigos.unico(plano)
+        val uidL = Codigos.unico(lista)
+        val yo = com.forge.pixpin.comentarios.Quien("Teléfono", "tel")
+        val (p0, id) = com.forge.pixpin.comentarios.Pegatinas().poner(com.forge.pixpin.comentarios.Tipo.URGENTE, com.forge.pixpin.comentarios.Ancla.pagina(0, 12.5, -3.0), yo, 100)
+        val adjunto = "pins/draw/anot-$uidP.a0123456789abcdef.adjunto"
+        File(telefono.filesDir, adjunto).apply { parentFile!!.mkdirs(); writeText("foto") }
+        val p1 = p0.escribir(id, yo, 110, "la viga", listOf(com.forge.pixpin.comentarios.Adjunto.archivo(adjunto, "foto.jpg"))).first
+        val comentarios = "pins/draw/anot-$uidP.comentarios.json"
+        File(telefono.filesDir, comentarios).writeText(com.forge.pixpin.comentarios.Fichero.escribir(null, p1))
+        val urgencia = "pins/draw/anot-$uidL.urgencia.json"
+        val senales = com.forge.pixpin.jev.Urgencia.Senales(com.forge.pixpin.jev.Escala.de(listOf(0.1, 0.2, 0.3, 0.4)), 0.8, 0.0, null)
+        com.forge.pixpin.jev.UrgenciasGuardadas.anadir(File(telefono.filesDir, urgencia), mapOf("Mandar la cotización" to com.forge.pixpin.jev.UrgenciasGuardadas.Guardada(senales, 5, "tel")))
+        sincronizar()
+        assertEquals("foto", File(tableta.filesDir, adjunto).readText())
+        assertEquals(p1, com.forge.pixpin.comentarios.Fichero.leer(File(tableta.filesDir, comentarios).readText()))
+        assertTrue("la urgencia de la lista viaja", com.forge.pixpin.jev.UrgenciasGuardadas.leer(File(tableta.filesDir, urgencia)).containsKey("Mandar la cotización"))
+
+        // Los dos escriben a la vez en el mismo minichat y revisan otra tarea: se juntan, no se pisan.
+        val otro = com.forge.pixpin.comentarios.Quien("Tableta", "tab")
+        File(telefono.filesDir, comentarios).writeText(com.forge.pixpin.comentarios.Fichero.escribir(null, p1.escribir(id, yo, 300, "desde el teléfono").first))
+        File(tableta.filesDir, comentarios).writeText(com.forge.pixpin.comentarios.Fichero.escribir(null, p1.escribir(id, otro, 200, "desde la tableta").first))
+        File(tableta.filesDir, comentarios).setLastModified(System.currentTimeMillis() + 60_000)
+        com.forge.pixpin.jev.UrgenciasGuardadas.anadir(File(telefono.filesDir, urgencia), mapOf("Pedir cemento" to com.forge.pixpin.jev.UrgenciasGuardadas.Guardada(senales, 7, "tel")))
+        com.forge.pixpin.jev.UrgenciasGuardadas.anadir(File(tableta.filesDir, urgencia), mapOf("Llamar al cliente" to com.forge.pixpin.jev.UrgenciasGuardadas.Guardada(senales, 8, "tab")))
+        File(tableta.filesDir, urgencia).setLastModified(System.currentTimeMillis() + 60_000)
+        sincronizar()
+        sincronizar()
+        for (d in listOf(telefono, tableta)) {
+            val hilo = com.forge.pixpin.comentarios.Fichero.leer(File(d.filesDir, comentarios).readText())!!.get(id)!!.entradas().map { it.texto }
+            assertEquals("en ${d.filesDir}", listOf("la viga", "desde la tableta", "desde el teléfono"), hilo)
+            assertEquals(setOf("Mandar la cotización", "Pedir cemento", "Llamar al cliente"), com.forge.pixpin.jev.UrgenciasGuardadas.leer(File(d.filesDir, urgencia)).keys)
+        }
+    }
 }

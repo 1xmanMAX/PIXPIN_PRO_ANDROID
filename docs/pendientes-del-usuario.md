@@ -286,3 +286,7 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       cuatro tipos (🔴 urgente, 🟠 alta, 🟡 media, 💬 nota), un toque pega la pegatina, mantener y arrastrar
       la mueve, y su minichat (escribir, adjuntar archivos, resolver, cambiar tipo, crear tarea en el Inbox,
       quitar) y la lista «Comentarios (n)». Mismo fichero y misma fusión que el PC: viajan y se juntan.
+- [x] 97. Todo lo nuevo sincroniza (v0.162.0): lo anotado con el código de **cualquier** mensaje viaja (antes
+      solo el de un archivo o una nota, y la urgencia de una lista de tareas se quedaba); los comentarios
+      y la urgencia cambiados en los dos aparatos se juntan y la versión juntada vuelve al otro, para que
+      queden iguales. Probado de punta a punta entre dos aparatos (`SincronizarDeVerdadTest`).
