@@ -317,3 +317,7 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 108. La cámara salía dos veces en el minichat de los comentarios: solo en el clip.
 - [x] 109. Atrás vuelve a la pantalla que abrió cada editor (nota → lienzo → atrás vuelve a la nota), aunque
       cada uno viva en su tarea.
+- [x] 110. La ficha del chat «Asistente», como sus tres puntos en el PC: el modelo (Claude o DeepSeek) con el
+      elegido marcado, conversación nueva, la clave y sus ajustes, fotos y archivos, y borrar el chat.
+- [x] 111. El visor de Markdown con espacios a los costados para anotar (el `.espacios` de la nota, como el
+      del PDF, que viaja): el texto se estrecha y la tinta sigue unida a él.

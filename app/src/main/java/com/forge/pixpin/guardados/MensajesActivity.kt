@@ -2827,7 +2827,30 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             }
         }
 
-        if (fichaAbierta) {
+        // **El chat «Asistente» tiene su ficha** (5-nov-2026, como sus tres puntos en el PC): el modelo,
+        // conversación nueva, la clave y borrar el chat; las fotos y archivos, desde ella.
+        var archivosDelAsistente by remember { mutableStateOf(false) }
+        androidx.compose.runtime.LaunchedEffect(fichaAbierta) { if (!fichaAbierta) archivosDelAsistente = false }
+        val esElAsistente = chatDelAsistente != null && chatDe == chatDelAsistente
+        if (fichaAbierta && esElAsistente && !archivosDelAsistente) {
+            com.forge.pixpin.asistente.FichaDelAsistente(
+                cuantos = deEsteChat.count { !it.enBuzon },
+                onCerrar = { fichaAbierta = false },
+                onNuevaConversacion = {
+                    lifecycleScope.launch {
+                        val aviso = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.Asistente.nuevaConversacion(this@MensajesActivity, chatDe) }
+                        if (aviso != null) Toast.makeText(this@MensajesActivity, aviso, Toast.LENGTH_SHORT).show()
+                    }
+                },
+                onVerArchivos = { archivosDelAsistente = true },
+                onBorrarChat = {
+                    val delChat = deEsteChat.toList()
+                    delChat.forEach { almacen.borrarAdjunto(it) }
+                    val ids = delChat.map { it.id }.toSet()
+                    guardarAparte({ lista -> lista.filterNot { it.id in ids } })
+                }
+            )
+        } else if (fichaAbierta) {
             val deLaFicha = remember(deEsteChat) { deEsteChat.filter { !it.enBuzon } }
             FichaDelChat(
                 nombre = nombreDelChat.ifBlank { getString(com.forge.pixpin.R.string.guardados_titulo) },

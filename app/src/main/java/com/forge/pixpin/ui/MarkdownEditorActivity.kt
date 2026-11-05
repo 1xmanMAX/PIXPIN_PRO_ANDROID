@@ -2,6 +2,8 @@ package com.forge.pixpin.ui
 
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.Draw
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.filled.FormatIndentIncrease
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.filled.BorderColor
@@ -684,7 +686,25 @@ private fun Pantalla(
     val marcosDeLaNota = remember(baseDeLaNota) {
         MarcosDelVisor(baseDeLaNota?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(contextoDelEditor.filesDir, it) })
     }
-    fun vistaDeLaTinta() = com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = (margenArriba - desplazado.value) / densidadDeLaNota, zoom = densidadDeLaNota)
+    // **Espacio a los costados para anotar** (5-nov-2026, el usuario: «que al visualizador de markdown se le pueda
+    // añadir un espacio a los costados para hacer anotaciones»): el `.espacios` de la nota, el mismo fichero y los
+    // mismos valores que el del PDF (1 izquierda, 2 derecha, 3 los dos), que viaja con ella. El texto se estrecha y
+    // la tinta sigue unida a él: su origen se corre con el margen de la izquierda, y lo de los márgenes queda fuera
+    // del texto (x negativa a la izquierda).
+    val archivoDeEspacios = remember(baseDeLaNota) { baseDeLaNota?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.espacios(contextoDelEditor.filesDir, it) } }
+    var espaciosDeLaNota by remember(archivoDeEspacios) {
+        mutableIntStateOf(runCatching { archivoDeEspacios?.takeIf { it.isFile }?.readText()?.trim()?.toInt() }.getOrNull()?.coerceIn(0, 3) ?: 0)
+    }
+    fun ponerEspacios(n: Int) {
+        espaciosDeLaNota = n
+        archivoDeEspacios?.let { f -> runCatching { f.parentFile?.mkdirs(); f.writeText(n.toString()) } }
+    }
+    val anchoDeLaPantallaDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val margenDeEspacio = (anchoDeLaPantallaDp * 0.28f).dp
+    val espacioIzq = if (viendo && espaciosDeLaNota and 1 != 0) margenDeEspacio else 0.dp
+    val espacioDer = if (viendo && espaciosDeLaNota and 2 != 0) margenDeEspacio else 0.dp
+    val corridoX = with(densidadDeLaPantalla) { espacioIzq.toPx() }
+    fun vistaDeLaTinta() = com.forge.pixpin.motor.Viewport(scrollX = corridoX / densidadDeLaNota, scrollY = (margenArriba - desplazado.value) / densidadDeLaNota, zoom = densidadDeLaNota)
     fun dejarDeAnotarLaNota() {
         if (!anotandoLaNota) return
         anotandoLaNota = false
@@ -701,8 +721,8 @@ private fun Pantalla(
                 ir = { m -> desplazado.scrollTo((m.y0 * densidadDeLaNota).toInt()) },
                 cajaEnVentana = { m ->
                     androidx.compose.ui.geometry.Rect(
-                        (m.x0 * densidadDeLaNota).toFloat(), (m.y0 * densidadDeLaNota + margenArriba - desplazado.value).toFloat(),
-                        (m.x1 * densidadDeLaNota).toFloat(), (m.y1 * densidadDeLaNota + margenArriba - desplazado.value).toFloat()
+                        (m.x0 * densidadDeLaNota + corridoX).toFloat(), (m.y0 * densidadDeLaNota + margenArriba - desplazado.value).toFloat(),
+                        (m.x1 * densidadDeLaNota + corridoX).toFloat(), (m.y1 * densidadDeLaNota + margenArriba - desplazado.value).toFloat()
                     ).translate(cajaDeLaNota.topLeft)
                 }
             )
@@ -929,6 +949,9 @@ private fun Pantalla(
     ) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
+            // Los espacios para anotar, un poco más oscuros que el papel: se ve dónde está el margen.
+            if (espacioIzq > 0.dp) Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().width(espacioIzq).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.045f)))
+            if (espacioDer > 0.dp) Box(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(espacioDer).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.045f)))
             Box(
                 Modifier
                     .fillMaxSize()
@@ -942,6 +965,7 @@ private fun Pantalla(
                     .verticalScroll(desplazado)
                     .padding(top = with(densidadDeLaPantalla) { margenArriba.toDp() })
                     .then(if (viendo) Modifier.navigationBarsPadding() else Modifier)
+                    .padding(start = espacioIzq, end = espacioDer)
                     .padding(16.dp)
             ) {
                 if (viendo && valor.text.isBlank()) {
@@ -1040,7 +1064,7 @@ private fun Pantalla(
                         // Dos dedos mueven la nota: solo de alto, y sin salirse.
                         val vp = tintaDeLaNota.scene.viewport
                         val y = (margenArriba - vp.scrollY * densidadDeLaNota).toInt().coerceIn(0, desplazado.maxValue)
-                        tintaDeLaNota.setViewport(vp.copy(scrollX = 0.0, scrollY = (margenArriba - y) / densidadDeLaNota))
+                        tintaDeLaNota.setViewport(vp.copy(scrollX = corridoX / densidadDeLaNota, scrollY = (margenArriba - y) / densidadDeLaNota))
                         alcanceDeMarcas.launch { desplazado.scrollTo(y) }
                         if (!trazando) tickDeLaTinta++
                     }
@@ -1055,8 +1079,8 @@ private fun Pantalla(
             }
             if (viendo && !anotandoLaNota && (marcosDeLaNota.activo || marcosDeLaNota.lista.isNotEmpty())) CapaDeMarcos(
                 marcosDeLaNota,
-                aPantalla = { x, y, _ -> androidx.compose.ui.geometry.Offset((x * densidadDeLaNota).toFloat(), (y * densidadDeLaNota + margenArriba - desplazado.value).toFloat()) },
-                aDocumento = { o -> PuntoDelDocumento(o.x / densidadDeLaNota, (o.y - margenArriba + desplazado.value) / densidadDeLaNota) },
+                aPantalla = { x, y, _ -> androidx.compose.ui.geometry.Offset((x * densidadDeLaNota + corridoX).toFloat(), (y * densidadDeLaNota + margenArriba - desplazado.value).toFloat()) },
+                aDocumento = { o -> PuntoDelDocumento((o.x - corridoX) / densidadDeLaNota, (o.y - margenArriba + desplazado.value) / densidadDeLaNota) },
                 pxPorUnidad = { densidadDeLaNota },
                 alIr = { m -> alcanceDeMarcas.launch { desplazado.animateScrollTo((m.y0 * densidadDeLaNota).toInt()) } },
                 alImprimir = { imprimirLosMarcosDeLaNota() },
@@ -1130,6 +1154,11 @@ private fun Pantalla(
                     },
                     // **Escribir el texto** (el `EDIT_NOTE` del PC): el lápiz del riel es para anotar.
                     // Un adjunto del chat se mira y se anota, pero no se escribe ([soloLeer]).
+                    // Los espacios a los costados para anotar: puestos o quitados de un toque.
+                    BotonDeLector(Icons.Filled.FormatIndentIncrease, if (espaciosDeLaNota == 0) "Espacios para anotar" else "Quitar los espacios") {
+                        ponerEspacios(if (espaciosDeLaNota == 0) 3 else 0)
+                        tintaDeLaNota.setViewport(vistaDeLaTinta()); tickDeLaTinta++; toques++
+                    },
                     if (soloLeer) null else BotonDeLector(Icons.Filled.EditNote, "Escribir") {
                         dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = false; viendo = false
                     },
