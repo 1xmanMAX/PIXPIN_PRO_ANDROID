@@ -1035,20 +1035,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         // **La cámara del teléfono** (5-nov-2026): la foto se hace con la cámara de Android y entra sola en el
         // cuadro de enviar (con su descripción y «Añadir»), como las elegidas. Se guarda en `cache/share`, que
         // el FileProvider sirve; al mandarla se copia al chat como cualquier otra.
-        var fotoDeLaCamara by remember { mutableStateOf<Uri?>(null) }
-        val hacerFoto = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { hecha ->
-            val u = fotoDeLaCamara
-            fotoDeLaCamara = null
-            if (hecha && u != null) fotosPorEnviar = EnvioDeVarios.anadir(fotosPorEnviar, listOf(u)).take(MAXIMO_DE_FOTOS)
-        }
-        val pedirCamara = {
-            runCatching {
-                val f = File(File(cacheDir, "share").apply { mkdirs() }, "camara-${System.currentTimeMillis()}.jpg")
-                val u = androidx.core.content.FileProvider.getUriForFile(this@MensajesActivity, "$packageName.fileprovider", f)
-                fotoDeLaCamara = u
-                hacerFoto.launch(u)
-            }.onFailure { Toast.makeText(this@MensajesActivity, "No se pudo abrir la cámara", Toast.LENGTH_SHORT).show() }
-            Unit
+        val pedirCamara = com.forge.pixpin.ui.rememberCamaraDelTelefono { u ->
+            fotosPorEnviar = EnvioDeVarios.anadir(fotosPorEnviar, listOf(u)).take(MAXIMO_DE_FOTOS)
         }
 
         // **Filtrar y buscar, en dos pasos.** Con la consulta dentro de la misma clave,

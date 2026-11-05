@@ -403,20 +403,9 @@ private fun Minichat(estado: EstadoDePegatinas, c: Comentario, alCerrar: () -> U
         }
     }
     val galeria = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { adjuntar(it) }
-    var fotoPendiente by remember { mutableStateOf<Uri?>(null) }
-    val camara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
-        val u = fotoPendiente
-        fotoPendiente = null
-        if (ok && u != null) adjuntar(listOf(u))
-    }
-    fun hacerFoto() {
-        runCatching {
-            val f = File(File(contexto.cacheDir, "share").apply { mkdirs() }, "foto-${System.currentTimeMillis()}.jpg")
-            val u = androidx.core.content.FileProvider.getUriForFile(contexto, "${contexto.packageName}.fileprovider", f)
-            fotoPendiente = u
-            camara.launch(u)
-        }
-    }
+    // Con el permiso de la cámara pedido antes (sin él Android no la abre). Ver [com.forge.pixpin.ui.rememberCamaraDelTelefono].
+    val hacerFotoConCamara = com.forge.pixpin.ui.rememberCamaraDelTelefono { u -> adjuntar(listOf(u)) }
+    fun hacerFoto() = hacerFotoConCamara()
     var clip by remember { mutableStateOf(false) }
     val tareaCreada = stringResource(R.string.cm_tarea_creada)
     if (clip) ClipDelMinichat(

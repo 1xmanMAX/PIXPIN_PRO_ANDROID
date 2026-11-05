@@ -304,3 +304,5 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       elegida (faltaba en el `ClipData` del selector).
 - [x] 102. «Cámara» en el clip del chat (v0.164.0): hace la foto con la cámara del teléfono y entra sola en el
       cuadro de enviar, con su descripción, como las elegidas.
+- [x] 103. La cámara de los comentarios no hacía nada: PixPin declara el permiso de la cámara y entonces
+      Android no abre la del sistema sin él concedido. Ahora se pide antes (en el chat y en los comentarios).
