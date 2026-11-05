@@ -5387,18 +5387,7 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
      * cualquier caja de texto. Ver [DrawController.altoDelTexto].
      */
     private fun ensenarAMedirElTexto() {
-        controller.altoDelTexto = medir@{ e, ancho ->
-            val tam = e.fontSize ?: com.forge.pixpin.motor.ItemStyle().fontSize
-            // Uno rico no se parte suelto (como en el PC): su alto es el de lo compuesto.
-            val fuente = TextoRico.fuenteVigente(e)
-            if (fuente != null) {
-                val medidor = PintorDeTextoRico(DrawFonts.provider(this)).medidor(e.fontFamily)
-                return@medir TextoRico.medida(fuente, TextoRico.opcionesDe(e), medidor).second
-            }
-            val regla = DrawFonts.reglaDeAnchos(this, e.fontFamily, tam)
-            val renglones = renglonesQueCaben(e.text.orEmpty(), ancho, regla)
-            altoDeRenglones(renglones.size, tam)
-        }
+        controller.medirTextosCon(this)
     }
 
     private fun medirTexto(texto: String, familia: Int, tamano: Double): Pair<Double, Double> =

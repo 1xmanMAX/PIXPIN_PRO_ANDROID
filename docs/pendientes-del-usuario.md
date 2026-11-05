@@ -325,3 +325,8 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       hueco era cero y quedaba encima del agujero de la cámara).
 - [x] 113. Nota mirando: mantener el dedo en el texto pasa a marcarlo (elegir y marcar con la barrita).
 - [x] 114. Lienzo mirando: sin la lupa al tocar o acercar.
+- [x] 115. El texto del lápiz en los visores (notas, HTML, PDF, Excel, 3D, clase) se escribe en su sitio, como en el
+      lienzo, sin la ventanita; en el PDF, sobre la hoja y a su tamaño.
+- [x] 116. Lo escrito aparece al momento (la hoja del PDF, el plano y la clase no se repintaban hasta moverlos).
+- [x] 117. La caja de texto en los visores: el alto, el de su texto (estirarla hacia abajo no deja hueco); a lo
+      ancho se estira y el texto se reparte (como en el lienzo: `medirTextosCon`).

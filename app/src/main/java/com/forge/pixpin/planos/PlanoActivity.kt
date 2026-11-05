@@ -693,6 +693,8 @@ class PlanoActivity : ComponentActivity() {
                         // Anotando, la misma tinta que con el editor guardado: contra el plano, como el PC.
                         papelDelAnfitrion = TintaDelPlano.papel(claro),
                         onChange = { trazando -> if (!trazando) { tickDeAnotar++; cambiosEnLaCapa++ } },
+                        // Se repinta al cambiar desde fuera (el texto escrito en su sitio).
+                        cambios = tickDeAnotar,
                         modoLapiz = conLapiz,
                         onLapizDetectado = { vioLapiz = true; if (lapizAutomatico) conLapiz = true }
                     )

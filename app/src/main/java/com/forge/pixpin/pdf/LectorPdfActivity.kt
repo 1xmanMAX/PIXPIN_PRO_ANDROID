@@ -1,5 +1,7 @@
 package com.forge.pixpin.pdf
 
+import androidx.compose.ui.layout.boundsInRoot
+import com.forge.pixpin.motor.medirTextosCon
 import com.forge.pixpin.ui.debajoDeLaCamara
 import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import androidx.compose.ui.graphics.nativeCanvas
@@ -1020,7 +1022,16 @@ class LectorPdfActivity : ComponentActivity() {
                 val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
                 var enProyecto by remember { mutableStateOf(capas.esDeUnProyecto()) }
                 // El texto plantado en una hoja se escribe aquí. Ver [com.forge.pixpin.ui.EscribirEnElLienzo].
-                capas.ultima()?.let { c -> com.forge.pixpin.ui.EscribirEnElLienzo(c, tickDeLaBarra) { capas.ensuciarLaUltima(); tickDeLaBarra++ } }
+                // **En su sitio, sobre la hoja** (5-nov-2026): sin la ventanita, como en el lienzo.
+                capas.ultima()?.let { c ->
+                    androidx.compose.runtime.LaunchedEffect(c) { if (c.altoDelTexto == null) c.medirTextosCon(this@LectorPdfActivity) }
+                    val caja = capas.cajaDeLaUltima()
+                    com.forge.pixpin.ui.EscribirEnElLienzo(
+                        c, tickDeLaBarra + capas.version.intValue, enSitio = caja != null,
+                        origen = caja?.first?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero,
+                        escala = caja?.let { (r, w) -> if (w > 0) r.width / w else 1f } ?: 1f
+                    ) { capas.ensuciarLaUltima(); tickDeLaBarra++ }
+                }
                 // **El editor avanzado de todos los visores** (25-oct-2026): la barra agrupada abajo, el
                 // estilo plegado a un lado y deshacer de la hoja que se anota. Ver [com.forge.pixpin.ui.EditorAvanzadoDeVisor].
                 val sitio = if (esOffice) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF
@@ -1592,6 +1603,12 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
 
     fun tocada(i: Int) { ultimaTocada = i }
     fun ultima(): com.forge.pixpin.motor.DrawController? = synchronized(abiertas) { abiertas[ultimaTocada] }
+    /**
+     * **Dónde cae cada hoja que se anota** (5-nov-2026): su caja en la pantalla y su ancho de verdad, para escribir
+     * el texto en su sitio, sobre la hoja y a su tamaño (ampliada o no), como en el lienzo.
+     */
+    val cajas = androidx.compose.runtime.mutableStateMapOf<Int, Pair<androidx.compose.ui.geometry.Rect, Int>>()
+    fun cajaDeLaUltima(): Pair<androidx.compose.ui.geometry.Rect, Int>? = cajas[ultimaTocada]
     fun ensuciar(i: Int) { synchronized(sucias) { sucias.add(i) }; version.intValue++ }
     fun ensuciarLaUltima() { if (ultimaTocada >= 0) ensuciar(ultimaTocada) }
 
@@ -1710,7 +1727,7 @@ private fun CapaDePagina(
         return
     }
     Box(
-        medido.pointerInput(c, conLapiz) {
+        medido.onGloballyPositioned { capas.cajas[i] = it.boundsInRoot() to it.size.width }.pointerInput(c, conLapiz) {
             awaitPointerEventScope {
                 while (true) {
                     val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
@@ -1730,6 +1747,9 @@ private fun CapaDePagina(
             controller = c,
             modifier = Modifier.fillMaxSize(),
             onChange = { trazando -> if (!trazando) { capas.ensuciar(i); alCambiar() } },
+            // **Se repinta en cuanto cambia** (5-nov-2026, el usuario: «pongo el texto y no aparece hasta que muevo
+            // el PDF»): el texto se escribe fuera de la hoja y solo se veía al volver a tocarla.
+            cambios = capas.version.intValue,
             vistaFija = true,
             dark = oscuro,
             modoLapiz = conLapiz,

@@ -55,6 +55,13 @@ fun EscribirEnElLienzo(
     noche: Boolean = false,
     /** Lo que hay debajo, para tapar el texto viejo mientras se reescribe. */
     fondo: androidx.compose.ui.graphics.Color = androidx.compose.ui.graphics.Color.Transparent,
+    /**
+     * **Dónde cae el lienzo y a qué tamaño se ve** (5-nov-2026), para escribir en su sitio cuando el lienzo no
+     * empieza en la esquina de quien lo hospeda (la hoja de un PDF dentro de su lista, ampliada): su esquina en
+     * píxeles y cuántos de pantalla hay por cada uno del lienzo.
+     */
+    origen: androidx.compose.ui.geometry.Offset = androidx.compose.ui.geometry.Offset.Zero,
+    escala: Float = 1f,
     alAcabar: () -> Unit
 ) {
     @Suppress("UNUSED_EXPRESSION") tick
@@ -77,7 +84,12 @@ fun EscribirEnElLienzo(
                 elemento.fontFamily ?: controlador.scene.style.fontFamily,
                 elemento.fontSize ?: controlador.scene.style.fontSize
             )
-            controlador.updateText(id, limpio, ancho, alto)
+            // **Un texto que ya tenía su ancho lo conserva** y se reparte en él (el alto, el de sus renglones):
+            // reescribirlo no lo devuelve a una sola línea larguísima.
+            val medir = controlador.altoDelTexto
+            val yaTenia = !elemento.text.isNullOrBlank() && elemento.width > 1.0 && elemento.width < ancho
+            if (yaTenia && medir != null) controlador.updateText(id, limpio, elemento.width, medir(elemento.copy(text = limpio), elemento.width))
+            else controlador.updateText(id, limpio, ancho, alto)
         }
         controlador.clearPendingText()
         alAcabar()
@@ -85,7 +97,8 @@ fun EscribirEnElLienzo(
 
     if (enSitio) {
         val vp = controlador.scene.viewport
-        val esquina = vp.toScreen(com.forge.pixpin.motor.Pt(elemento.x, elemento.y))
+        val enLienzo = vp.toScreen(com.forge.pixpin.motor.Pt(elemento.x, elemento.y))
+        val esquina = com.forge.pixpin.motor.Pt(origen.x + enLienzo.x * escala, origen.y + enLienzo.y * escala)
         val tam = elemento.fontSize ?: controlador.scene.style.fontSize
         val familia = elemento.fontFamily ?: controlador.scene.style.fontFamily
         // Un toque fuera acepta, como en el editor. Va DEBAJO del texto para no robarle los toques.
@@ -101,7 +114,7 @@ fun EscribirEnElLienzo(
             textStyle = androidx.compose.ui.text.TextStyle(
                 fontFamily = com.forge.pixpin.motor.composeFontFamily(familia),
                 // En píxeles de pantalla (no `sp`): lo que se teclea mide lo que va a quedar.
-                fontSize = with(LocalDensity.current) { (tam * vp.zoom).toFloat().toSp() },
+                fontSize = with(LocalDensity.current) { (tam * vp.zoom * escala).toFloat().toSp() },
                 color = androidx.compose.ui.graphics.Color(
                     com.forge.pixpin.motor.DrawTheme.filtrar(com.forge.pixpin.motor.parseColor(elemento.strokeColor), noche)
                 )

@@ -1311,6 +1311,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                 modifier = Modifier.fillMaxSize(),
                 imageProvider = { idf -> fotos.getOrPut(idf) { c.scene.files[idf]?.path?.let { com.forge.pixpin.pin.ImageStore.load(it) } } },
                 dark = noche,
+                // Se repinta al cambiar desde fuera (el texto escrito en su sitio).
+                cambios = tick,
                 onChange = { trazando -> if (!trazando) tick++ }
             )
             val sitio = com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PIN
