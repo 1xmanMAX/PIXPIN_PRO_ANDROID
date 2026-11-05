@@ -469,7 +469,8 @@ class ExcelActivity : ComponentActivity() {
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
                 }
-                LineaDeCelda(vista, marca, alCopiar = { vista?.let { copiar(it) }; toques++ }) { activa = it }
+                // **Sin la línea de la celda** (5-nov-2026, el usuario: «la barra inferior en la que aparece
+                // copiar, y el porcentaje del zoom, no son útiles: quítalos»).
                 // Con una sola hoja no hay pestañas que elegir: no tapan nada (lo que falta por leer y el
                 // zoom, solos a la derecha).
                 if (hojas.size > 1) PestanasDeHojas(hojas, activa, oscuro, vista, marca) { i -> activa = i; vista?.ponerHoja(i) }
@@ -601,8 +602,7 @@ class ExcelActivity : ComponentActivity() {
         val hoja = v?.hoja
         val estado = buildList {
             if (hoja != null && !hoja.completa && hoja.geo != null) add("Leyendo… ${"%,d".format(hoja.filasLeidas)} filas")
-            val z = v?.zoom ?: 1.0
-            if (kotlin.math.abs(z - 1.0) > 0.004) add("${(z * 100).toInt()} %")
+            // Sin el porcentaje del zoom (5-nov-2026): solo lo que falta por leer.
         }.joinToString("  ·  ")
         if (estado.isEmpty()) return
         if (flotando) Text(

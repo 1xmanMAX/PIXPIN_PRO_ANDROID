@@ -77,6 +77,14 @@ fun BoxScope.EditorAvanzadoDeVisor(
     historia: () -> DrawController? = { capa },
     /** Además del estilo de [capa], a quién más se le pone (la hoja que se está anotando). */
     alCambiarEstilo: (com.forge.pixpin.motor.ItemStyle) -> Unit = {},
+    /**
+     * **Escribir el texto que planta la herramienta de texto** (5-nov-2026, el usuario: «la función de texto de
+     * las herramientas de dibujo no funciona en los markdown, y sospecho que en los demás formatos tampoco»):
+     * el motor planta el texto, pero el cuadro donde se teclea ([EscribirEnElLienzo]) solo lo ponían algunos
+     * visores. Ahora lo pone el editor; quien ya lo pone a su manera (el plano, en su sitio; el PDF, en la hoja
+     * que se anota) pasa false.
+     */
+    escribirTexto: Boolean = true,
     /** Lo que el visor pone junto a «Listo» (exportar, «Dedo: mover»…). */
     arriba: @Composable () -> Unit = {}
 ) {
@@ -99,6 +107,8 @@ fun BoxScope.EditorAvanzadoDeVisor(
     val marcasDeColor = remember(ajustes.coloresMarcados) {
         ajustes.coloresMarcados.split(',').map { it.trim() }.filter { it.startsWith("#") && it.length == 7 }
     }
+
+    if (escribirTexto) EscribirEnElLienzo(capa, tick) { cambiado(true) }
 
     // Arriba: «Listo» y lo del visor, en la pastilla de cristal.
     Row(

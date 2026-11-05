@@ -1817,9 +1817,15 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             // `derivedStateOf` se queda con la lista de la primera composición: al mandar
             // algo, buscar o cambiar de ficha, la pastilla enseñaba días de una lista que
             // ya no existe.
+            // **El día de la primera fila que se ve de verdad** (5-nov-2026, el usuario: «la fecha no está
+            // bien»): la lista va a pantalla entera y lo de arriba pasa por detrás de la cabecera; la
+            // primera fila «visible» de la lista era la tapada, y la pastilla decía el día de otra. Ahora,
+            // la primera que asoma por debajo de la cabecera (las del relleno de arriba tienen la posición
+            // negativa).
             val cuandoArriba by androidx.compose.runtime.remember(tramos) {
                 androidx.compose.runtime.derivedStateOf {
-                    cuandoDeLaFila(tramos, lista.firstVisibleItemIndex)
+                    val primera = lista.layoutInfo.visibleItemsInfo.firstOrNull { it.offset + it.size > 0 }?.index ?: lista.firstVisibleItemIndex
+                    cuandoDeLaFila(tramos, primera)
                 }
             }
             // **El botón de bajar al final, como el de Telegram** (27-oct-2026).
@@ -1922,7 +1928,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                         // justo debajo, que es donde la pone Telegram respecto de su barra. El
                         // hueco de la barra de estado no se cuenta aquí: la cabecera y esto
                         // viven en la misma caja y lo tienen ya descontado.
-                        .padding(top = ALTO_DE_LA_PILDORA + AIRE_DE_LA_PILDORA * 2 + 6.dp)
+                        // **Con lo que mide la cabecera de verdad** (5-nov-2026): con las pestañas, las
+                        // etiquetas o lo fijado crece, y con el alto fijo de la píldora la fecha quedaba
+                        // otra vez debajo de ella sin verse.
+                        .padding(top = maxOf(altoDeLaCabecera, ALTO_DE_LA_PILDORA + AIRE_DE_LA_PILDORA * 2) + 6.dp)
                         .graphicsLayer { alpha = opacidad }
                         .background(
                             // Al 0,75 del fondo, como la suya (`ChatActionCell.java:3486`):

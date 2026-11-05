@@ -90,6 +90,12 @@ object Volver {
      * intento (el lienzo lleva su propia seña).
      */
     fun alCerrar(actividad: Activity, desdeDentro: Boolean = false) {
+        // **Primero, la pantalla que la abrió** (5-nov-2026, el usuario: «que retroceder funcione bien: si
+        // entro a otra ventana, al retroceder vuelvo atrás según se dio clic a los elementos»). Un lienzo
+        // abierto desde una nota (o desde el lector, o desde el plano) vive en su propia tarea: al cerrarlo
+        // se iba al chat o a la lista y la nota quedaba detrás. Si la tarea de quien la abrió sigue viva,
+        // se vuelve a ella. Ver [PilaDeTareas].
+        if (actividad.isTaskRoot && PilaDeTareas.volverALaAnterior(actividad)) return
         val i = actividad.intent
         val destino = adonde(
             esRaiz = actividad.isTaskRoot,
@@ -174,5 +180,49 @@ object Volver {
         runCatching {
             context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
         }
+    }
+}
+
+/**
+ * **De qué tarea se vino a cada tarea** (5-nov-2026). Los editores y el lector viven cada uno en su
+ * tarea (`documentLaunchMode`), así que Android no sabe volver a la pantalla que los abrió. Aquí se
+ * apunta, al crearse la primera pantalla de una tarea, cuál era la tarea de la pantalla que estaba
+ * delante en ese momento (si se acababa de ir: un toque dentro de PixPin, no la bola desde el
+ * escritorio), y [volverALaAnterior] la trae al frente al cerrar.
+ */
+object PilaDeTareas : android.app.Application.ActivityLifecycleCallbacks {
+    /** Lo que tarda como mucho una pantalla de PixPin en abrir otra: más, ya no se vino de ella. */
+    private const val VENTANA_MS = 2_000L
+
+    private val deDonde = java.util.concurrent.ConcurrentHashMap<Int, Int>()
+    @Volatile private var delante = -1
+    @Volatile private var seFue = 0L
+    @Volatile private var hayDelante = false
+
+    override fun onActivityCreated(a: Activity, b: android.os.Bundle?) {
+        val t = a.taskId
+        val antes = delante
+        val reciente = hayDelante || android.os.SystemClock.uptimeMillis() - seFue < VENTANA_MS
+        if (b == null && antes != -1 && antes != t && reciente && a.isTaskRoot) deDonde[t] = antes
+    }
+
+    override fun onActivityResumed(a: Activity) { delante = a.taskId; hayDelante = true }
+    override fun onActivityPaused(a: Activity) { hayDelante = false; seFue = android.os.SystemClock.uptimeMillis() }
+    override fun onActivityStarted(a: Activity) {}
+    override fun onActivityStopped(a: Activity) {}
+    override fun onActivitySaveInstanceState(a: Activity, b: android.os.Bundle) {}
+    override fun onActivityDestroyed(a: Activity) {
+        if (a.isFinishing && a.isTaskRoot) deDonde.remove(a.taskId)
+    }
+
+    /** La tarea de la que se vino a [t], si se sabe. Para las pruebas. */
+    internal fun anterior(t: Int): Int? = deDonde[t]
+
+    /** Trae al frente la tarea de la que se vino a la de [actividad], si sigue viva. Devuelve si lo hizo. */
+    fun volverALaAnterior(actividad: Activity): Boolean {
+        val antes = deDonde[actividad.taskId] ?: return false
+        val am = actividad.getSystemService(android.app.ActivityManager::class.java) ?: return false
+        val tarea = runCatching { am.appTasks.firstOrNull { it.taskInfo.taskId == antes && it.taskInfo.numActivities > 0 } }.getOrNull() ?: return false
+        return runCatching { tarea.moveToFront(); true }.getOrDefault(false)
     }
 }

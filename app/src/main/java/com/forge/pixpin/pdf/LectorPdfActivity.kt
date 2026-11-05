@@ -1024,6 +1024,7 @@ class LectorPdfActivity : ComponentActivity() {
                 // estilo plegado a un lado y deshacer de la hoja que se anota. Ver [com.forge.pixpin.ui.EditorAvanzadoDeVisor].
                 val sitio = if (esOffice) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF
                 EditorAvanzadoDeVisor(
+                    escribirTexto = false,
                     capa = maestro, ajustes = ajustes,
                     permitidas = ajustes.formatoToolSet(sitio) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
                     grupos = ajustes.formatoGroupList(sitio).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },

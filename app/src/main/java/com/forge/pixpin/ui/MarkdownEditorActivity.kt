@@ -1,6 +1,7 @@
 package com.forge.pixpin.ui
 
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.filled.BorderColor
@@ -325,8 +326,21 @@ class MarkdownEditorActivity : ComponentActivity() {
                         )
                     }
                 )
+                // **Con lo anotado**, la primera, si la nota tiene tinta: la foto de la nota que se hizo al tocar
+                // «Compartir» (ver `pdfConLaTinta`).
+                val conTinta = TintaParaCompartir.pdf?.let { bytes ->
+                    TintaParaCompartir.pdf = null
+                    com.forge.pixpin.ui.Compartible.Formato(
+                        "pdf-tinta", Icons.Filled.Draw, "PDF con anotaciones", com.forge.pixpin.ui.Compartible.NINGUNA,
+                        generar = {
+                            val f = java.io.File(com.forge.pixpin.ui.ExportarVisor.carpeta(this@MarkdownEditorActivity), com.forge.pixpin.ui.ExportarVisor.nombre("$titulo (anotada)", "pdf"))
+                            f.writeBytes(bytes)
+                            com.forge.pixpin.ui.Compartible.Salida(f, "application/pdf", "Como se ve, con lo anotado encima")
+                        }
+                    )
+                }
                 com.forge.pixpin.ui.Compartible(
-                    base.titulo, base.paginas, base.formatos.map { if (it.id == "word") word else it }, base.marcadas, base.contenido
+                    base.titulo, base.paginas, listOfNotNull(conTinta) + base.formatos.map { if (it.id == "word") word else it }, base.marcadas, base.contenido
                 )
             }.onFailure { android.util.Log.e("PixPinCompartir", "nota", it) }.getOrNull()
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -693,6 +707,39 @@ private fun Pantalla(
                 }
             )
         }
+    }
+    /**
+     * **La nota entera como se ve, con lo anotado**, en PDF (5-nov-2026): se baja por la nota hoja a hoja (del
+     * ancho de la pantalla y la altura de un A4), se fotografía cada trozo con la tinta encima y sin las barras,
+     * y vuelve adonde estaba. Null si no se pudo.
+     */
+    suspend fun pdfConLaTinta(): ByteArray? {
+        val actividad = contextoDelEditor as? android.app.Activity ?: return null
+        val caja = cajaDeLaNota
+        if (caja.width <= 1f || caja.height <= margenArriba + 1f) return null
+        val visible = caja.height - margenArriba
+        val hoja = minOf(caja.width * 842f / 595f, visible)
+        val total = desplazado.maxValue + visible
+        val antes = desplazado.value
+        val fotos = ArrayList<android.graphics.Bitmap>()
+        marcosDeLaNota.imprimiendo = true
+        try {
+            var y = 0f
+            while (y < total - 1f && fotos.size < 60) {
+                desplazado.scrollTo(y.toInt())
+                kotlinx.coroutines.delay(260)
+                val real = desplazado.value.toFloat()
+                val alto = minOf(hoja, total - y)
+                val arriba = caja.top + margenArriba + (y - real)
+                ImprimirMarcos.fotografiar(actividad, androidx.compose.ui.geometry.Rect(caja.left, arriba, caja.right, arriba + alto))?.let { fotos += it }
+                y += hoja
+            }
+        } finally {
+            marcosDeLaNota.imprimiendo = false
+            desplazado.scrollTo(antes)
+        }
+        if (fotos.isEmpty()) return null
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { ImprimirMarcos.aPdf(fotos) }
     }
     /** «Imprimir todo»: la nota entera en PDF, con su letra (el mismo PDF de las notas). */
     fun imprimirLaNota() {
@@ -1090,8 +1137,14 @@ private fun Pantalla(
                     BotonDeLector(IconoDeCompartir, "Compartir") {
                         // **La hoja de compartir de la app** (3-nov-2026), la de todo PinDesk; sin ella, el panel del teléfono.
                         val global = masAcciones.firstOrNull { it.first == "Compartir…" }?.second
-                        if (global != null) global(valor.text) else CompartirNativo.texto(contextoDelEditor, valor.text, titulo)
                         toques++
+                        // **Con lo anotado** (5-nov-2026, el usuario: «al exportarlo no exporta con sus anotaciones»):
+                        // si la nota tiene tinta, antes de abrir la hoja se fotografía entera tal como se ve.
+                        if (global != null && tintaDeLaNota.scene.elements.any { !it.isDeleted }) alcanceDeMarcas.launch {
+                            TintaParaCompartir.pdf = runCatching { pdfConLaTinta() }.getOrNull()
+                            global(valor.text)
+                        } else if (global != null) { TintaParaCompartir.pdf = null; global(valor.text) }
+                        else CompartirNativo.texto(contextoDelEditor, valor.text, titulo)
                     },
                     guardarYCerrar.takeIf { hayCambios }
                 ) else listOfNotNull(
@@ -1595,4 +1648,9 @@ private fun elReproductorDeLaNota(): com.forge.pixpin.motormd.AudioDeLaNota {
                 estado.ruta == ruta && estado.sonando
         }
     }
+}
+
+/** El PDF con lo anotado de la nota, de la pantalla a la hoja de compartir (5-nov-2026). Ver `pdfConLaTinta`. */
+internal object TintaParaCompartir {
+    @Volatile var pdf: ByteArray? = null
 }

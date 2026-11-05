@@ -71,6 +71,8 @@ class PixPinApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        // Atrás vuelve a la pantalla que abrió cada editor, aunque viva en otra tarea. Ver [PilaDeTareas].
+        registerActivityLifecycleCallbacks(PilaDeTareas)
         // **El idioma, lo primero** (1-nov-2026): español o inglés con la regla del PC, antes de que
         // nada lea un texto. Ver [com.forge.pixpin.ajustes.IdiomaDeLaApp].
         com.forge.pixpin.ajustes.IdiomaDeLaApp.alArrancar(this)

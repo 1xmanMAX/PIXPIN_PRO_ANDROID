@@ -463,7 +463,6 @@ private fun Minichat(estado: EstadoDePegatinas, c: Comentario, alCerrar: () -> U
             // La caja de escribir.
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { clip = true }) { Icon(Icons.Filled.AttachFile, stringResource(R.string.ip_adjuntar)) }
-                IconButton(onClick = { hacerFoto() }) { Icon(Icons.Filled.PhotoCamera, stringResource(R.string.cm_camara)) }
                 OutlinedTextField(
                     texto, { texto = it }, placeholder = { Text(stringResource(R.string.cm_escribir_toque)) },
                     modifier = Modifier.weight(1f), maxLines = 5, shape = RoundedCornerShape(20.dp)

@@ -306,3 +306,14 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       cuadro de enviar, con su descripción, como las elegidas.
 - [x] 103. La cámara de los comentarios no hacía nada: PixPin declara el permiso de la cámara y entonces
       Android no abre la del sistema sin él concedido. Ahora se pide antes (en el chat y en los comentarios).
+
+## Pedidos del 5-nov, tarde
+
+- [x] 104. La herramienta de texto (lápiz → texto) no dejaba escribir en las notas Markdown, Excel, 3D ni la
+      clase: el cuadro donde se teclea lo pone ahora el editor de todos los visores.
+- [x] 105. Compartir una nota anotada: «PDF con anotaciones», la nota entera como se ve con lo dibujado.
+- [x] 106. Excel: fuera la barra de abajo de la celda («Copiar») y el porcentaje del zoom.
+- [x] 107. La fecha flotante del chat salía debajo de la cabecera y con el día de un mensaje tapado.
+- [x] 108. La cámara salía dos veces en el minichat de los comentarios: solo en el clip.
+- [x] 109. Atrás vuelve a la pantalla que abrió cada editor (nota → lienzo → atrás vuelve a la nota), aunque
+      cada uno viva en su tarea.

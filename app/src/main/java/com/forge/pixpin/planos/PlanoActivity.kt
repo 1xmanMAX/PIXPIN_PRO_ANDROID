@@ -842,6 +842,7 @@ class PlanoActivity : ComponentActivity() {
                 // **Siempre el editor avanzado** (25-oct-2026, el usuario: «nunca el simple»), el de
                 // todos los visores. Ver [com.forge.pixpin.ui.EditorAvanzadoDeVisor].
                 EditorAvanzadoDeVisor(
+                    escribirTexto = false,
                     capa = laCapa, ajustes = ajustes,
                     permitidas = ajustes.planoToolSet, grupos = ajustes.planoGroupList,
                     noche = !claro, tick = tickDeAnotar,

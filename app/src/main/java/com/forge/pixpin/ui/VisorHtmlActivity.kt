@@ -1722,6 +1722,7 @@ class VisorHtmlActivity : ComponentActivity() {
         // **El editor avanzado de todos los visores** (25-oct-2026). Ver [EditorAvanzadoDeVisor].
         val sitio = if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB
         EditorAvanzadoDeVisor(
+            escribirTexto = false,
             capa = laCapa, ajustes = ajustes,
             permitidas = ajustes.formatoToolSet(sitio) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
             grupos = ajustes.formatoGroupList(sitio).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
