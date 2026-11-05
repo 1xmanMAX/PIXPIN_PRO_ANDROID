@@ -13,7 +13,7 @@ class OpcionesDeAdjuntarTest {
     fun `en un proyecto lo de todos los dias va en el orden del PC y nada se pierde`() {
         val h = OpcionesDeAdjuntar.hoja(conProyecto = true, asistente = false)
         assertEquals(
-            listOf(Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.LIENZO, Adjunto.NOTA, Adjunto.TAREAS, Adjunto.CONVERSACION, Adjunto.ESCANEAR, Adjunto.CLASE),
+            listOf(Adjunto.CAMARA, Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.LIENZO, Adjunto.NOTA, Adjunto.TAREAS, Adjunto.CONVERSACION, Adjunto.ESCANEAR, Adjunto.CLASE),
             h.deSiempre
         )
         assertEquals(Adjunto.FIGURA, h.mas.first())
@@ -37,7 +37,7 @@ class OpcionesDeAdjuntarTest {
     @Test
     fun `en el asistente la figura va primero`() {
         val h = OpcionesDeAdjuntar.hoja(conProyecto = true, asistente = true)
-        assertEquals(listOf(Adjunto.FIGURA, Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.ESCANEAR, Adjunto.LIENZO, Adjunto.NOTA), h.deSiempre)
+        assertEquals(listOf(Adjunto.FIGURA, Adjunto.CAMARA, Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.ESCANEAR, Adjunto.LIENZO, Adjunto.NOTA), h.deSiempre)
         assertFalse(Adjunto.FIGURA in h.mas)
         assertEquals(Adjunto.entries.toSet() - Adjunto.PEGAR, (h.deSiempre + h.mas).toSet())
     }
@@ -57,13 +57,13 @@ class OpcionesDeAdjuntarTest {
 
     /**
      * **La cámara del PC ya no está en el clip** (29-oct-2026): va junto al «+» de la lista de
-     * chats mientras el PC graba. «cámara» solo encuentra Escanear.
+     * chats mientras el PC graba. «cámara» encuentra la del teléfono (5-nov-2026) y Escanear.
      */
     @Test
     fun `la camara para la reunion del PC ya no esta en el clip`() {
         val h = OpcionesDeAdjuntar.hoja(conProyecto = true, asistente = false)
         val camara = OpcionesDeAdjuntar.filtrar(h, "cámara")
-        assertEquals(listOf(Adjunto.ESCANEAR), camara.deSiempre)
+        assertEquals(listOf(Adjunto.CAMARA, Adjunto.ESCANEAR), camara.deSiempre)
         assertTrue(camara.mas.isEmpty())
         assertTrue(OpcionesDeAdjuntar.filtrar(h, "reunión del PC").let { it.deSiempre.isEmpty() && it.mas.isEmpty() })
     }

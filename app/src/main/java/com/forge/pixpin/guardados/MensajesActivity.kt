@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -1030,6 +1031,24 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
             elegirFotos.launch(
                 androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
             )
+        }
+        // **La cámara del teléfono** (5-nov-2026): la foto se hace con la cámara de Android y entra sola en el
+        // cuadro de enviar (con su descripción y «Añadir»), como las elegidas. Se guarda en `cache/share`, que
+        // el FileProvider sirve; al mandarla se copia al chat como cualquier otra.
+        var fotoDeLaCamara by remember { mutableStateOf<Uri?>(null) }
+        val hacerFoto = androidx.activity.compose.rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { hecha ->
+            val u = fotoDeLaCamara
+            fotoDeLaCamara = null
+            if (hecha && u != null) fotosPorEnviar = EnvioDeVarios.anadir(fotosPorEnviar, listOf(u)).take(MAXIMO_DE_FOTOS)
+        }
+        val pedirCamara = {
+            runCatching {
+                val f = File(File(cacheDir, "share").apply { mkdirs() }, "camara-${System.currentTimeMillis()}.jpg")
+                val u = androidx.core.content.FileProvider.getUriForFile(this@MensajesActivity, "$packageName.fileprovider", f)
+                fotoDeLaCamara = u
+                hacerFoto.launch(u)
+            }.onFailure { Toast.makeText(this@MensajesActivity, "No se pudo abrir la cámara", Toast.LENGTH_SHORT).show() }
+            Unit
         }
 
         // **Filtrar y buscar, en dos pasos.** Con la consulta dentro de la misma clave,
@@ -2565,6 +2584,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 eligiendoQue = false
                 when (a) {
                     OpcionesDeAdjuntar.Adjunto.FOTO -> pedirFotos()
+                    OpcionesDeAdjuntar.Adjunto.CAMARA -> pedirCamara()
                     // Sin el escáner instalado dice qué falta.
                     OpcionesDeAdjuntar.Adjunto.ESCANEAR -> pedirEscaneo()
                     OpcionesDeAdjuntar.Adjunto.ARCHIVO -> elegirArchivo.launch(arrayOf("*/*"))
@@ -6391,6 +6411,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
     private fun iconoDe(a: OpcionesDeAdjuntar.Adjunto): androidx.compose.ui.graphics.vector.ImageVector = when (a) {
         OpcionesDeAdjuntar.Adjunto.PEGAR -> Icons.Filled.ContentPaste
         OpcionesDeAdjuntar.Adjunto.FOTO -> Icons.Filled.Image
+        OpcionesDeAdjuntar.Adjunto.CAMARA -> Icons.Filled.PhotoCamera
         OpcionesDeAdjuntar.Adjunto.ARCHIVO -> Icons.Filled.Description
         OpcionesDeAdjuntar.Adjunto.LIENZO -> Icons.Filled.Draw
         OpcionesDeAdjuntar.Adjunto.NOTA -> Icons.AutoMirrored.Filled.Notes

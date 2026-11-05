@@ -302,3 +302,5 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       anotarla en el lienzo) y los archivos compactos con el icono de su extensión y su nombre.
 - [x] 101. «Abrir con otra app» decía que el documento ya no estaba: el permiso de leerlo no llegaba a la app
       elegida (faltaba en el `ClipData` del selector).
+- [x] 102. «Cámara» en el clip del chat (v0.164.0): hace la foto con la cámara del teléfono y entra sola en el
+      cuadro de enviar, con su descripción, como las elegidas.
