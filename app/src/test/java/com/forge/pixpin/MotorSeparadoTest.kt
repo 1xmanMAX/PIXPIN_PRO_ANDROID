@@ -97,6 +97,7 @@ class MotorSeparadoTest {
         // separarla dejaría un archivo de núcleo con seis constantes.
         "PaletaDeColores.kt",
         "ColorAvanzado.kt",
+        "MedirTextos.kt",
         // Las dos ventanas flotantes: interfaz entera. Dónde caen las rayas
         // de la cuadrícula sí es núcleo y vive en `Cuadricula.kt`.
         "VentanaDeReferencia.kt", "VentanaDeAjustes.kt",
