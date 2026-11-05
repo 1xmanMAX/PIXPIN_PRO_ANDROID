@@ -182,12 +182,12 @@ data class Pegatinas(val lista: List<Comentario> = emptyList()) {
     }
 
     /** Escribe en su hilo. Sin texto ni adjuntos, nada. Devuelve el id de la entrada. */
-    fun escribir(id: String, quien: Quien, cuando: Long, texto: String, adjuntos: List<Adjunto> = emptyList()): Pair<Pegatinas, String?> {
+    fun escribir(id: String, quien: Quien, cuando: Long, texto: String, adjuntos: List<Adjunto> = emptyList(), conId: String? = null): Pair<Pegatinas, String?> {
         val t = texto.trim().replace("\r\n", "\n")
         if (t.isEmpty() && adjuntos.isEmpty()) return this to null
         val i = lista.indexOfFirst { it.id == id && !it.borrado }
         if (i < 0) return this to null
-        val eid = idNuevo(quien.aparato, cuando)
+        val eid = conId ?: idNuevo(quien.aparato, cuando)
         val c = lista[i]
         val nueva = c.copy(hilo = c.hilo + Entrada(eid, quien.autor, quien.aparato, cuando, cuando, t, adjuntos))
         return copy(lista = lista.toMutableList().also { it[i] = nueva }) to eid
@@ -208,6 +208,10 @@ data class Pegatinas(val lista: List<Comentario> = emptyList()) {
 
     fun quitarEntrada(id: String, entrada: String, cuando: Long) =
         tocarEntrada(id, entrada, cuando) { it.copy(borrado = true, texto = "", adjuntos = emptyList()) }
+
+    /** El lienzo de lo anotado sobre el adjunto [k] (una imagen) de una entrada (`poner_tinta`). */
+    fun ponerTinta(id: String, entrada: String, k: Int, tinta: String, cuando: Long) =
+        tocarEntrada(id, entrada, cuando) { e -> e.copy(adjuntos = e.adjuntos.mapIndexed { i, a -> if (i == k) a.copy(tinta = tinta) else a }) }
 
     fun editar(id: String, entrada: String, texto: String, cuando: Long): Pegatinas {
         val t = texto.trim().replace("\r\n", "\n")

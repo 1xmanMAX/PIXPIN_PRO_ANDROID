@@ -290,3 +290,15 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       solo el de un archivo o una nota, y la urgencia de una lista de tareas se quedaba); los comentarios
       y la urgencia cambiados en los dos aparatos se juntan y la versión juntada vuelve al otro, para que
       queden iguales. Probado de punta a punta entre dos aparatos (`SincronizarDeVerdadTest`).
+
+## Pedidos del 5-nov (v0.163.0)
+
+- [x] 98. Medir en los planos: la cadena que se está poniendo va pegada al plano (en su mismo fotograma, como
+      las cotas hechas); antes se movía con retraso.
+- [x] 99. Polilínea de medidas cerrada (soltar cerca de su primer punto la cierra): su zona resaltada y el
+      área en el medio (con el perímetro debajo).
+- [x] 100. El clip del minichat de los comentarios, como el del chat pero recortado: cámara y galería (fotos y
+      vídeos), archivo, lienzo y lista de tareas (casillas que se tachan); las fotos en miniatura (un toque:
+      anotarla en el lienzo) y los archivos compactos con el icono de su extensión y su nombre.
+- [x] 101. «Abrir con otra app» decía que el documento ya no estaba: el permiso de leerlo no llegaba a la app
+      elegida (faltaba en el `ClipData` del selector).

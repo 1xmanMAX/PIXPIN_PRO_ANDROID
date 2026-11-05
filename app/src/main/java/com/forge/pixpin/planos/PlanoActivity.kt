@@ -189,6 +189,8 @@ class PlanoActivity : ComponentActivity() {
     /** Las cotas y los marcos de ahora, para guardarlos en la capa (los copia la pantalla). */
     @Volatile private var cotasParaGuardar: List<List<DoubleArray>> = emptyList()
     @Volatile private var marcosParaGuardar: List<ImprimirPlano.Marco> = emptyList()
+    /** La cadena de cotas que se está poniendo, para el mapa de encima ([pedirEncima]). */
+    @Volatile private var cadenaViva: List<DoubleArray> = emptyList()
     /** Sube cuando cambia lo anotado (para repintarlo sin recomponer). */
     private var cambiosEnLaCapa by mutableIntStateOf(0)
 
@@ -233,7 +235,10 @@ class PlanoActivity : ComponentActivity() {
         val escena = capa?.scene
         val claro = encimaClaro
         val anotando = encimaAnotando
-        val cotas = cotasParaGuardar
+        // **La cadena que se está poniendo, también aquí** (5-nov-2026, el usuario: «que las medidas se queden
+        // sujetas al plano en los puntos que puse; ahora se mueven con retraso»): pintada por Compose iba un
+        // fotograma por detrás del plano. En el mapa de encima cae en su sitio en el mismo fotograma.
+        val cotas = cotasParaGuardar + listOfNotNull(cadenaViva.takeIf { it.isNotEmpty() })
         val hojas = marcosParaGuardar
         val hayCapa = escena != null && escena.elements.any { !it.isDeleted }
         if (!hayCapa && (anotando || (cotas.isEmpty() && hojas.isEmpty()))) { encima.vaciar(c); return }
@@ -548,6 +553,7 @@ class PlanoActivity : ComponentActivity() {
             }
         }
 
+        LaunchedEffect(puntos) { cadenaViva = puntos; pedirEncima(true) }
         // Las cotas y los marcos se guardan en la capa al poco de cambiar (viajan con ella).
         LaunchedEffect(hechas, hojas) {
             cotasParaGuardar = hechas; marcosParaGuardar = hojas
@@ -782,8 +788,19 @@ class PlanoActivity : ComponentActivity() {
                                 // Al soltar: un punto nuevo donde quedó la mira (si no se agarró uno).
                                 val donde = miraEnPlano
                                 if (!varios && agarrado == null && donde != null) {
-                                    puntos = puntos + listOf(donde)
-                                    enganchado = if (miraEnganchada) donde else null
+                                    // **Cerrar la polilínea**: soltar cerca de su primer punto la cierra en él
+                                    // (con su área) y la termina.
+                                    val primero = puntos.firstOrNull()
+                                    val cc = camara
+                                    val cierra = puntos.size >= 3 && primero != null && cc != null &&
+                                        hypot(cc.pantallaX(donde[0], ancho) - cc.pantallaX(primero[0], ancho), cc.pantallaY(donde[1], alto) - cc.pantallaY(primero[1], alto)) < 18 * densidad
+                                    if (cierra) {
+                                        puntos = puntos + listOf(primero!!.copyOf())
+                                        terminarCadena()
+                                    } else {
+                                        puntos = puntos + listOf(donde)
+                                        enganchado = if (miraEnganchada) donde else null
+                                    }
                                 }
                                 mira = null; miraEnPlano = null
                                 marcos++
@@ -1186,7 +1203,8 @@ class PlanoActivity : ComponentActivity() {
             // **Aquí solo lo vivo**: la cadena que se está poniendo, el marco que se arrastra, la mira
             // y las asas. Las cotas hechas y los marcos puestos van con lo anotado, en el fotograma
             // del plano ([pedirEncima]): pintados aquí, se quedaban atrás al moverlo.
-            dibujarCotas(lienzo, c, ancho, alto, densidad, claro, listOf(puntos), emptyList(), m.unidades, marcoVivo)
+            // La cadena que se pone va en el mapa de encima, con el plano; aquí solo el marco que se arrastra.
+            dibujarCotas(lienzo, c, ancho, alto, densidad, claro, emptyList(), emptyList(), m.unidades, marcoVivo)
             raya.color = naranja; raya.strokeWidth = 2f * densidad; raya.style = android.graphics.Paint.Style.STROKE
             letra.textSize = 12.5f * densidad; letra.color = if (claro) android.graphics.Color.WHITE else android.graphics.Color.rgb(0x1C, 0x1C, 0x1E)
             pildora.color = if (claro) 0xEE1C1C1E.toInt() else 0xEEF5F5F7.toInt()
@@ -1282,6 +1300,17 @@ class PlanoActivity : ComponentActivity() {
         }
         for (cadena in cadenas) {
             if (cadena.isEmpty()) continue
+            // **Cerrada: su zona resaltada y su área en el medio** (5-nov-2026).
+            val cerrada = Medidas.cerrada(cadena)
+            if (cerrada) {
+                val zona = android.graphics.Path()
+                cadena.forEachIndexed { i, p -> if (i == 0) zona.moveTo(sx(p), sy(p)) else zona.lineTo(sx(p), sy(p)) }
+                zona.close()
+                val relleno = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+                relleno.style = android.graphics.Paint.Style.FILL
+                relleno.color = android.graphics.Color.argb(56, 0xFF, 0x8A, 0x00)
+                lienzo.drawPath(zona, relleno)
+            }
             var total = 0.0
             for (k in 1 until cadena.size) {
                 val p = cadena[k - 1]; val q = cadena[k]
@@ -1298,7 +1327,14 @@ class PlanoActivity : ComponentActivity() {
             raya.style = android.graphics.Paint.Style.FILL
             for (p in cadena) lienzo.drawRect(sx(p) - 3 * densidad, sy(p) - 3 * densidad, sx(p) + 3 * densidad, sy(p) + 3 * densidad, raya)
             raya.style = android.graphics.Paint.Style.STROKE
-            if (cadena.size > 2) {
+            if (cerrada) {
+                val (a, centro) = Medidas.areaYCentro(cadena)
+                val gruesa = letra.isFakeBoldText
+                letra.isFakeBoldText = true
+                etiqueta("\u25A2 " + Medidas.area(a, unidades), sx(centro), sy(centro))
+                letra.isFakeBoldText = gruesa
+                etiqueta("Σ " + Medidas.medida(total, unidades), sx(centro), sy(centro) + letra.textSize * 1.9f)
+            } else if (cadena.size > 2) {
                 val u = cadena.last()
                 etiqueta("Σ " + Medidas.medida(total, unidades), sx(u) + 40 * densidad, sy(u) + 24 * densidad)
             }

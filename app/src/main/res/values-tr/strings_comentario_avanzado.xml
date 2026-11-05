@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">Dosya ekle</string>
     <string name="cm_comentar">Yorum</string>
     <string name="cm_enviar">Gönder</string>
+    <string name="cm_camara">Kamera</string>
+    <string name="cm_galeria">Galeri</string>
+    <string name="cm_nueva_tarea">Yeni görev</string>
 </resources>

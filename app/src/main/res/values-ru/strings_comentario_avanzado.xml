@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">Прикрепить файл</string>
     <string name="cm_comentar">Комментировать</string>
     <string name="cm_enviar">Отправить</string>
+    <string name="cm_camara">Камера</string>
+    <string name="cm_galeria">Галерея</string>
+    <string name="cm_nueva_tarea">Новая задача</string>
 </resources>

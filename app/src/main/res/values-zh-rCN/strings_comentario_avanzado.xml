@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">附加文件</string>
     <string name="cm_comentar">评论</string>
     <string name="cm_enviar">发送</string>
+    <string name="cm_camara">相机</string>
+    <string name="cm_galeria">图库</string>
+    <string name="cm_nueva_tarea">新任务</string>
 </resources>

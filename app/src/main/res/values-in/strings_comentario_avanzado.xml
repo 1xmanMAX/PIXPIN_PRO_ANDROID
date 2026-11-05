@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">Lampirkan file</string>
     <string name="cm_comentar">Komentar</string>
     <string name="cm_enviar">Kirim</string>
+    <string name="cm_camara">Kamera</string>
+    <string name="cm_galeria">Galeri</string>
+    <string name="cm_nueva_tarea">Tugas baru</string>
 </resources>

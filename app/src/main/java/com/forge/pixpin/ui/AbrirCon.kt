@@ -68,7 +68,13 @@ object AbrirCon {
                 instalar(context, uri, fuera)
                 return
             }
-            fun ver(t: String) = Intent(Intent.ACTION_VIEW).setDataAndType(uri, t).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // **Con el permiso de verdad** (5-nov-2026, el usuario: «al darle a abrir en otra app me dice que el
+            // documento se borró o que ya no está»): el selector de Android solo pasa el permiso de leer el
+            // `content://` a la aplicación elegida si va también en el `ClipData`; con solo `data`, la otra
+            // aplicación recibía un enlace que no podía abrir y decía que el archivo no existía.
+            fun ver(t: String) = Intent(Intent.ACTION_VIEW).setDataAndType(uri, t)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                .apply { clipData = android.content.ClipData.newRawUri(archivo.name, uri) }
             val pm = context.packageManager
             val principal = ver(tipo)
             // Las que solo contestan a otro nombre del mismo tipo (un visor de DWG que se anuncia como
@@ -98,7 +104,14 @@ object AbrirCon {
             val propios = pm.queryIntentActivities(lanzar, 0)
                 .filter { it.activityInfo.packageName == context.packageName }
                 .map { ComponentName(it.activityInfo.packageName, it.activityInfo.name) }
+            // Y por si alguna lo pide sin pasar por el selector: el permiso, a las que dicen abrirlo.
+            for (r in pm.queryIntentActivities(lanzar, 0)) runCatching {
+                context.grantUriPermission(r.activityInfo.packageName, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            for (e in extra) e.component?.packageName?.let { pkg -> runCatching { context.grantUriPermission(pkg, uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) } }
             val elegir = Intent.createChooser(lanzar, "Abrir con").apply {
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                clipData = android.content.ClipData.newRawUri(archivo.name, uri)
                 if (propios.isNotEmpty()) putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, propios.toTypedArray())
                 if (extra.isNotEmpty()) putExtra(Intent.EXTRA_INITIAL_INTENTS, extra.toTypedArray())
                 if (fuera) addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)

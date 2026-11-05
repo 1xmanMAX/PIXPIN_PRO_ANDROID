@@ -145,6 +145,53 @@ object Medidas {
         }
         return String.format(java.util.Locale.ROOT, "%.${dec}f", d) + sufijo(unidades)
     }
+
+    /** Un área, con sus decimales justos y su unidad al cuadrado («12.500 m²»). */
+    fun area(a: Double, unidades: Int): String {
+        val dec = when {
+            a >= 1000 -> 1
+            a >= 100 -> 2
+            else -> 3
+        }
+        val s = sufijo(unidades)
+        return String.format(java.util.Locale.ROOT, "%.${dec}f", a) + (if (s.isEmpty()) "" else s + "\u00B2")
+    }
+
+    /**
+     * **Si una cadena de cotas está cerrada** (5-nov-2026, el usuario: «si dibujo una polilínea de medidas
+     * cerrada, que calcule el área, la ponga en el medio y resalte esa zona»): tres tramos o más y el último
+     * punto encima del primero.
+     */
+    fun cerrada(cadena: List<DoubleArray>): Boolean {
+        if (cadena.size < 4) return false
+        val a = cadena.first(); val b = cadena.last()
+        val escala = maxOf(1.0, kotlin.math.abs(a[0]), kotlin.math.abs(a[1]))
+        return kotlin.math.abs(a[0] - b[0]) <= 1e-9 * escala && kotlin.math.abs(a[1] - b[1]) <= 1e-9 * escala
+    }
+
+    /** El área de una cadena cerrada (sin signo, por la fórmula del zapato) y su centro de gravedad. */
+    fun areaYCentro(cadena: List<DoubleArray>): Pair<Double, DoubleArray> {
+        var a2 = 0.0
+        var cx = 0.0
+        var cy = 0.0
+        val n = cadena.size - 1
+        // Respecto al primer punto: con coordenadas de plano enormes (UTM) no se pierden decimales.
+        val ox = cadena[0][0]; val oy = cadena[0][1]
+        for (i in 0 until n) {
+            val x0 = cadena[i][0] - ox; val y0 = cadena[i][1] - oy
+            val x1 = cadena[i + 1][0] - ox; val y1 = cadena[i + 1][1] - oy
+            val cruz = x0 * y1 - x1 * y0
+            a2 += cruz
+            cx += (x0 + x1) * cruz
+            cy += (y0 + y1) * cruz
+        }
+        if (kotlin.math.abs(a2) < 1e-12) {
+            val mx = cadena.dropLast(1).sumOf { it[0] } / n
+            val my = cadena.dropLast(1).sumOf { it[1] } / n
+            return 0.0 to doubleArrayOf(mx, my)
+        }
+        return kotlin.math.abs(a2) / 2 to doubleArrayOf(cx / (3 * a2) + ox, cy / (3 * a2) + oy)
+    }
 }
 
 /**

@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">Anexar arquivo</string>
     <string name="cm_comentar">Comentar</string>
     <string name="cm_enviar">Enviar</string>
+    <string name="cm_camara">Câmera</string>
+    <string name="cm_galeria">Galeria</string>
+    <string name="cm_nueva_tarea">Nova tarefa</string>
 </resources>

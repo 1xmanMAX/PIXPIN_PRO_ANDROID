@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">ファイルを添付</string>
     <string name="cm_comentar">コメント</string>
     <string name="cm_enviar">送信</string>
+    <string name="cm_camara">カメラ</string>
+    <string name="cm_galeria">ギャラリー</string>
+    <string name="cm_nueva_tarea">新しいタスク</string>
 </resources>

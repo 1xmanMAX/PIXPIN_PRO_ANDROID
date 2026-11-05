@@ -34,6 +34,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.Checklist
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.PhotoLibrary
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.ChatBubble
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
@@ -160,6 +168,36 @@ class EstadoDePegatinas(private val filesDir: File, val archivo: File, private v
     }.getOrNull()
 
     fun fichero(a: Adjunto): File? = a.ruta?.let { r -> File(filesDir, r).takeIf { it.isFile } }
+
+    /**
+     * **Un lienzo propio en el minichat** (`tipo: lienzo`): una entrada nueva con su Excalidraw en
+     * `pins/draw/<base>.c<entrada>.excalidraw.gz`. Devuelve el id del dibujo para abrirlo en el editor.
+     */
+    fun lienzoNuevo(id: String): String? {
+        val cuando = ahora()
+        val eid = pegatinas.idNuevo(quien.aparato, cuando)
+        val dibujo = "$base.c$eid"
+        var hecho = false
+        cambiar { p ->
+            p.escribir(id, quien, cuando, "", listOf(Adjunto(Adjunto.LIENZO, tinta = "${com.forge.pixpin.sincro.AnotacionesDelAdjunto.CARPETA}/$dibujo.excalidraw.gz")), conId = eid)
+                .also { hecho = it.second != null }.first
+        }
+        return dibujo.takeIf { hecho }
+    }
+
+    /**
+     * **Anotar una imagen del minichat**: su lienzo, `pins/draw/<base>.c<entrada>-<k>.excalidraw.gz`, con la
+     * imagen de fondo; la primera vez se apunta en `tinta`. Devuelve (id del dibujo, imagen si aún no hay lienzo).
+     */
+    fun anotarImagen(c: Comentario, e: Entrada, k: Int): Pair<String, String?>? {
+        val a = e.adjuntos.getOrNull(k) ?: return null
+        val f = fichero(a) ?: return null
+        val rel = a.tinta ?: "${com.forge.pixpin.sincro.AnotacionesDelAdjunto.CARPETA}/$base.c${e.id}-$k.excalidraw.gz"
+        val dibujo = rel.substringAfterLast('/').removeSuffix(".excalidraw.gz")
+        if (a.tinta == null) cambiar { it.ponerTinta(c.id, e.id, k, rel, ahora()) }
+        val yaHay = File(filesDir, rel).isFile
+        return dibujo to (if (yaHay) null else f.absolutePath)
+    }
 
     companion object {
         /** FNV-1a de 64 bits en 16 cifras hexadecimales. */
@@ -356,7 +394,47 @@ private fun Minichat(estado: EstadoDePegatinas, c: Comentario, alCerrar: () -> U
             if (adjuntos.isNotEmpty()) estado.escribir(c.id, "", adjuntos)
         }
     }
+    // **El clip, como el del chat pero recortado** (5-nov-2026, el usuario): la cámara, fotos y vídeos,
+    // archivo, lienzo y lista de tareas.
+    val adjuntar: (List<Uri>) -> Unit = { uris ->
+        if (uris.isNotEmpty()) enHilo {
+            val adjuntos = uris.mapNotNull { estado.guardarAdjunto(contexto, it) }
+            if (adjuntos.isNotEmpty()) estado.escribir(c.id, "", adjuntos)
+        }
+    }
+    val galeria = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { adjuntar(it) }
+    var fotoPendiente by remember { mutableStateOf<Uri?>(null) }
+    val camara = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
+        val u = fotoPendiente
+        fotoPendiente = null
+        if (ok && u != null) adjuntar(listOf(u))
+    }
+    fun hacerFoto() {
+        runCatching {
+            val f = File(File(contexto.cacheDir, "share").apply { mkdirs() }, "foto-${System.currentTimeMillis()}.jpg")
+            val u = androidx.core.content.FileProvider.getUriForFile(contexto, "${contexto.packageName}.fileprovider", f)
+            fotoPendiente = u
+            camara.launch(u)
+        }
+    }
+    var clip by remember { mutableStateOf(false) }
     val tareaCreada = stringResource(R.string.cm_tarea_creada)
+    if (clip) ClipDelMinichat(
+        alCerrar = { clip = false },
+        alCamara = { clip = false; hacerFoto() },
+        alGaleria = { clip = false; galeria.launch(androidx.activity.result.PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)) },
+        alArchivo = { clip = false; elegir.launch(arrayOf("*/*")) },
+        alLienzo = {
+            clip = false
+            enHilo {
+                estado.lienzoNuevo(c.id)?.let { dibujo ->
+                    val ruta = com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, dibujo)
+                    android.os.Handler(android.os.Looper.getMainLooper()).post { com.forge.pixpin.motor.DrawEditorActivity.abrir(contexto, dibujo, ruta, null) }
+                }
+            }
+        },
+        alTareas = { clip = false; texto = (if (texto.isBlank()) "" else texto.trimEnd() + "\n") + "- [ ] " }
+    )
     ModalBottomSheet(onDismissRequest = alCerrar, sheetState = hoja, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().imePadding()) {
             // La cabecera: el redondel (un toque, el tipo siguiente), el tipo y el documento, y lo de la pegatina.
@@ -395,7 +473,8 @@ private fun Minichat(estado: EstadoDePegatinas, c: Comentario, alCerrar: () -> U
             }
             // La caja de escribir.
             Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { elegir.launch(arrayOf("*/*")) }) { Icon(Icons.Filled.AttachFile, stringResource(R.string.cm_adjuntar)) }
+                IconButton(onClick = { clip = true }) { Icon(Icons.Filled.AttachFile, stringResource(R.string.ip_adjuntar)) }
+                IconButton(onClick = { hacerFoto() }) { Icon(Icons.Filled.PhotoCamera, stringResource(R.string.cm_camara)) }
                 OutlinedTextField(
                     texto, { texto = it }, placeholder = { Text(stringResource(R.string.cm_escribir_toque)) },
                     modifier = Modifier.weight(1f), maxLines = 5, shape = RoundedCornerShape(20.dp)
@@ -441,26 +520,138 @@ private fun FilaDeEntrada(estado: EstadoDePegatinas, c: Comentario, e: Entrada, 
                 }
             }
         }
-        if (e.texto.isNotEmpty()) Text(e.texto, fontSize = 15.sp)
+        if (e.texto.isNotEmpty()) TextoConCasillas(e.texto) { nuevo -> enHilo { estado.cambiar { it.editar(c.id, e.id, nuevo, estado.ahora()) } } }
+        // Las fotos, en miniatura (un toque: anotarla en el lienzo); lo demás, compacto con el icono de su
+        // extensión y su nombre.
+        val fotos = e.adjuntos.withIndex().filter { it.value.tipo == Adjunto.IMAGEN }
+        if (fotos.isNotEmpty()) androidx.compose.foundation.lazy.LazyRow(
+            Modifier.padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            items(fotos.size) { i ->
+                val (k, a) = fotos[i]
+                Miniatura(estado.fichero(a), Modifier.size(width = 120.dp, height = 90.dp).clip(RoundedCornerShape(12.dp)).clickable {
+                    enHilo {
+                        estado.anotarImagen(c, e, k)?.let { (dibujo, imagen) ->
+                            val ruta = com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, dibujo)
+                            android.os.Handler(android.os.Looper.getMainLooper()).post { com.forge.pixpin.motor.DrawEditorActivity.abrir(contexto, dibujo, ruta, imagen) }
+                        }
+                    }
+                })
+            }
+        }
         for (a in e.adjuntos) {
-            val nombre = a.nombre ?: a.rotulo ?: a.tipo
+            if (a.tipo == Adjunto.IMAGEN) continue
+            val esLienzo = a.tipo == Adjunto.LIENZO
+            val nombre = if (esLienzo) stringResource(R.string.cm_lienzo_propio) else a.nombre ?: a.rotulo ?: a.tipo
             Row(
                 Modifier.padding(top = 4.dp).clip(RoundedCornerShape(10.dp)).background(MaterialTheme.colorScheme.surfaceVariant)
                     .clickable {
-                        val f = estado.fichero(a)
-                        if (f != null) {
-                            val ext = nombre.substringAfterLast('.', "").lowercase()
-                            val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
-                            runCatching { com.forge.pixpin.ui.AbrirCon.abrir(contexto, f, mime) }
+                        if (esLienzo) {
+                            val dibujo = a.tinta?.substringAfterLast('/')?.removeSuffix(".excalidraw.gz")
+                            if (dibujo != null) com.forge.pixpin.motor.DrawEditorActivity.abrir(contexto, dibujo, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(contexto, dibujo), null)
+                        } else {
+                            val f = estado.fichero(a)
+                            if (f != null) {
+                                val ext = nombre.substringAfterLast('.', "").lowercase()
+                                val mime = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "*/*"
+                                runCatching { com.forge.pixpin.ui.AbrirCon.abrir(contexto, f, mime) }
+                            }
                         }
                     }
-                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Filled.AttachFile, null, modifier = Modifier.size(16.dp))
-                Text(nombre, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 6.dp))
+                if (esLienzo) Icon(Icons.Filled.Draw, null, modifier = Modifier.size(24.dp), tint = Color(0xFFC77700))
+                else com.forge.pixpin.ui.IconoDeFormato(nombre, lado = 26.dp)
+                Text(nombre, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp).widthIn(max = 220.dp))
             }
         }
+    }
+}
+
+/** Una foto reducida (en su hilo), o un recuadro gris mientras llega. */
+@Composable
+private fun Miniatura(f: File?, modifier: Modifier) {
+    val bmp by androidx.compose.runtime.produceState<androidx.compose.ui.graphics.ImageBitmap?>(null, f) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                if (f == null) return@runCatching null
+                val o = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                android.graphics.BitmapFactory.decodeFile(f.path, o)
+                var paso = 1
+                while (o.outWidth / (paso * 2) >= 320 && o.outHeight / (paso * 2) >= 240) paso *= 2
+                android.graphics.BitmapFactory.decodeFile(f.path, android.graphics.BitmapFactory.Options().apply { inSampleSize = paso })?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    Box(modifier.background(Color(0x22888888)), contentAlignment = Alignment.Center) {
+        val b = bmp
+        if (b != null) androidx.compose.foundation.Image(b, null, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        else Icon(Icons.Filled.Image, null, tint = Color(0x88888888))
+    }
+}
+
+/**
+ * **El texto de una entrada, con sus casillas**: los renglones «- [ ] …» y «- [x] …» son una lista de tareas
+ * (la del clip); un toque en la casilla la tacha o la destacha, y eso se guarda en la entrada (viaja como texto).
+ */
+@Composable
+private fun TextoConCasillas(texto: String, alCambiar: (String) -> Unit) {
+    val renglones = texto.lines()
+    val hayCasillas = renglones.any { it.trimStart().startsWith("- [ ]") || it.trimStart().startsWith("- [x]", ignoreCase = true) }
+    if (!hayCasillas) { Text(texto, fontSize = 15.sp); return }
+    Column {
+        renglones.forEachIndexed { i, r ->
+            val t = r.trimStart()
+            val hecha = t.startsWith("- [x]", ignoreCase = true)
+            if (hecha || t.startsWith("- [ ]")) Row(verticalAlignment = Alignment.CenterVertically) {
+                androidx.compose.material3.Checkbox(checked = hecha, onCheckedChange = { si ->
+                    val nuevo = renglones.toMutableList().also { it[i] = (if (si) "- [x] " else "- [ ] ") + t.drop(5).trimStart() }
+                    alCambiar(nuevo.joinToString("\n"))
+                })
+                Text(
+                    t.drop(5).trimStart(), fontSize = 15.sp,
+                    textDecoration = if (hecha) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                    color = if (hecha) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface
+                )
+            } else if (r.isNotBlank()) Text(r, fontSize = 15.sp)
+        }
+    }
+}
+
+/** **El clip del minichat**: lo del clip del chat que vale aquí, en una tarjeta que sube desde abajo. */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ClipDelMinichat(
+    alCerrar: () -> Unit, alCamara: () -> Unit, alGaleria: () -> Unit, alArchivo: () -> Unit, alLienzo: () -> Unit, alTareas: () -> Unit
+) {
+    val hoja = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    ModalBottomSheet(onDismissRequest = alCerrar, sheetState = hoja, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)) {
+        Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 18.dp).padding(bottom = 20.dp)) {
+            Text(stringResource(R.string.ip_adjuntar), fontSize = 17.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.align(Alignment.CenterHorizontally).padding(bottom = 14.dp))
+            // Fotos y vídeos, con la cámara dentro: la cámara grande, la galería a su lado.
+            Text(stringResource(R.string.adjuntar_foto), fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(bottom = 8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Tecla(Icons.Filled.PhotoCamera, stringResource(R.string.cm_camara), Color(0xFF0A6CD6), Modifier.weight(1f), alCamara)
+                Tecla(Icons.Filled.PhotoLibrary, stringResource(R.string.cm_galeria), Color(0xFF0A6CD6), Modifier.weight(1f), alGaleria)
+            }
+            HorizontalDivider(Modifier.padding(vertical = 14.dp), color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Tecla(Icons.Filled.Description, stringResource(R.string.adjuntar_archivo), Color(0xFF636366), Modifier.weight(1f), alArchivo)
+                Tecla(Icons.Filled.Draw, stringResource(R.string.adjuntar_lienzo), Color(0xFFC77700), Modifier.weight(1f), alLienzo)
+                Tecla(Icons.Filled.Checklist, stringResource(R.string.adjuntar_tareas), Color(0xFF1E7A4A), Modifier.weight(1f), alTareas)
+            }
+        }
+    }
+}
+
+@Composable
+private fun Tecla(icono: androidx.compose.ui.graphics.vector.ImageVector, rotulo: String, color: Color, modifier: Modifier, al: () -> Unit) {
+    Column(modifier.clip(RoundedCornerShape(16.dp)).clickable(onClick = al).padding(vertical = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(Modifier.size(60.dp).clip(RoundedCornerShape(16.dp)).background(color), contentAlignment = Alignment.Center) {
+            Icon(icono, null, tint = Color.White, modifier = Modifier.size(28.dp))
+        }
+        Text(rotulo, fontSize = 13.sp, maxLines = 2, textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
     }
 }
 

@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">إرفاق ملف</string>
     <string name="cm_comentar">تعليق</string>
     <string name="cm_enviar">إرسال</string>
+    <string name="cm_camara">الكاميرا</string>
+    <string name="cm_galeria">المعرض</string>
+    <string name="cm_nueva_tarea">مهمة جديدة</string>
 </resources>

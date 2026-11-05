@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">파일 첨부</string>
     <string name="cm_comentar">댓글</string>
     <string name="cm_enviar">보내기</string>
+    <string name="cm_camara">카메라</string>
+    <string name="cm_galeria">갤러리</string>
+    <string name="cm_nueva_tarea">새 작업</string>
 </resources>

@@ -29,4 +29,7 @@
     <string name="cm_adjuntar">Datei anhängen</string>
     <string name="cm_comentar">Kommentieren</string>
     <string name="cm_enviar">Senden</string>
+    <string name="cm_camara">Kamera</string>
+    <string name="cm_galeria">Galerie</string>
+    <string name="cm_nueva_tarea">Neue Aufgabe</string>
 </resources>
