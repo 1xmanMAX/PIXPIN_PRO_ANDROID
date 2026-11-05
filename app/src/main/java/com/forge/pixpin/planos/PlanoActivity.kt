@@ -1,5 +1,6 @@
 package com.forge.pixpin.planos
 
+import com.forge.pixpin.ui.debajoDeLaCamara
 import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import android.content.Context
 import android.content.Intent
@@ -860,7 +861,7 @@ class PlanoActivity : ComponentActivity() {
             if (!anotando) AnimatedVisibility(
                 visible = aLaVista || estado != null,
                 enter = fadeIn(), exit = fadeOut(),
-                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
+                modifier = Modifier.align(Alignment.TopCenter).debajoDeLaCamara().padding(top = 8.dp, start = 24.dp, end = 24.dp)
             ) {
                 Row(
                     Modifier.clip(RoundedCornerShape(50)).background(Color(0x8C14182B)).padding(start = 14.dp, end = 4.dp),

@@ -112,7 +112,7 @@ fun BoxScope.EditorAvanzadoDeVisor(
 
     // Arriba: «Listo» y lo del visor, en la pastilla de cristal.
     Row(
-        Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)
+        Modifier.align(Alignment.TopCenter).debajoDeLaCamara().padding(top = 8.dp)
             .clip(RoundedCornerShape(50)).background(CRISTAL_DE_VISOR),
         verticalAlignment = Alignment.CenterVertically
     ) {

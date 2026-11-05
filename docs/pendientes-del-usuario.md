@@ -321,3 +321,7 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       elegido marcado, conversación nueva, la clave y sus ajustes, fotos y archivos, y borrar el chat.
 - [x] 111. El visor de Markdown con espacios a los costados para anotar (el `.espacios` de la nota, como el
       del PDF, que viaja): el texto se estrecha y la tinta sigue unida a él.
+- [x] 112. La barra de arriba de los visores, siempre debajo de la cámara (con la barra de estado escondida su
+      hueco era cero y quedaba encima del agujero de la cámara).
+- [x] 113. Nota mirando: mantener el dedo en el texto pasa a marcarlo (elegir y marcar con la barrita).
+- [x] 114. Lienzo mirando: sin la lupa al tocar o acercar.

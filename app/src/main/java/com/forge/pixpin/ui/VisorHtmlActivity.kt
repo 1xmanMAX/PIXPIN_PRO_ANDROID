@@ -1425,7 +1425,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo,
                     enter = androidx.compose.animation.fadeIn(),
                     exit = androidx.compose.animation.fadeOut(),
-                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
+                    modifier = Modifier.align(Alignment.TopCenter).debajoDeLaCamara().padding(top = 8.dp, start = 24.dp, end = 24.dp)
                 ) {
                     Row(
                         Modifier
@@ -1515,7 +1515,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
                     // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
                     val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deAdjunto(this@VisorHtmlActivity, elDocumento?.absolutePath) }.getOrNull() } }
-                    com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
+                    com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).debajoDeLaCamara().padding(start = 12.dp, top = 60.dp))
                     RielDelVisor(
                         visible = RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarcador),
                         alUsar = { aLaVista = true; toquesEnLaPagina++ },

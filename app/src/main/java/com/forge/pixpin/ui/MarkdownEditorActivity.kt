@@ -2,6 +2,8 @@ package com.forge.pixpin.ui
 
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.material.icons.filled.Draw
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.material.icons.filled.FormatIndentIncrease
 import androidx.compose.material.icons.filled.EditNote
@@ -655,7 +657,7 @@ private fun Pantalla(
     // **Lo que queda encima del texto**: la barra del sistema y la pastilla. El documento empieza ahí,
     // como antes bajo la barra fija, para que la tinta y los marcos ya puestos no se corran.
     val densidadDeLaPantalla = androidx.compose.ui.platform.LocalDensity.current
-    val margenArriba = androidx.compose.foundation.layout.WindowInsets.statusBars.getTop(densidadDeLaPantalla) +
+    val margenArriba = com.forge.pixpin.ui.HuecoDeArriba.getTop(densidadDeLaPantalla) +
         with(densidadDeLaPantalla) { ALTO_DE_LA_PASTILLA.roundToPx() }
     // Los marcadores de la nota, en fracción del alto: el formato del PC para notas y páginas.
     var marcadores by remember { mutableStateOf(emptyList<com.forge.pixpin.motor.Lectura.Marcador>()) }
@@ -962,6 +964,17 @@ private fun Pantalla(
                             alMover = { if (!anotandoLaNota && !marcosDeLaNota.activo) aLaVista = false }
                         ) else Modifier
                     )
+                    // **Mantener el dedo en el texto, mirando, pasa a marcarlo** (5-nov-2026, el usuario: «no me deja
+                    // seleccionar el texto de un markdown para marcarlo en modo visualización»): era solo el botón
+                    // «Marcar texto» de la pastilla. Ahora mantener entra en ese modo, donde se elige y se marca.
+                    .then(
+                        if (viendo && !anotandoLaNota && !marcosDeLaNota.activo && paginaDeMarcas != null && !llano) Modifier.pointerInput(Unit) {
+                            detectTapGestures(onLongPress = {
+                                dejarDeAnotarLaNota(); poniendoMarca = false; sitio = null; marcandoTexto = true; viendo = false
+                                Toast.makeText(contextoDelEditor, contextoDelEditor.getString(com.forge.pixpin.R.string.mt_pista), Toast.LENGTH_SHORT).show()
+                            })
+                        } else Modifier
+                    )
                     .verticalScroll(desplazado)
                     .padding(top = with(densidadDeLaPantalla) { margenArriba.toDp() })
                     .then(if (viendo) Modifier.navigationBarsPadding() else Modifier)
@@ -1103,7 +1116,7 @@ private fun Pantalla(
             // **Y se va con la pastilla** (27-oct-2026): al mover la nota, y vuelve al tocar. Ver [RielALaVista].
             // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
             val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deBase(contextoDelEditor, archivoDeMarcasDeTexto?.name) }.getOrNull() } }
-            com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { (contextoDelEditor as? android.app.Activity)?.finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
+            com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { (contextoDelEditor as? android.app.Activity)?.finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).debajoDeLaCamara().padding(start = 12.dp, top = 60.dp))
             if (viendo && !marcosDeLaNota.imprimiendo) RielDelVisor(
                 visible = RielALaVista.visible(barras, anotandoLaNota, marcosDeLaNota.activo, poniendoMarca),
                 alUsar = { toques++ },

@@ -1,5 +1,6 @@
 package com.forge.pixpin.tabla
 
+import com.forge.pixpin.ui.debajoDeLaCamara
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -379,7 +380,7 @@ private fun ListaDeTablas(
     }
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
         Box(Modifier.fillMaxSize()) {
-            Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            Column(Modifier.fillMaxSize().debajoDeLaCamara()) {
                 // La misma isla de cristal que lleva el lienzo arriba. Ver [Cristal].
                 com.forge.pixpin.ui.theme.SuperficieDeCristal(
                     Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -762,7 +763,7 @@ private fun EditorDeTabla(
     }
 
     Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.surface) {
-        Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
+        Column(Modifier.fillMaxSize().debajoDeLaCamara().navigationBarsPadding().imePadding()) {
             // ---- Cabecera ----
             //
             // **En islas de cristal, como el lienzo** (21-sep-2026, pedido por el usuario: «que
