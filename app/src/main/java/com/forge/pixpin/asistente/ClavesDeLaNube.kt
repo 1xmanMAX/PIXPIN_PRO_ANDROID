@@ -66,7 +66,7 @@ object ClavesDeLaNube {
     }
 
     /** **La clave**, o null si no hay (o no se puede descifrar: el Keystore se borró). */
-    fun leer(c: Context, p: Nube.Proveedor): String? = leer(fichero(c, p)) ?: deFabrica(p)
+    fun leer(c: Context, p: Nube.Proveedor): String? = leer(fichero(c, p)) ?: AccesoDePrueba.clave(c, p) ?: deFabrica(p)
 
     /**
      * **La clave de prueba que trae el APK** (6-nov-2026, el usuario: «que la IA venga funcionando desde que lo
@@ -80,7 +80,7 @@ object ClavesDeLaNube {
     }.trim().takeIf { it.isNotEmpty() }
 
     /** Si la clave que se usa es la de prueba del APK (no hay una del usuario). */
-    fun esDePrueba(c: Context, p: Nube.Proveedor): Boolean = leer(fichero(c, p)) == null && deFabrica(p) != null
+    fun esDePrueba(c: Context, p: Nube.Proveedor): Boolean = leer(fichero(c, p)) == null && (AccesoDePrueba.clave(c, p) != null || deFabrica(p) != null)
 
     @Synchronized
     private fun leer(f: File): String? = runCatching {

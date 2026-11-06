@@ -346,3 +346,7 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 123. Fase de prueba: el asistente funciona nada más instalar con la clave de prueba que GitHub mete al compilar
       (secretos `CLAVE_CLAUDE_DE_PRUEBA` / `CLAVE_DEEPSEEK_DE_PRUEBA`; ver `ClavesDeLaNube.deFabrica`). La del usuario
       manda. **Para quitarla: borrar el secreto y volver a compilar.**
+- [x] 124. Acceso de prueba al asistente con Google (v0.170.0): el servidor (`servidor/ia-de-prueba`, Cloudflare Worker)
+      guarda la clave de Claude y la lista de correos; la app entra con Google y pregunta por él. Para Windows:
+      `docs/acceso-de-prueba-ia.md`. **Falta (del usuario): crear la cuenta de Cloudflare y los ID de Google**
+      (pasos en `servidor/ia-de-prueba/README.md`).

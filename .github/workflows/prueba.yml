@@ -70,13 +70,16 @@ jobs:
             cp herramientas/pixpin-prueba.keystore ~/.android/debug.keystore
             echo "Firmando con la clave de prueba del repositorio (herramientas/pixpin-prueba.keystore)."
           fi
-          keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 SHA256
+          keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -E "SHA1|SHA256" | head -2
 
       - name: Compilar
         # La clave de prueba del asistente, si el repositorio tiene el secreto (ver ClavesDeLaNube.deFabrica).
         env:
           CLAVE_CLAUDE_DE_PRUEBA: ${{ secrets.CLAVE_CLAUDE_DE_PRUEBA }}
           CLAVE_DEEPSEEK_DE_PRUEBA: ${{ secrets.CLAVE_DEEPSEEK_DE_PRUEBA }}
+          # El acceso de prueba con Google: variables del repositorio (no son secretos). Ver servidor/ia-de-prueba.
+          SERVIDOR_IA_DE_PRUEBA: ${{ vars.SERVIDOR_IA_DE_PRUEBA }}
+          GOOGLE_CLIENTE_WEB: ${{ vars.GOOGLE_CLIENTE_WEB }}
         # **Más memoria para Gradle aquí** (25-oct-2026): con los 2 GB de gradle.properties el
         # empaquetado del APK se quedaba sin memoria (ApkFlinger, «Java heap space»). La máquina
         # de GitHub tiene 16 GB; gradle.properties se queda como está para los equipos pequeños.

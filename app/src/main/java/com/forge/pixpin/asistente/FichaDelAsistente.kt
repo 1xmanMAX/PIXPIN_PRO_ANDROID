@@ -125,13 +125,48 @@ fun FichaDelAsistente(
                     fontSize = 13.sp, color = Color(0xFFE53935), modifier = Modifier.padding(horizontal = 28.dp, vertical = 6.dp)
                 )
 
+                // **El acceso de la fase de prueba** (6-nov-2026): entrar con Google; si el correo está en la lista, el
+                // asistente contesta sin clave propia. Ver [AccesoDePrueba].
+                if (AccesoDePrueba.configurado) {
+                    var correo by remember { mutableStateOf(AccesoDePrueba.correo(contexto)) }
+                    var entrando by remember { mutableStateOf(false) }
+                    Titulo("Fase de prueba")
+                    Grupo {
+                        if (correo == null) Fila(
+                            Icons.Filled.Key, if (entrando) "Entrando…" else "Entrar con Google",
+                            detalle = "Para los que están en la lista de la prueba: el asistente sin clave propia", color = Color(0xFF4285F4)
+                        ) {
+                            val actividad = contexto as? android.app.Activity
+                            if (actividad != null && !entrando) {
+                                entrando = true
+                                alcance.launch {
+                                    val r = AccesoDePrueba.entrar(actividad)
+                                    entrando = false
+                                    when (r) {
+                                        is AccesoDePrueba.Entrada.Dentro -> { correo = r.email; conClave = true }
+                                        is AccesoDePrueba.Entrada.SinAcceso -> android.widget.Toast.makeText(contexto, "${r.email ?: "Ese correo"} no está en la lista de la prueba", android.widget.Toast.LENGTH_LONG).show()
+                                        is AccesoDePrueba.Entrada.Fallo -> android.widget.Toast.makeText(contexto, r.motivo, android.widget.Toast.LENGTH_LONG).show()
+                                    }
+                                }
+                            }
+                        } else Fila(Icons.Filled.Key, correo!!, detalle = "Dentro de la prueba · toca para salir", color = Color(0xFF34C759)) {
+                            AccesoDePrueba.salir(contexto); correo = null
+                            alcance.launch { conClave = withContext(Dispatchers.IO) { ClavesDeLaNube.leer(contexto, proveedor) != null } }
+                        }
+                    }
+                }
+
                 Titulo("Conversación")
                 Grupo {
                     Fila(Icons.Filled.AddComment, "Conversación nueva", detalle = "Lo de arriba ya no se le manda", color = Color(0xFF34C759)) {
                         onNuevaConversacion(); onCerrar()
                     }
                     Raya()
-                    Fila(Icons.Filled.Key, "Clave y ajustes del asistente", detalle = if (conClave == true) "Clave guardada en este teléfono" else "Sin clave", color = Color(0xFFFF9500)) {
+                    Fila(Icons.Filled.Key, "Clave y ajustes del asistente", detalle = when {
+                        ClavesDeLaNube.esDePrueba(contexto, proveedor) -> "Con el acceso de la fase de prueba"
+                        conClave == true -> "Clave guardada en este teléfono"
+                        else -> "Sin clave"
+                    }, color = Color(0xFFFF9500)) {
                         com.forge.pixpin.ConfiguracionActivity.abrir(contexto, "ASISTENTE")
                     }
                     Raya()

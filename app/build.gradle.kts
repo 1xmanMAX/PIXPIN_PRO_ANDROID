@@ -25,8 +25,14 @@ android {
         fun deEntorno(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it == '-' || it == '_' }
         buildConfigField("String", "CLAVE_CLAUDE_DE_PRUEBA", "\"${deEntorno("CLAVE_CLAUDE_DE_PRUEBA")}\"")
         buildConfigField("String", "CLAVE_DEEPSEEK_DE_PRUEBA", "\"${deEntorno("CLAVE_DEEPSEEK_DE_PRUEBA")}\"")
-        versionCode = 268
-        versionName = "0.169.0"
+        // **El acceso de prueba con Google** (6-nov-2026): la dirección del servidor (`servidor/ia-de-prueba`) y el ID
+        // de cliente OAuth «web» con el que Google firma el inicio de sesión. No son secretos (variables del
+        // repositorio en GitHub); vacíos, no sale. Ver asistente/AccesoDePrueba.kt.
+        fun texto(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it in "-_.:/" }
+        buildConfigField("String", "SERVIDOR_IA_DE_PRUEBA", "\"${texto("SERVIDOR_IA_DE_PRUEBA").trimEnd('/')}\"")
+        buildConfigField("String", "GOOGLE_CLIENTE_WEB", "\"${texto("GOOGLE_CLIENTE_WEB")}\"")
+        versionCode = 269
+        versionName = "0.170.0"
     }
 
     buildTypes {
@@ -139,6 +145,10 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     // Las voces de Microsoft Edge para leer en alto: hablan por WebSocket. Ver ui/VozDeEdge.kt.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Entrar con Google en la fase de prueba del asistente (Credential Manager). Ver asistente/AccesoDePrueba.kt.
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
