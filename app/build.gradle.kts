@@ -31,8 +31,8 @@ android {
         fun texto(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it in "-_.:/" }
         buildConfigField("String", "SERVIDOR_IA_DE_PRUEBA", "\"${texto("SERVIDOR_IA_DE_PRUEBA").trimEnd('/')}\"")
         buildConfigField("String", "GOOGLE_CLIENTE_WEB", "\"${texto("GOOGLE_CLIENTE_WEB")}\"")
-        versionCode = 269
-        versionName = "0.170.0"
+        versionCode = 270
+        versionName = "0.171.0"
     }
 
     buildTypes {
@@ -149,6 +149,8 @@ dependencies {
     implementation("androidx.credentials:credentials:1.5.0")
     implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
     implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    // Las de Google traen un fragment viejo (1.0) y el lint del release lo para: el de ahora.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

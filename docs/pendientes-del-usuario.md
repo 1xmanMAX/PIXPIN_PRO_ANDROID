@@ -350,3 +350,8 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       guarda la clave de Claude y la lista de correos; la app entra con Google y pregunta por él. Para Windows:
       `docs/acceso-de-prueba-ia.md`. **Falta (del usuario): crear la cuenta de Cloudflare y los ID de Google**
       (pasos en `servidor/ia-de-prueba/README.md`).
+- [x] 125. (v0.171.0) PinDesk ya no alinea letras: «Sincronizar» / «Vincular letra» de una canción la manda a
+      **LetraSync Pro** con su letra, y la letra con tiempos vuelve a PinDesk al terminar. Sin LetraSync instalada,
+      un aviso con el enlace para descargarla. Las canciones ya no entran en la cola de «pasar a texto».
+- [x] 126. (v0.171.0) El asistente contesta en cualquier chat «Asistente» (si había dos, el segundo no respondía) y un
+      turno atascado más de 4 min se suelta solo, para que el siguiente mensaje sí tenga respuesta.

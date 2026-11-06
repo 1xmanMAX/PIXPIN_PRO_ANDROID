@@ -13,7 +13,7 @@ import java.io.File
  * manda la canción y su letra, y vuelve la letra con sus tiempos en el mismo `[m:ss] línea` de siempre, que el PC
  * canta igual. Su contrato, en `docs/integracion.md` de su repositorio.
  *
- * Si no está instalada, PinDesk sigue con lo de siempre ([SincronizarSola]).
+ * **Desde el 6-nov-2026 PinDesk no sincroniza letras por su cuenta**: sin LetraSync Pro, se dice dónde bajarla.
  */
 object LetraSyncPro {
     const val PAQUETE = "com.letrasyncpro"
@@ -22,6 +22,8 @@ object LetraSyncPro {
     const val EXTRA_LRC = "com.letrasyncpro.extra.LRC"
     const val EXTRA_TITULO = "com.letrasyncpro.extra.TITULO"
     const val EXTRA_QUIEN_LLAMA = "com.letrasyncpro.extra.CALLER_LABEL"
+    /** Dónde se baja (sus versiones, como las de PinDesk). */
+    const val ENLACE = "https://github.com/1xmanMAX/letrasync-pro-android/releases/latest"
 
     fun instalada(c: Context): Boolean = runCatching {
         c.packageManager.getPackageInfo(PAQUETE, 0); true

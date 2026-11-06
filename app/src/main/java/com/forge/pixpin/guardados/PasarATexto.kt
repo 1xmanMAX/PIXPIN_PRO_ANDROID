@@ -130,7 +130,8 @@ object PasarATexto {
         val fin = runCatching {
             PasarATextoService.mientras(app, titulo, descarga = false) { aviso ->
                 when (tarea) {
-                    ColaDeTexto.Tarea.TIEMPOS_DE_LA_LETRA -> tiemposDeLaLetra(app, m, aviso)
+                    // Lo que quedara en la cola de antes: ya no se hace aquí (LetraSync Pro).
+                    ColaDeTexto.Tarea.TIEMPOS_DE_LA_LETRA -> ColaDeTexto.Fin.HECHO
                     else -> almacen.transcribirAqui(m, p?.idioma, aviso)
                 }
             }
@@ -152,108 +153,8 @@ object PasarATexto {
     }
 
     // --- La música -----------------------------------------------------------------------------
-
-    /**
-     * **Los tiempos de la letra de una canción**: se oye entera, se alinea con la letra pegada
-     * ([AlinearLetra.propuesta]) y se guarda **solo si la letra no cambió entretanto** (no se pisa lo
-     * que el usuario esté escribiendo). Sin letra, lo oído como letra. La letra sigue siendo letra
-     * (`estadoDelTexto: "letra"`): el PC la lee igual. Ver `docs/musica-con-letra.md`.
-     */
-    private fun tiemposDeLaLetra(app: Context, m: Mensaje, avance: (Float) -> Unit): ColaDeTexto.Fin {
-        val almacen = MensajesStore(app)
-        val antes = m.transcripcion
-        almacen.ponerAvance(m.id, 0f)
-        try {
-            val r = oirLaCancion(app, m) { almacen.ponerAvance(m.id, it); avance(it) }
-            return when (r) {
-                is Transcriptor.Resultado.Texto -> {
-                    // Con letra pegada, cuántas líneas se oyeron (para decir si va a ojo, como el PC).
-                    val conTiempos = antes?.takeIf { AlinearLetra.lineasDeLaLetra(it).isNotEmpty() }
-                        ?.let { AlinearLetra.conTiempos(it, r.trozos, m.duracionMs.takeIf { d -> d > 0 }?.toLong()) }
-                    val propuesta = conTiempos?.texto ?: AlinearLetra.propuesta(antes, r.trozos, m.duracionMs.takeIf { it > 0 })
-                    if (propuesta == null) {
-                        avisar(app, app.getString(R.string.letra_no_se_alineo))
-                        ColaDeTexto.Fin.HECHO
-                    } else {
-                        var puesta = false
-                        almacen.actualizar(m.id) {
-                            if (it.transcripcion != antes) it
-                            else { puesta = true; it.copy(transcripcion = propuesta, estadoDelTexto = TEXTO_LETRA) }
-                        }
-                        if (puesta) avisar(
-                            app,
-                            conTiempos?.alineado?.let { a ->
-                                app.getString(
-                                    if (a.aOjo) R.string.letra_con_tiempos_lista_a_ojo else R.string.letra_con_tiempos_lista_de,
-                                    tituloDeAudio(app, m), a.ancladas, a.lineas.size
-                                )
-                            } ?: app.getString(R.string.letra_con_tiempos_lista, tituloDeAudio(app, m))
-                        )
-                        ColaDeTexto.Fin.HECHO
-                    }
-                }
-                is Transcriptor.Resultado.DescargandoIdioma -> ColaDeTexto.Fin.SIN_MODELO
-                is Transcriptor.Resultado.Fallo ->
-                    if (r.codigo == Transcriptor.FALLO_INTERNO) ColaDeTexto.Fin.FALLO else ColaDeTexto.Fin.HECHO
-            }
-        } finally {
-            almacen.quitarAvance(m.id)
-        }
-    }
-
-    /**
-     * **Lo que se oye en una canción**, con el motor elegido (Whisper por defecto). En este hilo.
-     *
-     * **Con Whisper, como el PC** (29-oct-2026, [OirCancion]): tanda a tanda de 8 s, en el idioma de la
-     * letra si se nota y sin anotaciones («[Música]»). Con otro motor, el de siempre, pero también en
-     * el idioma de la letra.
-     */
-    fun oirLaCancion(app: Context, m: Mensaje, avance: (Float) -> Unit): Transcriptor.Resultado {
-        val ruta = m.ruta ?: return Transcriptor.Resultado.Fallo(Transcriptor.NO_SE_LEE)
-        val lineas = m.transcripcion?.let { AlinearLetra.lineasDeLaLetra(it) }.orEmpty()
-        val elegido = (app.applicationContext as? com.forge.pixpin.PixPinApp)?.ajustes?.motorDeVoz ?: com.forge.pixpin.data.MOTOR_POR_DEFECTO
-        if (Transcriptor.motorQueVa(elegido, MotorWhisper.soportado()) == com.forge.pixpin.data.MOTOR_WHISPER) {
-            return when (val o = OirCancion.oir(app, File(ruta), lineas, avance)) {
-                is OirCancion.Oido.Texto -> Transcriptor.Resultado.Texto(o.trozos.joinToString(" ") { it.texto }, 0, o.trozos, trozos = o.trozos)
-                OirCancion.Oido.SinModelo -> Transcriptor.Resultado.DescargandoIdioma
-                OirCancion.Oido.Nada -> Transcriptor.Resultado.Fallo(Transcriptor.NADA)
-                OirCancion.Oido.Cancelada -> Transcriptor.Resultado.Fallo(Transcriptor.FALLO_INTERNO, "parada")
-                is OirCancion.Oido.Fallo -> Transcriptor.Resultado.Fallo(o.codigo, o.detalle)
-            }
-        }
-        val idioma = AlinearLetra.idiomaDeLaLetra(lineas) ?: Transcriptor.idiomaElegido(app)
-        return runCatching {
-            Transcriptor.transcribirAqui(app, File(ruta), idioma, avance)
-        }.getOrElse { Transcriptor.Resultado.Fallo(Transcriptor.FALLO_INTERNO, Transcriptor.resumenDe(it)) }
-    }
-
-    /**
-     * **«Poner los tiempos a la letra» a mano**, desde la pantalla de estudiar: lo mismo que la cola
-     * pero **sin guardar**, para enseñar la propuesta y que el usuario la acepte o la siga editando.
-     * [alAcabar] en el hilo principal con la letra propuesta, o null y por qué.
-     */
-    fun proponerTiempos(context: Context, m: Mensaje, letra: String?, avance: (Float) -> Unit, alAcabar: (String?, String?) -> Unit) {
-        val app = context.applicationContext
-        val almacen = MensajesStore(app)
-        obrero.execute {
-            almacen.ponerAvance(m.id, 0f)
-            val (propuesta, porque) = try {
-                PasarATextoService.mientras(app, app.getString(R.string.pasar_a_texto_letra, tituloDeAudio(app, m)), descarga = false) { aviso ->
-                    when (val r = oirLaCancion(app, m) { almacen.ponerAvance(m.id, it); avance(it); aviso(it) }) {
-                        is Transcriptor.Resultado.Texto -> {
-                            val p = AlinearLetra.propuesta(letra, r.trozos, m.duracionMs.takeIf { it > 0 })
-                            p to (if (p == null) app.getString(R.string.letra_no_se_alineo) else null)
-                        }
-                        is Transcriptor.Resultado.DescargandoIdioma -> null to app.getString(R.string.pasar_a_texto_falta_el_modelo)
-                        is Transcriptor.Resultado.Fallo -> null to (if (r.codigo == Transcriptor.NADA) app.getString(R.string.letra_no_se_oye) else app.getString(R.string.guardados_transcripcion_fallo) + (r.detalle?.let { "\n($it)" } ?: ""))
-                    }
-                }
-            } finally {
-                almacen.quitarAvance(m.id)
-            }
-            principal.post { alAcabar(propuesta, porque) }
-        }
-    }
+    // **Los tiempos de la letra de una canción ya no se ponen aquí** (6-nov-2026): los pone LetraSync Pro, la app
+    // hermana ([LetraSyncPro]). La letra sincronizada vuelve al mensaje y viaja al PC como siempre.
 
     // --- El modelo que falta y la red ------------------------------------------------------------
 

@@ -65,10 +65,8 @@ object ColaDeTexto {
      */
     fun queToca(m: Mensaje?, hayAudio: Boolean): Tarea {
         if (m == null || m.clase != Clase.VOZ || m.ruta == null || !hayAudio) return Tarea.NADA
-        if (m.esMusica) {
-            val letra = m.transcripcion.orEmpty()
-            return if (letra.isBlank() || !LetraDeCancion.leer(letra).conTiempos) Tarea.TIEMPOS_DE_LA_LETRA else Tarea.NADA
-        }
+        // **Una canción, nada** (6-nov-2026): sus tiempos los pone LetraSync Pro, no la cola. Ver [LetraSyncPro].
+        if (m.esMusica) return Tarea.NADA
         return if (m.transcripcion.isNullOrBlank()) Tarea.PASAR_A_TEXTO else Tarea.NADA
     }
 

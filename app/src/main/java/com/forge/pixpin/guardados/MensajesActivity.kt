@@ -610,7 +610,11 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
         val idDelAsistente = remember(proyectos, mensajes) {
             com.forge.pixpin.asistente.ChatDelAsistente.buscar(proyectos, mensajes)?.id
         }
-        LaunchedEffect(idDelAsistente) { chatDelAsistente = idDelAsistente }
+        // En un chat del asistente que no es el elegido (dos «Asistente»), contesta en este. Ver [ChatDelAsistente.esChatDelAsistente].
+        val asistenteAqui = remember(proyectos, chatDe, idDelAsistente) {
+            if (com.forge.pixpin.asistente.ChatDelAsistente.esChatDelAsistente(proyectos, chatDe)) chatDe else idDelAsistente
+        }
+        LaunchedEffect(asistenteAqui) { chatDelAsistente = asistenteAqui }
         // Si el asistente contesta en este chat (el botón de mandar pasa a «Parar»). Derivado: la
         // respuesta en vivo cambia muchas veces por segundo y esto solo cuando empieza o acaba.
         val contestandoAqui by remember {

@@ -236,7 +236,7 @@ object MotorWhisper {
                     // debajo, Whisper escribe «[Música]» o «♪» en vez de la letra. El PC le prohíbe
                     // esos tokens al decodificar; sherpa-onnx no deja, así que aquí se quitan del
                     // texto ([OirCancion.sinAnotaciones]) y una tanda que solo era eso no cuenta.
-                    if (cancion) texto = OirCancion.sinAnotaciones(texto)
+                    if (cancion) texto = sinAnotaciones(texto)
                     // **Y si aun así no se sostiene, se intenta una vez más con el primero antes
                     // de tirarlo**: perder un trozo de la grabación se ve como «no transcribe
                     // bien», que es peor que una frase regular.
@@ -298,4 +298,10 @@ object MotorWhisper {
         }
         return muestras
     }
+
+    /** Las notas musicales y anotaciones (`[Música]`, `♪`) que Whisper escribe en vez de lo cantado. */
+    private val ANOTACION = Regex("""\[[^\]]*]|\([^)]*\)|\{[^}]*}|「[^」]*」|『[^』]*』""")
+    private fun sinAnotaciones(texto: String): String =
+        ANOTACION.replace(texto, " ").filterNot { it in "♩♪♫♬♭♮♯" || it in "[](){}#*<>|~^_\\@=+「」『』" }
+            .split(Regex("\\s+")).filter { p -> p.isNotEmpty() && p.any { it.isLetterOrDigit() } }.joinToString(" ")
 }

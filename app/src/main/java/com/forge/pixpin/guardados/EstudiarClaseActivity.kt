@@ -379,9 +379,7 @@ class EstudiarClaseActivity : ComponentActivity() {
         var poniendoTiempos by remember { mutableStateOf<Float?>(null) }
         var propuesta by remember { mutableStateOf<String?>(null) }
         var textoParaEditar by remember { mutableStateOf<String?>(null) }
-        // «Sincronizar sola» (29-oct-2026): la de esta canción, si está en marcha. Ver [SincronizarSola].
-        val solaAhora by SincronizarSola.enMarcha.collectAsState()
-        val sola = solaAhora?.takeIf { it.id == id }
+        // **Sincronizar la letra es de LetraSync Pro** (6-nov-2026): aquí ya no se oye la canción. Ver [abrirEnLetraSync].
         val esta = m?.ruta != null && estado.ruta == m.ruta
         val posMs = if (esta) estado.posicionMs.toLong() else 0L
         val durMs = (if (esta && estado.duracionMs > 0) estado.duracionMs else m?.duracionMs ?: 0).toLong()
@@ -492,39 +490,13 @@ class EstudiarClaseActivity : ComponentActivity() {
             }
         }
 
-        /** «Poner los tiempos a la letra»: se oye la canción y se alinea con la letra; sale la propuesta. */
-        fun ponerTiempos() {
-            val n = m ?: return
-            if (poniendoTiempos != null) return
-            poniendoTiempos = 0f
-            menu = false
-            PasarATexto.proponerTiempos(
-                this@EstudiarClaseActivity, n, n.transcripcion,
-                avance = { a -> runOnUiThread { if (poniendoTiempos != null) poniendoTiempos = a } }
-            ) { p, porque ->
-                poniendoTiempos = null
-                if (p != null) propuesta = p
-                else Toast.makeText(this@EstudiarClaseActivity, porque ?: getString(R.string.letra_no_se_alineo), Toast.LENGTH_LONG).show()
-            }
-        }
-
-        /** «Sincronizar la letra»: desde el principio y sonando, un toque al empezar cada línea. */
-        fun empezarASincronizar() {
-            menu = false
-            val r = m?.ruta ?: return
-            val sinc = SincronizadorDeLetra.de(letra ?: LetraDeCancion.leer(m.transcripcion.orEmpty()))
-            if (sinc.textos.isEmpty()) {
-                Toast.makeText(this@EstudiarClaseActivity, R.string.letra_sincronizar_primero, Toast.LENGTH_SHORT).show()
-                editandoLetra = true
-                return
-            }
-            if (Reproductor.estado.value.ruta != r) Reproductor.cargar(r, titulo, arrancar = false)
-            Reproductor.irAMs(0)
-            if (!Reproductor.estado.value.sonando) Reproductor.seguir()
-            pantallaEntera = false
-            sincronizando = sinc
-            Toast.makeText(this@EstudiarClaseActivity, R.string.letra_sincronizar_pista, Toast.LENGTH_LONG).show()
-        }
+        /**
+         * **Sincronizar la letra, en LetraSync Pro** (6-nov-2026, el usuario: «que PinDesk ya no tenga esa función; que al
+         * vincular la letra a una música se mande a la otra app, ahí se sincronice y vuelva a PinDesk»). «Sincronizar
+         * sola», el reloj de a toques y «Poner los tiempos» llevan ahí; la letra con tiempos vuelve sola ([conLetraSync]).
+         */
+        fun ponerTiempos() { menu = false; m?.let { abrirEnLetraSync(it, datosDeCancion?.titulo) } }
+        fun empezarASincronizar() = ponerTiempos()
 
         // Las piezas de la pantalla, como funciones de aquí (comparten el estado); [Imagen] la última, que usa las demás.
         @Composable
@@ -1060,23 +1032,12 @@ class EstudiarClaseActivity : ComponentActivity() {
                     titulo = datosDeCancion?.titulo,
                     debajo = listOfNotNull(datosDeCancion?.artista, datosDeCancion?.album).joinToString(" · ").ifEmpty { null },
                     conAudio = conAudio,
-                    sincronizandoSola = sola != null,
+                    sincronizandoSola = false,
                     sincronizandoAToques = sincronizando != null,
                     alMenos = { if (tamano > 12) tamano -= 2 },
                     alMas = { if (tamano < 44) tamano += 2 },
                     alReloj = { if (sincronizando == null) empezarASincronizar() },
-                    alSola = {
-                        m?.let { n ->
-                            // **Con LetraSync Pro, en ella** (6-nov-2026): la app aparte que se especializa en esto.
-                            val pedir = if (sola == null && LetraSyncPro.instalada(this@EstudiarClaseActivity)) LetraSyncPro.peticion(this@EstudiarClaseActivity, n, datosDeCancion?.titulo) else null
-                            if (pedir != null) {
-                                pendienteDeLetraSync = n.id to n.transcripcion
-                                runCatching { conLetraSync.launch(pedir) }.onFailure {
-                                    Toast.makeText(this@EstudiarClaseActivity, SincronizarSola.alternar(this@EstudiarClaseActivity, n), Toast.LENGTH_LONG).show()
-                                }
-                            } else Toast.makeText(this@EstudiarClaseActivity, SincronizarSola.alternar(this@EstudiarClaseActivity, n), Toast.LENGTH_LONG).show()
-                        }
-                    },
+                    alSola = { ponerTiempos() },
                     alLapiz = { editandoLetra = true },
                     alVolver = { finish() },
                     menu = {
@@ -1092,12 +1053,8 @@ class EstudiarClaseActivity : ComponentActivity() {
                     modifier = Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                 )
                 // Lo que se está haciendo: sincronizar sola, o oír la canción para la propuesta o la cola.
-                val avanceSola = sola?.avance?.collectAsState()?.value
-                val bajando = sola?.bajando?.collectAsState()?.value == true
                 val oyendo = poniendoTiempos ?: avanceDelTexto
-                if (sola != null && avanceSola != null) PastillaDelKaraoke(
-                    getString(if (bajando) R.string.letra_sola_bajando else R.string.letra_sola_avance, (avanceSola * 100).toInt()), avanceSola
-                ) else if (oyendo != null && lineas.isNotEmpty()) PastillaDelKaraoke(getString(R.string.letra_poniendo_tiempos, (oyendo * 100).toInt()), oyendo)
+                if (oyendo != null && lineas.isNotEmpty()) PastillaDelKaraoke(getString(R.string.letra_poniendo_tiempos, (oyendo * 100).toInt()), oyendo)
             }
             @Composable
             fun Letra(modifier: Modifier) {
@@ -1284,20 +1241,30 @@ class EstudiarClaseActivity : ComponentActivity() {
     private fun guardarLaLetra(id: String, texto: String, sincronizarSola: Mensaje? = null) {
         Thread {
             MensajesStore(this).actualizar(id) { it.copy(transcripcion = texto.ifBlank { null }, estadoDelTexto = TEXTO_LETRA) }
-            // Ya guardada: si no trae tiempos, a sincronizarla sola (si el reconocedor está bajado).
-            if (sincronizarSola != null) runOnUiThread {
-                SincronizarSola.trasPegar(this, sincronizarSola.copy(estadoDelTexto = TEXTO_LETRA), texto)?.let {
-                    Toast.makeText(this, it, Toast.LENGTH_LONG).show()
-                }
+            // **Ya vinculada: si no trae tiempos, a LetraSync Pro a sincronizarla** (6-nov-2026).
+            if (sincronizarSola != null && texto.isNotBlank() && !LetraDeCancion.leer(texto).conTiempos) runOnUiThread {
+                abrirEnLetraSync(sincronizarSola.copy(transcripcion = texto, estadoDelTexto = TEXTO_LETRA), null)
             }
         }.start()
     }
 
-    /** **Cerrar la pantalla para «Sincronizar sola»** de esta canción (girar el teléfono, no). */
-    override fun onDestroy() {
-        super.onDestroy()
-        val id = intent.getStringExtra(LA_NOTA).orEmpty()
-        if (!isChangingConfigurations && SincronizarSola.enMarcha.value?.id == id) SincronizarSola.parar()
+    /**
+     * **Mandar la canción y su letra a LetraSync Pro.** Sin ella instalada, se dice dónde bajarla ([LetraSyncPro.ENLACE]).
+     */
+    private fun abrirEnLetraSync(n: Mensaje, titulo: String?) {
+        if (!LetraSyncPro.instalada(this)) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("LetraSync Pro")
+                .setMessage("La letra de las canciones se sincroniza con LetraSync Pro, la app hermana de PinDesk. Instálala y vuelve a tocar aquí: la letra sincronizada vuelve sola a esta canción.")
+                .setPositiveButton("Bajarla") { _, _ -> runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(LetraSyncPro.ENLACE))) } }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+            return
+        }
+        val pedir = LetraSyncPro.peticion(this, n, titulo)
+        if (pedir == null) { Toast.makeText(this, R.string.estudiar_sin_sonido, Toast.LENGTH_SHORT).show(); return }
+        pendienteDeLetraSync = n.id to n.transcripcion
+        runCatching { conLetraSync.launch(pedir) }.onFailure { Toast.makeText(this, "No se pudo abrir LetraSync Pro", Toast.LENGTH_SHORT).show() }
     }
 
     /** Un botón redondo en el cristal de los visores, para lo que va encima de la imagen. */
