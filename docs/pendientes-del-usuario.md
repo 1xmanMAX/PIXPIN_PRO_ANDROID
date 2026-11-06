@@ -337,3 +337,9 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 120. Sincronizar de fondo con cabeza (`RedDelTelefono`): con Wi-Fi, lo local arranca solo al conectarse y
       sondea cada 2 min (lo que avise antes —la baliza, un cambio— despierta al momento); con datos móviles, solo
       la nube; sin red, nada (se espera a que Android la devuelva, sin reintentar).
+- [x] 121. Sincronizar la letra de una canción, en su propia app: **LetraSync Pro** (`com.letrasyncpro`, repositorio
+      `letrasync-pro-android`), integrada como Escáner Pro Max: el botón de sincronizar sola del karaoke la abre con
+      la canción y su letra, y la letra con tiempos vuelve sola (`guardados/LetraSyncPro.kt`). Sin ella instalada,
+      lo de siempre.
+- [ ] 122. Los chats «pr-17…» (mensajes de un chat cuyo nombre no está en este teléfono): falta saber de dónde vienen
+      para esconderlos (uno por documento si son de comentarios).

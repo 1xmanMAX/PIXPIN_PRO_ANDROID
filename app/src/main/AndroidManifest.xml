@@ -64,6 +64,8 @@
     <!-- Leer en voz alta un Word o un libro: desde Android 11 los motores de voz (el de Google)
          solo se ven si se declara que se buscan. Ver ui/LectorEnVoz.kt. -->
     <queries>
+        <!-- LetraSync Pro (6-nov-2026): la app aparte que sincroniza la letra de una canción. Ver guardados/LetraSyncPro.kt. -->
+        <package android:name="com.letrasyncpro" />
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>

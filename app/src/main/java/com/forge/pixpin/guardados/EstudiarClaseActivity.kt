@@ -211,6 +211,22 @@ import java.io.File
  */
 class EstudiarClaseActivity : ComponentActivity() {
 
+    /** La canción mandada a LetraSync Pro: su id y su letra de entonces (si se editó mientras, no se pisa). */
+    private var pendienteDeLetraSync: Pair<String, String?>? = null
+
+    /** **La vuelta de LetraSync Pro**: la letra con tiempos, guardada como la de «Sincronizar sola». Ver [LetraSyncPro]. */
+    private val conLetraSync = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.StartActivityForResult()) { r ->
+        val (id, antes) = pendienteDeLetraSync ?: return@registerForActivityResult
+        pendienteDeLetraSync = null
+        val letra = if (r.resultCode == RESULT_OK) LetraSyncPro.letraDe(r.data) else null
+        if (letra == null) return@registerForActivityResult
+        var puesta = false
+        MensajesStore(this).actualizar(id) {
+            if (it.transcripcion != antes) it else { puesta = true; it.copy(transcripcion = letra, estadoDelTexto = TEXTO_LETRA) }
+        }
+        Toast.makeText(this, if (puesta) "Letra sincronizada con LetraSync Pro" else getString(com.forge.pixpin.R.string.letra_sola_cambio), Toast.LENGTH_LONG).show()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val id = intent.getStringExtra(LA_NOTA).orEmpty()
@@ -1050,7 +1066,16 @@ class EstudiarClaseActivity : ComponentActivity() {
                     alMas = { if (tamano < 44) tamano += 2 },
                     alReloj = { if (sincronizando == null) empezarASincronizar() },
                     alSola = {
-                        m?.let { n -> Toast.makeText(this@EstudiarClaseActivity, SincronizarSola.alternar(this@EstudiarClaseActivity, n), Toast.LENGTH_LONG).show() }
+                        m?.let { n ->
+                            // **Con LetraSync Pro, en ella** (6-nov-2026): la app aparte que se especializa en esto.
+                            val pedir = if (sola == null && LetraSyncPro.instalada(this@EstudiarClaseActivity)) LetraSyncPro.peticion(this@EstudiarClaseActivity, n, datosDeCancion?.titulo) else null
+                            if (pedir != null) {
+                                pendienteDeLetraSync = n.id to n.transcripcion
+                                runCatching { conLetraSync.launch(pedir) }.onFailure {
+                                    Toast.makeText(this@EstudiarClaseActivity, SincronizarSola.alternar(this@EstudiarClaseActivity, n), Toast.LENGTH_LONG).show()
+                                }
+                            } else Toast.makeText(this@EstudiarClaseActivity, SincronizarSola.alternar(this@EstudiarClaseActivity, n), Toast.LENGTH_LONG).show()
+                        }
                     },
                     alLapiz = { editandoLetra = true },
                     alVolver = { finish() },
