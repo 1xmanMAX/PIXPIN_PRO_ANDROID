@@ -66,7 +66,21 @@ object ClavesDeLaNube {
     }
 
     /** **La clave**, o null si no hay (o no se puede descifrar: el Keystore se borró). */
-    fun leer(c: Context, p: Nube.Proveedor): String? = leer(fichero(c, p))
+    fun leer(c: Context, p: Nube.Proveedor): String? = leer(fichero(c, p)) ?: deFabrica(p)
+
+    /**
+     * **La clave de prueba que trae el APK** (6-nov-2026, el usuario: «que la IA venga funcionando desde que lo
+     * instalen, para una fase de prueba; luego lo quitaremos»). No está en el código: la pone GitHub al compilar, del
+     * secreto `CLAVE_CLAUDE_DE_PRUEBA` o `CLAVE_DEEPSEEK_DE_PRUEBA` del repositorio. Sin el secreto va vacía y todo es
+     * como antes. La clave que pegue el usuario manda siempre sobre esta. Para quitarla: borrar el secreto y compilar.
+     */
+    fun deFabrica(p: Nube.Proveedor): String? = when (p) {
+        Nube.Proveedor.CLAUDE -> com.forge.pixpin.BuildConfig.CLAVE_CLAUDE_DE_PRUEBA
+        Nube.Proveedor.DEEPSEEK -> com.forge.pixpin.BuildConfig.CLAVE_DEEPSEEK_DE_PRUEBA
+    }.trim().takeIf { it.isNotEmpty() }
+
+    /** Si la clave que se usa es la de prueba del APK (no hay una del usuario). */
+    fun esDePrueba(c: Context, p: Nube.Proveedor): Boolean = leer(fichero(c, p)) == null && deFabrica(p) != null
 
     @Synchronized
     private fun leer(f: File): String? = runCatching {

@@ -130,7 +130,8 @@ private fun QuienContesta(ajustes: com.forge.pixpin.data.Settings) {
     var nueva by remember(proveedor) { mutableStateOf("") }
     var aviso by remember(proveedor) { mutableStateOf<String?>(null) }
     Text(
-        "${proveedor.nombre}: " + (guardada?.let { "clave $it, cifrada en este teléfono" } ?: "sin clave") +
+        "${proveedor.nombre}: " + (if (ClavesDeLaNube.esDePrueba(contexto, proveedor)) "con la clave de prueba de la app (pega la tuya para usarla en su lugar)"
+            else guardada?.let { "clave $it, cifrada en este teléfono" } ?: "sin clave") +
             ". Se paga en tu cuenta y manda lo que preguntas por internet.",
         fontSize = 13.sp
     )

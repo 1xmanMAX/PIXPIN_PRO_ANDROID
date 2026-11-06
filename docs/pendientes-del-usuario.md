@@ -343,3 +343,6 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       lo de siempre.
 - [ ] 122. Los chats «pr-17…» (mensajes de un chat cuyo nombre no está en este teléfono): falta saber de dónde vienen
       para esconderlos (uno por documento si son de comentarios).
+- [x] 123. Fase de prueba: el asistente funciona nada más instalar con la clave de prueba que GitHub mete al compilar
+      (secretos `CLAVE_CLAUDE_DE_PRUEBA` / `CLAVE_DEEPSEEK_DE_PRUEBA`; ver `ClavesDeLaNube.deFabrica`). La del usuario
+      manda. **Para quitarla: borrar el secreto y volver a compilar.**

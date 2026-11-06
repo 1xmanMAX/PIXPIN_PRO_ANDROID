@@ -55,7 +55,11 @@ object Nube {
              * se quitó el modelo del teléfono (25-oct-2026) la nube es el único motor, y el vacío
              * que antes quería decir «el local» pasa a ser el de siempre.
              */
-            fun elegido(id: String?): Proveedor = porId(id) ?: CLAUDE
+            fun elegido(id: String?): Proveedor = porId(id) ?: deFabrica()
+
+            /** Sin elegir: Claude, salvo que la app solo traiga la clave de prueba de DeepSeek. */
+            private fun deFabrica(): Proveedor =
+                if (com.forge.pixpin.BuildConfig.CLAVE_CLAUDE_DE_PRUEBA.isBlank() && com.forge.pixpin.BuildConfig.CLAVE_DEEPSEEK_DE_PRUEBA.isNotBlank()) DEEPSEEK else CLAUDE
         }
     }
 

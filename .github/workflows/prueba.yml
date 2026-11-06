@@ -73,6 +73,10 @@ jobs:
           keytool -list -v -keystore ~/.android/debug.keystore -storepass android | grep -m1 SHA256
 
       - name: Compilar
+        # La clave de prueba del asistente, si el repositorio tiene el secreto (ver ClavesDeLaNube.deFabrica).
+        env:
+          CLAVE_CLAUDE_DE_PRUEBA: ${{ secrets.CLAVE_CLAUDE_DE_PRUEBA }}
+          CLAVE_DEEPSEEK_DE_PRUEBA: ${{ secrets.CLAVE_DEEPSEEK_DE_PRUEBA }}
         # **Más memoria para Gradle aquí** (25-oct-2026): con los 2 GB de gradle.properties el
         # empaquetado del APK se quedaba sin memoria (ApkFlinger, «Java heap space»). La máquina
         # de GitHub tiene 16 GB; gradle.properties se queda como está para los equipos pequeños.
