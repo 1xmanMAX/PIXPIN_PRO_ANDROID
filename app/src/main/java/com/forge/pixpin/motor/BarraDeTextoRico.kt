@@ -42,9 +42,9 @@ import androidx.compose.ui.unit.dp
  * de lo elegido, la alineación de cada renglón y una fórmula `$...$`, sobre el cuadro de escribir
  * del lienzo.
  *
- * Como en el PC (`docs/texto-rico-del-lienzo.md`, «Editar»), **se escribe la fuente tal cual** y
- * cada botón pone sus marcas alrededor de lo elegido (`**X**`, `\color{rojo}{X}`...), o las pone
- * vacías con el cursor en medio si no hay nada elegido. Al cerrar el cuadro se compone. Sin un
+ * Como en el PC (`docs/texto-rico-del-lienzo.md`, «Editar»), la fuente lleva sus marcas: cada botón las pone
+ * alrededor de lo elegido (`**X**`, `\color{rojo}{X}`...), o vacías con el cursor en medio si no hay nada
+ * elegido. **Desde el 6-nov-2026 no se ven**: el cuadro las enseña ya compuestas ([com.forge.pixpin.ui.VerTextoRico]). Sin un
  * editor «de verdad» con estilos ocultos: la fuente es lo que viaja al PC y lo que se vuelve a
  * abrir, así que enseñarla es no esconder nada, y vale para lo que el teclado no tiene botón
  * (`\frac`, `\overline{AB}`, `\sqrt`).
@@ -55,7 +55,9 @@ import androidx.compose.ui.unit.dp
 fun BarraDeTextoRico(
     valor: TextFieldValue,
     onCambio: (TextFieldValue) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** Los colores usados hace poco (`#rrggbb`), detrás de los tres de siempre. Ver [Settings.coloresRecientes]. */
+    recientes: List<String> = emptyList()
 ) {
     fun aplicar(f: (TextoRico.Edicion) -> TextoRico.Edicion) {
         val r = f(TextoRico.Edicion(valor.text, valor.selection.start, valor.selection.end))
@@ -81,9 +83,14 @@ fun BarraDeTextoRico(
             Separador()
             // Los colores de los atajos del PC (Ctrl+Mayús+1..6 y 0), por su nombre: así la
             // fuente se lee («\color{rojo}{X}») y el PC la entiende igual.
-            for ((nombre, argb) in COLORES) {
+            // **Tres colores y los recientes** (6-nov-2026, el usuario: «reduce los colores a solo 3 y pon los más
+            // usados y los más útiles»): rojo, azul y verde, y detrás los usados hace poco en el lienzo.
+            val propios = COLORES.map { (_, argb) -> argb and 0xFFFFFFL }.toSet()
+            val deHacePoco = recientes.mapNotNull { h -> TextoRico.colorDeNombre(h)?.let { h to it.toLong() } }
+                .filter { (it.second and 0xFFFFFFL) !in propios }.distinctBy { it.second }.take(3)
+            for ((nombre, argb) in COLORES + deHacePoco) {
                 Box(
-                    Modifier.padding(3.dp).size(22.dp).background(Color(argb), CircleShape)
+                    Modifier.padding(3.dp).size(22.dp).background(Color(argb.toInt()), CircleShape)
                         .border(1.dp, MaterialTheme.colorScheme.outline, CircleShape)
                         .clickable { envolver("\\color{$nombre}{", "}") }
                 )
@@ -124,7 +131,4 @@ private fun Separador() {
 }
 
 /** Los colores de la barra: los de los atajos del PC, con el valor de `colorDeNombre`. */
-private val COLORES = listOf(
-    "rojo" to 0xFFE03131, "azul" to 0xFF1971C2, "verde" to 0xFF2F9E44, "naranja" to 0xFFE8590C,
-    "morado" to 0xFF6741D9, "gris" to 0xFF868E96, "negro" to 0xFF1E1E1E
-)
+private val COLORES = listOf("rojo" to 0xFFE03131, "azul" to 0xFF1971C2, "verde" to 0xFF2F9E44)

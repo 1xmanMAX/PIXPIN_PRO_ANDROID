@@ -5350,6 +5350,8 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
             cursorBrush = androidx.compose.ui.graphics.SolidColor(
                 MaterialTheme.colorScheme.primary
             ),
+            // **Ya compuesto, sin las marcas** (6-nov-2026): negrita, color, tamaño... se ven al momento.
+            visualTransformation = com.forge.pixpin.ui.VerTextoRico(with(androidx.compose.ui.platform.LocalDensity.current) { (tam * vp.zoom).toFloat().toSp() }),
             // **El intro hace otra línea; no cierra.**
             //
             // Estaba puesto para aceptar, y el resultado era que **desde el teclado del
@@ -5368,14 +5370,21 @@ class DrawEditorActivity : ComponentActivity(), RecibeImagenes, RecibeElementos 
 
         // La barra del texto rico, justo encima del cuadro (debajo si no cabe arriba).
         val altoDeLaBarra = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() }
+        // **Dentro de la pantalla** (6-nov-2026, el usuario: «parte de la barra no sale en la pantalla; que sea
+        // deslizable»): de lado a lado con su margen, y lo que no quepa se desliza.
+        val recientes = remember { (application as? com.forge.pixpin.PixPinApp)?.ajustes?.coloresRecientes.orEmpty().split(',').map { it.trim() }.filter { it.startsWith("#") } }
         BarraDeTextoRico(
             valor = valor,
             onCambio = { valor = it },
-            modifier = Modifier.offset {
-                val arriba = esquina.y - altoDeLaBarra
-                val y = if (arriba >= 0) arriba else esquina.y + tam * vp.zoom * INTERLINEADO + 8
-                IntOffset(esquina.x.toInt().coerceAtLeast(0), y.toInt())
-            }
+            recientes = recientes,
+            modifier = Modifier
+                .offset {
+                    val arriba = esquina.y - altoDeLaBarra
+                    val y = if (arriba >= 0) arriba else esquina.y + tam * vp.zoom * INTERLINEADO + 8
+                    IntOffset(0, y.toInt())
+                }
+                .padding(horizontal = 8.dp)
+                .widthIn(max = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp.dp - 16.dp)
         )
     }
 

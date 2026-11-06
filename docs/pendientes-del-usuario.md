@@ -330,3 +330,7 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 116. Lo escrito aparece al momento (la hoja del PDF, el plano y la clase no se repintaban hasta moverlos).
 - [x] 117. La caja de texto en los visores: el alto, el de su texto (estirarla hacia abajo no deja hueco); a lo
       ancho se estira y el texto se reparte (como en el lienzo: `medirTextosCon`).
+- [x] 118. El texto rico mientras se escribe se ve ya compuesto (negrita, cursiva, color, tamaño, tachado,
+      subrayado), sin las marcas (`**`, `\color{}{}`); la fuente es la misma de siempre y viaja igual al PC.
+- [x] 119. La barra del texto rico cabe en la pantalla (se desliza) y lleva tres colores (rojo, azul, verde)
+      más los recientes del lienzo.
