@@ -334,3 +334,6 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       subrayado), sin las marcas (`**`, `\color{}{}`); la fuente es la misma de siempre y viaja igual al PC.
 - [x] 119. La barra del texto rico cabe en la pantalla (se desliza) y lleva tres colores (rojo, azul, verde)
       más los recientes del lienzo.
+- [x] 120. Sincronizar de fondo con cabeza (`RedDelTelefono`): con Wi-Fi, lo local arranca solo al conectarse y
+      sondea cada 2 min (lo que avise antes —la baliza, un cambio— despierta al momento); con datos móviles, solo
+      la nube; sin red, nada (se espera a que Android la devuelva, sin reintentar).

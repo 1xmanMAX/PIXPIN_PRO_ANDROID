@@ -1,5 +1,6 @@
 package com.forge.pixpin.sincro
 
+import kotlinx.coroutines.launch
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
@@ -40,12 +41,30 @@ object Presencia {
     /** **Sincronizando en segundo plano** ([SincronizarDeFondoService]): no se apaga al salir. */
     @Volatile private var deFondo = false
 
-    /** Lo dice el servicio al arrancar y al pararse. */
+    /**
+     * Lo dice el servicio al arrancar y al pararse.
+     *
+     * **De fondo, lo local solo con Wi-Fi** (6-nov-2026, el usuario): el PC y los demás aparatos están en la red de
+     * casa, así que con datos móviles (o sin red) escuchar, anunciarse y sondear es gastar batería y datos para nada:
+     * se apaga, y queda solo la nube. Al volver la Wi-Fi, vuelve solo ([alCambiarLaRed]).
+     */
     fun deFondo(si: Boolean) {
         deFondo = si
+        SincronizacionAutomatica.deFondo = si && aLaVista == 0
         if (!::red.isInitialized) return
-        if (si) { encender(); SincronizacionAutomatica.alaVista(true); BalizaDelMovil.aLaVista(true) }
+        if (si) principal.post { alCambiarLaRed() }
         else principal.post { if (aLaVista == 0) { principal.removeCallbacks(apagar); principal.postDelayed(apagar, 1_000) } }
+    }
+
+    /** De fondo: lo local, encendido con Wi-Fi y apagado sin ella. */
+    private fun alCambiarLaRed() {
+        if (!deFondo || aLaVista > 0 || GrabacionDelMovil.grabando) return
+        if (RedDelTelefono.enWifi) {
+            encender(); SincronizacionAutomatica.alaVista(true); BalizaDelMovil.aLaVista(true)
+            SincronizacionAutomatica.despertarYa()
+        } else {
+            red.cerrar(); SincronizacionAutomatica.alaVista(false); BalizaDelMovil.aLaVista(false)
+        }
     }
 
     /**
@@ -63,6 +82,11 @@ object Presencia {
     fun instalar(aplicacion: Application) {
         app = aplicacion
         red = Red(aplicacion)
+        // La red que Android avisa: de fondo, lo local va y viene con la Wi-Fi.
+        RedDelTelefono.instalar(aplicacion)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            RedDelTelefono.tipo.collect { alCambiarLaRed() }
+        }
         SincronizacionAutomatica.instalar(aplicacion)
         // La cámara para la reunión del PC: pregunta con PixPin a la vista (28-oct-2026).
         CamaraDelPc.instalar(aplicacion)
@@ -72,11 +96,17 @@ object Presencia {
         aplicacion.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 aLaVista++
+                SincronizacionAutomatica.deFondo = false
                 if (aLaVista == 1) { encender(); SincronizacionAutomatica.alaVista(true); BalizaDelMovil.aLaVista(true) }
             }
             override fun onActivityStopped(activity: Activity) {
                 aLaVista = (aLaVista - 1).coerceAtLeast(0)
-                if (aLaVista == 0) { principal.removeCallbacks(apagar); principal.postDelayed(apagar, 60_000) }
+                if (aLaVista == 0) {
+                    SincronizacionAutomatica.deFondo = deFondo
+                    principal.removeCallbacks(apagar)
+                    // De fondo y sin Wi-Fi, lo local se apaga ya; con ella, se queda (y sondea despacio).
+                    if (deFondo) principal.postDelayed({ alCambiarLaRed() }, 60_000) else principal.postDelayed(apagar, 60_000)
+                }
             }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
             override fun onActivityResumed(activity: Activity) {}

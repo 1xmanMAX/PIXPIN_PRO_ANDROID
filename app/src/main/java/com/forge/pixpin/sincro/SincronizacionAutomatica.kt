@@ -240,6 +240,8 @@ class ColaDeTareas {
 object SincronizacionAutomatica {
     private const val LATIDO = 5_000L
     private const val LATIDOS_POR_SONDEO = 3
+    /** De fondo, cada cuánto se pregunta a los demás sin que nada haya avisado antes. */
+    private const val SONDEO_DE_FONDO = 2 * 60_000L
     private const val PREFS = "sincro_automatica"
     /** Grabando alguien (o con una grabación esperando a salir): se mira cada segundo si acabó. */
     private const val GRABANDO_MIRAR = 1_000L
@@ -283,6 +285,15 @@ object SincronizacionAutomatica {
             })
         }
     }
+
+    /**
+     * **De fondo, sin estar mirando a cada rato** (6-nov-2026): con PinDesk cerrado no se pregunta a los demás cada
+     * 15 s sino cada [SONDEO_DE_FONDO]; lo que llega antes (la baliza que oye a uno, la Wi-Fi que vuelve, algo que
+     * cambia aquí) despierta igual en el acto. Lo pone [Presencia].
+     */
+    @Volatile var deFondo = false
+
+    private fun cadaCuantoSondear(): Long = if (deFondo) SONDEO_DE_FONDO else LATIDO * LATIDOS_POR_SONDEO
 
     /** PixPin a la vista (lo dice [Presencia]). */
     fun alaVista(si: Boolean) {
@@ -366,7 +377,7 @@ object SincronizacionAutomatica {
                         val (host, puerto) = dirs[otroId] ?: continue
                         vuelta(disco, otroId, presentes[otroId]?.nombre ?: otroId, host, puerto)
                     }
-                    if (ahora - sondeado >= LATIDO * LATIDOS_POR_SONDEO) {
+                    if (ahora - sondeado >= cadaCuantoSondear()) {
                         sondeado = ahora
                         dirs = disco.direcciones()
                         presentes = id.miembros.filter { it.id != id.yo.id }
@@ -385,7 +396,7 @@ object SincronizacionAutomatica {
                     }
                     mandarTareas(disco, presentes, dirs)
                 }
-                if (toca != null && !modo.hayGrabadas() && encendida(app) && ahora - sondeadas >= LATIDO * LATIDOS_POR_SONDEO) {
+                if (toca != null && !modo.hayGrabadas() && encendida(app) && ahora - sondeadas >= cadaCuantoSondear()) {
                     sondeadas = ahora
                     conPersonas(disco, id, relojDePersonas)
                 }
