@@ -23,7 +23,7 @@ class FuncionesTest {
     fun `las funciones van en su orden y cada una con sus claves`() {
         // El orden y los nombres del documento `docs/ui-funciones-y-chats.md`.
         assertEquals(
-            listOf("grabar", "lienzo", "tareas", "timeline", "horario", "galeria", "figuras", "abrir", "asistente"),
+            listOf("grabar", "lienzo", "tareas", "timeline", "horario", "galeria", "figuras", "abrir", "asistente", "comunidad"),
             Funcion.entries.map { it.nombre }
         )
         assertEquals("nombres distintos", Funcion.entries.size, Funcion.entries.map { it.nombre }.toSet().size)

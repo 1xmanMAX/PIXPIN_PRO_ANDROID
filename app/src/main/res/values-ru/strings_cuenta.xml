@@ -4,4 +4,6 @@
     <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, чертежи и 3D</string>
     <string name="funciones_asistente">Ассистент</string>
     <string name="funciones_asistente_detalle">Спросите что угодно</string>
+    <string name="funciones_comunidad">Сообщество</string>
+    <string name="funciones_comunidad_detalle">Мини-приложения, фигуры и шаблоны от всех</string>
 </resources>

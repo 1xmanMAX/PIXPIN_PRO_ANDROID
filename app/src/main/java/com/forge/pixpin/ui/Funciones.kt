@@ -40,7 +40,9 @@ object Funciones {
         /** Abrir un archivo del teléfono en su visor (7-nov-2026: sin chats, es la puerta a los visores). */
         ABRIR("abrir", 0xFF0A84FF),
         /** El chat del asistente (7-nov-2026). */
-        ASISTENTE("asistente", 0xFF6E56CF);
+        ASISTENTE("asistente", 0xFF6E56CF),
+        /** La galería de la comunidad: miniapps, figuras y plantillas que comparte la gente (7-nov-2026). */
+        COMUNIDAD("comunidad", 0xFFE54666);
 
         /** La función del catálogo de la que depende ([com.forge.pixpin.cuenta.Disponible]): oculta, el mosaico no sale. */
         val delCatalogo: String get() = when (this) {
@@ -52,6 +54,7 @@ object Funciones {
             GALERIA -> com.forge.pixpin.cuenta.Disponible.CAPTURAS
             ABRIR -> com.forge.pixpin.cuenta.Disponible.VISORES
             ASISTENTE -> com.forge.pixpin.cuenta.Disponible.ASISTENTE
+            COMUNIDAD -> com.forge.pixpin.cuenta.Disponible.COMUNIDAD
         }
 
         /** La clave de su título en el catálogo del PC; aquí su recurso es la misma con `_`. */

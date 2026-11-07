@@ -390,3 +390,9 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       revisión (HTML cortado, sin viewport, JS sin cerrar…) para que se corrija solo; crear usa el modelo fuerte
       (Sonnet / DeepSeek Pro) y respuestas de hasta 16 000 tokens. Lo creado queda en el chat y se abre en sus visores.
       En el servidor, `MAX_TOKENS=24000` (cámbialo también en tu `/etc/pindesk/config.env` si ya lo instalaste).
+- [x] 136. (v0.177.0) **Comunidad**, la galería compartida: explorar por tipo (miniapps, figuras, plantillas, lienzos,
+      planos, documentos), buscar, populares/nuevas, «me gusta», descargar y usar (las figuras entran en la biblioteca
+      del lienzo), denunciar; contribuir con un archivo del chat (lo del asistente), una figura propia o uno del
+      teléfono, con portada; «Mis aportes» con su estado y versiones nuevas. Servidor: `src/galeria.mjs`, revisión
+      en el panel (pestaña Galería) antes de publicar (`GALERIA_REVISION=si`), 3 denuncias la esconden.
+- [ ] 137. Para la restringida: en el panel, Funciones → «comunidad» a gratis cuando quieras abrirla.

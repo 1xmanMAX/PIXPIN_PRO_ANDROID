@@ -4,4 +4,6 @@
     <string name="funciones_abrir_detalle">PDF وWord وExcel وPowerPoint والمخططات وثلاثي الأبعاد</string>
     <string name="funciones_asistente">المساعد</string>
     <string name="funciones_asistente_detalle">اسأله أي شيء</string>
+    <string name="funciones_comunidad">المجتمع</string>
+    <string name="funciones_comunidad_detalle">تطبيقات مصغّرة وأشكال وقوالب من الجميع</string>
 </resources>

@@ -4,4 +4,6 @@
     <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, plans et 3D</string>
     <string name="funciones_asistente">Assistant</string>
     <string name="funciones_asistente_detalle">Demandez-lui ce que vous voulez</string>
+    <string name="funciones_comunidad">Communauté</string>
+    <string name="funciones_comunidad_detalle">Mini-apps, formes et modèles de tous</string>
 </resources>

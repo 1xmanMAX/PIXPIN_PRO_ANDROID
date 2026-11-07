@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Public
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Draw
@@ -181,6 +182,7 @@ private fun iconoDe(f: Funcion): ImageVector = when (f) {
     Funcion.FIGURAS -> Icons.Filled.Layers
     Funcion.ABRIR -> Icons.Filled.FolderOpen
     Funcion.ASISTENTE -> Icons.Filled.AutoAwesome
+    Funcion.COMUNIDAD -> Icons.Filled.Public
 }
 
 private fun tituloDe(f: Funcion): Int = when (f) {
@@ -193,6 +195,7 @@ private fun tituloDe(f: Funcion): Int = when (f) {
     Funcion.FIGURAS -> R.string.funciones_figuras
     Funcion.ABRIR -> R.string.funciones_abrir
     Funcion.ASISTENTE -> R.string.funciones_asistente
+    Funcion.COMUNIDAD -> R.string.funciones_comunidad
 }
 
 private fun detalleDe(f: Funcion): Int = when (f) {
@@ -205,6 +208,7 @@ private fun detalleDe(f: Funcion): Int = when (f) {
     Funcion.FIGURAS -> R.string.funciones_figuras_detalle
     Funcion.ABRIR -> R.string.funciones_abrir_detalle
     Funcion.ASISTENTE -> R.string.funciones_asistente_detalle
+    Funcion.COMUNIDAD -> R.string.funciones_comunidad_detalle
 }
 
 /**
@@ -276,6 +280,7 @@ private suspend fun hacerFuncion(contexto: Context, f: Funcion) {
         Funcion.HORARIO -> com.forge.pixpin.mini.TodasLasTareasActivity.abrir(contexto, VistaDeTareas.Vista.HORARIO)
         Funcion.GALERIA -> GaleriaDeCapturasActivity.abrir(contexto)
         Funcion.FIGURAS, Funcion.ABRIR -> Unit // La hoja de figuras y el selector de archivos los abre la pestaña.
+        Funcion.COMUNIDAD -> com.forge.pixpin.comunidad.ComunidadActivity.abrir(contexto)
         Funcion.ASISTENTE -> {
             val p = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.Asistente.asegurarChat(contexto) }
             com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(contexto, p.id, p.nombre)

@@ -738,6 +738,7 @@
         </receiver>
 
         <activity android:name=".cuenta.CuentaActivity" android:exported="false" android:theme="@style/Theme.PixPin" />
+        <activity android:name=".comunidad.ComunidadActivity" android:exported="false" android:theme="@style/Theme.PixPin" />
 
         <!-- La música que suena, para el sistema: notificación, pantalla de bloqueo y ajustes rápidos. -->
         <service

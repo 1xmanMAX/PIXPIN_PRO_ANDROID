@@ -4,4 +4,6 @@
     <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, 도면, 3D</string>
     <string name="funciones_asistente">어시스턴트</string>
     <string name="funciones_asistente_detalle">무엇이든 물어보세요</string>
+    <string name="funciones_comunidad">커뮤니티</string>
+    <string name="funciones_comunidad_detalle">모두의 미니 앱, 도형, 템플릿</string>
 </resources>

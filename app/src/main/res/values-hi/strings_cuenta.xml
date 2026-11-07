@@ -4,4 +4,6 @@
     <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, नक्शे और 3D</string>
     <string name="funciones_asistente">सहायक</string>
     <string name="funciones_asistente_detalle">कुछ भी पूछें</string>
+    <string name="funciones_comunidad">समुदाय</string>
+    <string name="funciones_comunidad_detalle">सबके मिनी ऐप, आकृतियाँ और टेम्पलेट</string>
 </resources>

@@ -41,7 +41,7 @@
   <section id="todo" class="oculto">
     <h1>PinDesk</h1>
     <div class="pestanas">
-      <button data-p="usuarios" class="activa">Usuarios</button><button data-p="funciones">Funciones</button><button data-p="version">Versión</button>
+      <button data-p="usuarios" class="activa">Usuarios</button><button data-p="funciones">Funciones</button><button data-p="version">Versión</button><button data-p="galeria">Galería</button>
       <span style="flex:1"></span><button id="recargar">Recargar</button>
     </div>
     <p class="aviso" id="aviso"></p>
@@ -78,6 +78,13 @@
       </div>
       <h2>Clave pública (va dentro de la app)</h2>
       <div class="tarjeta"><div class="fila"><code id="publica"></code></div></div>
+    </div>
+
+    <div id="p-galeria" class="oculto">
+      <h2 id="gCuantos">Galería de la comunidad</h2>
+      <p class="sub" style="margin:0 4px 8px" id="gModo"></p>
+      <div class="fila" style="padding:0 4px 8px"><select id="gFiltro"><option value="pendiente">Por revisar</option><option value="publicada">Publicadas</option><option value="oculta">Ocultas</option><option value="rechazada">Rechazadas</option><option value="">Todas</option></select></div>
+      <div class="tarjeta" id="galeria"></div>
     </div>
   </section>
 </main>
@@ -117,8 +124,45 @@ async function cargar() {
 $("recargar").onclick = () => cargar().catch((e) => ($("aviso").textContent = e.message));
 document.querySelectorAll(".pestanas button[data-p]").forEach((b) => b.onclick = () => {
   document.querySelectorAll(".pestanas button[data-p]").forEach((x) => x.classList.toggle("activa", x === b));
-  ["usuarios", "funciones", "version"].forEach((p) => $("p-" + p).classList.toggle("oculto", p !== b.dataset.p));
+  ["usuarios", "funciones", "version", "galeria"].forEach((p) => $("p-" + p).classList.toggle("oculto", p !== b.dataset.p));
+  if (b.dataset.p === "galeria") cargarGaleria().catch((e) => ($("aviso").textContent = e.message));
 });
+
+// ---------------------------------------------------------------- la galería
+let galeria = null;
+async function cargarGaleria() { galeria = await api("galeria"); pintarGaleria(); }
+$("gFiltro").onchange = () => pintarGaleria();
+async function bajar(it) {
+  const r = await fetch("/admin/api/galeria/archivo?id=" + encodeURIComponent(it.id), { headers: { "x-admin-clave": cred.clave, "x-admin-codigo": cred.codigo } });
+  if (!r.ok) return ($("aviso").textContent = "No se pudo bajar");
+  const a = document.createElement("a"); a.href = URL.createObjectURL(await r.blob()); a.download = it.archivo.nombre; a.click();
+}
+function pintarGaleria() {
+  const filtro = $("gFiltro").value;
+  const l = galeria.items.filter((it) => !filtro || it.estado === filtro);
+  const pend = galeria.items.filter((it) => it.estado === "pendiente").length;
+  $("gCuantos").textContent = `Galería de la comunidad (${galeria.items.length}${pend ? " · " + pend + " por revisar" : ""})`;
+  $("gModo").textContent = galeria.revision ? "Lo nuevo espera tu revisión antes de verse. Bájalo y míralo antes de publicarlo: una miniapp es código de otra persona." : "Sin revisión (GALERIA_REVISION=no): lo nuevo se publica al momento; tres denuncias lo esconden.";
+  const caja = $("galeria"); caja.innerHTML = "";
+  if (!l.length) { caja.innerHTML = '<div class="fila sub">Nada por aquí.</div>'; return; }
+  for (const it of l) {
+    const f = document.createElement("div"); f.className = "fila";
+    f.innerHTML = '<div class="crece"><div><b></b> <span class="etiqueta gratis"></span> <span class="etiqueta"></span></div><div class="sub"></div><div class="sub d"></div></div>';
+    f.querySelector("b").textContent = it.titulo;
+    f.querySelectorAll(".etiqueta")[0].textContent = it.tipo;
+    const e = f.querySelectorAll(".etiqueta")[1]; e.textContent = it.estado + (it.motivo ? " · " + it.motivo : "");
+    e.className = "etiqueta " + (it.estado === "publicada" ? "prueba" : it.estado === "pendiente" ? "pro" : "bloq");
+    f.querySelector(".sub").textContent = `${it.autor} (${it.autorCorreo || "?"}) · v${it.version} · ${it.archivo.nombre} · ${Math.ceil(it.archivo.bytes / 1024)} KB · ♥ ${it.gustos} · ↓ ${it.descargas} · ${fecha(it.actualizada)}`;
+    f.querySelector(".d").textContent = (it.descripcion || "") + (it.denuncias.length ? " · Denuncias: " + it.denuncias.map((d) => d.motivo || "sin motivo").join(" / ") : "");
+    const boton = (txt, hacer, cls) => { const b = document.createElement("button"); b.textContent = txt; if (cls) b.className = cls; b.onclick = async () => { try { await hacer(); } catch (x) { $("aviso").textContent = x.message; } }; f.appendChild(b); };
+    const estado = (estado, motivo) => api("galeria/estado", { id: it.id, estado, motivo }).then(cargarGaleria);
+    boton("Bajar", () => bajar(it));
+    if (it.estado !== "publicada") boton("Publicar", () => estado("publicada"), "lleno");
+    if (it.estado !== "rechazada") boton("Rechazar…", () => { const m = prompt("Motivo (lo ve su autor):", ""); return m === null ? null : estado("rechazada", m); }, "peligro");
+    if (it.estado === "publicada") boton("Ocultar", () => estado("oculta"));
+    caja.appendChild(f);
+  }
+}
 
 function pintarUsuarios() {
   const q = $("buscar").value.toLowerCase();

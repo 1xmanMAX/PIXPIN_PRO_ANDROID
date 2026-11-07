@@ -52,6 +52,7 @@ object Disponible {
     const val PLANOS_MEDIR = "planos.medir"
     const val WIDGETS = "widgets"
     const val JEV = "jev"
+    const val COMUNIDAD = "comunidad"
 
     /** El catálogo de fábrica: el del relanzamiento (lo que no está aquí, oculto). */
     val DE_FABRICA: Map<String, Estado> = mapOf(

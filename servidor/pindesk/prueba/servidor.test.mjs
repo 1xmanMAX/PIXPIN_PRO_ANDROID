@@ -46,7 +46,7 @@ async function montar(extra = {}) {
     const r = await fetch(base + ruta, { method: metodo, headers: h, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
     return { estado: r.status, json: await r.json().catch(() => null) };
   };
-  return { pedir, publica, pasar: (ms) => (t += ms), ahora: () => t, pedidos: () => pedidos, cfg };
+  return { pedir, publica, pasar: (ms) => (t += ms), ahora: () => t, pedidos: () => pedidos, cfg, base };
 }
 
 const datosDe = (doc) => JSON.parse(deB64url(doc.datos).toString("utf8"));
@@ -153,4 +153,82 @@ test("frena a quien prueba a entrar muchas veces", async () => {
   let ultimo;
   for (let i = 0; i < 22; i++) ultimo = await s.pedir("/v1/entrar", { metodo: "POST", cuerpo: { idToken: "x" } });
   assert.equal(ultimo.estado, 429);
+});
+
+test("galería: subir, revisar en el panel, ver, me gusta, descargar, denunciar y versiones", async () => {
+  const s = await montar();
+  const entrar = async (sub, name) => (await s.pedir("/v1/entrar", { metodo: "POST", cuerpo: { idToken: idToken({ sub, email: `${sub}@x.com`, name }) } })).json.sesion;
+  const ana = await entrar("ana", "Ana Pérez"), beto = await entrar("beto", "Beto"), caro = await entrar("caro", "Caro"), dani = await entrar("dani", "Dani");
+  const html = "<!doctype html><h1>Hola</h1><script>alert(1)</script>";
+  const png = Buffer.from("89504e470d0a1a0a0000000d49484452", "hex");
+  // Sin cuenta no se sube; con tipo raro tampoco.
+  assert.equal((await s.pedir("/v1/galeria", { metodo: "POST", cuerpo: { tipo: "miniapp" } })).estado, 401);
+  assert.equal((await s.pedir("/v1/galeria", { metodo: "POST", sesion: ana, cuerpo: { tipo: "virus", titulo: "x", contenido: "eA==" } })).estado, 400);
+  const sub = await s.pedir("/v1/galeria", { metodo: "POST", sesion: ana, cuerpo: {
+    tipo: "miniapp", titulo: "Calculadora de notas", descripcion: "Para el cole", etiquetas: ["Cole", "notas", "cole"], nombre: "../notas.html",
+    contenido: Buffer.from(html).toString("base64"), vista: png.toString("base64") } });
+  assert.equal(sub.estado, 200);
+  const id = sub.json.item.id;
+  assert.equal(sub.json.item.estado, "pendiente");
+  assert.deepEqual(sub.json.item.etiquetas, ["cole", "notas"]);
+  assert.equal(sub.json.item.archivo.nombre, ".._notas.html".replace(/^\.+/, "") || "archivo");
+  // Pendiente: los demás no la ven; su autora sí.
+  assert.equal((await s.pedir("/v1/galeria")).json.total, 0);
+  assert.equal((await s.pedir(`/v1/galeria/${id}`, { sesion: beto })).estado, 404);
+  assert.equal((await s.pedir("/v1/galeria/mias", { sesion: ana })).json.items.length, 1);
+  // El panel la aprueba.
+  const pan = await s.pedir("/admin/api/galeria", { admin: {} });
+  assert.equal(pan.json.items[0].autorCorreo, "ana@x.com");
+  assert.equal((await s.pedir("/admin/api/galeria/estado", { metodo: "POST", admin: {}, cuerpo: { id, estado: "publicada" } })).estado, 200);
+  const l = await s.pedir("/v1/galeria?tipo=miniapp&q=calculadora", { sesion: beto });
+  assert.equal(l.json.total, 1);
+  assert.equal(l.json.items[0].autor, "Ana");
+  assert.equal(JSON.stringify(l.json).includes("ana@x.com"), false);
+  // Me gusta (y quitarlo), y la descarga: siempre como descarga, nunca para abrir en el navegador.
+  assert.equal((await s.pedir(`/v1/galeria/${id}/gusta`, { metodo: "POST", sesion: beto, cuerpo: {} })).json.gustos, 1);
+  assert.equal((await s.pedir(`/v1/galeria/${id}/gusta`, { metodo: "POST", sesion: beto, cuerpo: {} })).json.gustos, 0);
+  await s.pedir(`/v1/galeria/${id}/gusta`, { metodo: "POST", sesion: caro, cuerpo: { si: true } });
+  const r = await fetch(`${s.base}/v1/galeria/${id}/archivo`);
+  assert.equal(r.headers.get("content-type"), "application/octet-stream");
+  assert.match(r.headers.get("content-disposition"), /^attachment/);
+  assert.equal(r.headers.get("content-security-policy"), "sandbox");
+  assert.equal(Buffer.from(await r.arrayBuffer()).toString(), html);
+  assert.equal((await fetch(`${s.base}/v1/galeria/${id}/vista`)).headers.get("content-type"), "image/png");
+  const d = await s.pedir(`/v1/galeria/${id}`);
+  assert.equal(d.json.descargas, 1);
+  assert.equal(d.json.gustos, 1);
+  // Otra persona no puede borrarla ni sacarle versión.
+  assert.equal((await s.pedir(`/v1/galeria/${id}/borrar`, { metodo: "POST", sesion: beto, cuerpo: {} })).estado, 403);
+  assert.equal((await s.pedir("/v1/galeria", { metodo: "POST", sesion: beto, cuerpo: { reemplaza: id, tipo: "miniapp", titulo: "mía", contenido: "eA==" } })).estado, 404);
+  // Una versión nueva de su autora: misma ficha, versión 2, vuelve a revisión y conserva sus me gusta.
+  const v2 = await s.pedir("/v1/galeria", { metodo: "POST", sesion: ana, cuerpo: { reemplaza: id, tipo: "miniapp", titulo: "Calculadora de notas 2", nombre: "notas.html", contenido: Buffer.from("<h1>v2</h1>").toString("base64") } });
+  assert.equal(v2.json.item.id, id);
+  assert.equal(v2.json.item.version, 2);
+  assert.equal(v2.json.item.gustos, 1);
+  assert.equal(v2.json.item.estado, "pendiente");
+  await s.pedir("/admin/api/galeria/estado", { metodo: "POST", admin: {}, cuerpo: { id, estado: "publicada" } });
+  // Tres denuncias de personas distintas la esconden (la misma persona dos veces cuenta una).
+  for (const q of [beto, beto, caro]) await s.pedir(`/v1/galeria/${id}/denunciar`, { metodo: "POST", sesion: q, cuerpo: { motivo: "spam" } });
+  assert.equal((await s.pedir("/v1/galeria")).json.total, 1);
+  await s.pedir(`/v1/galeria/${id}/denunciar`, { metodo: "POST", sesion: dani, cuerpo: { motivo: "spam" } });
+  assert.equal((await s.pedir("/v1/galeria")).json.total, 0);
+  // Borrarla: desaparece y su archivo también.
+  await s.pedir("/admin/api/galeria/estado", { metodo: "POST", admin: {}, cuerpo: { id, estado: "publicada" } });
+  assert.equal((await s.pedir(`/v1/galeria/${id}/borrar`, { metodo: "POST", sesion: ana, cuerpo: {} })).estado, 200);
+  assert.equal((await fetch(`${s.base}/v1/galeria/${id}/archivo`)).status, 404);
+  assert.equal(fs.existsSync(path.join(s.cfg.datos, "galeria", `${id}.bin`)), false);
+});
+
+test("galería: sin revisión se publica al momento, y hay un tope por día", async () => {
+  const s = await montar({ galeriaRevision: false, galeriaPorDia: 2 });
+  const ses = (await s.pedir("/v1/entrar", { metodo: "POST", cuerpo: { idToken: idToken({ sub: "eva", email: "eva@x.com", name: "Eva" }) } })).json.sesion;
+  const subir = () => s.pedir("/v1/galeria", { metodo: "POST", sesion: ses, cuerpo: { tipo: "figura", titulo: "Una estrella", nombre: "estrella.svg", contenido: Buffer.from("<svg/>").toString("base64"), vista: Buffer.from("no es imagen").toString("base64") } });
+  const a = await subir();
+  assert.equal(a.json.item.estado, "publicada");
+  assert.equal(a.json.item.vista, false);
+  assert.equal((await subir()).estado, 200);
+  assert.equal((await subir()).estado, 429);
+  s.pasar(86_400_001);
+  assert.equal((await subir()).estado, 200);
+  assert.equal((await s.pedir("/v1/galeria?orden=nuevas")).json.total, 3);
 });

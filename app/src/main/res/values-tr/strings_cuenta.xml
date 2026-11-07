@@ -4,4 +4,6 @@
     <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, planlar ve 3D</string>
     <string name="funciones_asistente">Asistan</string>
     <string name="funciones_asistente_detalle">Ona istediğini sor</string>
+    <string name="funciones_comunidad">Topluluk</string>
+    <string name="funciones_comunidad_detalle">Herkesten mini uygulamalar, şekiller ve şablonlar</string>
 </resources>

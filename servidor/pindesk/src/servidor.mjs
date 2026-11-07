@@ -9,6 +9,7 @@
 //   POST /v1/entrar      {"idToken"}          -> {"sesion", "cuenta", "licencia", "catalogo"}   (Google)
 //   GET  /v1/estado      Bearer <sesion>      -> {"cuenta", "licencia", "catalogo", "cupo"}
 //   POST /v1/messages    Bearer <sesion>      -> lo mismo que api.anthropic.com/v1/messages (con la clave de aquí)
+//   /v1/galeria…                             -> la galería de la comunidad (ver galeria.mjs)
 // Panel (tú), con clave + código de 6 cifras:  /admin  y  /admin/api/*
 
 import http from "node:http";
@@ -19,6 +20,7 @@ import { fileURLToPath } from "node:url";
 import { firmar, publicaDe, sesionNueva, leerSesion, iguales, totpValido, deB64url } from "./firma.mjs";
 import { Almacen } from "./almacen.mjs";
 import { CATALOGO_INICIAL } from "./catalogo-inicial.mjs";
+import { crearGaleria } from "./galeria.mjs";
 
 const AQUI = path.dirname(fileURLToPath(import.meta.url));
 const ANTHROPIC = "https://api.anthropic.com";
@@ -49,6 +51,10 @@ export function configDesdeEntorno(env = process.env) {
     cupoPro: parseInt(leer("CUPO_PRO", "150"), 10),
     modelosPermitidos: String(leer("MODELOS_PERMITIDOS", "")).split(",").map((s) => s.trim()).filter(Boolean),
     maxTokens: parseInt(leer("MAX_TOKENS", "24000"), 10),
+    // La galería de la comunidad: con «si», lo nuevo espera a que lo apruebes en el panel.
+    galeriaRevision: String(leer("GALERIA_REVISION", "si")).toLowerCase() !== "no",
+    galeriaPorDia: parseInt(leer("GALERIA_POR_DIA", "10"), 10),
+    galeriaMaxBytes: parseInt(leer("GALERIA_MAX_BYTES", "3000000"), 10),
   };
 }
 
@@ -60,6 +66,7 @@ export function crearServidor(cfg, ahora = () => Date.now()) {
   const publica = publicaDe(cfg.clavePrivada);
   let certs = { claves: null, hasta: 0 };
   const intentos = new Map(); // ip -> [ms...]: frena a quien prueba muchas veces
+  const galeria = crearGaleria({ almacen, cfg, ahora, carpeta: cfg.datos });
 
   // ---------------------------------------------------------------- lo que se firma
 
@@ -227,6 +234,11 @@ export function crearServidor(cfg, ahora = () => Date.now()) {
       return aClaude(pedido, req, res);
     }
 
+    if (url.pathname.startsWith("/v1/galeria")) {
+      if (req.method === "POST" && demasiados(intentos, "galeria:" + ip, ahora(), 120, 600_000)) return responder(res, 429, { error: "demasiados_intentos" });
+      return galeria.manejar(url, req, res, { quien, cuerpo, responder });
+    }
+
     if (url.pathname === "/admin" || url.pathname === "/admin/") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8", "content-security-policy": "default-src 'self'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src 'self' https: data:" });
       return res.end(fs.readFileSync(path.join(AQUI, "panel.html")));
@@ -297,6 +309,10 @@ export function crearServidor(cfg, ahora = () => Date.now()) {
         notas: String(p.notas ?? "").slice(0, 2000), minimo: Number.isInteger(p.minimo) ? p.minimo : null };
       almacen.guardar("version", v);
       return responder(res, 200, { ok: true, version: v });
+    }
+    if (ruta.startsWith("galeria")) {
+      const r = await galeria.panel(ruta, url, req, res, { cuerpo, responder, usuarios });
+      if (r !== null) return r;
     }
     return responder(res, 404, { error: "no_existe" });
   }

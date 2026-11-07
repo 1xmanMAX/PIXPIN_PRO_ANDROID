@@ -43,8 +43,8 @@ android {
         val edicion = ((project.findProperty("edicion") as String?) ?: file("edicion.txt").readText()).trim().lowercase()
         require(edicion in setOf("completa", "restringida")) { "edición desconocida: $edicion" }
         buildConfigField("String", "EDICION", "\"$edicion\"")
-        versionCode = 275
-        versionName = "0.176.0"
+        versionCode = 276
+        versionName = "0.177.0"
     }
 
     buildTypes {

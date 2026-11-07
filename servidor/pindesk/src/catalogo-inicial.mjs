@@ -30,5 +30,6 @@ export const CATALOGO_INICIAL = {
     "anki":               { estado: "oculta", nombre: "Tarjetas Anki" },
     "planos.medir":       { estado: "oculta", nombre: "Medir en planos" },
     "widgets":            { estado: "oculta", nombre: "Widgets" },
+    "comunidad":          { estado: "oculta", nombre: "Comunidad (galería compartida)" },
   },
 };

@@ -4,4 +4,6 @@
     <string name="funciones_abrir_detalle">PDF、Word、Excel、PowerPoint、図面、3D</string>
     <string name="funciones_asistente">アシスタント</string>
     <string name="funciones_asistente_detalle">何でも聞いてください</string>
+    <string name="funciones_comunidad">コミュニティ</string>
+    <string name="funciones_comunidad_detalle">みんなのミニアプリ、図形、テンプレート</string>
 </resources>

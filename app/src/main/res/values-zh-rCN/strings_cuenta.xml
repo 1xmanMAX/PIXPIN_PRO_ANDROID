@@ -4,4 +4,6 @@
     <string name="funciones_abrir_detalle">PDF、Word、Excel、PowerPoint、图纸和 3D</string>
     <string name="funciones_asistente">助手</string>
     <string name="funciones_asistente_detalle">随便问</string>
+    <string name="funciones_comunidad">社区</string>
+    <string name="funciones_comunidad_detalle">大家分享的小应用、图形和模板</string>
 </resources>
