@@ -139,7 +139,7 @@ object ChatDelAsistente {
     /** Si se pide abrir el lienzo al terminar («dibuja… y ábrelo»). */
     fun pideAbrir(pregunta: String): Boolean {
         val t = sinTildesMencion(pregunta)
-        return listOf("abrelo", "abremelo", "abre el lienzo", "abrir el lienzo", "abre el dibujo", "abrelo al terminar", "muestramelo", "ensenamelo", "y abre", "y abrir").any { t.contains(it) }
+        return listOf("abrelo", "abremelo", "abrela", "abremela", "abre el lienzo", "abrir el lienzo", "abre el dibujo", "abrelo al terminar", "muestramelo", "ensenamelo", "y abre", "y abrir").any { t.contains(it) }
     }
 
     /** Un mensaje de sistema (`auto-*`: letras, figuras, automatizaciones): viaja, pero no es burbuja. */
@@ -284,6 +284,11 @@ object ChatDelAsistente {
         com.forge.pixpin.ia.EditarTexto.NOMBRE -> "✏️ cambiando los textos…"
         com.forge.pixpin.ia.MemoriaLarga.NOMBRE -> "🧠 mirando la memoria…"
         com.forge.pixpin.ia.Pasos.NOMBRE -> "📝 apuntando los pasos…"
+        com.forge.pixpin.ia.Artefactos.CREAR -> "🛠️ creando el archivo…"
+        com.forge.pixpin.ia.Artefactos.EDITAR -> "🛠️ corrigiendo el archivo…"
+        com.forge.pixpin.ia.Artefactos.LEER -> "🔍 revisando el archivo…"
+        com.forge.pixpin.ia.Artefactos.PDF -> "📄 haciendo el PDF…"
+        com.forge.pixpin.ia.Artefactos.PLANO -> "📐 dibujando el plano…"
         else -> "⚙️ trabajando…"
     }
 

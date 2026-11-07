@@ -39,7 +39,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 object Nube {
     enum class Proveedor(val id: String, val nombre: String, val modelo: String, val url: String, val paginaDeClaves: String, val maxTokens: Int) {
-        CLAUDE("claude", "Claude Haiku 5.5", "claude-haiku-5-5", "https://api.anthropic.com/v1/messages", "https://platform.claude.com/settings/keys", 16_000),
+        CLAUDE("claude", "Claude Haiku 5.5", "claude-haiku-5-5", "https://api.anthropic.com/v1/messages", "https://platform.claude.com/settings/keys", 32_000),
         DEEPSEEK("deepseek", "DeepSeek V4.1 Flash", "deepseek-flash", "https://api.deepseek.com/chat/completions", "https://platform.deepseek.com/api_keys", 16_000);
 
         fun cabeceras(clave: String): List<Pair<String, String>> = if (clave.startsWith(PREFIJO_DE_PRUEBA)) {
