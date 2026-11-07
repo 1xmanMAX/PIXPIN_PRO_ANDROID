@@ -76,6 +76,8 @@ sealed class Llamada {
     data class Figuras(val pedido: PedidoFiguras) : Llamada() { override val nombre get() = Herramientas.FIGURAS }
     /** Cambiar lo que dicen los textos que ya hay en el lienzo ([EditarTexto]). */
     data class EditarTextos(val edicion: EditarTexto.Edicion) : Llamada() { override val nombre get() = EditarTexto.NOMBRE }
+    /** Crear, editar o leer un archivo, un PDF o un plano ([Artefactos]). */
+    data class Artefacto(override val nombre: String, val pedido: Artefactos.Pedido) : Llamada()
 
     /** Si lo que pide se dibuja tal cual en el lienzo. */
     val dibuja: Boolean get() = this is Dibujar || this is Grafica || this is DibujoSvg
@@ -305,6 +307,7 @@ object Herramientas {
             BUSCAR -> Llamada.Buscar(Documentos.validar(args))
             SVG -> Llamada.DibujoSvg(Svg.validar(args, avisos))
             CALCAR -> Llamada.Calcar(validarCalcar(args))
+            in Artefactos.NOMBRES -> Llamada.Artefacto(nombre, Artefactos.validar(nombre, args))
             else -> Acciones.porNombre(nombre)?.let { Llamada.App(Acciones.validar(it, args)) }
                 ?: throw ErrorHerramienta.Desconocida(nombre)
         }

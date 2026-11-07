@@ -384,3 +384,9 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       `v<versión>-prueba`), **`restringida`** = la del relanzamiento (el servidor decide qué se ve, APK
       `v<versión>-restringida`) y **`play-store`** = la completa más lo que pide Google Play (sin actualizarse sola).
       Lo único que cambia entre `main` y `restringida` es `app/edicion.txt`.
+- [x] 135. (v0.176.0) El asistente crea cosas, como un agente de código: `crear_archivo` (miniapps HTML, SVG, Markdown,
+      CSV…), `editar_archivo` (cambia trozos exactos, todo o nada), `leer_archivo` (con números de línea), `crear_pdf`
+      (HTML → PDF con el motor del teléfono) y `crear_plano` (DXF con capas, arcos y cotas). Cada resultado trae una
+      revisión (HTML cortado, sin viewport, JS sin cerrar…) para que se corrija solo; crear usa el modelo fuerte
+      (Sonnet / DeepSeek Pro) y respuestas de hasta 16 000 tokens. Lo creado queda en el chat y se abre en sus visores.
+      En el servidor, `MAX_TOKENS=24000` (cámbialo también en tu `/etc/pindesk/config.env` si ya lo instalaste).

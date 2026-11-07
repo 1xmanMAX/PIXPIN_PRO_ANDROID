@@ -105,7 +105,11 @@ class EjecutorDelChat(
         is Llamada.Ayuda -> acciones.ayuda(llamada.pregunta)
         is Llamada.Figuras -> acciones.figuras(llamada.pedido) { elementos -> ponerFigura(elementos) }
         is Llamada.EditarTextos -> editarTexto(llamada.edicion)
+        is Llamada.Artefacto -> artefactos.hacer(llamada.pedido)
     }
+
+    /** **Crear, editar y leer archivos, PDF y planos** en este chat ([ArtefactosDelChat]). */
+    val artefactos = ArtefactosDelChat(contexto, almacen, chat)
 
     // --------------------------------------------------------------------------------- la web
 
