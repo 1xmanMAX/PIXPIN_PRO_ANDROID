@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="funciones_abrir">打开文件</string>
+    <string name="funciones_abrir_detalle">PDF、Word、Excel、PowerPoint、图纸和 3D</string>
+    <string name="funciones_asistente">助手</string>
+    <string name="funciones_asistente_detalle">随便问</string>
+</resources>

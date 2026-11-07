@@ -30,7 +30,21 @@ object CatalogoDeAjustes {
         PINEAR("Pinear", "Las palabras que se convierten en mini-app al pinearlas"),
         VOZ("Voz", "Con qué se pasan los audios a texto, en qué idioma, y bajar los modelos"),
         ASISTENTE("Asistente", "Quién contesta (el modelo del teléfono, Claude o DeepSeek), sus claves y bajarlo"),
-        ASPECTO("Aspecto", "Modo noche, negro OLED, fluidez y la letra de los pines")
+        ASPECTO("Aspecto", "Modo noche, negro OLED, fluidez y la letra de los pines");
+
+        /** Si la sección se enseña: la de una función oculta del catálogo, no. */
+        fun seVe(): Boolean {
+            val ve = { id: String -> com.forge.pixpin.cuenta.Disponible.ve(id) }
+            return when (this) {
+                CAPTURAR -> ve(com.forge.pixpin.cuenta.Disponible.CAPTURAS)
+                PDF -> ve(com.forge.pixpin.cuenta.Disponible.VISORES)
+                DIBUJAR -> ve(com.forge.pixpin.cuenta.Disponible.RIEL_LAPIZ) || ve(com.forge.pixpin.cuenta.Disponible.LIENZO)
+                PINEAR -> ve(com.forge.pixpin.cuenta.Disponible.PINES)
+                VOZ -> ve(com.forge.pixpin.cuenta.Disponible.GRABAR) || ve(com.forge.pixpin.cuenta.Disponible.MUSICA)
+                ASISTENTE -> ve(com.forge.pixpin.cuenta.Disponible.ASISTENTE)
+                ASPECTO -> true
+            }
+        }
     }
 
     /**

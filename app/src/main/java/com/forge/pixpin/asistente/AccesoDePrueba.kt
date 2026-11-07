@@ -26,7 +26,10 @@ object AccesoDePrueba {
     /** Lo que se le pone delante a la sesión para que [com.forge.pixpin.ia.Nube] sepa que va por el servidor. */
     const val PREFIJO = "pxt:"
 
-    val servidor: String get() = com.forge.pixpin.BuildConfig.SERVIDOR_IA_DE_PRUEBA
+    // **Desde el 7-nov-2026 la sesión es la de la cuenta de PinDesk** ([com.forge.pixpin.cuenta.Cuenta]) cuando la
+    // compilación la trae; si no, la de la prueba de antes (`servidor/ia-de-prueba`).
+    private val conCuenta: Boolean get() = com.forge.pixpin.cuenta.Cuenta.configurada
+    val servidor: String get() = com.forge.pixpin.cuenta.Cuenta.servidor
     private val clienteWeb: String get() = com.forge.pixpin.BuildConfig.GOOGLE_CLIENTE_WEB
 
     /** Si esta compilación trae el acceso de prueba (la dirección del servidor y el cliente de Google). */
@@ -42,13 +45,22 @@ object AccesoDePrueba {
     }.getOrNull()
 
     /** El correo con el que se entró, o null. */
-    fun correo(c: Context): String? = if (configurado) leer(c)?.email else null
+    fun correo(c: Context): String? = when {
+        conCuenta -> com.forge.pixpin.cuenta.Cuenta.datos.value?.email
+        configurado -> leer(c)?.email
+        else -> null
+    }
 
     /** La «clave» para [com.forge.pixpin.ia.Nube]: la sesión con su prefijo, solo para Claude. */
-    fun clave(c: Context, p: com.forge.pixpin.ia.Nube.Proveedor): String? =
-        if (configurado && p == com.forge.pixpin.ia.Nube.Proveedor.CLAUDE) leer(c)?.sesion?.let { PREFIJO + it } else null
+    fun clave(c: Context, p: com.forge.pixpin.ia.Nube.Proveedor): String? = when {
+        p != com.forge.pixpin.ia.Nube.Proveedor.CLAUDE -> null
+        conCuenta -> com.forge.pixpin.cuenta.Cuenta.sesion(c)?.let { PREFIJO + it }
+        configurado -> leer(c)?.sesion?.let { PREFIJO + it }
+        else -> null
+    }
 
     fun salir(c: Context) {
+        if (conCuenta) { com.forge.pixpin.cuenta.Cuenta.salir(c); return }
         fichero(c).delete()
         com.forge.pixpin.estadoia.EstadoDeLasIa.claveCambiada(c, com.forge.pixpin.ia.Nube.Proveedor.CLAUDE)
     }
@@ -65,6 +77,11 @@ object AccesoDePrueba {
      * el correo está en la lista, la sesión guardada.
      */
     suspend fun entrar(actividad: Activity): Entrada {
+        if (conCuenta) return when (val e = com.forge.pixpin.cuenta.Cuenta.entrar(actividad)) {
+            is com.forge.pixpin.cuenta.Cuenta.Entrada.Dentro -> Entrada.Dentro(e.email)
+            com.forge.pixpin.cuenta.Cuenta.Entrada.Bloqueada -> Entrada.SinAcceso(null)
+            is com.forge.pixpin.cuenta.Cuenta.Entrada.Fallo -> Entrada.Fallo(e.motivo)
+        }
         if (!configurado) return Entrada.Fallo("Esta versión no trae el acceso de prueba")
         val idToken = try {
             val opcion = com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption.Builder(clienteWeb).build()

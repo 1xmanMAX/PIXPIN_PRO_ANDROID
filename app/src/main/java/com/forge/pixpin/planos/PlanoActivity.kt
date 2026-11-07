@@ -900,7 +900,8 @@ class PlanoActivity : ComponentActivity() {
                             Text("3D", color = blanco.copy(alpha = 0.9f), fontWeight = FontWeight.Bold)
                         }
                         // Anotar y los marcos para imprimir van en el riel de la derecha (24-oct-2026, como el PC).
-                        IconButton(onClick = { acotando = !acotando; if (acotando) marcando = false else terminarCadena(); toques++ }, modifier = Modifier.size(38.dp)) {
+                        // Acotar (medir sobre el plano): una función del catálogo (7-nov-2026).
+                        if (com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.PLANOS_MEDIR)) IconButton(onClick = { acotando = !acotando; if (acotando) marcando = false else terminarCadena(); toques++ }, modifier = Modifier.size(38.dp)) {
                             Icon(
                                 Icons.Filled.Straighten, contentDescription = getString(com.forge.pixpin.R.string.plano_acotar),
                                 tint = if (acotando) Color(0xFFFF8A00) else blanco.copy(alpha = 0.9f), modifier = Modifier.size(19.dp)
@@ -978,7 +979,7 @@ class PlanoActivity : ComponentActivity() {
             // `pagina` 0 en unidades del dibujo respecto a su origen, con la y hacia arriba (las de la cámara).
             // Se ven y se tocan también sin anotar; anotando, el lienzo manda. Ver [com.forge.pixpin.comentarios].
             val pegs = pegatinas
-            if (listo && pegs != null && !anotando && !marcando) com.forge.pixpin.comentarios.CapaDePegatinas(
+            if (listo && pegs != null && !anotando && !marcando && com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.COMENTARIOS)) com.forge.pixpin.comentarios.CapaDePegatinas(
                 pegs,
                 aPantalla = { a ->
                     val c = camara

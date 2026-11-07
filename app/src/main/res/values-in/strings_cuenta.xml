@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="funciones_abrir">Buka file</string>
+    <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, denah, dan 3D</string>
+    <string name="funciones_asistente">Asisten</string>
+    <string name="funciones_asistente_detalle">Tanyakan apa saja</string>
+</resources>

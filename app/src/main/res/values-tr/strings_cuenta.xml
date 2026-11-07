@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="funciones_abrir">Dosya aç</string>
+    <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, planlar ve 3D</string>
+    <string name="funciones_asistente">Asistan</string>
+    <string name="funciones_asistente_detalle">Ona istediğini sor</string>
+</resources>

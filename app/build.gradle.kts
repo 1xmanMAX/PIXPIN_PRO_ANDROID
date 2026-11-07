@@ -31,8 +31,14 @@ android {
         fun texto(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it in "-_.:/" }
         buildConfigField("String", "SERVIDOR_IA_DE_PRUEBA", "\"${texto("SERVIDOR_IA_DE_PRUEBA").trimEnd('/')}\"")
         buildConfigField("String", "GOOGLE_CLIENTE_WEB", "\"${texto("GOOGLE_CLIENTE_WEB")}\"")
-        versionCode = 272
-        versionName = "0.173.0"
+        // **El servidor de PinDesk** (7-nov-2026, `servidor/pindesk`): cuentas, el catálogo de funciones y las
+        // licencias, firmados. FIRMA_PUBLICA es su clave pública (la privada solo está en el servidor). No son
+        // secretos: variables del repositorio. Vacíos, la app va sola con el catálogo de fábrica. Ver cuenta/Cuenta.kt.
+        buildConfigField("String", "SERVIDOR_PINDESK", "\"${texto("SERVIDOR_PINDESK").trimEnd('/')}\"")
+        fun base64(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it in "+/=" }
+        buildConfigField("String", "FIRMA_PUBLICA", "\"${base64("FIRMA_PUBLICA")}\"")
+        versionCode = 273
+        versionName = "0.174.0"
     }
 
     buildTypes {

@@ -76,7 +76,8 @@ object Nube {
      * Anthropic); si no, a [url] tal cual.
      */
     fun destino(url: String, clave: String): String {
-        val servidor = com.forge.pixpin.BuildConfig.SERVIDOR_IA_DE_PRUEBA
+        // El servidor de PinDesk (cuentas) o, si no hay, el de la prueba de antes.
+        val servidor = com.forge.pixpin.cuenta.Cuenta.servidor
         if (!clave.trim().startsWith(PREFIJO_DE_PRUEBA) || !servidor.startsWith("https://")) return url
         val i = url.indexOf("/v1/")
         return if (i >= 0) servidor + url.substring(i) else url

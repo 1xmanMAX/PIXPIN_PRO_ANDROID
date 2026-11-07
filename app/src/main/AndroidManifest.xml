@@ -737,6 +737,8 @@
             </intent-filter>
         </receiver>
 
+        <activity android:name=".cuenta.CuentaActivity" android:exported="false" android:theme="@style/Theme.PixPin" />
+
         <!-- La música que suena, para el sistema: notificación, pantalla de bloqueo y ajustes rápidos. -->
         <service
             android:name=".guardados.ReproduciendoService"

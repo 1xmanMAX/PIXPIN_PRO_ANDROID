@@ -86,8 +86,19 @@ object OpcionesDeAdjuntar {
      * **La hoja de este chat**. [conProyecto]: si el chat es de un proyecto (tiene Nota y Croquis);
      * [asistente]: si es el chat del Asistente.
      */
+    /** La función del catálogo de la que depende cada cosa de la hoja (7-nov-2026): oculta, no sale. */
+    fun delCatalogo(a: Adjunto): String = when (a) {
+        Adjunto.CAMARA, Adjunto.FOTO, Adjunto.ARCHIVO -> com.forge.pixpin.cuenta.Disponible.VISORES
+        Adjunto.LIENZO, Adjunto.FIGURA, Adjunto.CROQUIS -> com.forge.pixpin.cuenta.Disponible.LIENZO
+        Adjunto.TAREAS -> com.forge.pixpin.cuenta.Disponible.TAREAS
+        Adjunto.ESCANEAR -> com.forge.pixpin.cuenta.Disponible.ESCANER
+        Adjunto.CLASE -> com.forge.pixpin.cuenta.Disponible.GRABAR
+        Adjunto.MUSICA -> com.forge.pixpin.cuenta.Disponible.MUSICA
+        else -> com.forge.pixpin.cuenta.Disponible.CHATS
+    }
+
     fun hoja(conProyecto: Boolean, asistente: Boolean): Hoja {
-        val vale = { a: Adjunto -> conProyecto || (a != Adjunto.NOTA && a != Adjunto.CROQUIS) }
+        val vale = { a: Adjunto -> (conProyecto || (a != Adjunto.NOTA && a != Adjunto.CROQUIS)) && com.forge.pixpin.cuenta.Disponible.ve(delCatalogo(a)) }
         if (asistente) {
             val delante = DEL_ASISTENTE.filter(vale)
             return Hoja(delante, (DE_SIEMPRE + MAS).filter { vale(it) && it !in delante })

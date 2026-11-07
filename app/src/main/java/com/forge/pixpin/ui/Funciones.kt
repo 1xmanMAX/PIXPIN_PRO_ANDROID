@@ -36,7 +36,23 @@ object Funciones {
         /** Todas las capturas guardadas. */
         GALERIA("galeria", 0xFF12A594),
         /** La biblioteca de figuras de los lienzos. */
-        FIGURAS("figuras", 0xFF3E63DD);
+        FIGURAS("figuras", 0xFF3E63DD),
+        /** Abrir un archivo del teléfono en su visor (7-nov-2026: sin chats, es la puerta a los visores). */
+        ABRIR("abrir", 0xFF0A84FF),
+        /** El chat del asistente (7-nov-2026). */
+        ASISTENTE("asistente", 0xFF6E56CF);
+
+        /** La función del catálogo de la que depende ([com.forge.pixpin.cuenta.Disponible]): oculta, el mosaico no sale. */
+        val delCatalogo: String get() = when (this) {
+            GRABAR -> com.forge.pixpin.cuenta.Disponible.GRABAR
+            LIENZO, FIGURAS -> com.forge.pixpin.cuenta.Disponible.LIENZO
+            TAREAS -> com.forge.pixpin.cuenta.Disponible.TAREAS
+            TIMELINE -> com.forge.pixpin.cuenta.Disponible.LECCIONES
+            HORARIO -> com.forge.pixpin.cuenta.Disponible.HORARIO
+            GALERIA -> com.forge.pixpin.cuenta.Disponible.CAPTURAS
+            ABRIR -> com.forge.pixpin.cuenta.Disponible.VISORES
+            ASISTENTE -> com.forge.pixpin.cuenta.Disponible.ASISTENTE
+        }
 
         /** La clave de su título en el catálogo del PC; aquí su recurso es la misma con `_`. */
         val claveTitulo: String get() = "funciones-$nombre"

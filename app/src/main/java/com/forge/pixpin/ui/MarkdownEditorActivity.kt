@@ -1149,7 +1149,7 @@ private fun Pantalla(
             // `pasos` está solo para que Compose vuelva a mirar deshacer y rehacer: el historial es
             // un objeto normal y no un estado observable.
             @Suppress("UNUSED_EXPRESSION") pasos
-            val botonDeComentarios = if (comentarios == null) null else BotonDeLector(Icons.Filled.ChatBubbleOutline, "Comentarios", insignia = fichero.abiertos) { viendoComentarios = -1 }
+            val botonDeComentarios = if (comentarios == null || !com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.COMENTARIOS)) null else BotonDeLector(Icons.Filled.ChatBubbleOutline, "Comentarios", insignia = fichero.abiertos) { viendoComentarios = -1 }
             val guardarYCerrar = BotonDeLector(Icons.Filled.Check, "Guardar") {
                 if (comentarios != null && fichero.comentarios.isNotEmpty()) cambiarComentarios(fichero, valor.text)
                 onGuardar(valor.text)
@@ -1162,7 +1162,7 @@ private fun Pantalla(
                     BotonDeLector(Icons.Filled.Check, stringResource(com.forge.pixpin.R.string.mt_listo)) { marcandoTexto = false; sitio = null; viendo = true }
                 ) else if (viendo) listOfNotNull(
                     // **Marcar el texto** (2-nov-2026): se elige sin teclado y se marca con la barrita.
-                    if (paginaDeMarcas == null || llano) null else BotonDeLector(Icons.Filled.BorderColor, stringResource(com.forge.pixpin.R.string.mt_marcar_texto)) {
+                    if (paginaDeMarcas == null || llano || !com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.MARCAS_TEXTO)) null else BotonDeLector(Icons.Filled.BorderColor, stringResource(com.forge.pixpin.R.string.mt_marcar_texto)) {
                         dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = false; sitio = null; marcandoTexto = true; viendo = false
                     },
                     // **Escribir el texto** (el `EDIT_NOTE` del PC): el lápiz del riel es para anotar.

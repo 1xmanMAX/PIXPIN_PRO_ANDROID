@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="funciones_abrir">फ़ाइल खोलें</string>
+    <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, नक्शे और 3D</string>
+    <string name="funciones_asistente">सहायक</string>
+    <string name="funciones_asistente_detalle">कुछ भी पूछें</string>
+</resources>

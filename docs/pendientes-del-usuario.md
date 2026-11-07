@@ -366,3 +366,17 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 129. (v0.173.0) LetraSync Pro guarda en su biblioteca las canciones que le manda PinDesk (con la etiqueta
       «PinDesk») y, si luego se retocan allí, la letra vuelve sola a su canción (`LetraDevuelta`, la acción
       `com.forge.pixpin.action.LETRA_SINCRONIZADA` con el id de la canción).
+- [x] 130. (v0.174.0) **Relanzamiento: las funciones las decide el servidor** (`servidor/pindesk`, para tu VPS). Cada
+      función es *oculta · gratis · pro* en un catálogo **firmado** (y la licencia de cada cuenta, también firmada:
+      nadie puede darse Pro por el camino ni tocando la app). Lo de fábrica: solo los visores, el asistente, las
+      tareas, la cuenta y los pines; la barra lateral (marcador, lápiz, marcos) y todo lo demás, oculto, para irlo
+      abriendo desde el panel (`https://tu-servidor/admin`). Lo oculto tampoco arranca de fondo.
+- [x] 131. (v0.174.0) Cuenta con Google (`cuenta/`): 30 días de Pro de prueba para las cuentas nuevas, el plan y el cupo
+      del asistente en la pantalla «Cuenta». El asistente pregunta por el servidor con la sesión: la clave de Claude
+      solo está en la VPS, con cupo por persona y día.
+- [x] 132. (v0.174.0) Actualizarse sin la Play Store, como Telegram: el servidor publica la versión (firmada, con la
+      huella SHA-256 del APK), la app avisa, la baja, comprueba la huella y abre el instalador.
+- [ ] 133. **Lo que falta (del usuario)**: los datos de la VPS (sistema, RAM, IP) y un dominio que apunte a ella;
+      instalar con `sh despliegue/instalar.sh api.tudominio.com`; los ID de Google y la clave de Claude en
+      `/etc/pindesk/config.env`; y en GitHub las variables `SERVIDOR_PINDESK`, `FIRMA_PUBLICA` y `GOOGLE_CLIENTE_WEB`.
+      Pasos: `servidor/pindesk/README.md`.

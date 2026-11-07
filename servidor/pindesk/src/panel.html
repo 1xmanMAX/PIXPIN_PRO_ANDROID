@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Panel de PinDesk</title>
+<style>
+  :root { --fondo:#f2f2f7; --tarjeta:#fff; --texto:#111; --gris:#6b6b70; --linea:#e3e3e8; --acento:#0a84ff; --verde:#30a14e; --naranja:#e8890c; --rojo:#d93a3f; }
+  @media (prefers-color-scheme: dark) { :root { --fondo:#000; --tarjeta:#1c1c1e; --texto:#f2f2f7; --gris:#98989f; --linea:#2c2c2e; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--fondo); color:var(--texto); font:15px/1.4 -apple-system, system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 28px; margin: 12px 0 4px; } h2 { font-size: 13px; text-transform: uppercase; color: var(--gris); font-weight: 600; margin: 24px 4px 8px; }
+  .tarjeta { background: var(--tarjeta); border-radius: 12px; padding: 4px 0; }
+  .fila { display:flex; gap:10px; align-items:center; padding: 10px 14px; border-bottom: 1px solid var(--linea); flex-wrap: wrap; }
+  .fila:last-child { border-bottom: 0; }
+  .crece { flex: 1 1 220px; min-width: 0; } .sub { color: var(--gris); font-size: 13px; }
+  button, select, input { font: inherit; border-radius: 9px; border: 1px solid var(--linea); padding: 7px 11px; background: var(--tarjeta); color: var(--texto); }
+  button { cursor: pointer; } button.lleno { background: var(--acento); color: #fff; border: 0; } button.peligro { color: var(--rojo); }
+  .etiqueta { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 6px; }
+  .pro { background: #e8890c22; color: var(--naranja); } .prueba { background: #0a84ff22; color: var(--acento); } .gratis { background: #8882; color: var(--gris); } .bloq { background:#d93a3f22; color: var(--rojo); }
+  .oculta { color: var(--gris); }
+  #entrar { max-width: 360px; margin: 12vh auto; } #entrar input { width: 100%; margin: 6px 0; padding: 11px; }
+  .pestanas { display:flex; gap: 6px; margin: 8px 0; } .pestanas button.activa { background: var(--acento); color:#fff; border:0; }
+  .oculto { display:none; } .aviso { color: var(--rojo); min-height: 20px; }
+  code { font-size: 12px; word-break: break-all; }
+</style>
+</head>
+<body>
+<main>
+  <section id="entrar">
+    <h1>Panel de PinDesk</h1>
+    <p class="sub">La clave del panel y el código de 6 cifras de tu app de autenticación.</p>
+    <input id="clave" type="password" placeholder="Clave del panel" autocomplete="current-password">
+    <input id="codigo" inputmode="numeric" placeholder="Código de 6 cifras" autocomplete="one-time-code">
+    <button class="lleno" id="botonEntrar" style="width:100%;margin-top:8px">Entrar</button>
+    <p class="aviso" id="avisoEntrar"></p>
+  </section>
+
+  <section id="todo" class="oculto">
+    <h1>PinDesk</h1>
+    <div class="pestanas">
+      <button data-p="usuarios" class="activa">Usuarios</button><button data-p="funciones">Funciones</button><button data-p="version">Versión</button>
+      <span style="flex:1"></span><button id="recargar">Recargar</button>
+    </div>
+    <p class="aviso" id="aviso"></p>
+
+    <div id="p-usuarios">
+      <h2 id="cuantos">Usuarios</h2>
+      <div class="fila" style="padding:0 4px 8px"><input id="buscar" placeholder="Buscar por correo" style="flex:1"></div>
+      <div class="tarjeta" id="usuarios"></div>
+    </div>
+
+    <div id="p-funciones" class="oculto">
+      <h2>Funciones</h2>
+      <p class="sub" style="margin:0 4px 8px">Oculta: no se ve. Gratis: para todos. Pro: con Pro o en la prueba (y para quien la tenga regalada). Los cambios llegan a la app la próxima vez que se abra.</p>
+      <div class="tarjeta" id="funciones"></div>
+      <h2>Programar un cambio</h2>
+      <div class="tarjeta"><div class="fila">
+        <select id="progId"></select>
+        <select id="progEstado"><option value="gratis">gratis</option><option value="pro">pro</option><option value="oculta">oculta</option></select>
+        <input id="progFecha" type="datetime-local">
+        <input id="progAviso" placeholder="Aviso para la app (opcional)" class="crece">
+        <button class="lleno" id="programar">Programar</button>
+      </div></div>
+    </div>
+
+    <div id="p-version" class="oculto">
+      <h2>Publicar una versión (la app avisa y se actualiza sola)</h2>
+      <div class="tarjeta">
+        <div class="fila"><input id="vCodigo" type="number" placeholder="versionCode (p. ej. 273)"><input id="vNombre" placeholder="versionName (p. ej. 0.174.0)"></div>
+        <div class="fila"><input id="vUrl" class="crece" placeholder="https://…/PixPin-0.174.0.apk"></div>
+        <div class="fila"><input id="vSha" class="crece" placeholder="SHA-256 del APK (sha256sum PixPin.apk)"></div>
+        <div class="fila"><input id="vMinimo" type="number" placeholder="Versión mínima (opcional: obliga a actualizar)"></div>
+        <div class="fila"><textarea id="vNotas" rows="3" class="crece" placeholder="Novedades (las ve el usuario)" style="font:inherit;border-radius:9px;border:1px solid var(--linea);padding:8px;background:var(--tarjeta);color:var(--texto)"></textarea></div>
+        <div class="fila"><button class="lleno" id="publicar">Publicar</button><span class="sub" id="vActual"></span></div>
+      </div>
+      <h2>Clave pública (va dentro de la app)</h2>
+      <div class="tarjeta"><div class="fila"><code id="publica"></code></div></div>
+    </div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+let cred = null, datos = null;
+const DIA = 86400000;
+const fecha = (ms) => ms ? new Date(ms).toLocaleDateString("es-PE", { day: "numeric", month: "short", year: "numeric" }) : "—";
+
+async function api(ruta, cuerpo) {
+  const r = await fetch("/admin/api/" + ruta, {
+    method: cuerpo ? "POST" : "GET",
+    headers: { "content-type": "application/json", "x-admin-clave": cred.clave, "x-admin-codigo": cred.codigo },
+    body: cuerpo ? JSON.stringify(cuerpo) : undefined,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { salir("La sesión del panel caducó: vuelve a poner el código."); throw new Error("401"); }
+  if (!r.ok) throw new Error(j.error || r.status);
+  return j;
+}
+function salir(msg) { cred = null; $("todo").classList.add("oculto"); $("entrar").classList.remove("oculto"); $("avisoEntrar").textContent = msg || ""; }
+
+$("botonEntrar").onclick = async () => {
+  cred = { clave: $("clave").value, codigo: $("codigo").value.trim() };
+  try { await cargar(); $("entrar").classList.add("oculto"); $("todo").classList.remove("oculto"); }
+  catch (e) { $("avisoEntrar").textContent = "No: revisa la clave y el código."; }
+};
+// El código de 6 cifras cambia cada 30 s: si caduca, el panel lo vuelve a pedir.
+$("codigo").onkeydown = (e) => { if (e.key === "Enter") $("botonEntrar").click(); };
+
+async function cargar() {
+  datos = await api("resumen");
+  pintarUsuarios(); pintarFunciones();
+  $("publica").textContent = datos.publica;
+  const v = datos.version; $("vActual").textContent = v ? `Publicada: ${v.versionName} (${v.versionCode})` : "Ninguna publicada";
+}
+$("recargar").onclick = () => cargar().catch((e) => ($("aviso").textContent = e.message));
+document.querySelectorAll(".pestanas button[data-p]").forEach((b) => b.onclick = () => {
+  document.querySelectorAll(".pestanas button[data-p]").forEach((x) => x.classList.toggle("activa", x === b));
+  ["usuarios", "funciones", "version"].forEach((p) => $("p-" + p).classList.toggle("oculto", p !== b.dataset.p));
+});
+
+function pintarUsuarios() {
+  const q = $("buscar").value.toLowerCase();
+  const us = datos.usuarios.filter((u) => !q || u.email.includes(q));
+  $("cuantos").textContent = `Usuarios (${datos.usuarios.length})`;
+  const caja = $("usuarios"); caja.innerHTML = "";
+  for (const u of us) {
+    const l = u.licencia;
+    const f = document.createElement("div"); f.className = "fila";
+    const plan = u.bloqueada ? '<span class="etiqueta bloq">bloqueada</span>' : `<span class="etiqueta ${l.plan}">${l.plan}${l.hasta ? " · hasta " + fecha(l.hasta) : ""}</span>`;
+    f.innerHTML = `<div class="crece"><div><b></b> ${plan}</div><div class="sub"></div></div>`;
+    f.querySelector("b").textContent = u.email;
+    f.querySelector(".sub").textContent = `${u.nombre || ""} · alta ${fecha(u.alta)} · última vez ${fecha(u.ultimaVez)}` + (u.regaladas?.length ? ` · regaladas: ${u.regaladas.join(", ")}` : "") + (u.nota ? ` · ${u.nota}` : "");
+    const boton = (txt, cuerpo, cls) => { const b = document.createElement("button"); b.textContent = txt; if (cls) b.className = cls;
+      b.onclick = async () => { try { await api("usuario", { uid: u.uid, ...cuerpo() }); await cargar(); } catch (e) { $("aviso").textContent = e.message; } }; f.appendChild(b); };
+    boton("+1 mes Pro", () => ({ proDias: 31 }), "lleno");
+    boton("+1 año Pro", () => ({ proDias: 365 }));
+    if (u.proHasta) boton("Quitar Pro", () => ({ proDias: 0 }));
+    boton("Regalar…", () => { const id = prompt("Id de la función a regalar (p. ej. riel.lapiz). Vacío para quitar todas:", (u.regaladas || []).join(",")); return id === null ? {} : { regaladas: id.split(",").map((s) => s.trim()).filter(Boolean) }; });
+    boton("Nota…", () => { const n = prompt("Nota (p. ej. «pagó por Yape el 7-nov»):", u.nota || ""); return n === null ? {} : { nota: n }; });
+    boton(u.bloqueada ? "Desbloquear" : "Bloquear", () => (confirm(u.bloqueada ? "¿Desbloquear?" : "¿Bloquear esta cuenta? Se le cierran las sesiones.") ? { bloqueada: !u.bloqueada } : {}), "peligro");
+    caja.appendChild(f);
+  }
+}
+$("buscar").oninput = pintarUsuarios;
+
+function pintarFunciones() {
+  const caja = $("funciones"); caja.innerHTML = ""; $("progId").innerHTML = "";
+  for (const [id, f] of Object.entries(datos.catalogo.funciones)) {
+    const fila = document.createElement("div"); fila.className = "fila";
+    const prog = (f.programado || []).map((p) => `${p.estado} desde ${fecha(p.desde)}`).join(" · ");
+    fila.innerHTML = `<div class="crece"><div class="${f.estado === "oculta" ? "oculta" : ""}"><b></b></div><div class="sub"></div></div>`;
+    fila.querySelector("b").textContent = f.nombre || id;
+    fila.querySelector(".sub").textContent = id + (prog ? " · programado: " + prog : "") + (f.aviso ? " · aviso: " + f.aviso : "");
+    const sel = document.createElement("select");
+    for (const e of ["oculta", "gratis", "pro"]) { const o = document.createElement("option"); o.value = e; o.textContent = e; o.selected = f.estado === e; sel.appendChild(o); }
+    sel.onchange = async () => { try { await api("funcion", { id, estado: sel.value }); await cargar(); } catch (e) { $("aviso").textContent = e.message; } };
+    fila.appendChild(sel);
+    if (prog) { const b = document.createElement("button"); b.textContent = "Quitar lo programado"; b.onclick = async () => { await api("funcion", { id, quitarProgramado: true }); await cargar(); }; fila.appendChild(b); }
+    caja.appendChild(fila);
+    const o = document.createElement("option"); o.value = id; o.textContent = f.nombre || id; $("progId").appendChild(o);
+  }
+}
+$("programar").onclick = async () => {
+  const desde = Date.parse($("progFecha").value);
+  if (!desde) return ($("aviso").textContent = "Elige la fecha");
+  try { await api("funcion", { id: $("progId").value, programar: { estado: $("progEstado").value, desde }, aviso: $("progAviso").value || undefined }); await cargar(); }
+  catch (e) { $("aviso").textContent = e.message; }
+};
+$("publicar").onclick = async () => {
+  try {
+    await api("version", { versionCode: parseInt($("vCodigo").value, 10), versionName: $("vNombre").value, url: $("vUrl").value.trim(), sha256: $("vSha").value.trim().toLowerCase(),
+      notas: $("vNotas").value, minimo: $("vMinimo").value ? parseInt($("vMinimo").value, 10) : null });
+    await cargar(); $("aviso").textContent = "Publicada.";
+  } catch (e) { $("aviso").textContent = e.message; }
+};
+</script>
+</body>
+</html>

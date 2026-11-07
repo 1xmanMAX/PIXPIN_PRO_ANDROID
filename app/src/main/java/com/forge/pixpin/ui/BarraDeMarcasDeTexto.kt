@@ -51,6 +51,8 @@ fun BarraDeMarcasDeTexto(
     /** «Copiar» lo elegido, delante de los colores (como el PC); null, no sale. */
     onCopiar: (() -> Unit)? = null
 ) {
+    // Resaltar texto es una función del catálogo (7-nov-2026): oculta, la barra no sale.
+    if (!com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.MARCAS_TEXTO)) return
     val colores = AnclaDeTexto.COLORES.map { Color(0xFF000000 or it.substring(1).toLong(16)) }
     val elegido = colores.getOrElse(color) { colores[4] }
     val rotulos = mapOf(

@@ -162,7 +162,8 @@ fun AjustesV2(
                 busqueda.isNotBlank() -> Resultados(busqueda, ajustes, tarjeta)
                 seccion == null -> {
                     cabecera()
-                    for (s in Seccion.entries) FilaDeSeccion(s, ajustes) { abierta = s.name }
+                    // Solo las secciones de lo que se ve (7-nov-2026, el catálogo: [com.forge.pixpin.cuenta.Disponible]).
+                    for (s in Seccion.entries.filter { it.seVe() }) FilaDeSeccion(s, ajustes) { abierta = s.name }
                     pie()
                 }
                 else -> ContenidoDeSeccion(seccion, ajustes, tarjeta)

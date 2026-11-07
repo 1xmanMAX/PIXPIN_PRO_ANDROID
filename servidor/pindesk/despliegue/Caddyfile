@@ -1,0 +1,12 @@
+# Caddy pone el HTTPS solo (certificado de Let's Encrypt, renovado solo). Cambia el dominio por el tuyo.
+api.tudominio.com {
+	encode gzip
+	reverse_proxy 127.0.0.1:8080
+	# El panel, solo para ti (opcional): descomenta y pon tu IP.
+	# @panel path /admin*
+	# handle @panel {
+	# 	@noYo not remote_ip 203.0.113.10
+	# 	respond @noYo 404
+	# 	reverse_proxy 127.0.0.1:8080
+	# }
+}

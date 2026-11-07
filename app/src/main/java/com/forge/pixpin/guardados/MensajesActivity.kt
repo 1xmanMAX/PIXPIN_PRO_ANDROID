@@ -2404,7 +2404,9 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                     // entra a la de cualquier proyecto: es lo que hace
                                     // que esto sea el sitio desde el que se llega a todo
                                     // y no una conversación más entre otras.
-                                    if (chatDe == null) {
+                                    // Sin los chats en el catálogo (7-nov-2026), nada de ir a otros chats ni de compartirlos.
+                                    val conChats = com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.CHATS)
+                                    if (chatDe == null && conChats) {
                                         DelMenu(com.forge.pixpin.R.string.biblioteca_audio, Icons.Filled.LibraryMusic) {
                                             masOpciones = false
                                             BibliotecaDeAudioActivity.abrir(this@MensajesActivity)
@@ -2417,7 +2419,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                     // **Chats compartidos** (13-oct-2026): en un proyecto, quién está y
                                     // añadir a alguien; en la general, entrar en el de otro con su código.
                                     val esteChat = chatDe
-                                    if (esteChat != null && esteChat != com.forge.pixpin.sincro.Disco.GENERAL) {
+                                    if (!conChats) Unit
+                                    else if (esteChat != null && esteChat != com.forge.pixpin.sincro.Disco.GENERAL) {
                                         DelMenu(com.forge.pixpin.R.string.guardados_personas, Icons.Filled.Groups) {
                                             masOpciones = false
                                             com.forge.pixpin.sincro.ChatCompartidoActivity.abrir(this@MensajesActivity, esteChat, nombreDelChat)
