@@ -355,3 +355,8 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       un aviso con el enlace para descargarla. Las canciones ya no entran en la cola de «pasar a texto».
 - [x] 126. (v0.171.0) El asistente contesta en cualquier chat «Asistente» (si había dos, el segundo no respondía) y un
       turno atascado más de 4 min se suelta solo, para que el siguiente mensaje sí tenga respuesta.
+- [x] 127. (v0.172.0) Una sola entrada a la letra de una canción: **«Sincronizar la letra»** (abre LetraSync Pro, donde
+      se escribe, pega y sincroniza). En el chat, al mantener la canción; en el karaoke, un solo botón en la
+      cabecera (fuera el reloj, «sola» y el lápiz, y las tres opciones repetidas del menú ⋮). La tarjeta de música
+      ya no tiene un botón aparte que haga lo mismo que tocarla. Sin LetraSync instalada, el aviso deja también
+      «Escribir o pegar la letra» aquí.

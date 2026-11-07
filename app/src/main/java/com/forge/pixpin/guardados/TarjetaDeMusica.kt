@@ -151,15 +151,10 @@ fun TarjetaDeMusica(m: Mensaje, alMantener: () -> Unit) {
                     debajo.joinToString(" · "), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Tocar: cantarla. Mantener: «Sincronizar la letra» (la única entrada; sin botón aparte que haga lo mismo).
                 Text(
-                    if (conLetra) "Con letra · tócala para cantar" else "Sin letra · tócala para añadirla",
+                    if (conLetra) "Con letra · tócala para cantar" else "Sin letra · mantenla para sincronizarla",
                     fontSize = 11.sp, color = MaterialTheme.colorScheme.primary
-                )
-            }
-            IconButton(onClick = { MusicaActivity.abrir(contexto, m.id) }) {
-                Icon(
-                    Icons.Filled.Lyrics, contentDescription = "Letra",
-                    tint = if (conLetra) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

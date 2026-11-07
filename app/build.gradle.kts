@@ -31,8 +31,8 @@ android {
         fun texto(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it in "-_.:/" }
         buildConfigField("String", "SERVIDOR_IA_DE_PRUEBA", "\"${texto("SERVIDOR_IA_DE_PRUEBA").trimEnd('/')}\"")
         buildConfigField("String", "GOOGLE_CLIENTE_WEB", "\"${texto("GOOGLE_CLIENTE_WEB")}\"")
-        versionCode = 270
-        versionName = "0.171.0"
+        versionCode = 271
+        versionName = "0.172.0"
     }
 
     buildTypes {

@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Hearing
 import androidx.compose.material.icons.filled.Subtitles
 import androidx.compose.material.icons.filled.Timer
@@ -91,13 +92,9 @@ internal fun CabeceraDelKaraoke(
     titulo: String?,
     debajo: String?,
     conAudio: Boolean,
-    sincronizandoSola: Boolean,
-    sincronizandoAToques: Boolean,
     alMenos: () -> Unit,
     alMas: () -> Unit,
-    alReloj: () -> Unit,
-    alSola: () -> Unit,
-    alLapiz: () -> Unit,
+    alSincronizar: () -> Unit,
     alVolver: () -> Unit,
     menu: @Composable () -> Unit,
     modifier: Modifier = Modifier
@@ -108,29 +105,9 @@ internal fun CabeceraDelKaraoke(
         Row(verticalAlignment = Alignment.CenterVertically) {
             BotonDeTexto("A", 12, contexto.getString(R.string.letra_mas_pequena), alMenos)
             BotonDeTexto("A", 18, contexto.getString(R.string.letra_mas_grande), alMas)
-            IconButton(onClick = alReloj, enabled = conAudio, modifier = Modifier.size(40.dp)) {
-                Icon(
-                    Icons.Filled.Timer, contexto.getString(R.string.letra_sincronizar),
-                    tint = if (sincronizandoAToques) MaterialTheme.colorScheme.primary else androidx.compose.material3.LocalContentColor.current
-                )
-            }
-            // Encendido mientras se sincroniza sola: pulsarlo otra vez la para.
-            Box(
-                Modifier.size(40.dp).clip(CircleShape)
-                    .background(if (sincronizandoSola) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent)
-                    .clickable(enabled = conAudio, onClickLabel = contexto.getString(R.string.letra_sola), onClick = alSola),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    Icons.Filled.Subtitles, contexto.getString(R.string.letra_sola),
-                    tint = when {
-                        sincronizandoSola -> MaterialTheme.colorScheme.primary
-                        conAudio -> androidx.compose.material3.LocalContentColor.current
-                        else -> androidx.compose.material3.LocalContentColor.current.copy(alpha = 0.38f)
-                    }
-                )
-            }
-            IconButton(onClick = alLapiz, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.Edit, contexto.getString(R.string.letra_editar_titulo)) }
+            // **Un solo botón para la letra** (7-nov-2026, pedido del usuario: «hay varios botones que llevan al mismo
+            // sitio»): escribirla, pegarla y ponerle los tiempos se hace en LetraSync Pro, y se entra solo por aquí.
+            BotonDeSincronizar(conAudio, alSincronizar)
             menu()
         }
     }
@@ -161,6 +138,25 @@ internal fun CabeceraDelKaraoke(
     }
 }
 
+/** El único botón de la letra: «Sincronizar la letra», en una pastilla que se ve. */
+@Composable
+internal fun BotonDeSincronizar(activo: Boolean, alTocar: () -> Unit, modifier: Modifier = Modifier) {
+    val contexto = LocalContext.current
+    val color = MaterialTheme.colorScheme.primary
+    Row(
+        modifier.padding(horizontal = 4.dp).height(40.dp).clip(RoundedCornerShape(50))
+            .background(color.copy(alpha = if (activo) 0.16f else 0.06f))
+            .clickable(enabled = activo, onClick = alTocar).padding(horizontal = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Filled.Lyrics, null, tint = color.copy(alpha = if (activo) 1f else 0.4f), modifier = Modifier.size(20.dp))
+        Text(
+            contexto.getString(R.string.letra_sincronizar), color = color.copy(alpha = if (activo) 1f else 0.4f),
+            fontWeight = FontWeight.SemiBold, fontSize = 14.sp, maxLines = 1, modifier = Modifier.padding(start = 6.dp)
+        )
+    }
+}
+
 /** Una «A» pequeña o grande: la letra más pequeña o más grande. */
 @Composable
 private fun BotonDeTexto(letra: String, tam: Int, nombre: String, al: () -> Unit) {
@@ -177,11 +173,8 @@ private fun BotonDeTexto(letra: String, tam: Int, nombre: String, al: () -> Unit
  */
 @Composable
 internal fun MenuDelKaraoke(
-    conAudio: Boolean,
-    poniendoTiempos: Boolean,
     conTiempos: Boolean,
     oscuro: Boolean,
-    alPonerTiempos: () -> Unit,
     alCopiarLrc: () -> Unit,
     alCambiarTema: () -> Unit
 ) {
@@ -190,12 +183,6 @@ internal fun MenuDelKaraoke(
     Box {
         IconButton(onClick = { abierto = true }, modifier = Modifier.size(40.dp)) { Icon(Icons.Filled.MoreVert, contexto.getString(R.string.estudiar_mas)) }
         DropdownMenu(expanded = abierto, onDismissRequest = { abierto = false }) {
-            DropdownMenuItem(
-                text = { Text(contexto.getString(R.string.letra_poner_tiempos)) },
-                leadingIcon = { Icon(Icons.Filled.Hearing, null) },
-                enabled = conAudio && !poniendoTiempos,
-                onClick = { abierto = false; alPonerTiempos() }
-            )
             if (conTiempos) DropdownMenuItem(
                 text = { Text(contexto.getString(R.string.letra_copiar_lrc)) },
                 leadingIcon = { Icon(Icons.Filled.ContentCopy, null) },
@@ -317,7 +304,7 @@ internal fun LetraQueSigue(
 
 /** **Sin letra aún**: se dice, y cómo ponerla (escribirla o pegarla; o lo que se oye como letra). */
 @Composable
-internal fun SinLetraEnElKaraoke(avance: Float?, conAudio: Boolean, alEscribir: () -> Unit, alPonerTiempos: () -> Unit, modifier: Modifier = Modifier) {
+internal fun SinLetraEnElKaraoke(avance: Float?, conAudio: Boolean, alSincronizar: () -> Unit, modifier: Modifier = Modifier) {
     val contexto = LocalContext.current
     Column(modifier.padding(24.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
         if (avance != null) {
@@ -325,8 +312,7 @@ internal fun SinLetraEnElKaraoke(avance: Float?, conAudio: Boolean, alEscribir: 
             androidx.compose.material3.LinearProgressIndicator(progress = { avance.coerceIn(0f, 1f) }, modifier = Modifier.padding(top = 10.dp).width(200.dp))
         } else {
             Text(contexto.getString(R.string.letra_sin_letra), color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-            androidx.compose.material3.TextButton(onClick = alEscribir) { Text(contexto.getString(R.string.letra_editar_titulo)) }
-            if (conAudio) androidx.compose.material3.TextButton(onClick = alPonerTiempos) { Text(contexto.getString(R.string.letra_poner_tiempos)) }
+            BotonDeSincronizar(conAudio, alSincronizar, Modifier.padding(top = 16.dp))
         }
     }
 }

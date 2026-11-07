@@ -373,6 +373,7 @@ class EstudiarClaseActivity : ComponentActivity() {
         var tamano by rememberSaveable { mutableIntStateOf(if (m?.esMusica == true) 22 else 17) }
         var menu by remember { mutableStateOf(false) }
         var editandoLetra by remember { mutableStateOf(false) }
+        escribirAqui = { editandoLetra = true }
         var sincronizando by remember { mutableStateOf<SincronizadorDeLetra?>(null) }
         var toques by remember { mutableIntStateOf(0) }
         // «Poner los tiempos a la letra»: lo que lleva (null: no se está haciendo) y la propuesta.
@@ -497,6 +498,9 @@ class EstudiarClaseActivity : ComponentActivity() {
          */
         fun ponerTiempos() { menu = false; m?.let { abrirEnLetraSync(it, datosDeCancion?.titulo) } }
         fun empezarASincronizar() = ponerTiempos()
+        // Desde el chat («Sincronizar la letra» al mantener la canción): se va derecho a LetraSync Pro.
+        var pedidoDesdeElChat by remember { mutableStateOf(intent.getBooleanExtra(SINCRONIZAR, false)) }
+        LaunchedEffect(m != null, pedidoDesdeElChat) { if (pedidoDesdeElChat && m != null) { pedidoDesdeElChat = false; intent.removeExtra(SINCRONIZAR); ponerTiempos() } }
 
         // Las piezas de la pantalla, como funciones de aquí (comparten el estado); [Imagen] la última, que usa las demás.
         @Composable
@@ -672,8 +676,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                                 enCola != null -> Text(getString(R.string.pasar_a_texto_en_cola), color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 esCancion -> {
                                     Text(getString(R.string.letra_sin_letra), color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    TextButton(onClick = { editandoLetra = true }) { Text(getString(R.string.letra_editar_titulo)) }
-                                    if (m?.ruta != null) TextButton(onClick = { ponerTiempos() }) { Text(getString(R.string.letra_poner_tiempos)) }
+                                    BotonDeSincronizar(m?.ruta != null, { ponerTiempos() }, Modifier.padding(top = 12.dp))
                                 }
                                 else -> {
                                     Text(
@@ -789,23 +792,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                         IconButton(onClick = { if (tamano < 44) tamano += 2 }) { Icon(Icons.Filled.TextIncrease, getString(R.string.letra_mas_grande)) }
                     }
                     if (esCancion) {
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text(getString(R.string.letra_editar_titulo)) },
-                            leadingIcon = { Icon(Icons.Filled.Edit, null) },
-                            onClick = { menu = false; editandoLetra = true }
-                        )
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text(getString(R.string.letra_sincronizar)) },
-                            leadingIcon = { Icon(Icons.Filled.Timer, null) },
-                            enabled = m?.ruta != null && sincronizando == null,
-                            onClick = { empezarASincronizar() }
-                        )
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text(getString(R.string.letra_poner_tiempos)) },
-                            leadingIcon = { Icon(Icons.Filled.Subtitles, null) },
-                            enabled = m?.ruta != null && poniendoTiempos == null,
-                            onClick = { ponerTiempos() }
-                        )
+                        // Escribir, pegar o poner tiempos a la letra: solo con «Sincronizar la letra» (LetraSync Pro).
                         if (letra?.conTiempos == true) androidx.compose.material3.DropdownMenuItem(
                             text = { Text(getString(R.string.letra_copiar_lrc)) },
                             leadingIcon = { Icon(Icons.Filled.ContentCopy, null) },
@@ -1032,18 +1019,13 @@ class EstudiarClaseActivity : ComponentActivity() {
                     titulo = datosDeCancion?.titulo,
                     debajo = listOfNotNull(datosDeCancion?.artista, datosDeCancion?.album).joinToString(" · ").ifEmpty { null },
                     conAudio = conAudio,
-                    sincronizandoSola = false,
-                    sincronizandoAToques = sincronizando != null,
                     alMenos = { if (tamano > 12) tamano -= 2 },
                     alMas = { if (tamano < 44) tamano += 2 },
-                    alReloj = { if (sincronizando == null) empezarASincronizar() },
-                    alSola = { ponerTiempos() },
-                    alLapiz = { editandoLetra = true },
+                    alSincronizar = { ponerTiempos() },
                     alVolver = { finish() },
                     menu = {
                         MenuDelKaraoke(
-                            conAudio = conAudio, poniendoTiempos = poniendoTiempos != null, conTiempos = letra?.conTiempos == true, oscuro = oscuroAhora,
-                            alPonerTiempos = { ponerTiempos() },
+                            conTiempos = letra?.conTiempos == true, oscuro = oscuroAhora,
                             alCopiarLrc = {
                                 letra?.let { l -> copiarComoLrc(this@EstudiarClaseActivity, LetraDeCancion.aLrc(l, datosDeCancion?.titulo ?: titulo, datosDeCancion?.artista)) }
                             },
@@ -1063,7 +1045,7 @@ class EstudiarClaseActivity : ComponentActivity() {
                     if (sinc != null) ListaParaSincronizar(sinc, toques, tamano)
                     else if (lineas.isEmpty()) SinLetraEnElKaraoke(
                         avance = avanceDelTexto ?: poniendoTiempos, conAudio = conAudio,
-                        alEscribir = { editandoLetra = true }, alPonerTiempos = { ponerTiempos() },
+                        alSincronizar = { ponerTiempos() },
                         modifier = Modifier.align(Alignment.Center)
                     )
                     else LetraQueSigue(lineas, lineaActual, sonando, tamano, alTocar = irYSonar, modifier = Modifier.fillMaxSize())
@@ -1251,12 +1233,16 @@ class EstudiarClaseActivity : ComponentActivity() {
     /**
      * **Mandar la canción y su letra a LetraSync Pro.** Sin ella instalada, se dice dónde bajarla ([LetraSyncPro.ENLACE]).
      */
+    /** Sin LetraSync Pro: escribir la letra aquí (el editor de siempre), lo único que no necesita la otra app. */
+    private var escribirAqui: () -> Unit = {}
+
     private fun abrirEnLetraSync(n: Mensaje, titulo: String?) {
         if (!LetraSyncPro.instalada(this)) {
             android.app.AlertDialog.Builder(this)
                 .setTitle("LetraSync Pro")
                 .setMessage("La letra de las canciones se sincroniza con LetraSync Pro, la app hermana de PinDesk. Instálala y vuelve a tocar aquí: la letra sincronizada vuelve sola a esta canción.")
                 .setPositiveButton("Bajarla") { _, _ -> runCatching { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(LetraSyncPro.ENLACE))) } }
+                .setNeutralButton(R.string.letra_editar_titulo) { _, _ -> escribirAqui() }
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
             return
@@ -1582,6 +1568,12 @@ class EstudiarClaseActivity : ComponentActivity() {
     companion object {
         private const val LA_NOTA = "estudiar_nota"
         private const val EL_MINUTO = "estudiar_minuto"
+        private const val SINCRONIZAR = "estudiar_sincronizar"
+
+        /** Abre la canción [nota] y va derecho a sincronizar su letra en LetraSync Pro (lo que se pide desde el chat). */
+        fun sincronizar(context: Context, nota: String) {
+            com.forge.pixpin.Volver.abrirEnLaApp(context, intento(context, nota).putExtra(SINCRONIZAR, true))
+        }
 
         fun intento(context: Context, nota: String, ms: Long = 0): Intent =
             Intent(context, EstudiarClaseActivity::class.java).putExtra(LA_NOTA, nota).putExtra(EL_MINUTO, ms)

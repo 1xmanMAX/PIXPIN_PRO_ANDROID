@@ -1674,7 +1674,10 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                                 reenviar = { reenviando = listOf(m) },
                                 unir = if (!m.unido && UnirAlProyecto.sePuedeUnir(m)) { { unirAlProyecto(listOf(m)) } } else null,
                                 devolver = if (m.proyecto != null) { { devolverAlProyecto(m) } } else null,
-                                letra = if (m.clase == Clase.VOZ && m.ruta != null) { { LetraActivity.abrir(this@MensajesActivity, m.id) } } else null,
+                                // Una canción: «Sincronizar la letra» va derecho a LetraSync Pro (7-nov-2026, una sola entrada).
+                                letra = if (m.clase == Clase.VOZ && m.ruta != null) {
+                                    if (m.esMusica) { { EstudiarClaseActivity.sincronizar(this@MensajesActivity, m.id) } } else { { LetraActivity.abrir(this@MensajesActivity, m.id) } }
+                                } else null,
                                 estudiar = EstudiarClase.notaDe(m, mensajes)?.let { nota -> { EstudiarClaseActivity.abrir(this@MensajesActivity, nota.id) } },
                                 transcribir = if (m.clase == Clase.VOZ && m.ruta != null && Transcriptor.disponible(this@MensajesActivity)) {
                                     {
@@ -5610,7 +5613,8 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 fontSize = 12.sp,
                 color = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.padding(top = 4.dp).clickable {
-                    com.forge.pixpin.ui.MarkdownEditorActivity.abrir(this@MensajesActivity, "letra-${m.id}", "", mensaje = m.id)
+                    // Lo mismo que «Sincronizar la letra»: se pega y se sincroniza en LetraSync Pro.
+                    EstudiarClaseActivity.sincronizar(this@MensajesActivity, m.id)
                 }
             )
             return
@@ -6652,7 +6656,7 @@ class MensajesActivity : ComponentActivity(), ChatAlFrente.Pantalla {
                 if (m.texto.isBlank()) com.forge.pixpin.R.string.guardados_describir else com.forge.pixpin.R.string.guardados_describir_editar, Icons.Filled.Subtitles
             ) { cerrar(); describiendo = m }
             OpcionesDelMensaje.Opcion.TRANSCRIBIR -> acciones.transcribir?.let { t -> DelMenu(com.forge.pixpin.R.string.guardados_transcribir, Icons.Filled.Subtitles) { cerrar(); t() } }
-            OpcionesDelMensaje.Opcion.LETRA -> acciones.letra?.let { l -> DelMenu(com.forge.pixpin.R.string.letra_ver, Icons.Filled.Lyrics) { cerrar(); l() } }
+            OpcionesDelMensaje.Opcion.LETRA -> acciones.letra?.let { l -> DelMenu(if (m.esMusica) com.forge.pixpin.R.string.letra_sincronizar else com.forge.pixpin.R.string.letra_ver, Icons.Filled.Lyrics) { cerrar(); l() } }
             OpcionesDelMensaje.Opcion.ESTUDIAR -> acciones.estudiar?.let { e -> DelMenu(com.forge.pixpin.R.string.estudiar_titulo, Icons.Filled.School) { cerrar(); e() } }
             // La carpeta de una grabación (25-oct-2026): tocarla estudia la clase; lo grabado y lo adjuntado, aquí.
             OpcionesDelMensaje.Opcion.ABRIR_CARPETA -> DelMenu(com.forge.pixpin.R.string.guardados_abrir_la_carpeta, Icons.Filled.FolderCopy) {
