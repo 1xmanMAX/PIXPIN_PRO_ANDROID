@@ -23,8 +23,8 @@ class FirmadoTest {
     private val licencia = obj("{\"datos\": \"eyJ0aXBvIjoibGljZW5jaWEiLCJ1aWQiOiJnLTEiLCJjdWVudGEiOiJhbmFAeC5wZSIsInBsYW4iOiJwcnVlYmEiLCJoYXN0YSI6NDEwMjQ0NDgwMDAwMCwicmVnYWxhZGFzIjpbInJpZWwubGFwaXoiXSwiYmxvcXVlYWRhIjpmYWxzZSwiZW1pdGlkYSI6MSwidmVuY2UiOjQxMDI0NDQ4MDAwMDB9\", \"firma\": \"MEQCIBoBCQcperxe_AhmgTUt4Gbq_RIL5A30i_CHyMi7cM7wAiAyvYBjn-931QE7KOy_XOGSf95-flYK7zri8ARzQ0sGgQ\", \"clave\": \"f0acba9f02d7\"}")
     private val licenciaVencida = obj("{\"datos\": \"eyJ0aXBvIjoibGljZW5jaWEiLCJ1aWQiOiJnLTEiLCJjdWVudGEiOiJhbmFAeC5wZSIsInBsYW4iOiJwcm8iLCJoYXN0YSI6NDEwMjQ0NDgwMDAwMCwicmVnYWxhZGFzIjpbXSwiYmxvcXVlYWRhIjpmYWxzZSwiZW1pdGlkYSI6MSwidmVuY2UiOjEwMDB9\", \"firma\": \"MEYCIQCQtd2npfYNyZXoHDytCOpoDJzg_SKVAdRB7HNjtuBBUAIhALbIFzv5Wgx3NlYig6sI5QEIVrXqGhgXuJ8mydySR76Y\", \"clave\": \"f0acba9f02d7\"}")
 
-    @Before fun antes() { Disponible.enPruebas = false; Disponible.abrirTodo(false); Disponible.aplicar(null, null, quitarLicencia = true) }
-    @After fun despues() { Disponible.enPruebas = true }
+    @Before fun antes() { Disponible.enPruebas = false; Disponible.todoAbierto = false; Disponible.abrirTodo(false); Disponible.aplicar(null, null, quitarLicencia = true) }
+    @After fun despues() { Disponible.enPruebas = true; Disponible.todoAbierto = com.forge.pixpin.BuildConfig.EDICION != "restringida" }
 
     @Test
     fun lo_firmado_por_el_servidor_vale_y_lo_tocado_no() {

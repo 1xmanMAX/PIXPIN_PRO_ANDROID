@@ -39,8 +39,14 @@ android {
         buildConfigField("String", "SERVIDOR_PINDESK", "\"${texto("SERVIDOR_PINDESK").trimEnd('/')}\"")
         fun base64(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it in "+/=" }
         buildConfigField("String", "FIRMA_PUBLICA", "\"${base64("FIRMA_PUBLICA")}\"")
-        versionCode = 273
-        versionName = "0.174.0"
+        // **La edición** (7-nov-2026, las tres ramas principales, ver docs/ramas.md): «completa» (main y play-store,
+        // todo abierto) o «restringida» (la rama restringida: el catálogo del servidor decide qué se ve). Sale de
+        // app/edicion.txt, que es lo único que cambia entre ramas (o de -Pedicion=… al compilar).
+        val edicion = ((project.findProperty("edicion") as String?) ?: file("edicion.txt").readText()).trim().lowercase()
+        require(edicion in setOf("completa", "restringida")) { "edición desconocida: $edicion" }
+        buildConfigField("String", "EDICION", "\"$edicion\"")
+        versionCode = 274
+        versionName = "0.175.0"
     }
 
     // **La clave de subida a Google Play** (30-oct-2026): fuera del repositorio. Se lee de

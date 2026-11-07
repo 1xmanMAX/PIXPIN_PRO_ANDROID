@@ -90,9 +90,14 @@ jobs:
       - name: Firmar para repartir
         run: |
           VERSION=$(grep -m1 'versionName' app/build.gradle.kts | sed 's/.*"\(.*\)".*/\1/')
+          # La edición (docs/ramas.md): la completa se llama como siempre; la restringida lleva su nombre.
+          EDICION=$(tr -d '[:space:]' < app/edicion.txt)
+          if [ "$EDICION" = "restringida" ]; then SUFIJO="-restringida"; else SUFIJO=""; fi
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+          echo "SUFIJO=$SUFIJO" >> "$GITHUB_ENV"
+          echo "APK=PixPin-$VERSION$SUFIJO.apk" >> "$GITHUB_ENV"
           # El proyecto deja lo compilado en `pixpin-build`, fuera de app/build.
-          sh herramientas/apk-para-repartir.sh "PixPin-$VERSION.apk"
+          sh herramientas/apk-para-repartir.sh "PixPin-$VERSION$SUFIJO.apk"
 
       - name: Publicar la release
         env:
@@ -100,16 +105,16 @@ jobs:
         run: |
           # Estable: `v<versión>` y release normal. Si no, la prerelease de prueba de siempre.
           if [ "${{ inputs.estable }}" = "true" ]; then
-            TAG="v$VERSION"; TITULO="v$VERSION"; TIPO=""
+            TAG="v$VERSION$SUFIJO"; TITULO="v$VERSION$SUFIJO"; TIPO=""
           else
-            TAG="v$VERSION-prueba"; TITULO="v$VERSION (prueba)"; TIPO="--prerelease"
+            TAG="v$VERSION${SUFIJO:--prueba}"; TITULO="v$VERSION (${SUFIJO:+restringida, }prueba)"; TIPO="--prerelease"
           fi
           NOTAS=$(git log -1 --format=%B -- app/build.gradle.kts | sed '/^Co-Authored-By:/d;/^Claude-Session:/d')
           # Si ya estaba (se volvió a empujar con la misma versión), se reemplaza el APK.
           if gh release view "$TAG" > /dev/null 2>&1; then
-            gh release upload "$TAG" "PixPin-$VERSION.apk" --clobber
+            gh release upload "$TAG" "$APK" --clobber
           else
-            gh release create "$TAG" "PixPin-$VERSION.apk" $TIPO \
+            gh release create "$TAG" "$APK" $TIPO \
               --target "$GITHUB_SHA" --title "$TITULO" --notes "$NOTAS"
           fi
           echo "https://github.com/${{ github.repository }}/releases/tag/$TAG" >> "$GITHUB_STEP_SUMMARY"
