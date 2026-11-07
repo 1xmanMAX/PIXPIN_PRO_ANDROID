@@ -37,6 +37,9 @@ ssh root@TU_IP
 cd /root/pindesk && sh despliegue/instalar.sh api.tudominio.com
 ```
 
+**¿Tu VPS ya tiene nginx con otra web?** Usa `sudo sh despliegue/instalar-nginx.sh tu.dominio` en vez de `instalar.sh`:
+añade solo un sitio nuevo de nginx (con certificado de certbot) y no toca lo que ya hay, ni el Node ni el cortafuegos.
+
 Al acabar enseña **la clave del panel**, **la clave para Google Authenticator** (añádela en la app del móvil) y **la
 clave pública para la app**: guárdalas. Luego edita `/etc/pindesk/config.env`:
 
