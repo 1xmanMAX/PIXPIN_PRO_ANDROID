@@ -37,6 +37,8 @@ object Actualizar {
 
     /** Pregunta al servidor; [actual] es esta versión. */
     suspend fun mirar(actual: Int = com.forge.pixpin.BuildConfig.VERSION_CODE): Nueva? = withContext(Dispatchers.IO) {
+        // En la Play Store se actualiza solo por la Play Store (su política lo exige): aquí nunca se mira.
+        if (com.forge.pixpin.BuildConfig.PARA_PLAY) return@withContext null
         if (!Cuenta.servidor.startsWith("https://") || Cuenta.publica.isBlank()) return@withContext null
         runCatching {
             red.newCall(Request.Builder().url("${Cuenta.servidor}/v1/version").build()).execute().use { r ->
