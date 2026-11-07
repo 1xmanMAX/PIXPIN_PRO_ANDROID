@@ -71,12 +71,21 @@ class PixPinApp : Application() {
     override fun onCreate() {
         super.onCreate()
         CrashLog.install(this)
+        com.forge.pixpin.guardados.Reproductor.app = this
+        // **Qué funciones hay** (7-nov-2026): lo guardado (firmado) antes que nada, y lo nuevo del servidor de fondo.
+        com.forge.pixpin.cuenta.Cuenta.arrancar(this)
+        com.forge.pixpin.cuenta.Disponible.alCambiar = { runCatching { com.forge.pixpin.cuenta.AlSistema.aplicar(this) } }
+        scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.cuenta.AlSistema.aplicar(this@PixPinApp) } }
+        // Atrás vuelve a la pantalla que abrió cada editor, aunque viva en otra tarea. Ver [PilaDeTareas].
+        registerActivityLifecycleCallbacks(PilaDeTareas)
         // **El idioma, lo primero** (1-nov-2026): español o inglés con la regla del PC, antes de que
         // nada lea un texto. Ver [com.forge.pixpin.ajustes.IdiomaDeLaApp].
         com.forge.pixpin.ajustes.IdiomaDeLaApp.alArrancar(this)
         com.forge.pixpin.ui.Textos.app = this
         // **La nube de los chats compartidos** (2-nov-2026): su bucle, si está configurada no hace nada sin chats.
-        runCatching { com.forge.pixpin.sincro.nube.NubeEnMarcha.instalar(this) }
+        // **Solo arranca lo de las funciones que se ven** (7-nov-2026): lo oculto no gasta (ni red, ni batería).
+        val ve = { id: String -> com.forge.pixpin.cuenta.Disponible.ve(id) }
+        if (ve(com.forge.pixpin.cuenta.Disponible.CHATS) || ve(com.forge.pixpin.cuenta.Disponible.SINCRONIZAR)) runCatching { com.forge.pixpin.sincro.nube.NubeEnMarcha.instalar(this) }
         com.forge.pixpin.motor.DrawFonts.app = this
         // **El proceso del compresor no es la aplicación**: solo corre [com.forge.pixpin.pdf.PdfSqueezeService].
         // Nada de presencia en la red, ni reparar chats, ni reponer documentos desde dos procesos a la vez.
@@ -110,12 +119,12 @@ class PixPinApp : Application() {
         com.forge.pixpin.pdf.ComprimirPdf.alMomento = { archivo, nivel -> com.forge.pixpin.pdf.PdfSqueezeService.ahora(this, archivo, nivel) }
         // Localizable para los otros aparatos del grupo mientras haya una pantalla de PixPin a la
         // vista. Ver [com.forge.pixpin.sincro.Presencia].
-        com.forge.pixpin.sincro.Presencia.instalar(this)
+        if (ve(com.forge.pixpin.cuenta.Disponible.SINCRONIZAR)) com.forge.pixpin.sincro.Presencia.instalar(this)
         // **Lo grabado se pasa a texto siempre** (28-oct-2026): la cola retoma lo que quedó a medias al
         // volver a PixPin y lo que esperaba al modelo al volver la red. Ver [com.forge.pixpin.guardados.ColaDeTexto].
-        com.forge.pixpin.guardados.PasarATexto.vigilar(this)
+        if (ve(com.forge.pixpin.cuenta.Disponible.GRABAR) || ve(com.forge.pixpin.cuenta.Disponible.MUSICA)) com.forge.pixpin.guardados.PasarATexto.vigilar(this)
         // **La barra de la reunión presencial** en cada pantalla mientras se graba. Ver [com.forge.pixpin.guardados.ReunionEnLaApp].
-        com.forge.pixpin.guardados.ReunionEnLaApp.vigilar(this)
+        if (ve(com.forge.pixpin.cuenta.Disponible.GRABAR)) com.forge.pixpin.guardados.ReunionEnLaApp.vigilar(this)
         // **Lo que dejaron los archivos abiertos de paso** (27-oct-2026): un cierre a la fuerza no
         // borra la copia ni lo anotado sin guardar. Ver [com.forge.pixpin.guardados.ModoDePaso].
         com.forge.pixpin.guardados.AbrirDePaso.limpiarAlArrancar(this)
@@ -128,6 +137,18 @@ class PixPinApp : Application() {
         // Y lo que el capturador no ve —crashes nativos, ANR—, que Android sí
         // apunta: se recoge al arrancar y acaba en el mismo informe.
         scope.launch { CrashLog.recogerMuertesDelSistema(this@PixPinApp) }
+        // **La urgencia de lo apuntado aquí, al momento** (4-nov-2026): al cambiar los mensajes, pasado un
+        // respiro, Jev revisa las tareas nuevas de las listas de este aparato y lo guarda para que viaje.
+        // Lo ya revisado (aquí o en el PC) sale del disco: no gasta. Ver [com.forge.pixpin.jev.UrgenciaEnLaApp].
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        scope.launch(Dispatchers.IO) {
+            com.forge.pixpin.guardados.MensajesStore.cambios.debounce(5_000).collect {
+                runCatching {
+                    val nombres = proyectos.proyectos.value.associate { it.id to it.nombre }
+                    if (ve(com.forge.pixpin.cuenta.Disponible.JEV)) com.forge.pixpin.jev.UrgenciaEnLaApp.alCambiarLasTareas(this@PixPinApp, nombres)
+                }
+            }
+        }
         // Los modelos del asistente que se bajaban al teléfono ya no se usan: fuera, que ocupan gigas.
         scope.launch(Dispatchers.IO) { runCatching { com.forge.pixpin.asistente.Asistente.limpiarModelosLocales(this@PixPinApp) } }
         // La biblioteca de figuras viaja por el chat «Asistente» (mensaje `auto-figuras`).
@@ -141,7 +162,7 @@ class PixPinApp : Application() {
         settings = SettingsRepository(this)
         // **El estado de las IA** (1-nov-2026): los puntitos de Claude, DeepSeek y Jev junto al botón
         // de sincronizar. Escucha cada petición y comprueba sin gastar en su hilo. Ver [com.forge.pixpin.estadoia.EstadoDeLasIa].
-        com.forge.pixpin.estadoia.EstadoDeLasIa.arrancar(this)
+        if (ve(com.forge.pixpin.cuenta.Disponible.ASISTENTE)) com.forge.pixpin.estadoia.EstadoDeLasIa.arrancar(this)
         scope.launch { settings.settings.collect { ajustes = it; com.forge.pixpin.pdf.ComprimirPdf.nivel = it.compresionPdf } }
         // **Los widgets de tareas y de galería, al día** con el chat y con las capturas.
         // Ver [com.forge.pixpin.widget.AvisoDeWidgets].
@@ -153,6 +174,7 @@ class PixPinApp : Application() {
         // Ver [com.forge.pixpin.horario.AvisosDelHorario].
         scope.launch(Dispatchers.IO) {
             // Cada asignatura con su lista y su enlace `lista:<id>` (2-nov-2026), luego las llamadas.
+            if (!ve(com.forge.pixpin.cuenta.Disponible.HORARIO)) return@launch
             runCatching { com.forge.pixpin.horario.AvisosDelHorario.enlazarAlArrancar(this@PixPinApp) }
             runCatching { com.forge.pixpin.horario.AvisosDelHorario.reprogramar(this@PixPinApp) }
         }
@@ -175,7 +197,7 @@ class PixPinApp : Application() {
             while (true) {
                 runCatching {
                     val dias = settings.settings.first().diasCaducidad
-                    com.forge.pixpin.capture.BarrenderoDeCapturas.barrer(this@PixPinApp, System.currentTimeMillis(), dias)
+                    if (ve(com.forge.pixpin.cuenta.Disponible.CAPTURAS)) com.forge.pixpin.capture.BarrenderoDeCapturas.barrer(this@PixPinApp, System.currentTimeMillis(), dias)
                 }
                 kotlinx.coroutines.delay(com.forge.pixpin.capture.BarrenderoDeCapturas.CADA_MS)
             }

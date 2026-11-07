@@ -1,6 +1,11 @@
 package com.forge.pixpin.ui
 
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material.icons.filled.Draw
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.material.icons.filled.FormatIndentIncrease
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.ui.res.stringResource
 import androidx.compose.material.icons.filled.BorderColor
@@ -193,7 +198,7 @@ class MarkdownEditorActivity : ComponentActivity() {
         val soloLeer = intent.getBooleanExtra(EXTRA_SOLO_LEER, false)
         val archivo = intent.getStringExtra(EXTRA_NOMBRE)?.takeIf { it.isNotBlank() } ?: paso?.nombre
         setContent {
-            PixPinTheme {
+            PixPinTheme(sinCosmos = true) {
               Box(Modifier.fillMaxSize()) {
                 Pantalla(
                     inicial = inicial,
@@ -325,8 +330,21 @@ class MarkdownEditorActivity : ComponentActivity() {
                         )
                     }
                 )
+                // **Con lo anotado**, la primera, si la nota tiene tinta: la foto de la nota que se hizo al tocar
+                // «Compartir» (ver `pdfConLaTinta`).
+                val conTinta = TintaParaCompartir.pdf?.let { bytes ->
+                    TintaParaCompartir.pdf = null
+                    com.forge.pixpin.ui.Compartible.Formato(
+                        "pdf-tinta", Icons.Filled.Draw, "PDF con anotaciones", com.forge.pixpin.ui.Compartible.NINGUNA,
+                        generar = {
+                            val f = java.io.File(com.forge.pixpin.ui.ExportarVisor.carpeta(this@MarkdownEditorActivity), com.forge.pixpin.ui.ExportarVisor.nombre("$titulo (anotada)", "pdf"))
+                            f.writeBytes(bytes)
+                            com.forge.pixpin.ui.Compartible.Salida(f, "application/pdf", "Como se ve, con lo anotado encima")
+                        }
+                    )
+                }
                 com.forge.pixpin.ui.Compartible(
-                    base.titulo, base.paginas, base.formatos.map { if (it.id == "word") word else it }, base.marcadas, base.contenido
+                    base.titulo, base.paginas, listOfNotNull(conTinta) + base.formatos.map { if (it.id == "word") word else it }, base.marcadas, base.contenido
                 )
             }.onFailure { android.util.Log.e("PixPinCompartir", "nota", it) }.getOrNull()
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -639,7 +657,7 @@ private fun Pantalla(
     // **Lo que queda encima del texto**: la barra del sistema y la pastilla. El documento empieza ahí,
     // como antes bajo la barra fija, para que la tinta y los marcos ya puestos no se corran.
     val densidadDeLaPantalla = androidx.compose.ui.platform.LocalDensity.current
-    val margenArriba = androidx.compose.foundation.layout.WindowInsets.statusBars.getTop(densidadDeLaPantalla) +
+    val margenArriba = com.forge.pixpin.ui.HuecoDeArriba.getTop(densidadDeLaPantalla) +
         with(densidadDeLaPantalla) { ALTO_DE_LA_PASTILLA.roundToPx() }
     // Los marcadores de la nota, en fracción del alto: el formato del PC para notas y páginas.
     var marcadores by remember { mutableStateOf(emptyList<com.forge.pixpin.motor.Lectura.Marcador>()) }
@@ -670,7 +688,25 @@ private fun Pantalla(
     val marcosDeLaNota = remember(baseDeLaNota) {
         MarcosDelVisor(baseDeLaNota?.let { com.forge.pixpin.motor.MarcosDelDocumento.archivo(contextoDelEditor.filesDir, it) })
     }
-    fun vistaDeLaTinta() = com.forge.pixpin.motor.Viewport(scrollX = 0.0, scrollY = (margenArriba - desplazado.value) / densidadDeLaNota, zoom = densidadDeLaNota)
+    // **Espacio a los costados para anotar** (5-nov-2026, el usuario: «que al visualizador de markdown se le pueda
+    // añadir un espacio a los costados para hacer anotaciones»): el `.espacios` de la nota, el mismo fichero y los
+    // mismos valores que el del PDF (1 izquierda, 2 derecha, 3 los dos), que viaja con ella. El texto se estrecha y
+    // la tinta sigue unida a él: su origen se corre con el margen de la izquierda, y lo de los márgenes queda fuera
+    // del texto (x negativa a la izquierda).
+    val archivoDeEspacios = remember(baseDeLaNota) { baseDeLaNota?.let { com.forge.pixpin.sincro.AnotacionesDelAdjunto.espacios(contextoDelEditor.filesDir, it) } }
+    var espaciosDeLaNota by remember(archivoDeEspacios) {
+        mutableIntStateOf(runCatching { archivoDeEspacios?.takeIf { it.isFile }?.readText()?.trim()?.toInt() }.getOrNull()?.coerceIn(0, 3) ?: 0)
+    }
+    fun ponerEspacios(n: Int) {
+        espaciosDeLaNota = n
+        archivoDeEspacios?.let { f -> runCatching { f.parentFile?.mkdirs(); f.writeText(n.toString()) } }
+    }
+    val anchoDeLaPantallaDp = androidx.compose.ui.platform.LocalConfiguration.current.screenWidthDp
+    val margenDeEspacio = (anchoDeLaPantallaDp * 0.28f).dp
+    val espacioIzq = if (viendo && espaciosDeLaNota and 1 != 0) margenDeEspacio else 0.dp
+    val espacioDer = if (viendo && espaciosDeLaNota and 2 != 0) margenDeEspacio else 0.dp
+    val corridoX = with(densidadDeLaPantalla) { espacioIzq.toPx() }
+    fun vistaDeLaTinta() = com.forge.pixpin.motor.Viewport(scrollX = corridoX / densidadDeLaNota, scrollY = (margenArriba - desplazado.value) / densidadDeLaNota, zoom = densidadDeLaNota)
     fun dejarDeAnotarLaNota() {
         if (!anotandoLaNota) return
         anotandoLaNota = false
@@ -687,12 +723,45 @@ private fun Pantalla(
                 ir = { m -> desplazado.scrollTo((m.y0 * densidadDeLaNota).toInt()) },
                 cajaEnVentana = { m ->
                     androidx.compose.ui.geometry.Rect(
-                        (m.x0 * densidadDeLaNota).toFloat(), (m.y0 * densidadDeLaNota + margenArriba - desplazado.value).toFloat(),
-                        (m.x1 * densidadDeLaNota).toFloat(), (m.y1 * densidadDeLaNota + margenArriba - desplazado.value).toFloat()
+                        (m.x0 * densidadDeLaNota + corridoX).toFloat(), (m.y0 * densidadDeLaNota + margenArriba - desplazado.value).toFloat(),
+                        (m.x1 * densidadDeLaNota + corridoX).toFloat(), (m.y1 * densidadDeLaNota + margenArriba - desplazado.value).toFloat()
                     ).translate(cajaDeLaNota.topLeft)
                 }
             )
         }
+    }
+    /**
+     * **La nota entera como se ve, con lo anotado**, en PDF (5-nov-2026): se baja por la nota hoja a hoja (del
+     * ancho de la pantalla y la altura de un A4), se fotografía cada trozo con la tinta encima y sin las barras,
+     * y vuelve adonde estaba. Null si no se pudo.
+     */
+    suspend fun pdfConLaTinta(): ByteArray? {
+        val actividad = contextoDelEditor as? android.app.Activity ?: return null
+        val caja = cajaDeLaNota
+        if (caja.width <= 1f || caja.height <= margenArriba + 1f) return null
+        val visible = caja.height - margenArriba
+        val hoja = minOf(caja.width * 842f / 595f, visible)
+        val total = desplazado.maxValue + visible
+        val antes = desplazado.value
+        val fotos = ArrayList<android.graphics.Bitmap>()
+        marcosDeLaNota.imprimiendo = true
+        try {
+            var y = 0f
+            while (y < total - 1f && fotos.size < 60) {
+                desplazado.scrollTo(y.toInt())
+                kotlinx.coroutines.delay(260)
+                val real = desplazado.value.toFloat()
+                val alto = minOf(hoja, total - y)
+                val arriba = caja.top + margenArriba + (y - real)
+                ImprimirMarcos.fotografiar(actividad, androidx.compose.ui.geometry.Rect(caja.left, arriba, caja.right, arriba + alto))?.let { fotos += it }
+                y += hoja
+            }
+        } finally {
+            marcosDeLaNota.imprimiendo = false
+            desplazado.scrollTo(antes)
+        }
+        if (fotos.isEmpty()) return null
+        return kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { ImprimirMarcos.aPdf(fotos) }
     }
     /** «Imprimir todo»: la nota entera en PDF, con su letra (el mismo PDF de las notas). */
     fun imprimirLaNota() {
@@ -882,6 +951,9 @@ private fun Pantalla(
     ) {
         Column(Modifier.fillMaxSize()) {
             Box(Modifier.weight(1f)) {
+            // Los espacios para anotar, un poco más oscuros que el papel: se ve dónde está el margen.
+            if (espacioIzq > 0.dp) Box(Modifier.align(Alignment.CenterStart).fillMaxHeight().width(espacioIzq).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.045f)))
+            if (espacioDer > 0.dp) Box(Modifier.align(Alignment.CenterEnd).fillMaxHeight().width(espacioDer).background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.045f)))
             Box(
                 Modifier
                     .fillMaxSize()
@@ -892,9 +964,21 @@ private fun Pantalla(
                             alMover = { if (!anotandoLaNota && !marcosDeLaNota.activo) aLaVista = false }
                         ) else Modifier
                     )
+                    // **Mantener el dedo en el texto, mirando, pasa a marcarlo** (5-nov-2026, el usuario: «no me deja
+                    // seleccionar el texto de un markdown para marcarlo en modo visualización»): era solo el botón
+                    // «Marcar texto» de la pastilla. Ahora mantener entra en ese modo, donde se elige y se marca.
+                    .then(
+                        if (viendo && !anotandoLaNota && !marcosDeLaNota.activo && paginaDeMarcas != null && !llano) Modifier.pointerInput(Unit) {
+                            detectTapGestures(onLongPress = {
+                                dejarDeAnotarLaNota(); poniendoMarca = false; sitio = null; marcandoTexto = true; viendo = false
+                                Toast.makeText(contextoDelEditor, contextoDelEditor.getString(com.forge.pixpin.R.string.mt_pista), Toast.LENGTH_SHORT).show()
+                            })
+                        } else Modifier
+                    )
                     .verticalScroll(desplazado)
                     .padding(top = with(densidadDeLaPantalla) { margenArriba.toDp() })
                     .then(if (viendo) Modifier.navigationBarsPadding() else Modifier)
+                    .padding(start = espacioIzq, end = espacioDer)
                     .padding(16.dp)
             ) {
                 if (viendo && valor.text.isBlank()) {
@@ -993,7 +1077,7 @@ private fun Pantalla(
                         // Dos dedos mueven la nota: solo de alto, y sin salirse.
                         val vp = tintaDeLaNota.scene.viewport
                         val y = (margenArriba - vp.scrollY * densidadDeLaNota).toInt().coerceIn(0, desplazado.maxValue)
-                        tintaDeLaNota.setViewport(vp.copy(scrollX = 0.0, scrollY = (margenArriba - y) / densidadDeLaNota))
+                        tintaDeLaNota.setViewport(vp.copy(scrollX = corridoX / densidadDeLaNota, scrollY = (margenArriba - y) / densidadDeLaNota))
                         alcanceDeMarcas.launch { desplazado.scrollTo(y) }
                         if (!trazando) tickDeLaTinta++
                     }
@@ -1008,8 +1092,8 @@ private fun Pantalla(
             }
             if (viendo && !anotandoLaNota && (marcosDeLaNota.activo || marcosDeLaNota.lista.isNotEmpty())) CapaDeMarcos(
                 marcosDeLaNota,
-                aPantalla = { x, y, _ -> androidx.compose.ui.geometry.Offset((x * densidadDeLaNota).toFloat(), (y * densidadDeLaNota + margenArriba - desplazado.value).toFloat()) },
-                aDocumento = { o -> PuntoDelDocumento(o.x / densidadDeLaNota, (o.y - margenArriba + desplazado.value) / densidadDeLaNota) },
+                aPantalla = { x, y, _ -> androidx.compose.ui.geometry.Offset((x * densidadDeLaNota + corridoX).toFloat(), (y * densidadDeLaNota + margenArriba - desplazado.value).toFloat()) },
+                aDocumento = { o -> PuntoDelDocumento((o.x - corridoX) / densidadDeLaNota, (o.y - margenArriba + desplazado.value) / densidadDeLaNota) },
                 pxPorUnidad = { densidadDeLaNota },
                 alIr = { m -> alcanceDeMarcas.launch { desplazado.animateScrollTo((m.y0 * densidadDeLaNota).toInt()) } },
                 alImprimir = { imprimirLosMarcosDeLaNota() },
@@ -1032,7 +1116,7 @@ private fun Pantalla(
             // **Y se va con la pastilla** (27-oct-2026): al mover la nota, y vuelve al tocar. Ver [RielALaVista].
             // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
             val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deBase(contextoDelEditor, archivoDeMarcasDeTexto?.name) }.getOrNull() } }
-            com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { (contextoDelEditor as? android.app.Activity)?.finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
+            com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { (contextoDelEditor as? android.app.Activity)?.finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).debajoDeLaCamara().padding(start = 12.dp, top = 60.dp))
             if (viendo && !marcosDeLaNota.imprimiendo) RielDelVisor(
                 visible = RielALaVista.visible(barras, anotandoLaNota, marcosDeLaNota.activo, poniendoMarca),
                 alUsar = { toques++ },
@@ -1065,7 +1149,7 @@ private fun Pantalla(
             // `pasos` está solo para que Compose vuelva a mirar deshacer y rehacer: el historial es
             // un objeto normal y no un estado observable.
             @Suppress("UNUSED_EXPRESSION") pasos
-            val botonDeComentarios = if (comentarios == null) null else BotonDeLector(Icons.Filled.ChatBubbleOutline, "Comentarios", insignia = fichero.abiertos) { viendoComentarios = -1 }
+            val botonDeComentarios = if (comentarios == null || !com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.COMENTARIOS)) null else BotonDeLector(Icons.Filled.ChatBubbleOutline, "Comentarios", insignia = fichero.abiertos) { viendoComentarios = -1 }
             val guardarYCerrar = BotonDeLector(Icons.Filled.Check, "Guardar") {
                 if (comentarios != null && fichero.comentarios.isNotEmpty()) cambiarComentarios(fichero, valor.text)
                 onGuardar(valor.text)
@@ -1078,16 +1162,32 @@ private fun Pantalla(
                     BotonDeLector(Icons.Filled.Check, stringResource(com.forge.pixpin.R.string.mt_listo)) { marcandoTexto = false; sitio = null; viendo = true }
                 ) else if (viendo) listOfNotNull(
                     // **Marcar el texto** (2-nov-2026): se elige sin teclado y se marca con la barrita.
-                    if (paginaDeMarcas == null || llano) null else BotonDeLector(Icons.Filled.BorderColor, stringResource(com.forge.pixpin.R.string.mt_marcar_texto)) {
+                    if (paginaDeMarcas == null || llano || !com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.MARCAS_TEXTO)) null else BotonDeLector(Icons.Filled.BorderColor, stringResource(com.forge.pixpin.R.string.mt_marcar_texto)) {
                         dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = false; sitio = null; marcandoTexto = true; viendo = false
                     },
                     // **Escribir el texto** (el `EDIT_NOTE` del PC): el lápiz del riel es para anotar.
                     // Un adjunto del chat se mira y se anota, pero no se escribe ([soloLeer]).
+                    // Los espacios a los costados para anotar: puestos o quitados de un toque.
+                    BotonDeLector(Icons.Filled.FormatIndentIncrease, if (espaciosDeLaNota == 0) "Espacios para anotar" else "Quitar los espacios") {
+                        ponerEspacios(if (espaciosDeLaNota == 0) 3 else 0)
+                        tintaDeLaNota.setViewport(vistaDeLaTinta()); tickDeLaTinta++; toques++
+                    },
                     if (soloLeer) null else BotonDeLector(Icons.Filled.EditNote, "Escribir") {
                         dejarDeAnotarLaNota(); marcosDeLaNota.activo = false; poniendoMarca = false; viendo = false
                     },
                     botonDeComentarios,
-                    BotonDeLector(IconoDeCompartir, "Compartir") { CompartirNativo.texto(contextoDelEditor, valor.text, titulo); toques++ },
+                    BotonDeLector(IconoDeCompartir, "Compartir") {
+                        // **La hoja de compartir de la app** (3-nov-2026), la de todo PinDesk; sin ella, el panel del teléfono.
+                        val global = masAcciones.firstOrNull { it.first == "Compartir…" }?.second
+                        toques++
+                        // **Con lo anotado** (5-nov-2026, el usuario: «al exportarlo no exporta con sus anotaciones»):
+                        // si la nota tiene tinta, antes de abrir la hoja se fotografía entera tal como se ve.
+                        if (global != null && tintaDeLaNota.scene.elements.any { !it.isDeleted }) alcanceDeMarcas.launch {
+                            TintaParaCompartir.pdf = runCatching { pdfConLaTinta() }.getOrNull()
+                            global(valor.text)
+                        } else if (global != null) { TintaParaCompartir.pdf = null; global(valor.text) }
+                        else CompartirNativo.texto(contextoDelEditor, valor.text, titulo)
+                    },
                     guardarYCerrar.takeIf { hayCambios }
                 ) else listOfNotNull(
                     BotonDeLector(Icons.Filled.Visibility, "Ver la nota") { viendo = true },
@@ -1590,4 +1690,9 @@ private fun elReproductorDeLaNota(): com.forge.pixpin.motormd.AudioDeLaNota {
                 estado.ruta == ruta && estado.sonando
         }
     }
+}
+
+/** El PDF con lo anotado de la nota, de la pantalla a la hoja de compartir (5-nov-2026). Ver `pdfConLaTinta`. */
+internal object TintaParaCompartir {
+    @Volatile var pdf: ByteArray? = null
 }

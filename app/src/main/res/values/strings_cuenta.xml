@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="funciones_abrir">Abrir un archivo</string>
+    <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, planos y 3D</string>
+    <string name="funciones_asistente">Asistente</string>
+    <string name="funciones_asistente_detalle">Pregúntale lo que quieras</string>
+</resources>

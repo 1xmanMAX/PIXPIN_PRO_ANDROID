@@ -1,5 +1,6 @@
 package com.forge.pixpin.sincro
 
+import kotlinx.coroutines.launch
 import android.app.Activity
 import android.app.Application
 import android.os.Bundle
@@ -35,7 +36,36 @@ object Presencia {
         private set
     private val principal = Handler(Looper.getMainLooper())
     private var aLaVista = 0
-    private val apagar = Runnable { if (aLaVista == 0 && !GrabacionDelMovil.grabando) { red.cerrar(); SincronizacionAutomatica.alaVista(false); BalizaDelMovil.aLaVista(false) } }
+    private val apagar = Runnable { if (aLaVista == 0 && !GrabacionDelMovil.grabando && !deFondo) { red.cerrar(); SincronizacionAutomatica.alaVista(false); BalizaDelMovil.aLaVista(false) } }
+
+    /** **Sincronizando en segundo plano** ([SincronizarDeFondoService]): no se apaga al salir. */
+    @Volatile private var deFondo = false
+
+    /**
+     * Lo dice el servicio al arrancar y al pararse.
+     *
+     * **De fondo, lo local solo con Wi-Fi** (6-nov-2026, el usuario): el PC y los demás aparatos están en la red de
+     * casa, así que con datos móviles (o sin red) escuchar, anunciarse y sondear es gastar batería y datos para nada:
+     * se apaga, y queda solo la nube. Al volver la Wi-Fi, vuelve solo ([alCambiarLaRed]).
+     */
+    fun deFondo(si: Boolean) {
+        deFondo = si
+        SincronizacionAutomatica.deFondo = si && aLaVista == 0
+        if (!::red.isInitialized) return
+        if (si) principal.post { alCambiarLaRed() }
+        else principal.post { if (aLaVista == 0) { principal.removeCallbacks(apagar); principal.postDelayed(apagar, 1_000) } }
+    }
+
+    /** De fondo: lo local, encendido con Wi-Fi y apagado sin ella. */
+    private fun alCambiarLaRed() {
+        if (!deFondo || aLaVista > 0 || GrabacionDelMovil.grabando) return
+        if (RedDelTelefono.enWifi) {
+            encender(); SincronizacionAutomatica.alaVista(true); BalizaDelMovil.aLaVista(true)
+            SincronizacionAutomatica.despertarYa()
+        } else {
+            red.cerrar(); SincronizacionAutomatica.alaVista(false); BalizaDelMovil.aLaVista(false)
+        }
+    }
 
     /**
      * **Mientras el teléfono graba, se sigue escuchando** (28-oct-2026, §13): el PC le manda capturas a
@@ -52,6 +82,11 @@ object Presencia {
     fun instalar(aplicacion: Application) {
         app = aplicacion
         red = Red(aplicacion)
+        // La red que Android avisa: de fondo, lo local va y viene con la Wi-Fi.
+        RedDelTelefono.instalar(aplicacion)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main).launch {
+            RedDelTelefono.tipo.collect { alCambiarLaRed() }
+        }
         SincronizacionAutomatica.instalar(aplicacion)
         // La cámara para la reunión del PC: pregunta con PixPin a la vista (28-oct-2026).
         CamaraDelPc.instalar(aplicacion)
@@ -61,11 +96,17 @@ object Presencia {
         aplicacion.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
                 aLaVista++
+                SincronizacionAutomatica.deFondo = false
                 if (aLaVista == 1) { encender(); SincronizacionAutomatica.alaVista(true); BalizaDelMovil.aLaVista(true) }
             }
             override fun onActivityStopped(activity: Activity) {
                 aLaVista = (aLaVista - 1).coerceAtLeast(0)
-                if (aLaVista == 0) { principal.removeCallbacks(apagar); principal.postDelayed(apagar, 60_000) }
+                if (aLaVista == 0) {
+                    SincronizacionAutomatica.deFondo = deFondo
+                    principal.removeCallbacks(apagar)
+                    // De fondo y sin Wi-Fi, lo local se apaga ya; con ella, se queda (y sondea despacio).
+                    if (deFondo) principal.postDelayed({ alCambiarLaRed() }, 60_000) else principal.postDelayed(apagar, 60_000)
+                }
             }
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
             override fun onActivityResumed(activity: Activity) {}
@@ -88,6 +129,8 @@ object Presencia {
             // **También con chats compartidos** (13-oct-2026): las personas de esos chats llaman aquí
             // aunque este aparato no esté en ningún grupo. Ver [Compartidos].
             val compartidos = runCatching { CompartidosEnDisco(app.filesDir).hayAlguno(id.yo.id) }.getOrDefault(false)
+            // Con PinDesk a la vista, el servicio de segundo plano si hay con quién (3-nov-2026).
+            if (aLaVista > 0) SincronizarDeFondoService.siToca(app, id.enGrupo || compartidos)
             if (!id.enGrupo && !compartidos) { principal.post { red.cerrar() }; return@Thread }
             val etiqueta = id.codigo?.takeIf { id.enGrupo }?.let { Grupo.etiqueta(Grupo.clave(it)) }
             principal.post {

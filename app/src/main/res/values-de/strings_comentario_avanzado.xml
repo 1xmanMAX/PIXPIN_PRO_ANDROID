@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Dringend</string>
+    <string name="cm_tipo_alta">Hohe Priorität</string>
+    <string name="cm_tipo_media">Mittlere Priorität</string>
+    <string name="cm_tipo_nota">Notiz</string>
+    <string name="cm_abrir">Chat öffnen</string>
+    <string name="cm_resolver">Erledigen</string>
+    <string name="cm_reabrir">Wieder öffnen</string>
+    <string name="cm_crear_tarea">Aufgabe erstellen</string>
+    <string name="cm_tarea_creada">Aufgabe im Eingang erstellt</string>
+    <string name="cm_quitar">Entfernen</string>
+    <string name="cm_lista_titulo">Kommentare</string>
+    <string name="cm_sin_entradas">Schreib die erste Nachricht, füge ein Bild ein oder hänge eine Datei an.</string>
+    <string name="cm_resuelto">Erledigt</string>
+    <string name="cm_sin_sitio">Dieses Dokument ist nicht gespeichert: Anhängen ist nicht möglich.</string>
+    <string name="cm_abre_el_chat">Öffne den Chat, um zu dieser Nachricht zu gehen.</string>
+    <string name="cm_elegir_atajo">Verknüpfung zu…</string>
+    <string name="cm_sin_atajos">Wähle etwas auf der Leinwand aus oder öffne ein Dokument aus einem Chat, um eine Verknüpfung zu erstellen.</string>
+    <string name="cm_elemento">Element</string>
+    <string name="cm_mensaje">Chatnachricht</string>
+    <string name="cm_lienzo_propio">Leinwand</string>
+    <string name="cm_anotar">Kommentieren</string>
+    <string name="cm_anotada">Kommentiert</string>
+    <string name="cm_plantando_toque">Tippe dorthin, wo der Kommentar kleben soll</string>
+    <string name="cm_lista_vacia_toque">Noch keine Kommentare. Wähle eine Art und tippe dorthin, wo er kleben soll.</string>
+    <string name="cm_escribir_toque">Schreiben…</string>
+    <string name="cm_adjuntar">Datei anhängen</string>
+    <string name="cm_comentar">Kommentieren</string>
+    <string name="cm_enviar">Senden</string>
+    <string name="cm_camara">Kamera</string>
+    <string name="cm_galeria">Galerie</string>
+    <string name="cm_nueva_tarea">Neue Aufgabe</string>
+</resources>

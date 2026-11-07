@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">अत्यावश्यक</string>
+    <string name="cm_tipo_alta">उच्च प्राथमिकता</string>
+    <string name="cm_tipo_media">मध्यम प्राथमिकता</string>
+    <string name="cm_tipo_nota">नोट</string>
+    <string name="cm_abrir">चैट खोलें</string>
+    <string name="cm_resolver">हल करें</string>
+    <string name="cm_reabrir">फिर से खोलें</string>
+    <string name="cm_crear_tarea">कार्य बनाएँ</string>
+    <string name="cm_tarea_creada">इनबॉक्स में कार्य बनाया गया</string>
+    <string name="cm_quitar">हटाएँ</string>
+    <string name="cm_lista_titulo">टिप्पणियाँ</string>
+    <string name="cm_sin_entradas">पहला संदेश लिखें, कोई चित्र चिपकाएँ या फ़ाइल जोड़ें।</string>
+    <string name="cm_resuelto">हल हो गया</string>
+    <string name="cm_sin_sitio">यह दस्तावेज़ सहेजा नहीं गया है: कुछ जोड़ा नहीं जा सकता।</string>
+    <string name="cm_abre_el_chat">उस संदेश पर जाने के लिए चैट खोलें।</string>
+    <string name="cm_elegir_atajo">इसका शॉर्टकट…</string>
+    <string name="cm_sin_atajos">शॉर्टकट बनाने के लिए कैनवास पर कुछ चुनें, या किसी चैट का दस्तावेज़ खोलें।</string>
+    <string name="cm_elemento">तत्व</string>
+    <string name="cm_mensaje">चैट संदेश</string>
+    <string name="cm_lienzo_propio">कैनवास</string>
+    <string name="cm_anotar">एनोटेट करें</string>
+    <string name="cm_anotada">एनोटेट किया गया</string>
+    <string name="cm_plantando_toque">जहाँ टिप्पणी चिपकानी है वहाँ टैप करें</string>
+    <string name="cm_lista_vacia_toque">अभी कोई टिप्पणी नहीं। एक प्रकार चुनें और जहाँ चिपकाना है वहाँ टैप करें।</string>
+    <string name="cm_escribir_toque">लिखें…</string>
+    <string name="cm_adjuntar">फ़ाइल जोड़ें</string>
+    <string name="cm_comentar">टिप्पणी</string>
+    <string name="cm_enviar">भेजें</string>
+    <string name="cm_camara">कैमरा</string>
+    <string name="cm_galeria">गैलरी</string>
+    <string name="cm_nueva_tarea">नया कार्य</string>
+</resources>

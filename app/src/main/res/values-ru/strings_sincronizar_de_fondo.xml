@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sincronizar en segundo plano (3-nov-2026) -->
+<resources>
+    <string name="sf_canal">Фоновая синхронизация</string>
+    <string name="sf_canal_detalle">Продолжает синхронизацию с вашими устройствами и общими чатами</string>
+    <string name="sf_aviso">PinDesk синхронизирует в фоне</string>
+    <string name="sf_ajuste">Синхронизировать в фоне</string>
+    <string name="sf_ajuste_detalle">Продолжает передавать новое на другие устройства и в общие чаты после выхода из приложения.</string>
+</resources>

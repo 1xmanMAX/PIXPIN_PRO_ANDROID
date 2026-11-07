@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">閉じる</string>
+    <string name="ip_figuras">図形</string>
+    <string name="ip_figuras_cuenta">図形とテンプレート %1$d 件</string>
+    <string name="ip_todas">すべて</string>
+    <string name="ip_buscar_figuras">図形を検索</string>
+    <string name="ip_adjuntar">添付</string>
+    <string name="ip_pegar">貼り付け</string>
+    <string name="ip_figuras_dia">昼の図形</string>
+    <string name="ip_figuras_noche">夜の図形</string>
+</resources>

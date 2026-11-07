@@ -38,6 +38,8 @@ object Reproductor {
     val VELOCIDADES = listOf(1f, 1.25f, 1.5f, 2f, 0.75f)
 
     private var reproductor: MediaPlayer? = null
+    /** La aplicación, para avisar al sistema de lo que suena ([ReproduciendoService]). La pone [com.forge.pixpin.PixPinApp]. */
+    var app: android.content.Context? = null
     /** Si el de ahora se preparó para el auricular de llamadas. Ver [com.forge.pixpin.audio.SalidaDeAudio]. */
     private var alOido = false
     private val reloj = Handler(Looper.getMainLooper())
@@ -96,6 +98,7 @@ object Reproductor {
             p.start()
         }
         estado.value = estado.value.copy(sonando = true)
+        app?.let { ReproduciendoService.arrancar(it) }
         reloj.removeCallbacks(latido)
         reloj.post(latido)
         // Mientras suena, el teléfono en modo de llamada si va por el auricular; y llevárselo a la

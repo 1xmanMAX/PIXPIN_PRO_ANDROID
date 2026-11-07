@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">बंद करें</string>
+    <string name="ip_figuras">आकृतियाँ</string>
+    <string name="ip_figuras_cuenta">%1$d आकृतियाँ और टेम्पलेट</string>
+    <string name="ip_todas">सभी</string>
+    <string name="ip_buscar_figuras">आकृतियाँ खोजें</string>
+    <string name="ip_adjuntar">संलग्न करें</string>
+    <string name="ip_pegar">चिपकाएँ</string>
+    <string name="ip_figuras_dia">दिन की आकृतियाँ</string>
+    <string name="ip_figuras_noche">रात की आकृतियाँ</string>
+</resources>

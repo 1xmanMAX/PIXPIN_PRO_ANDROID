@@ -757,8 +757,11 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
             // «informe (1).pdf» se quedaba en «informe (1», que no es un archivo: no viajaba nunca y
             // el PC lo reenviaba en cada vuelta (1-oct-2026, arreglado igual en el PC).
             m.ruta?.let { rutas.relativa(it) }?.let { poner(it, etiqueta) }
-            // Lo anotado: sobre un adjunto, y los comentarios de una nota (`anot-<uid>.comentarios.json`).
-            if ((m.ruta != null || m.clase == Clase.NOTA) && anotado.isNotEmpty()) anotado[Codigos.unico(m)]?.forEach { poner(it, etiqueta) }
+            // Lo anotado: sobre un adjunto, los comentarios de una nota (`anot-<uid>.comentarios.json`) y, de
+            // **cualquier mensaje** (4-nov-2026), lo que lleve su código: la revisión de urgencia de una lista
+            // de tareas (`.urgencia.json`), sus pegatinas y sus adjuntos (`.adjunto`). Antes solo con ruta o
+            // nota, y lo de una lista de tareas no viajaba.
+            if (anotado.isNotEmpty()) anotado[Codigos.unico(m)]?.forEach { poner(it, etiqueta) }
             when (m.clase) {
                 Clase.DIBUJO, Clase.PAGINA -> poner(dibujo(m.referencia), etiqueta)
                 Clase.IMAGEN -> poner(dibujo(m.referencia ?: "foto-${m.id}"), etiqueta)
@@ -871,6 +874,12 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
     }
 
     /** Escribe un archivo de texto (JSON portátil) en su sitio, comprimido si toca. */
+    /** Lo que llegó de [rel] antes de juntarlo con lo de aquí (su resumen), si se juntó. Ver [escribirArchivo]. */
+    private val recibidosAntesDeJuntar = java.util.concurrent.ConcurrentHashMap<String, String>()
+
+    /** Y tomarlo: el resumen acordado de lo que se acaba de traer, o el del archivo si no se juntó nada. */
+    fun resumenAcordadoDe(rel: String): String = recibidosAntesDeJuntar.remove(rel) ?: resumenDeArchivo(rel)
+
     fun escribirTexto(rel: String, portatil: String): Boolean =
         escribirArchivo(rel) { salida -> salida.write(portatil.toByteArray()); true }
 
@@ -926,6 +935,24 @@ class Disco(val filesDir: File, private val alCambiar: (Cambio) -> Unit = {}) {
                 val local = rutas.aLocal(tmp.readText())
                 if (rel.endsWith(".gz")) GZIPOutputStream(tmp.outputStream()).use { it.write(local.toByteArray()) }
                 else tmp.writeText(local)
+            }
+            // **Las pegatinas de comentario se juntan, no se pisan** (4-nov-2026, `juntar_comentarios` del
+            // PC): si aquí también cambió, lo que llega con las pegatinas de los dos. Ver
+            // [com.forge.pixpin.comentarios.Fusion.alLlegar].
+            // Si se juntó, lo acordado es lo que llegó (no lo juntado): así lo juntado cuenta como cambiado
+            // aquí y vuelve al otro en la vuelta siguiente, y los dos quedan iguales ([recibidoAntesDeJuntar]).
+            val llegado = if (destino.isFile && (rel.endsWith(".comentarios.json") || rel.endsWith(".urgencia.json"))) runCatching { tmp.readBytes() }.getOrNull() else null
+            if (rel.endsWith(".comentarios.json") && destino.isFile) runCatching {
+                com.forge.pixpin.comentarios.Fusion.alLlegar(destino.readText(), tmp.readText())?.let { tmp.writeText(it) }
+            }
+            // **La revisión de urgencia, igual** (4-nov-2026): lo de los dos aparatos, por tarea.
+            if (rel.endsWith(".urgencia.json") && destino.isFile) runCatching {
+                val aqui = com.forge.pixpin.jev.UrgenciasGuardadas.leer(destino)
+                if (aqui.isNotEmpty()) com.forge.pixpin.jev.UrgenciasGuardadas.anadir(tmp, aqui)
+            }
+            if (llegado != null) runCatching {
+                if (!llegado.contentEquals(tmp.readBytes())) recibidosAntesDeJuntar[rel] = llegado.inputStream().use { sha256De(it) }
+                else recibidosAntesDeJuntar.remove(rel)
             }
             ponerEnSuSitio(tmp, destino)
         } catch (e: Throwable) {

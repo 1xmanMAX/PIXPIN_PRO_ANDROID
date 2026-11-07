@@ -30,6 +30,11 @@ object OpcionesDeAdjuntar {
      */
     enum class Adjunto(val rotulo: String, @androidx.annotation.StringRes val texto: Int, val palabras: String, val color: Long) {
         FOTO("Foto o vídeo", com.forge.pixpin.R.string.adjuntar_foto, "imagen foto video galeria photo image gallery", 0xFF0A6CD6),
+        /**
+         * **La cámara del teléfono** (5-nov-2026, el usuario: «tomar directamente la foto con la cámara nativa
+         * del celular y que se adjunte automáticamente»): la foto entra en el cuadro de enviar, como las elegidas.
+         */
+        CAMARA("Cámara", com.forge.pixpin.R.string.cm_camara, "camara foto hacer tomar sacar camera take photo picture", 0xFF0A6CD6),
         ARCHIVO("Archivo", com.forge.pixpin.R.string.adjuntar_archivo, "pdf documento word excel fichero file document", 0xFF636366),
         LIENZO("Lienzo", com.forge.pixpin.R.string.adjuntar_lienzo, "dibujo pizarra canvas draw nuevo board new", 0xFFC77700),
         NOTA("Nota", com.forge.pixpin.R.string.adjuntar_nota, "nota markdown texto note text", 0xFF248A3D),
@@ -66,7 +71,7 @@ object OpcionesDeAdjuntar {
     data class Hoja(val deSiempre: List<Adjunto>, val mas: List<Adjunto>)
 
     private val DE_SIEMPRE = listOf(
-        Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.LIENZO, Adjunto.NOTA,
+        Adjunto.CAMARA, Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.LIENZO, Adjunto.NOTA,
         Adjunto.TAREAS, Adjunto.CONVERSACION, Adjunto.ESCANEAR, Adjunto.CLASE
     )
     private val MAS = listOf(
@@ -75,14 +80,25 @@ object OpcionesDeAdjuntar {
     )
 
     /** Lo del asistente delante, en este orden (como `para_el_asistente` del PC). */
-    private val DEL_ASISTENTE = listOf(Adjunto.FIGURA, Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.ESCANEAR, Adjunto.LIENZO, Adjunto.NOTA)
+    private val DEL_ASISTENTE = listOf(Adjunto.FIGURA, Adjunto.CAMARA, Adjunto.FOTO, Adjunto.ARCHIVO, Adjunto.ESCANEAR, Adjunto.LIENZO, Adjunto.NOTA)
 
     /**
      * **La hoja de este chat**. [conProyecto]: si el chat es de un proyecto (tiene Nota y Croquis);
      * [asistente]: si es el chat del Asistente.
      */
+    /** La función del catálogo de la que depende cada cosa de la hoja (7-nov-2026): oculta, no sale. */
+    fun delCatalogo(a: Adjunto): String = when (a) {
+        Adjunto.CAMARA, Adjunto.FOTO, Adjunto.ARCHIVO -> com.forge.pixpin.cuenta.Disponible.VISORES
+        Adjunto.LIENZO, Adjunto.FIGURA, Adjunto.CROQUIS -> com.forge.pixpin.cuenta.Disponible.LIENZO
+        Adjunto.TAREAS -> com.forge.pixpin.cuenta.Disponible.TAREAS
+        Adjunto.ESCANEAR -> com.forge.pixpin.cuenta.Disponible.ESCANER
+        Adjunto.CLASE -> com.forge.pixpin.cuenta.Disponible.GRABAR
+        Adjunto.MUSICA -> com.forge.pixpin.cuenta.Disponible.MUSICA
+        else -> com.forge.pixpin.cuenta.Disponible.CHATS
+    }
+
     fun hoja(conProyecto: Boolean, asistente: Boolean): Hoja {
-        val vale = { a: Adjunto -> conProyecto || (a != Adjunto.NOTA && a != Adjunto.CROQUIS) }
+        val vale = { a: Adjunto -> (conProyecto || (a != Adjunto.NOTA && a != Adjunto.CROQUIS)) && com.forge.pixpin.cuenta.Disponible.ve(delCatalogo(a)) }
         if (asistente) {
             val delante = DEL_ASISTENTE.filter(vale)
             return Hoja(delante, (DE_SIEMPRE + MAS).filter { vale(it) && it !in delante })

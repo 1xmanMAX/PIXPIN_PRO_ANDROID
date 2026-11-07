@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Urgente</string>
+    <string name="cm_tipo_alta">Prioridad alta</string>
+    <string name="cm_tipo_media">Prioridad media</string>
+    <string name="cm_tipo_nota">Nota</string>
+    <string name="cm_abrir">Abrir el chat</string>
+    <string name="cm_resolver">Resolver</string>
+    <string name="cm_reabrir">Reabrir</string>
+    <string name="cm_crear_tarea">Crear tarea</string>
+    <string name="cm_tarea_creada">Tarea creada en el Inbox</string>
+    <string name="cm_quitar">Quitar</string>
+    <string name="cm_lista_titulo">Comentarios</string>
+    <string name="cm_sin_entradas">Escribe lo primero, pega una imagen o adjunta un archivo.</string>
+    <string name="cm_resuelto">Resuelto</string>
+    <string name="cm_sin_sitio">Este documento no está guardado: no se puede adjuntar.</string>
+    <string name="cm_abre_el_chat">Abre el chat para ir a ese mensaje.</string>
+    <string name="cm_elegir_atajo">Atajo a…</string>
+    <string name="cm_sin_atajos">Elige algo en el lienzo, o abre un documento de un chat, para hacer un atajo.</string>
+    <string name="cm_elemento">Elemento</string>
+    <string name="cm_mensaje">Mensaje del chat</string>
+    <string name="cm_lienzo_propio">Lienzo</string>
+    <string name="cm_anotar">Anotar</string>
+    <string name="cm_anotada">Anotada</string>
+    <string name="cm_plantando_toque">Toca donde quieras pegar el comentario</string>
+    <string name="cm_lista_vacia_toque">Aún no hay comentarios. Elige un tipo y toca donde quieras pegarlo.</string>
+    <string name="cm_escribir_toque">Escribe…</string>
+    <string name="cm_adjuntar">Adjuntar archivo</string>
+    <string name="cm_comentar">Comentar</string>
+    <string name="cm_enviar">Enviar</string>
+    <string name="cm_camara">Cámara</string>
+    <string name="cm_galeria">Galería</string>
+    <string name="cm_nueva_tarea">Nueva tarea</string>
+</resources>

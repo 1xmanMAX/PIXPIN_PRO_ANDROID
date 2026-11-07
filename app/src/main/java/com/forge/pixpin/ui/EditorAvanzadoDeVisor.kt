@@ -38,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.forge.pixpin.motor.DrawController
 import com.forge.pixpin.motor.Tool
+import com.forge.pixpin.motor.medirTextosCon
 import kotlinx.coroutines.launch
 
 /** El cristal de las barras de los visores (la del visor de Revit, la que gustó: 25-oct-2026). */
@@ -77,6 +78,14 @@ fun BoxScope.EditorAvanzadoDeVisor(
     historia: () -> DrawController? = { capa },
     /** Además del estilo de [capa], a quién más se le pone (la hoja que se está anotando). */
     alCambiarEstilo: (com.forge.pixpin.motor.ItemStyle) -> Unit = {},
+    /**
+     * **Escribir el texto que planta la herramienta de texto** (5-nov-2026, el usuario: «la función de texto de
+     * las herramientas de dibujo no funciona en los markdown, y sospecho que en los demás formatos tampoco»):
+     * el motor planta el texto, pero el cuadro donde se teclea ([EscribirEnElLienzo]) solo lo ponían algunos
+     * visores. Ahora lo pone el editor; quien ya lo pone a su manera (el plano, en su sitio; el PDF, en la hoja
+     * que se anota) pasa false.
+     */
+    escribirTexto: Boolean = true,
     /** Lo que el visor pone junto a «Listo» (exportar, «Dedo: mover»…). */
     arriba: @Composable () -> Unit = {}
 ) {
@@ -100,9 +109,15 @@ fun BoxScope.EditorAvanzadoDeVisor(
         ajustes.coloresMarcados.split(',').map { it.trim() }.filter { it.startsWith("#") && it.length == 7 }
     }
 
+    // El alto de los textos, atado a lo que tienen dentro, como en el lienzo. Ver [com.forge.pixpin.motor.medirTextosCon].
+    androidx.compose.runtime.LaunchedEffect(capa) { if (capa.altoDelTexto == null) capa.medirTextosCon(contexto) }
+    // **En su sitio, como en el lienzo** (5-nov-2026, el usuario: «me aparece una ventanita de ingreso de texto; en el
+    // lienzo se escribe directamente ahí»): la capa de estos visores ocupa su caja desde la esquina.
+    if (escribirTexto) EscribirEnElLienzo(capa, tick, enSitio = true) { cambiado(true) }
+
     // Arriba: «Listo» y lo del visor, en la pastilla de cristal.
     Row(
-        Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp)
+        Modifier.align(Alignment.TopCenter).debajoDeLaCamara().padding(top = 8.dp)
             .clip(RoundedCornerShape(50)).background(CRISTAL_DE_VISOR),
         verticalAlignment = Alignment.CenterVertically
     ) {

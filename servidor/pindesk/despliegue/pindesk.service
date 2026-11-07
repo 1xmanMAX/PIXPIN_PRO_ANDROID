@@ -1,0 +1,28 @@
+[Unit]
+Description=Servidor de PinDesk
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pindesk
+Group=pindesk
+WorkingDirectory=/opt/pindesk
+EnvironmentFile=/etc/pindesk/secretos.env
+EnvironmentFile=/etc/pindesk/config.env
+Environment=CLAVE_PRIVADA_ARCHIVO=/etc/pindesk/firma.pem
+Environment=DATOS=/var/lib/pindesk
+ExecStart=/usr/bin/node /opt/pindesk/src/servidor.mjs
+Restart=always
+RestartSec=3
+# Encerrado: solo puede escribir en su carpeta de datos.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/pindesk
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+
+[Install]
+WantedBy=multi-user.target

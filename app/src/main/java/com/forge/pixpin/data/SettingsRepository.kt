@@ -126,6 +126,8 @@ data class Settings(
      * recto, 1 artista, 2 caricatura. -1, nunca se tocó (el de fábrica). Lo nuevo nace con él.
      */
     val rugosidadDelLienzo: Int = -1,
+    /** **Sincronizar en segundo plano** (3-nov-2026): seguir escuchando y sincronizando al salir. */
+    val sincronizarDeFondo: Boolean = true,
     /**
      * Cómo se agrupan las herramientas en cada barra, escrito.
      *
@@ -181,7 +183,7 @@ data class Settings(
      * cuando es de noche de verdad —por la hora o porque el sensor de luz dice que la
      * habitación está a oscuras—. Ver [com.forge.pixpin.ui.theme.rememberAOscuras].
      */
-    val modoNoche: ModoNoche = ModoNoche.COSMOS,
+    val modoNoche: ModoNoche = ModoNoche.SISTEMA,
 
 
     /**
@@ -499,6 +501,7 @@ class SettingsRepository(private val context: Context) {
         val COLORES_MARCADOS = stringPreferencesKey("colores_marcados")
         val COLORES_RECIENTES = stringPreferencesKey("colores_recientes")
         val RUGOSIDAD_DEL_LIENZO = intPreferencesKey("rugosidad_del_lienzo")
+        val SINCRONIZAR_DE_FONDO = booleanPreferencesKey("sincronizar_de_fondo")
         val GUIA_EDITOR = booleanPreferencesKey("guia_editor")
         val GUIA_PIN = booleanPreferencesKey("guia_pin")
         val GUIA_CAPA = booleanPreferencesKey("guia_capa")
@@ -579,7 +582,7 @@ class SettingsRepository(private val context: Context) {
             editorGroups = prefs[Keys.EDITOR_GROUPS],
             oledNegro = prefs[Keys.OLED_NEGRO] ?: false,
             modoNoche = runCatching { ModoNoche.valueOf(prefs[Keys.MODO_NOCHE] ?: "") }
-                .getOrDefault(ModoNoche.COSMOS),
+                .getOrDefault(ModoNoche.SISTEMA),
             motorDeVoz = prefs[Keys.MOTOR_DE_VOZ] ?: MOTOR_POR_DEFECTO,
             idiomaDeVoz = prefs[Keys.IDIOMA_DE_VOZ] ?: "",
             segundoIdiomaDeVoz = prefs[Keys.SEGUNDO_IDIOMA_DE_VOZ] ?: "",
@@ -607,6 +610,7 @@ class SettingsRepository(private val context: Context) {
             coloresMarcados = prefs[Keys.COLORES_MARCADOS] ?: "",
             coloresRecientes = prefs[Keys.COLORES_RECIENTES] ?: "",
             rugosidadDelLienzo = prefs[Keys.RUGOSIDAD_DEL_LIENZO] ?: -1,
+            sincronizarDeFondo = prefs[Keys.SINCRONIZAR_DE_FONDO] ?: true,
             imanEsquinas = prefs[Keys.IMAN_ESQUINAS] ?: true,
             imanMedios = prefs[Keys.IMAN_MEDIOS] ?: true,
             imanCentros = prefs[Keys.IMAN_CENTROS] ?: true,
@@ -888,6 +892,10 @@ class SettingsRepository(private val context: Context) {
     /** Los colores recientes del lienzo. Ver [Settings.coloresRecientes]. */
     suspend fun setColoresRecientes(texto: String) {
         context.dataStore.edit { it[Keys.COLORES_RECIENTES] = texto }
+    }
+
+    suspend fun setSincronizarDeFondo(si: Boolean) {
+        context.dataStore.edit { it[Keys.SINCRONIZAR_DE_FONDO] = si }
     }
 
     /** El último trazo a mano. Ver [Settings.rugosidadDelLienzo]. */

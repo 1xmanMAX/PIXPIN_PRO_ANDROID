@@ -77,7 +77,8 @@ fun BarraDePaso(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Boton(Icons.Filled.OpenInNew, "Abrir con…", ACENTO, negrita = true) { AbrirDePaso.abrirCon(contexto, estado) }
-            Box {
+            // Guardar en un chat: solo con los chats abiertos (7-nov-2026, el catálogo).
+            if (com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.CHATS)) Box {
                 if (estado.guardado != null) Boton(Icons.Filled.Check, "Guardado ✓", Color.White.copy(alpha = 0.7f)) {}
                 else Boton(Icons.Filled.Save, "Guardar", Color.White) { menu = true }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {

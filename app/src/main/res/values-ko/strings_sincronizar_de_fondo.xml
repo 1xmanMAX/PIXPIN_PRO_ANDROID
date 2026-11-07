@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sincronizar en segundo plano (3-nov-2026) -->
+<resources>
+    <string name="sf_canal">백그라운드 동기화</string>
+    <string name="sf_canal_detalle">기기와 공유 채팅과 계속 동기화합니다</string>
+    <string name="sf_aviso">PinDesk가 백그라운드에서 동기화 중</string>
+    <string name="sf_ajuste">백그라운드에서 동기화</string>
+    <string name="sf_ajuste_detalle">앱을 나가도 새 항목을 다른 기기와 공유 채팅에 계속 보냅니다.</string>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sincronizar en segundo plano (3-nov-2026) -->
+<resources>
+    <string name="sf_canal">Background sync</string>
+    <string name="sf_canal_detalle">Keeps syncing with your devices and shared chats</string>
+    <string name="sf_aviso">PinDesk is syncing in the background</string>
+    <string name="sf_ajuste">Sync in the background</string>
+    <string name="sf_ajuste_detalle">Keeps sending new things to your other devices and shared chats after you leave the app.</string>
+</resources>

@@ -336,7 +336,7 @@ object ImprimirMarcos {
         com.forge.pixpin.guardados.Imprimir.pdf(actividad, pdf, nombre)
     }
 
-    private suspend fun fotografiar(actividad: Activity, r: Rect): Bitmap? {
+    suspend fun fotografiar(actividad: Activity, r: Rect): Bitmap? {
         val ventana = actividad.window ?: return null
         val raiz = ventana.decorView
         val x0 = r.left.toInt().coerceIn(0, raiz.width - 1)

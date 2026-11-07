@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">Закрыть</string>
+    <string name="ip_figuras">Фигуры</string>
+    <string name="ip_figuras_cuenta">Фигур и шаблонов: %1$d</string>
+    <string name="ip_todas">Все</string>
+    <string name="ip_buscar_figuras">Поиск фигур</string>
+    <string name="ip_adjuntar">Прикрепить</string>
+    <string name="ip_pegar">Вставить</string>
+    <string name="ip_figuras_dia">Дневные фигуры</string>
+    <string name="ip_figuras_noche">Ночные фигуры</string>
+</resources>

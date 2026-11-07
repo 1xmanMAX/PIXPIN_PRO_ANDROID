@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sincronizar en segundo plano (3-nov-2026) -->
+<resources>
+    <string name="sf_canal">Sincronização em segundo plano</string>
+    <string name="sf_canal_detalle">Mantém a sincronização com seus aparelhos e chats compartilhados</string>
+    <string name="sf_aviso">O PinDesk está sincronizando em segundo plano</string>
+    <string name="sf_ajuste">Sincronizar em segundo plano</string>
+    <string name="sf_ajuste_detalle">Continua enviando o que é novo para seus outros aparelhos e chats compartilhados ao sair do app.</string>
+</resources>

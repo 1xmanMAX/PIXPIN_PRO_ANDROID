@@ -1,0 +1,17 @@
+# El servidor de la IA de la fase de prueba (Cloudflare Worker). Ver README.md.
+name = "pindesk-ia-de-prueba"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# Los cupos por día (opcional pero recomendado): crear con
+#   npx wrangler kv namespace create CUPOS
+# y pegar aquí el id que devuelve.
+# [[kv_namespaces]]
+# binding = "CUPOS"
+# id = "PEGA_AQUI_EL_ID"
+
+[vars]
+# Mensajes por persona y día (con CUPOS puesto).
+CUPO_DIARIO = "200"
+# Días que dura una sesión antes de volver a entrar con Google.
+DIAS_DE_SESION = "30"

@@ -1,0 +1,9 @@
+{
+  "name": "pindesk-servidor",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "El servidor de PinDesk: cuentas, funciones y licencias firmadas, versión de la app y el asistente con cupo.",
+  "engines": { "node": ">=22" },
+  "scripts": { "start": "node src/servidor.mjs", "test": "node --test --test-force-exit prueba/*.test.mjs", "claves": "node src/claves.mjs" }
+}

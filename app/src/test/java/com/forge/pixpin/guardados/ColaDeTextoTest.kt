@@ -53,12 +53,11 @@ class ColaDeTextoTest {
     }
 
     @Test
-    fun una_cancion_sin_tiempos_o_sin_letra_pide_tiempos_y_con_tiempos_nada() {
-        assertEquals(Tarea.TIEMPOS_DE_LA_LETRA, ColaDeTexto.queToca(voz(estado = TEXTO_LETRA), hayAudio = true))
-        assertEquals(Tarea.TIEMPOS_DE_LA_LETRA, ColaDeTexto.queToca(voz(texto = "Bésame\nmucho", estado = TEXTO_LETRA), hayAudio = true))
+    fun una_cancion_no_entra_en_la_cola_sus_tiempos_los_pone_letrasync_pro() {
+        assertEquals(Tarea.NADA, ColaDeTexto.queToca(voz(estado = TEXTO_LETRA), hayAudio = true))
+        assertEquals(Tarea.NADA, ColaDeTexto.queToca(voz(texto = "Bésame\nmucho", estado = TEXTO_LETRA), hayAudio = true))
         assertEquals(Tarea.NADA, ColaDeTexto.queToca(voz(texto = "[0:12] Bésame\n\n[0:18] mucho", estado = TEXTO_LETRA), hayAudio = true))
-        // Importada o no, una canción sin tiempos entra.
-        assertTrue(ColaDeTexto.entraSola(voz(texto = "Bésame", estado = TEXTO_LETRA), hayAudio = true, grabadoAqui = false))
+        assertFalse(ColaDeTexto.entraSola(voz(texto = "Bésame", estado = TEXTO_LETRA), hayAudio = true, grabadoAqui = false))
     }
 
     @Test

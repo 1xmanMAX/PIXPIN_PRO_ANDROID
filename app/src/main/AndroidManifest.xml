@@ -64,6 +64,8 @@
     <!-- Leer en voz alta un Word o un libro: desde Android 11 los motores de voz (el de Google)
          solo se ven si se declara que se buscan. Ver ui/LectorEnVoz.kt. -->
     <queries>
+        <!-- LetraSync Pro (6-nov-2026): la app aparte que sincroniza la letra de una canción. Ver guardados/LetraSyncPro.kt. -->
+        <package android:name="com.letrasyncpro" />
         <intent>
             <action android:name="android.intent.action.TTS_SERVICE" />
         </intent>
@@ -335,7 +337,7 @@
         <activity
             android:name=".ui.GaleriaDeCapturasActivity"
             android:exported="false"
-            android:theme="@style/Theme.PixPin" />
+            android:theme="@style/Theme.PixPin.Hoja" />
         <activity
             android:name=".guardados.SoltarActivity"
             android:exported="false"
@@ -728,6 +730,21 @@
                 android:value="Keeps user-created floating pins (notes, images, timers, quick capture) visible over other apps while the user works" />
         </service>
 
+        <!-- La letra retocada en la biblioteca de LetraSync Pro vuelve sola a su canción. -->
+        <receiver android:name=".guardados.LetraDevuelta" android:exported="true">
+            <intent-filter>
+                <action android:name="com.forge.pixpin.action.LETRA_SINCRONIZADA" />
+            </intent-filter>
+        </receiver>
+
+        <activity android:name=".cuenta.CuentaActivity" android:exported="false" android:theme="@style/Theme.PixPin" />
+
+        <!-- La música que suena, para el sistema: notificación, pantalla de bloqueo y ajustes rápidos. -->
+        <service
+            android:name=".guardados.ReproduciendoService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <service
             android:name=".ui.LeyendoEnVozService"
             android:exported="false"
@@ -746,6 +763,12 @@
             android:name=".guardados.PasarATextoService"
             android:exported="false"
             android:foregroundServiceType="dataSync|mediaProcessing" />
+
+        <!-- Sincronizar en segundo plano con los demás aparatos. Ver sincro/SincronizarDeFondoService. -->
+        <service
+            android:name=".sincro.SincronizarDeFondoService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
 
         <!-- Sube al PC las fotos y los clips de su grabación. Ver sincro/SubidaDeLaCamaraService. -->
         <service
@@ -872,9 +895,19 @@
         <!-- Sincronizar con los otros aparatos del grupo. Ver sincro/SincronizarActivity. -->
         <activity
             android:name=".sincro.SincronizarActivity"
-            android:exported="false"
+            android:exported="true"
+            android:launchMode="singleTop"
             android:windowSoftInputMode="adjustResize"
-            android:theme="@style/Theme.PixPin" />
+            android:theme="@style/Theme.PixPin">
+            <!-- El QR de emparejar (3-nov-2026, docs/emparejar.md del PC): cualquier cámara lo abre aquí. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="pindesk" android:host="emparejar" />
+                <data android:scheme="pixpin" android:host="emparejar" />
+            </intent-filter>
+        </activity>
 
         <!-- La hoja de compartir de un archivo desde un pin o una captura, que no tienen pantalla. Ver CompartirArchivoActivity. -->
         <activity

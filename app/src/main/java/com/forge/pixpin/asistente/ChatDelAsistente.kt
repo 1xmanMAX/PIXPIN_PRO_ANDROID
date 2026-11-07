@@ -176,6 +176,14 @@ object ChatDelAsistente {
             ((chatDelAsistente != null && m.proyecto == chatDelAsistente) || pideAlAsistente(m.texto))
 
     /**
+     * **Si [chat] es un chat del asistente**, aunque no sea el elegido por [buscar] (6-nov-2026, el usuario: «le mando un
+     * mensaje y no responde nada»): con dos «Asistente» (uno llegó de otro aparato antes de unificarlos), en el que no
+     * era el elegido nadie contestaba. Vale el marcado como del asistente o el que se llama así.
+     */
+    fun esChatDelAsistente(proyectos: List<Proyecto>, chat: String?): Boolean =
+        chat != null && proyectos.any { it.id == chat && !it.archivado && (it.asistente == true || it.nombre.trim().equals(NOMBRE, ignoreCase = true)) }
+
+    /**
      * **El lienzo propio del asistente en este chat**: el último dibujo hecho por él
      * (`aparato == "IA"`). Null si aún no hay: se crea con [NOMBRE_DEL_LIENZO].
      */

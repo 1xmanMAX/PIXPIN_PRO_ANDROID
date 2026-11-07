@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.runtime.collectAsState
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Edit
@@ -105,6 +106,12 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
     }
     var eligiendoNuevo by remember { mutableStateOf(false) }
     var enFunciones by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
+    // **El relanzamiento** (7-nov-2026): sin los chats en el catálogo, la pantalla es la rejilla de funciones (abrir
+    // un archivo, el asistente, las tareas…) y la cuenta; nada de chats, búsqueda, sincronizar ni «+».
+    val fotoDelCatalogo by com.forge.pixpin.cuenta.Disponible.ahora.collectAsState()
+    val conChats = remember(fotoDelCatalogo) { com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.CHATS) }
+    val conSincro = remember(fotoDelCatalogo) { com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.SINCRONIZAR) }
+    LaunchedEffect(conChats) { if (!conChats) enFunciones = true }
     // Atrás, con Funciones puesto, vuelve a Chat (el Escape del PC) antes de salir de la lista.
     BackHandler(enabled = enFunciones) { enFunciones = false }
 
@@ -166,12 +173,12 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                 // **El interruptor Chat · Funciones** (25-oct-2026, del PC `768b73f8`): en el sitio del
                 // título. «Funciones» cambia la lista por la rejilla de funciones y se queda puesta
                 // como una pestaña; «Chat» devuelve la lista. Ver [PestanaDeFunciones].
-                InterruptorChatFunciones(
+                if (conChats) InterruptorChatFunciones(
                     enFunciones, { enFunciones = it },
                     Modifier.padding(start = 16.dp, top = 10.dp, bottom = 8.dp)
-                )
+                ) else Text("PinDesk", fontSize = 26.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold, modifier = Modifier.padding(start = 20.dp, top = 12.dp, bottom = 8.dp))
                 Spacer(Modifier.weight(1f))
-                if (!enFunciones) androidx.compose.material3.IconButton(onClick = { if (consulta == null) consulta = "" else cerrarLaBusqueda() }) {
+                if (!enFunciones && conChats) androidx.compose.material3.IconButton(onClick = { if (consulta == null) consulta = "" else cerrarLaBusqueda() }) {
                     Icon(Icons.Filled.Search, stringResource(R.string.chat_buscar), tint = Cristal.tinta)
                 }
                 // **Los ajustes y la configuración** (26-oct-2026): eran la primera tarjeta de la
@@ -181,16 +188,22 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                 }
                 // **El estado de las IA** (1-nov-2026, del PC): tres puntitos (Claude, DeepSeek, Jev)
                 // pegados a la izquierda del botón de sincronizar. Ver [PuntitosDeLasIa].
-                PuntitosDeLasIa()
+                if (com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.ASISTENTE)) PuntitosDeLasIa()
+                // La cuenta (7-nov-2026): entrar con Google, el plan y el cupo del asistente.
+                if (com.forge.pixpin.cuenta.Cuenta.configurada) androidx.compose.material3.IconButton(onClick = { com.forge.pixpin.cuenta.CuentaActivity.abrir(contexto) }) {
+                    Icon(Icons.Filled.AccountCircle, "Cuenta", tint = Cristal.tinta)
+                }
                 // **El botón de sincronizar gira mientras hay una vuelta en marcha** y lleva la marca
                 // roja si la última falló (25-oct-2026, PC `0470294`). Pulsarlo es ver qué pasó.
-                androidx.compose.material3.IconButton(onClick = {
+                if (conSincro) androidx.compose.material3.IconButton(onClick = {
                     com.forge.pixpin.sincro.VueltasEnMarcha.olvidarFallo()
                     contexto.startActivity(Intent(contexto, com.forge.pixpin.sincro.SincronizarActivity::class.java))
                 }) {
                     IconoDeSincronizar(Cristal.tinta, MaterialTheme.colorScheme.background)
                 }
             }
+            // Una versión nueva (7-nov-2026): se avisa y se actualiza aquí mismo, sin la Play Store.
+            com.forge.pixpin.cuenta.AvisoDeActualizacion()
             if (consulta != null && !enFunciones) {
                 val foco = remember { androidx.compose.ui.focus.FocusRequester() }
                 androidx.compose.material3.OutlinedTextField(
@@ -208,7 +221,7 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                 LaunchedEffect(Unit) { if (consulta.isNullOrEmpty()) runCatching { foco.requestFocus() } }
                 PestanasDeLaBusqueda(pestana, cuentas) { pestana = it }
             }
-            if (enFunciones) PestanaDeFunciones(onChat = { enFunciones = false }, Modifier.weight(1f).padding(bottom = 80.dp))
+            if (enFunciones || !conChats) PestanaDeFunciones(onChat = { if (conChats) enFunciones = false }, Modifier.weight(1f).padding(bottom = if (conChats) 80.dp else 16.dp))
             else LazyColumn(contentPadding = PaddingValues(bottom = 110.dp)) {
                 items(filtradas, key = { it.proyecto ?: "general" }) { c ->
                     val p = c.proyecto?.let { id -> proyectos.firstOrNull { it.id == id } }
@@ -328,7 +341,7 @@ internal fun ListaDeChats(proyectos: List<Proyecto>) {
                     Modifier.padding(end = 16.dp), tamano = 56.dp, puesto = true
                 )
             }
-            Box {
+            if (conChats) Box {
                 BotonRedondo(Icons.Filled.Add, stringResource(R.string.lista_chat_nuevo), { eligiendoNuevo = true }, tamano = 56.dp, puesto = true)
                 com.forge.pixpin.guardados.MenuDeChatNuevo(
                     eligiendoNuevo, { eligiendoNuevo = false },

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="funciones_abrir">ファイルを開く</string>
+    <string name="funciones_abrir_detalle">PDF、Word、Excel、PowerPoint、図面、3D</string>
+    <string name="funciones_asistente">アシスタント</string>
+    <string name="funciones_asistente_detalle">何でも聞いてください</string>
+</resources>

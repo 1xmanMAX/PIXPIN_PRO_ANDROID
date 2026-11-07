@@ -1,5 +1,6 @@
 package com.forge.pixpin.planos
 
+import com.forge.pixpin.ui.debajoDeLaCamara
 import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import androidx.compose.runtime.collectAsState
 
@@ -550,7 +551,7 @@ class Visor3DActivity : ComponentActivity() {
             // La pastilla: nombre, ver todo, tema, aristas, planta y caja de sección.
             AnimatedVisibility(
                 visible = aLaVista || estado != null, enter = fadeIn(), exit = fadeOut(),
-                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 16.dp, end = 16.dp)
+                modifier = Modifier.align(Alignment.TopCenter).debajoDeLaCamara().padding(top = 8.dp, start = 16.dp, end = 16.dp)
             ) {
                 Row(Modifier.clip(RoundedCornerShape(50)).background(Color(0x8C14182B)).padding(start = 14.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     val blanco = Color.White
@@ -636,7 +637,7 @@ class Visor3DActivity : ComponentActivity() {
                     Text(
                         "Lo anotado solo se ve en la vista de este marcador",
                         color = Color.White, style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 62.dp)
+                        modifier = Modifier.align(Alignment.TopCenter).debajoDeLaCamara().padding(top = 62.dp)
                             .background(Color(0xCC14182B), androidx.compose.foundation.shape.RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 6.dp)
                     )
                 }
@@ -752,7 +753,7 @@ class Visor3DActivity : ComponentActivity() {
                 val unidad = if (m.metros == 1f) "m" else ""
                 val tenue = Color.White.copy(alpha = 0.55f)
                 LazyColumn(
-                    Modifier.align(Alignment.CenterEnd).statusBarsPadding().navigationBarsPadding()
+                    Modifier.align(Alignment.CenterEnd).debajoDeLaCamara().navigationBarsPadding()
                         .padding(end = 60.dp, top = 64.dp, bottom = 16.dp).width(270.dp)
                         .clip(RoundedCornerShape(18.dp)).background(Color(0xE614182B)).padding(vertical = 6.dp)
                 ) {

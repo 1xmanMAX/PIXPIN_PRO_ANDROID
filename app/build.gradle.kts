@@ -22,8 +22,25 @@ android {
         // que Android no tenía forma de saber que uno era más nuevo que otro
         // —a veces se niega a instalar encima— y desde el móvil no había manera
         // de comprobar cuál estaba puesto.
-        versionCode = 256
-        versionName = "0.157.0"
+        // **La clave de prueba del asistente** (6-nov-2026): la pone GitHub al compilar, de los secretos del
+        // repositorio; en el código no está. Vacía, la app pide la clave como siempre. Ver ClavesDeLaNube.deFabrica.
+        fun deEntorno(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it == '-' || it == '_' }
+        buildConfigField("String", "CLAVE_CLAUDE_DE_PRUEBA", "\"${deEntorno("CLAVE_CLAUDE_DE_PRUEBA")}\"")
+        buildConfigField("String", "CLAVE_DEEPSEEK_DE_PRUEBA", "\"${deEntorno("CLAVE_DEEPSEEK_DE_PRUEBA")}\"")
+        // **El acceso de prueba con Google** (6-nov-2026): la dirección del servidor (`servidor/ia-de-prueba`) y el ID
+        // de cliente OAuth «web» con el que Google firma el inicio de sesión. No son secretos (variables del
+        // repositorio en GitHub); vacíos, no sale. Ver asistente/AccesoDePrueba.kt.
+        fun texto(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it in "-_.:/" }
+        buildConfigField("String", "SERVIDOR_IA_DE_PRUEBA", "\"${texto("SERVIDOR_IA_DE_PRUEBA").trimEnd('/')}\"")
+        buildConfigField("String", "GOOGLE_CLIENTE_WEB", "\"${texto("GOOGLE_CLIENTE_WEB")}\"")
+        // **El servidor de PinDesk** (7-nov-2026, `servidor/pindesk`): cuentas, el catálogo de funciones y las
+        // licencias, firmados. FIRMA_PUBLICA es su clave pública (la privada solo está en el servidor). No son
+        // secretos: variables del repositorio. Vacíos, la app va sola con el catálogo de fábrica. Ver cuenta/Cuenta.kt.
+        buildConfigField("String", "SERVIDOR_PINDESK", "\"${texto("SERVIDOR_PINDESK").trimEnd('/')}\"")
+        fun base64(n: String) = (System.getenv(n) ?: "").filter { it.isLetterOrDigit() || it in "+/=" }
+        buildConfigField("String", "FIRMA_PUBLICA", "\"${base64("FIRMA_PUBLICA")}\"")
+        versionCode = 273
+        versionName = "0.174.0"
     }
 
     // **La clave de subida a Google Play** (30-oct-2026): fuera del repositorio. Se lee de
@@ -174,6 +191,12 @@ dependencies {
     implementation("com.google.zxing:core:3.5.3")
     // Las voces de Microsoft Edge para leer en alto: hablan por WebSocket. Ver ui/VozDeEdge.kt.
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Entrar con Google en la fase de prueba del asistente (Credential Manager). Ver asistente/AccesoDePrueba.kt.
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
+    // Las de Google traen un fragment viejo (1.0) y el lint del release lo para: el de ahora.
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 

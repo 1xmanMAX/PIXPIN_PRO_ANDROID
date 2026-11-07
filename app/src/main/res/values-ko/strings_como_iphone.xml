@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">닫기</string>
+    <string name="ip_figuras">도형</string>
+    <string name="ip_figuras_cuenta">도형 및 템플릿 %1$d개</string>
+    <string name="ip_todas">전체</string>
+    <string name="ip_buscar_figuras">도형 검색</string>
+    <string name="ip_adjuntar">첨부</string>
+    <string name="ip_pegar">붙여넣기</string>
+    <string name="ip_figuras_dia">주간 도형</string>
+    <string name="ip_figuras_noche">야간 도형</string>
+</resources>

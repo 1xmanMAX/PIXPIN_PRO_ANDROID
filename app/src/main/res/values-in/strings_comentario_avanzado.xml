@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Mendesak</string>
+    <string name="cm_tipo_alta">Prioritas tinggi</string>
+    <string name="cm_tipo_media">Prioritas sedang</string>
+    <string name="cm_tipo_nota">Catatan</string>
+    <string name="cm_abrir">Buka obrolan</string>
+    <string name="cm_resolver">Selesaikan</string>
+    <string name="cm_reabrir">Buka lagi</string>
+    <string name="cm_crear_tarea">Buat tugas</string>
+    <string name="cm_tarea_creada">Tugas dibuat di Kotak Masuk</string>
+    <string name="cm_quitar">Hapus</string>
+    <string name="cm_lista_titulo">Komentar</string>
+    <string name="cm_sin_entradas">Tulis pesan pertama, tempel gambar, atau lampirkan file.</string>
+    <string name="cm_resuelto">Selesai</string>
+    <string name="cm_sin_sitio">Dokumen ini belum disimpan: tidak bisa melampirkan apa pun.</string>
+    <string name="cm_abre_el_chat">Buka obrolan untuk menuju pesan itu.</string>
+    <string name="cm_elegir_atajo">Pintasan ke…</string>
+    <string name="cm_sin_atajos">Pilih sesuatu di kanvas, atau buka dokumen dari obrolan, untuk membuat pintasan.</string>
+    <string name="cm_elemento">Elemen</string>
+    <string name="cm_mensaje">Pesan obrolan</string>
+    <string name="cm_lienzo_propio">Kanvas</string>
+    <string name="cm_anotar">Anotasi</string>
+    <string name="cm_anotada">Beranotasi</string>
+    <string name="cm_plantando_toque">Ketuk tempat untuk menempelkan komentar</string>
+    <string name="cm_lista_vacia_toque">Belum ada komentar. Pilih jenis lalu ketuk tempat untuk menempelkannya.</string>
+    <string name="cm_escribir_toque">Tulis…</string>
+    <string name="cm_adjuntar">Lampirkan file</string>
+    <string name="cm_comentar">Komentar</string>
+    <string name="cm_enviar">Kirim</string>
+    <string name="cm_camara">Kamera</string>
+    <string name="cm_galeria">Galeri</string>
+    <string name="cm_nueva_tarea">Tugas baru</string>
+</resources>

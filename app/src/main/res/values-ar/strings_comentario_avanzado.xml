@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">عاجل</string>
+    <string name="cm_tipo_alta">أولوية عالية</string>
+    <string name="cm_tipo_media">أولوية متوسطة</string>
+    <string name="cm_tipo_nota">ملاحظة</string>
+    <string name="cm_abrir">فتح الدردشة</string>
+    <string name="cm_resolver">حلّ</string>
+    <string name="cm_reabrir">إعادة فتح</string>
+    <string name="cm_crear_tarea">إنشاء مهمة</string>
+    <string name="cm_tarea_creada">أُنشئت المهمة في صندوق الوارد</string>
+    <string name="cm_quitar">إزالة</string>
+    <string name="cm_lista_titulo">التعليقات</string>
+    <string name="cm_sin_entradas">اكتب أول رسالة أو الصق صورة أو أرفق ملفًا.</string>
+    <string name="cm_resuelto">تم الحل</string>
+    <string name="cm_sin_sitio">هذا المستند غير محفوظ: لا يمكن إرفاق شيء.</string>
+    <string name="cm_abre_el_chat">افتح الدردشة للانتقال إلى تلك الرسالة.</string>
+    <string name="cm_elegir_atajo">اختصار إلى…</string>
+    <string name="cm_sin_atajos">حدّد شيئًا على اللوحة، أو افتح مستندًا من دردشة، لإنشاء اختصار.</string>
+    <string name="cm_elemento">عنصر</string>
+    <string name="cm_mensaje">رسالة الدردشة</string>
+    <string name="cm_lienzo_propio">لوحة</string>
+    <string name="cm_anotar">إضافة تعليقات توضيحية</string>
+    <string name="cm_anotada">عليها تعليقات</string>
+    <string name="cm_plantando_toque">المس المكان الذي تريد لصق التعليق فيه</string>
+    <string name="cm_lista_vacia_toque">لا توجد تعليقات بعد. اختر نوعًا والمس المكان الذي تريد لصقه فيه.</string>
+    <string name="cm_escribir_toque">اكتب…</string>
+    <string name="cm_adjuntar">إرفاق ملف</string>
+    <string name="cm_comentar">تعليق</string>
+    <string name="cm_enviar">إرسال</string>
+    <string name="cm_camara">الكاميرا</string>
+    <string name="cm_galeria">المعرض</string>
+    <string name="cm_nueva_tarea">مهمة جديدة</string>
+</resources>

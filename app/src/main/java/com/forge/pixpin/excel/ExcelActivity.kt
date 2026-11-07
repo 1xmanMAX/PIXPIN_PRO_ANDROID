@@ -1,6 +1,7 @@
 package com.forge.pixpin.excel
 
 
+import com.forge.pixpin.ui.debajoDeLaCamara
 import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import androidx.compose.runtime.collectAsState
 
@@ -378,7 +379,7 @@ class ExcelActivity : ComponentActivity() {
             // **El riel se va con la pastilla** (27-oct-2026): al mover la hoja, y vuelve al tocar. Ver [com.forge.pixpin.ui.RielALaVista].
             // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
             val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null, base) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deBase(this@ExcelActivity, base) }.getOrNull() } }
-            com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
+            com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).debajoDeLaCamara().padding(start = 12.dp, top = 60.dp))
             if (l != null && !marcosDoc.imprimiendo && !ocultarParaImprimir) com.forge.pixpin.ui.RielDelVisor(
                 visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarca),
                 alUsar = { toques++ },
@@ -469,7 +470,8 @@ class ExcelActivity : ComponentActivity() {
                         modifier = Modifier.padding(horizontal = 12.dp)
                     )
                 }
-                LineaDeCelda(vista, marca, alCopiar = { vista?.let { copiar(it) }; toques++ }) { activa = it }
+                // **Sin la línea de la celda** (5-nov-2026, el usuario: «la barra inferior en la que aparece
+                // copiar, y el porcentaje del zoom, no son útiles: quítalos»).
                 // Con una sola hoja no hay pestañas que elegir: no tapan nada (lo que falta por leer y el
                 // zoom, solos a la derecha).
                 if (hojas.size > 1) PestanasDeHojas(hojas, activa, oscuro, vista, marca) { i -> activa = i; vista?.ponerHoja(i) }
@@ -601,8 +603,7 @@ class ExcelActivity : ComponentActivity() {
         val hoja = v?.hoja
         val estado = buildList {
             if (hoja != null && !hoja.completa && hoja.geo != null) add("Leyendo… ${"%,d".format(hoja.filasLeidas)} filas")
-            val z = v?.zoom ?: 1.0
-            if (kotlin.math.abs(z - 1.0) > 0.004) add("${(z * 100).toInt()} %")
+            // Sin el porcentaje del zoom (5-nov-2026): solo lo que falta por leer.
         }.joinToString("  ·  ")
         if (estado.isEmpty()) return
         if (flotando) Text(

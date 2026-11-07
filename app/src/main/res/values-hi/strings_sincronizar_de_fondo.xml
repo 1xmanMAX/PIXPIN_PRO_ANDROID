@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sincronizar en segundo plano (3-nov-2026) -->
+<resources>
+    <string name="sf_canal">बैकग्राउंड सिंक</string>
+    <string name="sf_canal_detalle">आपके डिवाइस और साझा चैट के साथ सिंक जारी रखता है</string>
+    <string name="sf_aviso">PinDesk बैकग्राउंड में सिंक कर रहा है</string>
+    <string name="sf_ajuste">बैकग्राउंड में सिंक करें</string>
+    <string name="sf_ajuste_detalle">ऐप छोड़ने के बाद भी नई चीज़ें आपके दूसरे डिवाइस और साझा चैट तक भेजता रहता है।</string>
+</resources>

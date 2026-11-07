@@ -191,6 +191,10 @@ object Asistente {
     }
 
     /** Si hay una respuesta en curso en este chat (el botón de mandar se vuelve «Parar»). */
+    /** Cuándo empezó el turno en curso; uno de más de [ATASCADO_MS] se da por atascado. */
+    @Volatile private var empezoElTurno = 0L
+    private const val ATASCADO_MS = 4 * 60_000L
+
     fun contestandoEn(chat: String?): Boolean = enVivo?.let { it.chat == chat } == true
 
     fun parar() = parar.set(true)
@@ -233,6 +237,13 @@ object Asistente {
      */
     fun preguntar(c: Context, pregunta: Mensaje, chatDelAsistente: String?): Boolean {
         val app = c.applicationContext as PixPinApp
+        // **Un turno atascado no deja mudo al asistente** (6-nov-2026, «le mando un mensaje y no responde nada»): uno
+        // que lleva más de [ATASCADO_MS] (la red que se cortó a medias) se para y se contesta lo nuevo.
+        if (ocupado.get() && System.currentTimeMillis() - empezoElTurno > ATASCADO_MS) {
+            Log.w(TAG, "turno atascado: se suelta")
+            parar.set(true)
+            ocupado.set(false)
+        }
         if (!ocupado.compareAndSet(false, true)) {
             // **Escribirle mientras trabaja** (25-oct-2026 en el PC, «como en Claude Code»): en el
             // chat del turno en curso, lo escrito contesta la duda que espera o le llega al modelo
@@ -245,6 +256,7 @@ object Asistente {
         }
         entrantes.clear()
         chatEnCurso = pregunta.proyecto
+        empezoElTurno = System.currentTimeMillis()
         parar.set(false)
         val enSuChat = chatDelAsistente != null && pregunta.proyecto == chatDelAsistente
         val respuesta = Mensaje(

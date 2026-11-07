@@ -1,5 +1,7 @@
 package com.forge.pixpin.ui
 
+import androidx.compose.ui.layout.boundsInRoot
+import com.forge.pixpin.motor.medirTextosCon
 import androidx.compose.ui.layout.boundsInWindow
 
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -1425,7 +1427,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     visible = aLaVista && !anotando && !marcosDoc.activo && !marcosDoc.imprimiendo,
                     enter = androidx.compose.animation.fadeIn(),
                     exit = androidx.compose.animation.fadeOut(),
-                    modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
+                    modifier = Modifier.align(Alignment.TopCenter).debajoDeLaCamara().padding(top = 8.dp, start = 24.dp, end = 24.dp)
                 ) {
                     Row(
                         Modifier
@@ -1515,7 +1517,7 @@ class VisorHtmlActivity : ComponentActivity() {
                     val lista = com.forge.pixpin.motor.Lectura.conMarcaDeVoz(marcadores, marcaDeVoz?.second)
                     // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
                     val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deAdjunto(this@VisorHtmlActivity, elDocumento?.absolutePath) }.getOrNull() } }
-                    com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
+                    com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).debajoDeLaCamara().padding(start = 12.dp, top = 60.dp))
                     RielDelVisor(
                         visible = RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarcador),
                         alUsar = { aLaVista = true; toquesEnLaPagina++ },
@@ -1693,7 +1695,7 @@ class VisorHtmlActivity : ComponentActivity() {
                 llevarElDocumentoConLaCapa()
             }
         }
-        Box(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize().onGloballyPositioned { cajaDeLaCapa = it.boundsInRoot() to it.size.width }) {
             @Suppress("UNUSED_EXPRESSION") tickDeAnotar
             com.forge.pixpin.motor.DrawCanvas(
                 controller = laCapa,
@@ -1713,15 +1715,26 @@ class VisorHtmlActivity : ComponentActivity() {
         }
     }
 
+    /** Dónde cae la capa de anotar en la pantalla y su ancho de verdad: para escribir el texto en su sitio. */
+    private var cajaDeLaCapa by androidx.compose.runtime.mutableStateOf<Pair<androidx.compose.ui.geometry.Rect, Int>?>(null)
+
     /** «Listo», la barra de herramientas y el cuadro del texto: **fuera** de la capa que se estira. */
     @Composable
     private fun androidx.compose.foundation.layout.BoxScope.MandosDeAnotar(alProyecto: (() -> Unit)? = null) {
         val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
         @Suppress("UNUSED_EXPRESSION") tickDeAnotar
-        EscribirEnElLienzo(laCapa, tickDeAnotar) { tickDeAnotar++; cambiosEnLaCapa++ }
+        // **En su sitio, como en el lienzo** (5-nov-2026): donde cae la capa (que el pellizco estira) y a su tamaño.
+        LaunchedEffect(laCapa) { if (laCapa.altoDelTexto == null) laCapa.medirTextosCon(this@VisorHtmlActivity) }
+        val caja = cajaDeLaCapa
+        EscribirEnElLienzo(
+            laCapa, tickDeAnotar, enSitio = caja != null,
+            origen = caja?.first?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero,
+            escala = caja?.let { (r, w) -> if (w > 0) r.width / w else 1f } ?: 1f
+        ) { tickDeAnotar++; cambiosEnLaCapa++ }
         // **El editor avanzado de todos los visores** (25-oct-2026). Ver [EditorAvanzadoDeVisor].
         val sitio = if (esDocumento) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.WEB
         EditorAvanzadoDeVisor(
+            escribirTexto = false,
             capa = laCapa, ajustes = ajustes,
             permitidas = ajustes.formatoToolSet(sitio) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
             grupos = ajustes.formatoGroupList(sitio).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
@@ -2347,6 +2360,8 @@ class VisorHtmlActivity : ComponentActivity() {
         setOnTouchListener { _, e ->
             when (e.actionMasked) {
                 android.view.MotionEvent.ACTION_DOWN -> { x0 = e.x; y0 = e.y; seMovio = false }
+                // Un segundo dedo es pellizcar: también es moverse (3-nov-2026), se esconden.
+                android.view.MotionEvent.ACTION_POINTER_DOWN -> if (!seMovio) { seMovio = true; movidasDeLaPagina++ }
                 android.view.MotionEvent.ACTION_MOVE ->
                     if (!seMovio && (kotlin.math.abs(e.x - x0) > margen || kotlin.math.abs(e.y - y0) > margen)) { seMovio = true; movidasDeLaPagina++ }
                 // Leyendo, **donde se deja el documento, ahí se queda** (23-sep-2026): el imán que

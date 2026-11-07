@@ -108,7 +108,7 @@ fun PastillaDeLector(
 ) {
     AnimatedVisibility(
         visible = visible, enter = fadeIn(), exit = fadeOut(),
-        modifier = modifier.statusBarsPadding().padding(top = 8.dp, start = 24.dp, end = 24.dp)
+        modifier = modifier.debajoDeLaCamara().padding(top = 8.dp, start = 24.dp, end = 24.dp)
     ) {
         Row(
             Modifier.clip(RoundedCornerShape(50)).background(FONDO_DE_PASTILLA).padding(start = if (archivo != null) 8.dp else 14.dp, end = 4.dp),

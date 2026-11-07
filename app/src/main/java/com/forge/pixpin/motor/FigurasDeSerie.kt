@@ -180,6 +180,15 @@ object FigurasDeSerie {
      * un mueble, no una plantilla de noche— y por el final del nombre en las demás (una propia que
      * alguien guardó así).
      */
+    /**
+     * **La figura tal como queda al ponerla** (2-nov-2026): el catálogo la trae sin grupo, y al
+     * estamparla se agrupa. Sin grupo, la página blanca de una plantilla de día no se reconocía
+     * como hoja ([PapelDeLaHoja]) y su blanco se «adaptaba» contra el papel blanco: en la vista
+     * previa salía negra con la tinta clara.
+     */
+    fun paraVer(elementos: List<Element>): List<Element> =
+        elementos.map { it.copy(groupIds = it.groupIds + "vista-previa") }
+
     fun esDeNoche(f: FiguraGuardada): Boolean =
         if (esDeSerie(f)) f.id.endsWith(SUFIJO_NOCHE) else f.nombre.endsWith(MARCA_NOCHE)
 

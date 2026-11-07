@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="funciones_abrir">فتح ملف</string>
+    <string name="funciones_abrir_detalle">PDF وWord وExcel وPowerPoint والمخططات وثلاثي الأبعاد</string>
+    <string name="funciones_asistente">المساعد</string>
+    <string name="funciones_asistente_detalle">اسأله أي شيء</string>
+</resources>

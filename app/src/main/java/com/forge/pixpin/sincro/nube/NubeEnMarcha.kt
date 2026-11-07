@@ -198,7 +198,17 @@ object NubeEnMarcha {
         if (arrancada) return
         arrancada = true
         val c = contexto.applicationContext
+        com.forge.pixpin.sincro.RedDelTelefono.instalar(c)
         val alcance = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        // **Al volver la red, enseguida** (6-nov-2026): sin red no se reintenta; se espera a que Android la dé.
+        alcance.launch {
+            var antes = com.forge.pixpin.sincro.RedDelTelefono.hayRed
+            com.forge.pixpin.sincro.RedDelTelefono.tipo.collect { t ->
+                val ahora = t != com.forge.pixpin.sincro.RedDelTelefono.Tipo.NINGUNA
+                if (ahora && !antes) despertar()
+                antes = ahora
+            }
+        }
         alcance.launch { bucle(c) }
         alcance.launch { novedades(c) }
     }
@@ -211,6 +221,7 @@ object NubeEnMarcha {
         var bajado = System.currentTimeMillis()
         var fallos = 0
         while (true) {
+            com.forge.pixpin.sincro.RedDelTelefono.esperarRed()
             val espera = if (fallos > 0) minOf(5 * 60_000L, 2_000L shl minOf(fallos, 7)) else MIRAR_CADA
             if (withTimeoutOrNull(espera) { despierta.receive() } != null) fallos = 0
             val con = conexion(c)
@@ -265,6 +276,7 @@ object NubeEnMarcha {
     private suspend fun novedades(c: Context) {
         var fallos = 0
         while (true) {
+            com.forge.pixpin.sincro.RedDelTelefono.esperarRed()
             val con = conexion(c)
             if (con == null) { delay(5_000); continue }
             val (direccion, llave) = con
@@ -290,7 +302,8 @@ object NubeEnMarcha {
                 fallos = 0
             } catch (e: Exception) {
                 fallos++
-                delay(minOf(5 * 60_000L, 2_000L shl minOf(fallos, 7)))
+                // Sin red, a esperar que vuelva (arriba); con red, la espera creciente de siempre.
+                if (com.forge.pixpin.sincro.RedDelTelefono.hayRed) delay(minOf(5 * 60_000L, 2_000L shl minOf(fallos, 7)))
             }
         }
     }

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sincronizar en segundo plano (3-nov-2026) -->
+<resources>
+    <string name="sf_canal">Sinkronisasi latar belakang</string>
+    <string name="sf_canal_detalle">Tetap menyinkronkan dengan perangkat dan obrolan bersama Anda</string>
+    <string name="sf_aviso">PinDesk menyinkronkan di latar belakang</string>
+    <string name="sf_ajuste">Sinkronkan di latar belakang</string>
+    <string name="sf_ajuste_detalle">Tetap mengirim yang baru ke perangkat lain dan obrolan bersama setelah Anda keluar dari aplikasi.</string>
+</resources>

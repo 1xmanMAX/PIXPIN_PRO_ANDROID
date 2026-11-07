@@ -1,5 +1,8 @@
 package com.forge.pixpin.pdf
 
+import androidx.compose.ui.layout.boundsInRoot
+import com.forge.pixpin.motor.medirTextosCon
+import com.forge.pixpin.ui.debajoDeLaCamara
 import com.forge.pixpin.ui.EditorAvanzadoDeVisor
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.foundation.layout.Row
@@ -739,7 +742,11 @@ class LectorPdfActivity : ComponentActivity() {
                                 if (zoom in 0.999f..1.001f && kotlin.math.abs(desplazado.x) < size.width * 0.12f) desplazado = Offset.Zero
                                 break
                             }
-                            if (dedos >= 2) { cogido = true; pellizcando = true }
+                            // **Mirando, moverse esconde las barras y el riel** (3-nov-2026, el usuario:
+                            // «la barra lateral tiene que desaparecer mientras estoy en movimiento, en
+                            // todos los formatos, igual que la de arriba»): también al pellizcar y al
+                            // llevar la hoja de lado, no solo al pasar hojas.
+                            if (dedos >= 2) { cogido = true; pellizcando = true; if (!anotando && !marcosDoc.activo) aLaVista = false }
                             // **Un dedo, también de lado** (23-sep-2026: «con un solo dedo moverme a
                             // todas partes»). De alto lo lleva la lista, como siempre; de lado, si el
                             // documento es más ancho que la pantalla —acercado o con espacios—, este
@@ -750,6 +757,7 @@ class LectorPdfActivity : ComponentActivity() {
                                 if (c != null && !anotando && !marcosDoc.activo) {
                                     val d = c.position - c.previousPosition
                                     recorrido += d.getDistance()
+                                    if (recorrido > viewConfiguration.touchSlop) aLaVista = false
                                     val tope = topeX(zoom)
                                     if (!sinLado && tope > 0f && d.x != 0f) desplazado = Offset((desplazado.x + d.x).coerceIn(-tope, tope), desplazado.y)
                                 }
@@ -1014,11 +1022,21 @@ class LectorPdfActivity : ComponentActivity() {
                 val ajustes by (application as com.forge.pixpin.PixPinApp).settings.settings.collectAsState(initial = com.forge.pixpin.data.Settings())
                 var enProyecto by remember { mutableStateOf(capas.esDeUnProyecto()) }
                 // El texto plantado en una hoja se escribe aquí. Ver [com.forge.pixpin.ui.EscribirEnElLienzo].
-                capas.ultima()?.let { c -> com.forge.pixpin.ui.EscribirEnElLienzo(c, tickDeLaBarra) { capas.ensuciarLaUltima(); tickDeLaBarra++ } }
+                // **En su sitio, sobre la hoja** (5-nov-2026): sin la ventanita, como en el lienzo.
+                capas.ultima()?.let { c ->
+                    androidx.compose.runtime.LaunchedEffect(c) { if (c.altoDelTexto == null) c.medirTextosCon(this@LectorPdfActivity) }
+                    val caja = capas.cajaDeLaUltima()
+                    com.forge.pixpin.ui.EscribirEnElLienzo(
+                        c, tickDeLaBarra + capas.version.intValue, enSitio = caja != null,
+                        origen = caja?.first?.topLeft ?: androidx.compose.ui.geometry.Offset.Zero,
+                        escala = caja?.let { (r, w) -> if (w > 0) r.width / w else 1f } ?: 1f
+                    ) { capas.ensuciarLaUltima(); tickDeLaBarra++ }
+                }
                 // **El editor avanzado de todos los visores** (25-oct-2026): la barra agrupada abajo, el
                 // estilo plegado a un lado y deshacer de la hoja que se anota. Ver [com.forge.pixpin.ui.EditorAvanzadoDeVisor].
                 val sitio = if (esOffice) com.forge.pixpin.motor.HerramientasPorSitio.Sitio.DOCUMENTO else com.forge.pixpin.motor.HerramientasPorSitio.Sitio.PDF
                 EditorAvanzadoDeVisor(
+                    escribirTexto = false,
                     capa = maestro, ajustes = ajustes,
                     permitidas = ajustes.formatoToolSet(sitio) - com.forge.pixpin.motor.LECTOR_TOOLS_FUERA,
                     grupos = ajustes.formatoGroupList(sitio).map { g -> g.filterNot { it in com.forge.pixpin.motor.LECTOR_TOOLS_FUERA } }.filter { it.isNotEmpty() },
@@ -1061,7 +1079,7 @@ class LectorPdfActivity : ComponentActivity() {
             if (cuantas > 0 && aSolas == null && !marcosDoc.imprimiendo) {
                 // **En línea / Sin conexión** (2-nov-2026, como el PC): solo en un documento de un chat de la nube.
                 val enLaNubeDelVisor by androidx.compose.runtime.produceState<Pair<String, String>?>(null) { value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { runCatching { com.forge.pixpin.sincro.nube.EnLinea.deAdjunto(this@LectorPdfActivity, rutaPedida) }.getOrNull() } }
-                com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).statusBarsPadding().padding(start = 12.dp, top = 60.dp))
+                com.forge.pixpin.sincro.nube.EnLineaDelVisor(enLaNubeDelVisor, { finish() }, androidx.compose.ui.Modifier.align(androidx.compose.ui.Alignment.TopStart).debajoDeLaCamara().padding(start = 12.dp, top = 60.dp))
                 com.forge.pixpin.ui.RielDelVisor(
                     visible = com.forge.pixpin.ui.RielALaVista.visible(aLaVista, anotando, marcosDoc.activo, poniendoMarca),
                     alUsar = { toques++ },
@@ -1585,6 +1603,12 @@ private class CapasDelPdf(private val actividad: ComponentActivity, private val 
 
     fun tocada(i: Int) { ultimaTocada = i }
     fun ultima(): com.forge.pixpin.motor.DrawController? = synchronized(abiertas) { abiertas[ultimaTocada] }
+    /**
+     * **Dónde cae cada hoja que se anota** (5-nov-2026): su caja en la pantalla y su ancho de verdad, para escribir
+     * el texto en su sitio, sobre la hoja y a su tamaño (ampliada o no), como en el lienzo.
+     */
+    val cajas = androidx.compose.runtime.mutableStateMapOf<Int, Pair<androidx.compose.ui.geometry.Rect, Int>>()
+    fun cajaDeLaUltima(): Pair<androidx.compose.ui.geometry.Rect, Int>? = cajas[ultimaTocada]
     fun ensuciar(i: Int) { synchronized(sucias) { sucias.add(i) }; version.intValue++ }
     fun ensuciarLaUltima() { if (ultimaTocada >= 0) ensuciar(ultimaTocada) }
 
@@ -1703,7 +1727,7 @@ private fun CapaDePagina(
         return
     }
     Box(
-        medido.pointerInput(c, conLapiz) {
+        medido.onGloballyPositioned { capas.cajas[i] = it.boundsInRoot() to it.size.width }.pointerInput(c, conLapiz) {
             awaitPointerEventScope {
                 while (true) {
                     val e = awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
@@ -1723,6 +1747,9 @@ private fun CapaDePagina(
             controller = c,
             modifier = Modifier.fillMaxSize(),
             onChange = { trazando -> if (!trazando) { capas.ensuciar(i); alCambiar() } },
+            // **Se repinta en cuanto cambia** (5-nov-2026, el usuario: «pongo el texto y no aparece hasta que muevo
+            // el PDF»): el texto se escribe fuera de la hoja y solo se veía al volver a tocarla.
+            cambios = capas.version.intValue,
             vistaFija = true,
             dark = oscuro,
             modoLapiz = conLapiz,

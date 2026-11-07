@@ -71,30 +71,18 @@ fun HojaDeAdjuntarFigura(onCerrar: () -> Unit, onAdjuntar: (FiguraGuardada) -> U
             (fabrica + FigurasDeSerie.sinLasDeSerie(BibliotecaStore.cargar(contexto))) to FigurasDeSerie.todas(contexto)
         }
     }
-    // En un diálogo: así tapa la pantalla entera esté donde esté puesto en la del chat.
-    androidx.compose.ui.window.Dialog(
-        onDismissRequest = onCerrar,
-        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-    ) { Box(
-        Modifier.fillMaxSize()
-            .background(Color(0x33000000))
-            .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) { onCerrar() },
-        contentAlignment = Alignment.Center
-    ) {
-        val l = listas ?: return@Box
-        PanelDeFiguras(
-            figuras = l.first,
-            deSerie = l.second,
-            onInsertar = {},
-            onQuitar = {},
-            onGuardarSeleccion = {},
-            puedeGuardar = false,
-            onPegarTabla = {},
-            onCerrar = onCerrar,
-            onAdjuntar = onAdjuntar,
-            // Que un toque en el panel no llegue al velo de detrás y lo cierre.
-            modifier = Modifier.padding(12.dp)
-                .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {}
-        )
-    } }
+    // **Una tarjeta que sube desde abajo** (3-nov-2026): la hoja la pone [PanelDeFiguras]. Mientras
+    // se leen las listas no sale nada (es un instante).
+    val l = listas ?: return
+    PanelDeFiguras(
+        figuras = l.first,
+        deSerie = l.second,
+        onInsertar = {},
+        onQuitar = {},
+        onGuardarSeleccion = {},
+        puedeGuardar = false,
+        onPegarTabla = {},
+        onCerrar = onCerrar,
+        onAdjuntar = onAdjuntar
+    )
 }

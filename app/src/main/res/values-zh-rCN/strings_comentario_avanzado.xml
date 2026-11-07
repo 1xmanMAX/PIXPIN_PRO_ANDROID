@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">紧急</string>
+    <string name="cm_tipo_alta">高优先级</string>
+    <string name="cm_tipo_media">中优先级</string>
+    <string name="cm_tipo_nota">备注</string>
+    <string name="cm_abrir">打开聊天</string>
+    <string name="cm_resolver">解决</string>
+    <string name="cm_reabrir">重新打开</string>
+    <string name="cm_crear_tarea">创建任务</string>
+    <string name="cm_tarea_creada">已在收件箱中创建任务</string>
+    <string name="cm_quitar">移除</string>
+    <string name="cm_lista_titulo">评论</string>
+    <string name="cm_sin_entradas">写下第一条消息、粘贴图片或附加文件。</string>
+    <string name="cm_resuelto">已解决</string>
+    <string name="cm_sin_sitio">此文档尚未保存：无法附加。</string>
+    <string name="cm_abre_el_chat">打开聊天以前往该消息。</string>
+    <string name="cm_elegir_atajo">快捷方式到…</string>
+    <string name="cm_sin_atajos">在画布上选择内容，或打开聊天中的文档，即可创建快捷方式。</string>
+    <string name="cm_elemento">元素</string>
+    <string name="cm_mensaje">聊天消息</string>
+    <string name="cm_lienzo_propio">画布</string>
+    <string name="cm_anotar">标注</string>
+    <string name="cm_anotada">已标注</string>
+    <string name="cm_plantando_toque">点按要贴评论的位置</string>
+    <string name="cm_lista_vacia_toque">还没有评论。选择一种类型，然后点按要贴的位置。</string>
+    <string name="cm_escribir_toque">输入…</string>
+    <string name="cm_adjuntar">附加文件</string>
+    <string name="cm_comentar">评论</string>
+    <string name="cm_enviar">发送</string>
+    <string name="cm_camara">相机</string>
+    <string name="cm_galeria">图库</string>
+    <string name="cm_nueva_tarea">新任务</string>
+</resources>

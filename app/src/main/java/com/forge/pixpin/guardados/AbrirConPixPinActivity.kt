@@ -115,16 +115,20 @@ class AbrirConPixPinActivity : LanzadorDePaso() {
             if (asunto.isNotBlank()) r.putExtra(Intent.EXTRA_SUBJECT, asunto)
             return r
         }
+        // Solo lo de las funciones que se ven (7-nov-2026, el catálogo).
+        val conChats = com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.CHATS)
+        val conSincro = com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.SINCRONIZAR)
+        val conPines = com.forge.pixpin.cuenta.Disponible.ve(com.forge.pixpin.cuenta.Disponible.PINES)
         val opciones = buildList {
-            add(Triple(Icons.Filled.Bookmark, "Guardar en Mensajes guardados") {
+            if (conChats) add(Triple(Icons.Filled.Bookmark, "Guardar en Mensajes guardados") {
                 pasarA(GuardarCompartidoActivity::class.java, reenvio().putExtra(GuardarCompartidoActivity.EXTRA_A_LA_GENERAL, true))
             })
-            if (hayChats) add(Triple(Icons.Filled.Forum, "Guardar en un chat…") { pasarA(GuardarCompartidoActivity::class.java, reenvio()) })
-            if (copias.isNotEmpty()) add(Triple(Icons.Filled.Wifi, "Enviar por Wi-Fi a mis aparatos") {
+            if (hayChats && conChats) add(Triple(Icons.Filled.Forum, "Guardar en un chat…") { pasarA(GuardarCompartidoActivity::class.java, reenvio()) })
+            if (copias.isNotEmpty() && conSincro) add(Triple(Icons.Filled.Wifi, "Enviar por Wi-Fi a mis aparatos") {
                 pasarA(com.forge.pixpin.sincro.EnviarActivity::class.java, reenvio())
             })
             copias.singleOrNull()?.let { e -> add(Triple(Icons.Filled.OpenInNew, "Abrir con otra aplicación") { com.forge.pixpin.ui.AbrirCon.abrir(this@AbrirConPixPinActivity, File(e.ruta), e.mime) }) }
-            add(Triple(Icons.Filled.PushPin, "Poner como pin") { pasarA(com.forge.pixpin.clipboard.ShareReceiverActivity::class.java, reenvio()) })
+            if (conPines) add(Triple(Icons.Filled.PushPin, "Poner como pin") { pasarA(com.forge.pixpin.clipboard.ShareReceiverActivity::class.java, reenvio()) })
         }
         setContent {
             com.forge.pixpin.ui.theme.PixPinTheme {

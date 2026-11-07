@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">Kapat</string>
+    <string name="ip_figuras">Şekiller</string>
+    <string name="ip_figuras_cuenta">%1$d şekil ve şablon</string>
+    <string name="ip_todas">Tümü</string>
+    <string name="ip_buscar_figuras">Şekil ara</string>
+    <string name="ip_adjuntar">Ekle</string>
+    <string name="ip_pegar">Yapıştır</string>
+    <string name="ip_figuras_dia">Gündüz şekilleri</string>
+    <string name="ip_figuras_noche">Gece şekilleri</string>
+</resources>

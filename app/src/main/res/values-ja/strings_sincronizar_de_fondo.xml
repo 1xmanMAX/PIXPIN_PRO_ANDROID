@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Sincronizar en segundo plano (3-nov-2026) -->
+<resources>
+    <string name="sf_canal">バックグラウンド同期</string>
+    <string name="sf_canal_detalle">デバイスと共有チャットとの同期を続けます</string>
+    <string name="sf_aviso">PinDesk はバックグラウンドで同期しています</string>
+    <string name="sf_ajuste">バックグラウンドで同期</string>
+    <string name="sf_ajuste_detalle">アプリを閉じても、新しい内容をほかのデバイスや共有チャットに同期し続けます。</string>
+</resources>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Urgente</string>
+    <string name="cm_tipo_alta">Priorità alta</string>
+    <string name="cm_tipo_media">Priorità media</string>
+    <string name="cm_tipo_nota">Nota</string>
+    <string name="cm_abrir">Apri la chat</string>
+    <string name="cm_resolver">Risolvi</string>
+    <string name="cm_reabrir">Riapri</string>
+    <string name="cm_crear_tarea">Crea attività</string>
+    <string name="cm_tarea_creada">Attività creata nella Posta in arrivo</string>
+    <string name="cm_quitar">Rimuovi</string>
+    <string name="cm_lista_titulo">Commenti</string>
+    <string name="cm_sin_entradas">Scrivi il primo messaggio, incolla un’immagine o allega un file.</string>
+    <string name="cm_resuelto">Risolto</string>
+    <string name="cm_sin_sitio">Questo documento non è salvato: non si può allegare nulla.</string>
+    <string name="cm_abre_el_chat">Apri la chat per andare a quel messaggio.</string>
+    <string name="cm_elegir_atajo">Scorciatoia a…</string>
+    <string name="cm_sin_atajos">Seleziona qualcosa sulla tela, o apri un documento di una chat, per creare una scorciatoia.</string>
+    <string name="cm_elemento">Elemento</string>
+    <string name="cm_mensaje">Messaggio della chat</string>
+    <string name="cm_lienzo_propio">Tela</string>
+    <string name="cm_anotar">Annota</string>
+    <string name="cm_anotada">Annotata</string>
+    <string name="cm_plantando_toque">Tocca dove vuoi attaccare il commento</string>
+    <string name="cm_lista_vacia_toque">Ancora nessun commento. Scegli un tipo e tocca dove vuoi attaccarlo.</string>
+    <string name="cm_escribir_toque">Scrivi…</string>
+    <string name="cm_adjuntar">Allega file</string>
+    <string name="cm_comentar">Commenta</string>
+    <string name="cm_enviar">Invia</string>
+    <string name="cm_camara">Fotocamera</string>
+    <string name="cm_galeria">Galleria</string>
+    <string name="cm_nueva_tarea">Nuova attività</string>
+</resources>

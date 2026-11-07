@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Urgent</string>
+    <string name="cm_tipo_alta">High priority</string>
+    <string name="cm_tipo_media">Medium priority</string>
+    <string name="cm_tipo_nota">Note</string>
+    <string name="cm_abrir">Open the chat</string>
+    <string name="cm_resolver">Resolve</string>
+    <string name="cm_reabrir">Reopen</string>
+    <string name="cm_crear_tarea">Create task</string>
+    <string name="cm_tarea_creada">Task created in the Inbox</string>
+    <string name="cm_quitar">Remove</string>
+    <string name="cm_lista_titulo">Comments</string>
+    <string name="cm_sin_entradas">Write the first message, paste an image or attach a file.</string>
+    <string name="cm_resuelto">Resolved</string>
+    <string name="cm_sin_sitio">This document isn\'t saved: nothing can be attached.</string>
+    <string name="cm_abre_el_chat">Open the chat to go to that message.</string>
+    <string name="cm_elegir_atajo">Shortcut to…</string>
+    <string name="cm_sin_atajos">Select something on the canvas, or open a document from a chat, to make a shortcut.</string>
+    <string name="cm_elemento">Element</string>
+    <string name="cm_mensaje">Chat message</string>
+    <string name="cm_lienzo_propio">Canvas</string>
+    <string name="cm_anotar">Annotate</string>
+    <string name="cm_anotada">Annotated</string>
+    <string name="cm_plantando_toque">Tap where you want to stick the comment</string>
+    <string name="cm_lista_vacia_toque">No comments yet. Pick a type and tap where you want to stick it.</string>
+    <string name="cm_escribir_toque">Write…</string>
+    <string name="cm_adjuntar">Attach file</string>
+    <string name="cm_comentar">Comment</string>
+    <string name="cm_enviar">Send</string>
+    <string name="cm_camara">Camera</string>
+    <string name="cm_galeria">Gallery</string>
+    <string name="cm_nueva_tarea">New task</string>
+</resources>

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- El comentario avanzado (pegatinas), del catálogo del PC (`comentario-*`, 3-nov-2026). -->
+<resources>
+    <string name="cm_tipo_urgente">Срочно</string>
+    <string name="cm_tipo_alta">Высокий приоритет</string>
+    <string name="cm_tipo_media">Средний приоритет</string>
+    <string name="cm_tipo_nota">Заметка</string>
+    <string name="cm_abrir">Открыть чат</string>
+    <string name="cm_resolver">Решить</string>
+    <string name="cm_reabrir">Открыть снова</string>
+    <string name="cm_crear_tarea">Создать задачу</string>
+    <string name="cm_tarea_creada">Задача создана во «Входящих»</string>
+    <string name="cm_quitar">Убрать</string>
+    <string name="cm_lista_titulo">Комментарии</string>
+    <string name="cm_sin_entradas">Напишите первое сообщение, вставьте изображение или прикрепите файл.</string>
+    <string name="cm_resuelto">Решено</string>
+    <string name="cm_sin_sitio">Документ не сохранён: прикрепить ничего нельзя.</string>
+    <string name="cm_abre_el_chat">Откройте чат, чтобы перейти к этому сообщению.</string>
+    <string name="cm_elegir_atajo">Ярлык на…</string>
+    <string name="cm_sin_atajos">Выделите что-нибудь на холсте или откройте документ из чата, чтобы сделать ярлык.</string>
+    <string name="cm_elemento">Элемент</string>
+    <string name="cm_mensaje">Сообщение чата</string>
+    <string name="cm_lienzo_propio">Холст</string>
+    <string name="cm_anotar">Аннотировать</string>
+    <string name="cm_anotada">С аннотацией</string>
+    <string name="cm_plantando_toque">Коснитесь места, куда приклеить комментарий</string>
+    <string name="cm_lista_vacia_toque">Комментариев пока нет. Выберите тип и коснитесь места, куда его приклеить.</string>
+    <string name="cm_escribir_toque">Напишите…</string>
+    <string name="cm_adjuntar">Прикрепить файл</string>
+    <string name="cm_comentar">Комментировать</string>
+    <string name="cm_enviar">Отправить</string>
+    <string name="cm_camara">Камера</string>
+    <string name="cm_galeria">Галерея</string>
+    <string name="cm_nueva_tarea">Новая задача</string>
+</resources>

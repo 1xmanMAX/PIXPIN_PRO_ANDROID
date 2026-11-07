@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">关闭</string>
+    <string name="ip_figuras">图形</string>
+    <string name="ip_figuras_cuenta">%1$d 个图形和模板</string>
+    <string name="ip_todas">全部</string>
+    <string name="ip_buscar_figuras">搜索图形</string>
+    <string name="ip_adjuntar">附加</string>
+    <string name="ip_pegar">粘贴</string>
+    <string name="ip_figuras_dia">日间图形</string>
+    <string name="ip_figuras_noche">夜间图形</string>
+</resources>

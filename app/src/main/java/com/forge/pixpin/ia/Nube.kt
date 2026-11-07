@@ -42,7 +42,10 @@ object Nube {
         CLAUDE("claude", "Claude Haiku 5.5", "claude-haiku-5-5", "https://api.anthropic.com/v1/messages", "https://platform.claude.com/settings/keys", 16_000),
         DEEPSEEK("deepseek", "DeepSeek V4.1 Flash", "deepseek-flash", "https://api.deepseek.com/chat/completions", "https://platform.deepseek.com/api_keys", 16_000);
 
-        fun cabeceras(clave: String): List<Pair<String, String>> = when (this) {
+        fun cabeceras(clave: String): List<Pair<String, String>> = if (clave.startsWith(PREFIJO_DE_PRUEBA)) {
+            // **Por el servidor de la prueba** (6-nov-2026): la sesión, y él pone la clave. Ver AccesoDePrueba.
+            listOf("Authorization" to "Bearer " + clave.removePrefix(PREFIJO_DE_PRUEBA), "anthropic-version" to VERSION_API_CLAUDE)
+        } else when (this) {
             CLAUDE -> listOf("x-api-key" to clave, "anthropic-version" to VERSION_API_CLAUDE)
             DEEPSEEK -> listOf("Authorization" to "Bearer $clave")
         }
@@ -55,11 +58,30 @@ object Nube {
              * se quitó el modelo del teléfono (25-oct-2026) la nube es el único motor, y el vacío
              * que antes quería decir «el local» pasa a ser el de siempre.
              */
-            fun elegido(id: String?): Proveedor = porId(id) ?: CLAUDE
+            fun elegido(id: String?): Proveedor = porId(id) ?: deFabrica()
+
+            /** Sin elegir: Claude, salvo que la app solo traiga la clave de prueba de DeepSeek. */
+            private fun deFabrica(): Proveedor =
+                if (com.forge.pixpin.BuildConfig.CLAVE_CLAUDE_DE_PRUEBA.isBlank() && com.forge.pixpin.BuildConfig.CLAVE_DEEPSEEK_DE_PRUEBA.isNotBlank()) DEEPSEEK else CLAUDE
         }
     }
 
     const val VERSION_API_CLAUDE = "2023-06-01"
+
+    /** La «clave» que es una sesión del acceso de prueba ([com.forge.pixpin.asistente.AccesoDePrueba.PREFIJO]). */
+    const val PREFIJO_DE_PRUEBA = "pxt:"
+
+    /**
+     * **Adónde va la petición**: con una sesión de prueba, al servidor de la prueba (la misma ruta `/v1/...` que
+     * Anthropic); si no, a [url] tal cual.
+     */
+    fun destino(url: String, clave: String): String {
+        // El servidor de PinDesk (cuentas) o, si no hay, el de la prueba de antes.
+        val servidor = com.forge.pixpin.cuenta.Cuenta.servidor
+        if (!clave.trim().startsWith(PREFIJO_DE_PRUEBA) || !servidor.startsWith("https://")) return url
+        val i = url.indexOf("/v1/")
+        return if (i >= 0) servidor + url.substring(i) else url
+    }
     const val ESFUERZO_CLAUDE = "medium"
     const val ESFUERZO_DEEPSEEK = "high"
     const val RESERVA_PENSAR = 8_192
@@ -173,7 +195,7 @@ object Nube {
      */
     fun comprobar(p: Proveedor, clave: String, url: String = urlDeModelos(p), get: Get = OkHttpGet): Int? {
         val codigo = try {
-            val (c, cuerpo) = get.pedir(url, p.cabeceras(clave.trim()))
+            val (c, cuerpo) = get.pedir(destino(url, clave), p.cabeceras(clave.trim()))
             if (c in 200..299) c else codigoDelEstado(c, cuerpo)
         } catch (e: Fallo.Red) {
             null
@@ -636,7 +658,7 @@ object Nube {
                     val lector = Claude.Lector()
                     var roto: ErrorIa? = null
                     val cortado = resultadoHttp {
-                        http.enviar(url, proveedor.cabeceras(clave), cuerpo) { b ->
+                        http.enviar(destino(url, clave), proveedor.cabeceras(clave), cuerpo) { b ->
                             try {
                                 for (t in lector.meter(b)) { emitido[0] = true; if (alTrozo(t) == Seguir.PARAR) return@enviar Seguir.PARAR }
                                 Seguir.SI
@@ -667,7 +689,7 @@ object Nube {
                     val acum = Acumulador()
                     var roto: ErrorIa? = null
                     val cortado = resultadoHttp {
-                        http.enviar(url, proveedor.cabeceras(clave), cuerpo) { b ->
+                        http.enviar(destino(url, clave), proveedor.cabeceras(clave), cuerpo) { b ->
                             try {
                                 for (t in acum.meter(b)) { emitido[0] = true; if (alTrozo(t) == Seguir.PARAR) return@enviar Seguir.PARAR }
                                 Seguir.SI
@@ -726,7 +748,7 @@ object Nube {
             val cuerpo = (if (proveedor == Proveedor.CLAUDE) Claude.cuerpoDePrueba() else DeepSeek.cuerpoDePrueba()).toString().toByteArray()
             val respuesta = ByteArrayOutputStream()
             try {
-                http.enviar(url, proveedor.cabeceras(clave), cuerpo) { b -> respuesta.write(b); if (respuesta.size() > 64 * 1024) Seguir.PARAR else Seguir.SI }
+                http.enviar(destino(url, clave), proveedor.cabeceras(clave), cuerpo) { b -> respuesta.write(b); if (respuesta.size() > 64 * 1024) Seguir.PARAR else Seguir.SI }
                 avisar(proveedor, 200)
             } catch (f: Fallo.Red) { avisar(proveedor, null); error("no hay conexion con ${proveedor.nombre}") }
             catch (f: Fallo.Http) { avisar(proveedor, codigoDelEstado(f.codigo, f.cuerpo)); error(clasificar(proveedor, f.codigo, f.cuerpo).first) }

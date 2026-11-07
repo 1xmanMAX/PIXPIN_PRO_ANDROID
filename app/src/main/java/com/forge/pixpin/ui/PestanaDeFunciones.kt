@@ -29,6 +29,9 @@ import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Checklist
 import androidx.compose.material.icons.filled.Draw
 import androidx.compose.material.icons.filled.Layers
+import androidx.compose.runtime.collectAsState
+import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Timeline
@@ -86,9 +89,26 @@ internal fun PestanaDeFunciones(onChat: () -> Unit, modifier: Modifier = Modifie
     val alcance = rememberCoroutineScope()
     var elegido by remember { mutableStateOf<Int?>(null) }
     var figuras by remember { mutableStateOf(false) }
-    val todas = Funcion.entries
+    // **Solo las del catálogo** (7-nov-2026): las ocultas no salen; abrir un archivo y el asistente, delante.
+    @Suppress("UNUSED_VARIABLE") val foto by com.forge.pixpin.cuenta.Disponible.ahora.collectAsState()
+    val todas = (listOf(Funcion.ABRIR, Funcion.ASISTENTE) + Funcion.entries.filter { it != Funcion.ABRIR && it != Funcion.ASISTENTE })
+        .filter { com.forge.pixpin.cuenta.Disponible.ve(it.delCatalogo) }
+    val abrirArchivo = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        // Al visor que le toca, por la misma puerta que «Abrir con PinDesk» desde otra app.
+        if (uri != null) runCatching {
+            contexto.startActivity(
+                android.content.Intent(android.content.Intent.ACTION_VIEW, uri, contexto, com.forge.pixpin.guardados.AbrirConPixPinActivity::class.java)
+                    .addFlags(android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            )
+        }
+    }
     fun hacer(f: Funcion) {
-        if (f == Funcion.FIGURAS) figuras = true else alcance.launch { hacerFuncion(contexto, f) }
+        when {
+            !com.forge.pixpin.cuenta.Disponible.puede(f.delCatalogo) -> com.forge.pixpin.cuenta.CuentaActivity.abrirParaPro(contexto, f.delCatalogo)
+            f == Funcion.FIGURAS -> figuras = true
+            f == Funcion.ABRIR -> abrirArchivo.launch(arrayOf("*/*"))
+            else -> alcance.launch { hacerFuncion(contexto, f) }
+        }
     }
 
     BoxWithConstraints(modifier.fillMaxSize()) {
@@ -159,6 +179,8 @@ private fun iconoDe(f: Funcion): ImageVector = when (f) {
     Funcion.HORARIO -> Icons.Filled.CalendarMonth
     Funcion.GALERIA -> Icons.Filled.PhotoLibrary
     Funcion.FIGURAS -> Icons.Filled.Layers
+    Funcion.ABRIR -> Icons.Filled.FolderOpen
+    Funcion.ASISTENTE -> Icons.Filled.AutoAwesome
 }
 
 private fun tituloDe(f: Funcion): Int = when (f) {
@@ -169,6 +191,8 @@ private fun tituloDe(f: Funcion): Int = when (f) {
     Funcion.HORARIO -> R.string.funciones_horario
     Funcion.GALERIA -> R.string.funciones_galeria
     Funcion.FIGURAS -> R.string.funciones_figuras
+    Funcion.ABRIR -> R.string.funciones_abrir
+    Funcion.ASISTENTE -> R.string.funciones_asistente
 }
 
 private fun detalleDe(f: Funcion): Int = when (f) {
@@ -179,6 +203,8 @@ private fun detalleDe(f: Funcion): Int = when (f) {
     Funcion.HORARIO -> R.string.funciones_horario_detalle
     Funcion.GALERIA -> R.string.funciones_galeria_detalle
     Funcion.FIGURAS -> R.string.funciones_figuras_detalle
+    Funcion.ABRIR -> R.string.funciones_abrir_detalle
+    Funcion.ASISTENTE -> R.string.funciones_asistente_detalle
 }
 
 /**
@@ -249,7 +275,11 @@ private suspend fun hacerFuncion(contexto: Context, f: Funcion) {
         Funcion.TIMELINE -> com.forge.pixpin.lecciones.LeccionesActivity.abrir(contexto)
         Funcion.HORARIO -> com.forge.pixpin.mini.TodasLasTareasActivity.abrir(contexto, VistaDeTareas.Vista.HORARIO)
         Funcion.GALERIA -> GaleriaDeCapturasActivity.abrir(contexto)
-        Funcion.FIGURAS -> Unit // La hoja de figuras la abre la pestaña.
+        Funcion.FIGURAS, Funcion.ABRIR -> Unit // La hoja de figuras y el selector de archivos los abre la pestaña.
+        Funcion.ASISTENTE -> {
+            val p = withContext(Dispatchers.IO) { com.forge.pixpin.asistente.Asistente.asegurarChat(contexto) }
+            com.forge.pixpin.guardados.MensajesActivity.abrirChatDe(contexto, p.id, p.nombre)
+        }
     }
 }
 

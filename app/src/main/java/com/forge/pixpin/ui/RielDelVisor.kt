@@ -23,6 +23,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -103,6 +104,21 @@ fun RielDelVisor(
      */
     alMantenerMarcador: (() -> Unit)? = null
 ) {
+    // **Cada botón, según el catálogo** (7-nov-2026, el relanzamiento: «la barra lateral restringida, y yo la voy
+    // abriendo botón a botón»). Oculto: no está. De Pro sin Pro: está, y al tocarlo se explica Pro (sin candados).
+    val contexto = androidx.compose.ui.platform.LocalContext.current
+    @Suppress("UNUSED_VARIABLE") val foto by com.forge.pixpin.cuenta.Disponible.ahora.collectAsState()
+    fun segun(id: String, f: (() -> Unit)?): (() -> Unit)? = when {
+        f == null || !com.forge.pixpin.cuenta.Disponible.ve(id) -> null
+        com.forge.pixpin.cuenta.Disponible.puede(id) -> f
+        else -> ({ com.forge.pixpin.cuenta.CuentaActivity.abrirParaPro(contexto, id) })
+    }
+    val onMarcador = segun(com.forge.pixpin.cuenta.Disponible.RIEL_MARCADOR, onMarcador)
+    val onLapiz = segun(com.forge.pixpin.cuenta.Disponible.RIEL_LAPIZ, onLapiz)
+    val onMarco = segun(com.forge.pixpin.cuenta.Disponible.RIEL_MARCO, onMarco)
+    val marcas = if (onMarcador != null) marcas else 0
+    // Sin nada que enseñar, ni la pastilla del riel.
+    if (onMarcador == null && onLapiz == null && onMarco == null && extras == null) return
     var eligiendoQueImprimir by remember { mutableStateOf(false) }
     var globo by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(globo) { if (globo != null) { kotlinx.coroutines.delay(1600); globo = null } }

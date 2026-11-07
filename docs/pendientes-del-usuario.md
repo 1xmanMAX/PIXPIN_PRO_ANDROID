@@ -242,3 +242,141 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
 - [x] 79. La nube de los chats compartidos (deltas: solo sube lo que cambia) con «En línea / Sin
       conexión» en los visores. Ver `docs/compatibilidad-pc-2-nov.md`.
 
+## Figuras y Adjuntar como en el iPhone (pedido del 2-nov, publicado en v0.158.0)
+
+- [x] 80. Las figuras de día se veían negras en el panel (la hoja blanca se «adaptaba» a negro): ahora se
+      ven como quedan al ponerlas.
+- [x] 81. El panel de Figuras como el del iPhone: «Cerrar», el título con su cuenta, el botón redondo de
+      día y noche (gira al cambiar), «Todas» con secciones y su cuenta, tarjetas y el buscador abajo.
+- [x] 82. La hoja «Adjuntar» como la del iPhone: «Cerrar» y el título, iconos cuadrados redondeados,
+      «Más» en dos columnas de pastillas y «Pegar lo copiado» con su botón «Pegar».
+
+## Pedidos del 3-nov (publicados en v0.159.0)
+
+- [x] 83. Una nota con enlace y fotos: tocar una foto la abre (antes se abría el enlace).
+- [x] 84. Abrir una foto sin esperar: se decodifica en segundo plano y se pinta al tenerla.
+- [x] 85. Compartir una nota o un Markdown con la hoja de compartir de la app, no directo con Android.
+- [x] 86. Aspecto de fábrica: día y noche según el teléfono (el cosmos, solo si se elige); las notas
+      Markdown nunca con el fondo galáctico.
+- [x] 87. Sincronizar en segundo plano con los demás aparatos y los chats compartidos (servicio con su
+      aviso; se apaga en Sincronizar).
+
+
+## Nuevas del PC y tarjetas de abajo (3-nov, publicadas en v0.160.0)
+
+- [x] 88. Emparejar sin la dirección, como el PC: el código del grupo con su QR (`pindesk://emparejar?…`,
+      10 minutos) que lee cualquier cámara; escribir el código busca al PC por mDNS y por la baliza.
+- [x] 89. Figuras en una tarjeta que sube desde abajo: la barrita de arriba, bajada, la cierra.
+- [x] 90. La vista previa de una figura, dentro de esa misma tarjeta (no en otra ventana) y, al
+      acercarla, recortada a su recuadro.
+- [x] 91. La galería de capturas, también en una tarjeta que sube desde abajo y se cierra bajándola.
+- [x] 94. Mirando, moverse esconde el riel y la barra de arriba en todos los visores: ahora también al
+      pellizcar o llevar de lado un PDF/Office y al pellizcar una página web.
+- [~] 92. Comentario avanzado (pegatinas con minichat, `docs/comentarios.md` del PC): **hecho en los planos**
+      (v0.161.0, ver 96); faltan el lienzo, el PDF/Office, el lector de Word y las hojas.
+- [ ] 93. Parámetros de las plantillas de figuras (desde/hasta, por hoja, semanas, mes, año): pendiente;
+      necesita el generador de plantillas del PC.
+
+## Pedidos del 4-nov
+
+- [x] 95. Jev no repite la revisión de urgencia: lo dicho de cada tarea se guarda en
+      `anot-<uid>.urgencia.json` de su lista y viaja; lo nacido en el teléfono se revisa al momento.
+      El PC tiene que leer y escribir el mismo fichero (`docs/urgencia-que-viaja.md`).
+- [x] 96. Comentarios en los planos con el emoji: botón abajo a la derecha (con las abiertas en rojo), los
+      cuatro tipos (🔴 urgente, 🟠 alta, 🟡 media, 💬 nota), un toque pega la pegatina, mantener y arrastrar
+      la mueve, y su minichat (escribir, adjuntar archivos, resolver, cambiar tipo, crear tarea en el Inbox,
+      quitar) y la lista «Comentarios (n)». Mismo fichero y misma fusión que el PC: viajan y se juntan.
+- [x] 97. Todo lo nuevo sincroniza (v0.162.0): lo anotado con el código de **cualquier** mensaje viaja (antes
+      solo el de un archivo o una nota, y la urgencia de una lista de tareas se quedaba); los comentarios
+      y la urgencia cambiados en los dos aparatos se juntan y la versión juntada vuelve al otro, para que
+      queden iguales. Probado de punta a punta entre dos aparatos (`SincronizarDeVerdadTest`).
+
+## Pedidos del 5-nov (v0.163.0)
+
+- [x] 98. Medir en los planos: la cadena que se está poniendo va pegada al plano (en su mismo fotograma, como
+      las cotas hechas); antes se movía con retraso.
+- [x] 99. Polilínea de medidas cerrada (soltar cerca de su primer punto la cierra): su zona resaltada y el
+      área en el medio (con el perímetro debajo).
+- [x] 100. El clip del minichat de los comentarios, como el del chat pero recortado: cámara y galería (fotos y
+      vídeos), archivo, lienzo y lista de tareas (casillas que se tachan); las fotos en miniatura (un toque:
+      anotarla en el lienzo) y los archivos compactos con el icono de su extensión y su nombre.
+- [x] 101. «Abrir con otra app» decía que el documento ya no estaba: el permiso de leerlo no llegaba a la app
+      elegida (faltaba en el `ClipData` del selector).
+- [x] 102. «Cámara» en el clip del chat (v0.164.0): hace la foto con la cámara del teléfono y entra sola en el
+      cuadro de enviar, con su descripción, como las elegidas.
+- [x] 103. La cámara de los comentarios no hacía nada: PixPin declara el permiso de la cámara y entonces
+      Android no abre la del sistema sin él concedido. Ahora se pide antes (en el chat y en los comentarios).
+
+## Pedidos del 5-nov, tarde
+
+- [x] 104. La herramienta de texto (lápiz → texto) no dejaba escribir en las notas Markdown, Excel, 3D ni la
+      clase: el cuadro donde se teclea lo pone ahora el editor de todos los visores.
+- [x] 105. Compartir una nota anotada: «PDF con anotaciones», la nota entera como se ve con lo dibujado.
+- [x] 106. Excel: fuera la barra de abajo de la celda («Copiar») y el porcentaje del zoom.
+- [x] 107. La fecha flotante del chat salía debajo de la cabecera y con el día de un mensaje tapado.
+- [x] 108. La cámara salía dos veces en el minichat de los comentarios: solo en el clip.
+- [x] 109. Atrás vuelve a la pantalla que abrió cada editor (nota → lienzo → atrás vuelve a la nota), aunque
+      cada uno viva en su tarea.
+- [x] 110. La ficha del chat «Asistente», como sus tres puntos en el PC: el modelo (Claude o DeepSeek) con el
+      elegido marcado, conversación nueva, la clave y sus ajustes, fotos y archivos, y borrar el chat.
+- [x] 111. El visor de Markdown con espacios a los costados para anotar (el `.espacios` de la nota, como el
+      del PDF, que viaja): el texto se estrecha y la tinta sigue unida a él.
+- [x] 112. La barra de arriba de los visores, siempre debajo de la cámara (con la barra de estado escondida su
+      hueco era cero y quedaba encima del agujero de la cámara).
+- [x] 113. Nota mirando: mantener el dedo en el texto pasa a marcarlo (elegir y marcar con la barrita).
+- [x] 114. Lienzo mirando: sin la lupa al tocar o acercar.
+- [x] 115. El texto del lápiz en los visores (notas, HTML, PDF, Excel, 3D, clase) se escribe en su sitio, como en el
+      lienzo, sin la ventanita; en el PDF, sobre la hoja y a su tamaño.
+- [x] 116. Lo escrito aparece al momento (la hoja del PDF, el plano y la clase no se repintaban hasta moverlos).
+- [x] 117. La caja de texto en los visores: el alto, el de su texto (estirarla hacia abajo no deja hueco); a lo
+      ancho se estira y el texto se reparte (como en el lienzo: `medirTextosCon`).
+- [x] 118. El texto rico mientras se escribe se ve ya compuesto (negrita, cursiva, color, tamaño, tachado,
+      subrayado), sin las marcas (`**`, `\color{}{}`); la fuente es la misma de siempre y viaja igual al PC.
+- [x] 119. La barra del texto rico cabe en la pantalla (se desliza) y lleva tres colores (rojo, azul, verde)
+      más los recientes del lienzo.
+- [x] 120. Sincronizar de fondo con cabeza (`RedDelTelefono`): con Wi-Fi, lo local arranca solo al conectarse y
+      sondea cada 2 min (lo que avise antes —la baliza, un cambio— despierta al momento); con datos móviles, solo
+      la nube; sin red, nada (se espera a que Android la devuelva, sin reintentar).
+- [x] 121. Sincronizar la letra de una canción, en su propia app: **LetraSync Pro** (`com.letrasyncpro`, repositorio
+      `letrasync-pro-android`), integrada como Escáner Pro Max: el botón de sincronizar sola del karaoke la abre con
+      la canción y su letra, y la letra con tiempos vuelve sola (`guardados/LetraSyncPro.kt`). Sin ella instalada,
+      lo de siempre.
+- [ ] 122. Los chats «pr-17…» (mensajes de un chat cuyo nombre no está en este teléfono): falta saber de dónde vienen
+      para esconderlos (uno por documento si son de comentarios).
+- [x] 123. Fase de prueba: el asistente funciona nada más instalar con la clave de prueba que GitHub mete al compilar
+      (secretos `CLAVE_CLAUDE_DE_PRUEBA` / `CLAVE_DEEPSEEK_DE_PRUEBA`; ver `ClavesDeLaNube.deFabrica`). La del usuario
+      manda. **Para quitarla: borrar el secreto y volver a compilar.**
+- [x] 124. Acceso de prueba al asistente con Google (v0.170.0): el servidor (`servidor/ia-de-prueba`, Cloudflare Worker)
+      guarda la clave de Claude y la lista de correos; la app entra con Google y pregunta por él. Para Windows:
+      `docs/acceso-de-prueba-ia.md`. **Falta (del usuario): crear la cuenta de Cloudflare y los ID de Google**
+      (pasos en `servidor/ia-de-prueba/README.md`).
+- [x] 125. (v0.171.0) PinDesk ya no alinea letras: «Sincronizar» / «Vincular letra» de una canción la manda a
+      **LetraSync Pro** con su letra, y la letra con tiempos vuelve a PinDesk al terminar. Sin LetraSync instalada,
+      un aviso con el enlace para descargarla. Las canciones ya no entran en la cola de «pasar a texto».
+- [x] 126. (v0.171.0) El asistente contesta en cualquier chat «Asistente» (si había dos, el segundo no respondía) y un
+      turno atascado más de 4 min se suelta solo, para que el siguiente mensaje sí tenga respuesta.
+- [x] 127. (v0.172.0) Una sola entrada a la letra de una canción: **«Sincronizar la letra»** (abre LetraSync Pro, donde
+      se escribe, pega y sincroniza). En el chat, al mantener la canción; en el karaoke, un solo botón en la
+      cabecera (fuera el reloj, «sola» y el lápiz, y las tres opciones repetidas del menú ⋮). La tarjeta de música
+      ya no tiene un botón aparte que haga lo mismo que tocarla. Sin LetraSync instalada, el aviso deja también
+      «Escribir o pegar la letra» aquí.
+- [x] 128. (v0.173.0) La música, para el sistema: mientras suena algo en PinDesk, sus mandos en la notificación, la
+      pantalla de bloqueo y los ajustes rápidos (carátula, barra para arrastrar, ±10 s), y los de los auriculares.
+      Pausa al quitar los auriculares o cuando otra app se pone a sonar (`guardados/ReproduciendoService.kt`).
+- [x] 129. (v0.173.0) LetraSync Pro guarda en su biblioteca las canciones que le manda PinDesk (con la etiqueta
+      «PinDesk») y, si luego se retocan allí, la letra vuelve sola a su canción (`LetraDevuelta`, la acción
+      `com.forge.pixpin.action.LETRA_SINCRONIZADA` con el id de la canción).
+- [x] 130. (v0.174.0) **Relanzamiento: las funciones las decide el servidor** (`servidor/pindesk`, para tu VPS). Cada
+      función es *oculta · gratis · pro* en un catálogo **firmado** (y la licencia de cada cuenta, también firmada:
+      nadie puede darse Pro por el camino ni tocando la app). Lo de fábrica: solo los visores, el asistente, las
+      tareas, la cuenta y los pines; la barra lateral (marcador, lápiz, marcos) y todo lo demás, oculto, para irlo
+      abriendo desde el panel (`https://tu-servidor/admin`). Lo oculto tampoco arranca de fondo.
+- [x] 131. (v0.174.0) Cuenta con Google (`cuenta/`): 30 días de Pro de prueba para las cuentas nuevas, el plan y el cupo
+      del asistente en la pantalla «Cuenta». El asistente pregunta por el servidor con la sesión: la clave de Claude
+      solo está en la VPS, con cupo por persona y día.
+- [x] 132. (v0.174.0) Actualizarse sin la Play Store, como Telegram: el servidor publica la versión (firmada, con la
+      huella SHA-256 del APK), la app avisa, la baja, comprueba la huella y abre el instalador.
+- [ ] 133. **Lo que falta (del usuario)**: los datos de la VPS (sistema, RAM, IP) y un dominio que apunte a ella;
+      instalar con `sh despliegue/instalar.sh api.tudominio.com`; los ID de Google y la clave de Claude en
+      `/etc/pindesk/config.env`; y en GitHub las variables `SERVIDOR_PINDESK`, `FIRMA_PUBLICA` y `GOOGLE_CLIENTE_WEB`.
+      Pasos: `servidor/pindesk/README.md`.

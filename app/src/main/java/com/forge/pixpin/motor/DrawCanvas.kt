@@ -1447,7 +1447,9 @@ fun DrawCanvas(
         // **Y solo si cabe** (18-sep-2026): en una columna estrecha de la tira el lienzo puede
         // ser más pequeño que la lupa, y el cálculo de dónde ponerla se quedaba sin sitio
         // («Cannot coerce value to an empty range»): fue el fallo que mandó el usuario.
-        dedo?.takeUnless { lupaAMano || !cabeLaLupa(size.width, size.height, LUPA_DP.dp.toPx(), 8.dp.toPx()) }?.let { pos ->
+        // **Mirando, sin lupa** (5-nov-2026, el usuario: «viendo un lienzo, las lupas salen al hacer zoom; quita
+        // esa función»): mirando no se apunta a nada, el dedo solo mueve y acerca.
+        dedo?.takeUnless { controller.soloMirar || lupaAMano || !cabeLaLupa(size.width, size.height, LUPA_DP.dp.toPx(), 8.dp.toPx()) }?.let { pos ->
             val lado = LUPA_DP.dp.toPx()
             val margen = 8.dp.toPx()
 

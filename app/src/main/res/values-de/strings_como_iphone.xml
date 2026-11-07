@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Figuras y Adjuntar como en el iPhone (2-nov-2026) -->
+<resources>
+    <string name="ip_cerrar">Schließen</string>
+    <string name="ip_figuras">Formen</string>
+    <string name="ip_figuras_cuenta">%1$d Formen und Vorlagen</string>
+    <string name="ip_todas">Alle</string>
+    <string name="ip_buscar_figuras">Formen suchen</string>
+    <string name="ip_adjuntar">Anhängen</string>
+    <string name="ip_pegar">Einfügen</string>
+    <string name="ip_figuras_dia">Tagesformen</string>
+    <string name="ip_figuras_noche">Nachtformen</string>
+</resources>

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="funciones_abrir">파일 열기</string>
+    <string name="funciones_abrir_detalle">PDF, Word, Excel, PowerPoint, 도면, 3D</string>
+    <string name="funciones_asistente">어시스턴트</string>
+    <string name="funciones_asistente_detalle">무엇이든 물어보세요</string>
+</resources>
