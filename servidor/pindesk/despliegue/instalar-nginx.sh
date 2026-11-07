@@ -10,7 +10,8 @@ cd "$(dirname "$0")/.."
 [ "$(id -u)" = 0 ] || { echo "Hace falta sudo"; exit 1; }
 
 # El puerto de dentro tiene que estar libre (otra app puede usar el 8080).
-if ss -ltn | grep -q ":$PUERTO\s"; then echo "El puerto $PUERTO está ocupado: elige otro (2.º argumento)"; exit 1; fi
+# (Si ya estaba instalado, el puerto es el suyo: volver a correr el script, p. ej. con otro dominio, no choca.)
+if [ ! -f /etc/pindesk/config.env ] && ss -ltn | grep -q ":$PUERTO\s"; then echo "El puerto $PUERTO está ocupado: elige otro (2.º argumento)"; exit 1; fi
 
 # Node: sirve el del sistema si es 18 o más; si no hay ninguno en /usr/bin, se pone el 22. Nunca se cambia uno que ya está.
 if [ -x /usr/bin/node ]; then
