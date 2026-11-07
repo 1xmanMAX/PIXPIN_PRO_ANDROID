@@ -360,3 +360,9 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       cabecera (fuera el reloj, «sola» y el lápiz, y las tres opciones repetidas del menú ⋮). La tarjeta de música
       ya no tiene un botón aparte que haga lo mismo que tocarla. Sin LetraSync instalada, el aviso deja también
       «Escribir o pegar la letra» aquí.
+- [x] 128. (v0.173.0) La música, para el sistema: mientras suena algo en PinDesk, sus mandos en la notificación, la
+      pantalla de bloqueo y los ajustes rápidos (carátula, barra para arrastrar, ±10 s), y los de los auriculares.
+      Pausa al quitar los auriculares o cuando otra app se pone a sonar (`guardados/ReproduciendoService.kt`).
+- [x] 129. (v0.173.0) LetraSync Pro guarda en su biblioteca las canciones que le manda PinDesk (con la etiqueta
+      «PinDesk») y, si luego se retocan allí, la letra vuelve sola a su canción (`LetraDevuelta`, la acción
+      `com.forge.pixpin.action.LETRA_SINCRONIZADA` con el id de la canción).

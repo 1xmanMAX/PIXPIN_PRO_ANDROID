@@ -730,6 +730,19 @@
                 android:value="Keeps user-created floating pins (notes, images, timers, quick capture) visible over other apps while the user works" />
         </service>
 
+        <!-- La letra retocada en la biblioteca de LetraSync Pro vuelve sola a su canción. -->
+        <receiver android:name=".guardados.LetraDevuelta" android:exported="true">
+            <intent-filter>
+                <action android:name="com.forge.pixpin.action.LETRA_SINCRONIZADA" />
+            </intent-filter>
+        </receiver>
+
+        <!-- La música que suena, para el sistema: notificación, pantalla de bloqueo y ajustes rápidos. -->
+        <service
+            android:name=".guardados.ReproduciendoService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <service
             android:name=".ui.LeyendoEnVozService"
             android:exported="false"
