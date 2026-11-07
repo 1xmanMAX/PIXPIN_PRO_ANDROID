@@ -78,6 +78,11 @@ object Disponible {
      * catálogo (que tiene las suyas).
      */
     @Volatile internal var enPruebas: Boolean = runCatching { Class.forName("org.junit.Test"); true }.getOrDefault(false)
+    /**
+     * **La edición completa** (main y play-store, ver docs/ramas.md): todo abierto, sin catálogo ni Pro. Solo la
+     * edición restringida (su rama) hace caso al catálogo.
+     */
+    @Volatile internal var todoAbierto: Boolean = com.forge.pixpin.BuildConfig.EDICION != "restringida"
     @Volatile private var abiertoAMano: Boolean = false
     /** Abrir todo a mano (solo pruebas). */
     fun abrirTodo(si: Boolean) { abiertoAMano = si }
@@ -94,10 +99,10 @@ object Disponible {
     private fun regalada(id: String) = licencia()?.regaladas?.contains(id) == true
 
     /** Si se ve (en el menú, el riel, la rejilla…). Oculta: no se ve en absoluto. */
-    fun ve(id: String): Boolean = enPruebas || abiertoAMano || regalada(id) || estado(id) != Estado.OCULTA
+    fun ve(id: String): Boolean = enPruebas || todoAbierto || abiertoAMano || regalada(id) || estado(id) != Estado.OCULTA
 
     /** Si se puede usar ya. Una de Pro sin Pro se ve, pero al tocarla se ofrece Pro (ver [CuentaActivity.abrirParaPro]). */
-    fun puede(id: String): Boolean = enPruebas || abiertoAMano || regalada(id) || when (estado(id)) {
+    fun puede(id: String): Boolean = enPruebas || todoAbierto || abiertoAMano || regalada(id) || when (estado(id)) {
         Estado.GRATIS -> true
         Estado.PRO -> conPro()
         Estado.OCULTA -> false
@@ -129,7 +134,8 @@ object Disponible {
 
     internal fun aplicar(catalogo: JsonObject?, licencia: JsonObject?, quitarLicencia: Boolean = false) {
         var f = _ahora.value
-        if (catalogo != null && catalogo["tipo"]?.jsonPrimitive?.content == "catalogo") {
+        // En la completa el catálogo no manda (ni enseña «Qué incluye Pro»).
+        if (catalogo != null && !todoAbierto && catalogo["tipo"]?.jsonPrimitive?.content == "catalogo") {
             val fs = catalogo["funciones"]?.jsonObject ?: JsonObject(emptyMap())
             val estados = HashMap(DE_FABRICA); val nombres = HashMap<String, String>()
             val proximos = HashMap<String, Pair<Estado, Long>>(); val avisos = HashMap<String, String>()

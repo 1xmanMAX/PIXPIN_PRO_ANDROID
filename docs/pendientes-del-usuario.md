@@ -380,3 +380,7 @@ sincronizable. Primera tanda: `origin/main` 50e87978 (70 commits desde 995fd94b)
       instalar con `sh despliegue/instalar.sh api.tudominio.com`; los ID de Google y la clave de Claude en
       `/etc/pindesk/config.env`; y en GitHub las variables `SERVIDOR_PINDESK`, `FIRMA_PUBLICA` y `GOOGLE_CLIENTE_WEB`.
       Pasos: `servidor/pindesk/README.md`.
+- [x] 134. (v0.175.0) Tres ramas principales (ver `docs/ramas.md`): **`main`** = la completa (todo abierto, APK
+      `v<versión>-prueba`), **`restringida`** = la del relanzamiento (el servidor decide qué se ve, APK
+      `v<versión>-restringida`) y **`play-store`** = la completa más lo que pide Google Play (sin actualizarse sola).
+      Lo único que cambia entre `main` y `restringida` es `app/edicion.txt`.
