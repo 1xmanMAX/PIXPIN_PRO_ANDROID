@@ -299,9 +299,12 @@ object Asistente {
      * **El motor de este turno** (§1.4): Claude o DeepSeek con su clave. null y el motivo si falta
      * la clave.
      */
-    private fun motorDelTurno(app: PixPinApp, ajustes: com.forge.pixpin.data.Settings): Pair<com.forge.pixpin.ia.Motor?, String?> {
+    private fun motorDelTurno(app: PixPinApp, ajustes: com.forge.pixpin.data.Settings, fuerte: Boolean = false): Pair<com.forge.pixpin.ia.Motor?, String?> {
         val proveedor = Nube.Proveedor.elegido(ajustes.asistenteMotor)
         val clave = ClavesDeLaNube.leer(app, proveedor) ?: return null to "Falta la clave de ${proveedor.nombre}: pégala en Ajustes → Asistente."
+        // **Crear (una app, un PDF, un plano) va con el modelo fuerte** del mismo proveedor (7-nov-2026): el rápido
+        // se queda corto escribiendo una miniapp entera que funcione.
+        if (fuerte) return Nube.Motor(proveedor, clave, ligero = ajustes.asistentePensar == "no", modelo = com.forge.pixpin.jev.ModeloEnLaApp.fuerteDe(proveedor).first) to null
         return Nube.Motor(proveedor, clave, ligero = ajustes.asistentePensar == "no") to null
     }
 
@@ -310,11 +313,12 @@ object Asistente {
         fun escribir(texto: String, lienzo: String? = null, fuentes: kotlinx.serialization.json.JsonArray? = null) =
             almacen.actualizar(respuesta.id) { it.copy(texto = texto, lienzoIa = lienzo ?: it.lienzoIa, fuentesIa = fuentes ?: it.fuentesIa) }
         val conFoto = ChatDelAsistente.fotoDe(almacen.leer(), pregunta) != null
-        val (motor0, motivo) = motorDelTurno(app, ajustes)
+        val creando = com.forge.pixpin.ia.Artefactos.pideCrear(ChatDelAsistente.sinMencion(pregunta.texto))
+        val (motor0, motivo) = motorDelTurno(app, ajustes, fuerte = creando)
         // Una orden simple sale sin modelo (camino rápido); sin motor, el resto avisa.
         val esOrden = !conFoto && com.forge.pixpin.ia.Rapido.interpretar(ChatDelAsistente.sinMencion(pregunta.texto), com.forge.pixpin.ia.Momento.ahora()) != null
-        // Con Jev (28-oct-2026), el fuerte del mismo proveedor si el pedido lo pide; si no, el de siempre.
-        val motor = motor0?.let { com.forge.pixpin.jev.ModeloEnLaApp.segunJev(app, it, pregunta, esOrden, ligero = ajustes.asistentePensar == "no") }
+        // Con Jev (28-oct-2026), el fuerte del mismo proveedor si el pedido lo pide; si no, el de siempre. Crear ya va con el fuerte.
+        val motor = motor0?.let { if (creando) it else com.forge.pixpin.jev.ModeloEnLaApp.segunJev(app, it, pregunta, esOrden, ligero = ajustes.asistentePensar == "no") }
             ?: if (esOrden) Agente.SinMotor(motivo.orEmpty()) else null
         if (motor == null) {
             escribir("⚠️ " + motivo.orEmpty())
@@ -367,15 +371,18 @@ object Asistente {
         val ventana = Nube.VENTANA
         // **La web** (28-oct-2026): si está encendida en Ajustes, `buscar_en_la_web` y `abrir_pagina`
         // (con Claude, `Nube.Claude.cuerpo` las cambia por `web_search` y `web_fetch` de la API).
-        val herramientas = Herramientas.catalogo() + if (ajustes.asistenteWeb) com.forge.pixpin.asistente.web.Web.herramientas() else emptyList()
+        val herramientas = Herramientas.catalogo() + com.forge.pixpin.ia.Artefactos.herramientas() +
+            if (ajustes.asistenteWeb) com.forge.pixpin.asistente.web.Web.herramientas() else emptyList()
+        // Lo que sabe del oficio de crear (planear, hacerlo entero, revisar y corregir), tras las instrucciones de siempre.
+        val instrucciones = Agente.instrucciones() + "\n" + com.forge.pixpin.ia.Artefactos.INSTRUCCIONES
         // **El lienzo destino** pegado al pedido (`edicion::anadir_resumen` del PC): lo que ya hay,
         // con sus #id, para editarlo en vez de dibujar otro al lado.
         val paraElModelo = (if (com.forge.pixpin.ia.LienzoDestino.vieneACuento(pedido0)) ejecutor.resumenDelLienzo() else null)
             ?.let { com.forge.pixpin.ia.LienzoDestino.conResumen(pedido0, it) } ?: pedido0
         val (historial, reiniciado) = if (enSuChat) {
             val nuevo = if (foto != null) com.forge.pixpin.ia.MensajeIa.usuarioConImagen(paraElModelo, foto.first, foto.second) else com.forge.pixpin.ia.MensajeIa.usuario(paraElModelo)
-            PensadoDelChat.historial(Agente.instrucciones(), hoja, anteriores, nuevo, ventana, herramientas)
-        } else ChatDelAsistente.historial(Agente.instrucciones(), mensajes, pregunta.copy(texto = paraElModelo), enSuChat, foto) to false
+            PensadoDelChat.historial(instrucciones, hoja, anteriores, nuevo, ventana, herramientas)
+        } else ChatDelAsistente.historial(instrucciones, mensajes, pregunta.copy(texto = paraElModelo), enSuChat, foto) to false
         val fuentesDelChat = PensadoDelChat.fuentes(anteriores, hoja)
         val opciones = Agente.Opciones(
             planificar = true,
@@ -463,6 +470,10 @@ object Asistente {
         // «…y ábrelo»: se abre al acabar (si no, la respuesta lleva «Abrir lienzo»).
         ejecutor.lienzo?.takeIf { ChatDelAsistente.pideAbrir(pedido) }?.let { ref ->
             enPantalla { runCatching { com.forge.pixpin.motor.DrawEditorActivity.abrir(app, ref, com.forge.pixpin.motor.ExcalidrawStore.rutaDe(app, ref), null) } }
+        }
+        // «…y ábrela»: la miniapp, el PDF o el plano recién hechos, en su visor.
+        ejecutor.artefactos.ultimoMensaje?.takeIf { ChatDelAsistente.pideAbrir(pedido) && ejecutor.lienzo == null }?.let { id ->
+            enPantalla { runCatching { com.forge.pixpin.guardados.MensajesActivity.abrirYAbrir(app, id) } }
         }
         // Lo que pensó y la hoja reescrita, junto a su nota (§3.2): viaja con ella.
         if (enSuChat) {

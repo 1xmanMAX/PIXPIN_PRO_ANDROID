@@ -38,7 +38,7 @@ object Agente {
      * tope es de seguridad, no el que decide cuándo acabar; agrandar, numerar y revisar no cabía en
      * 4+2 y acababa en «Hecho en parte». El teléfono solo contesta con la nube: lo pasa el chat.
      */
-    const val VUELTAS_NUBE = 12
+    const val VUELTAS_NUBE = 20
 
     /** Cuántas veces puede preguntar al usuario en un turno (`PREGUNTAS_POR_TURNO` del PC). */
     const val PREGUNTAS_POR_TURNO = 2
@@ -469,7 +469,7 @@ object Agente {
                     continue
                 }
                 val validada = try {
-                    Herramientas.validar(sanear(cruda), herramientas)
+                    Herramientas.validar(if (cruda.nombre.trim() in Artefactos.NOMBRES) cruda else sanear(cruda), herramientas)
                 } catch (e: ErrorHerramienta) {
                     algunaMal = true
                     // La siguiente, corta: una llamada larga que sale mal es la que más tarda en repetirse.
@@ -511,6 +511,7 @@ object Agente {
                 alEvento(Evento.Resultado(llamada.nombre, ok, dicho))
                 // Una parte de página web cabe entera (con sus enlaces).
                 var paraElModelo = if (com.forge.pixpin.asistente.web.Web.esDeLaWeb(llamada.nombre)) recortarResultado(dicho, com.forge.pixpin.asistente.web.Web.LETRAS_RESULTADO)
+                else if (llamada is Llamada.Artefacto) recortarResultado(dicho, Artefactos.LETRAS_AL_LEER + 600)
                 else recortarResultado(dicho)
                 if (validada.avisos.isNotEmpty()) paraElModelo += " (avisos: ${validada.avisos.joinToString("; ")})"
                 historial += MensajeIa.resultado(cruda.id, paraElModelo)
@@ -574,11 +575,13 @@ object Agente {
      * lo que ya lleva la conversación (por lo alto: 3 letras por token y ~1000 por foto).
      */
     fun topeDeTokens(p: Peticion, contexto: Int): Int {
+        // Con las herramientas de crear, la respuesta tiene que poder llevar un archivo entero.
+        val maximo = if (p.herramientas.any { it.nombre in Artefactos.NOMBRES }) Artefactos.TOKENS_AL_CREAR else MAX_TOKENS_CON_HERRAMIENTAS
         val letras = p.mensajes.sumOf { m -> m.textoEntero.length + m.llamadas.sumOf { it.argumentos.length } } +
             p.herramientas.sumOf { it.aJson().toString().length }
         val fotos = p.mensajes.count { it.tieneImagen }
         val entrada = letras / 3 + 1000 * fotos + 200
-        return (contexto - entrada).coerceAtLeast(0).coerceIn(MIN_TOKENS, MAX_TOKENS_CON_HERRAMIENTAS)
+        return (contexto - entrada).coerceAtLeast(0).coerceIn(MIN_TOKENS, maximo)
     }
 
     /**
@@ -587,7 +590,8 @@ object Agente {
      * cortarse a medias. Solo se recorta lo de la petición; la validación usa los límites de verdad.
      */
     fun conTopes(herramientas: List<Herramienta>, tope: Long): List<Herramienta> =
-        herramientas.map { it.copy(parametros = ordenado(acotar(it.parametros, tope)) as JsonObject) }
+        // Crear archivos, PDF y planos ([Artefactos]) no se acota: un HTML entero o un plano no caben en 16 elementos.
+        herramientas.map { if (it.nombre in Artefactos.NOMBRES) it else it.copy(parametros = ordenado(acotar(it.parametros, tope)) as JsonObject) }
 
     private fun acotar(v: JsonElement, tope: Long): JsonElement {
         if (v is JsonArray) return JsonArray(v.map { acotar(it, tope) })
@@ -637,7 +641,8 @@ object Agente {
     private fun pedirMasCorto() =
         "ERROR: tu llamada a la herramienta salio cortada porque era demasiado larga. " +
             "Vuelve a llamarla con $TOPE_LISTAS_REINTENTO elementos como mucho, solo las formas principales; " +
-            "si hace falta mas, haz varias llamadas seguidas."
+            "si hace falta mas, haz varias llamadas seguidas. Si era un archivo (crear_archivo, crear_pdf), escribelo mas compacto " +
+            "o por partes: primero la base y luego anade lo demas con editar_archivo."
 
     /** Si el error del motor es una llamada con el JSON roto (lo que contesta `llama-server`). */
     internal fun llamadaRota(m: String): Boolean {

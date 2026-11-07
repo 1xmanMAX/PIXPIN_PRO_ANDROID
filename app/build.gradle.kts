@@ -45,8 +45,8 @@ android {
         val edicion = ((project.findProperty("edicion") as String?) ?: file("edicion.txt").readText()).trim().lowercase()
         require(edicion in setOf("completa", "restringida")) { "edición desconocida: $edicion" }
         buildConfigField("String", "EDICION", "\"$edicion\"")
-        versionCode = 274
-        versionName = "0.175.0"
+        versionCode = 275
+        versionName = "0.176.0"
     }
 
     // **La clave de subida a Google Play** (30-oct-2026): fuera del repositorio. Se lee de

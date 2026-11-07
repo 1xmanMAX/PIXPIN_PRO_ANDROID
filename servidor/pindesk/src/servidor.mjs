@@ -48,7 +48,7 @@ export function configDesdeEntorno(env = process.env) {
     cupoGratis: parseInt(leer("CUPO_GRATIS", "15"), 10),
     cupoPro: parseInt(leer("CUPO_PRO", "150"), 10),
     modelosPermitidos: String(leer("MODELOS_PERMITIDOS", "")).split(",").map((s) => s.trim()).filter(Boolean),
-    maxTokens: parseInt(leer("MAX_TOKENS", "4096"), 10),
+    maxTokens: parseInt(leer("MAX_TOKENS", "24000"), 10),
   };
 }
 
